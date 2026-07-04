@@ -339,6 +339,7 @@
         function init() {
             loadData();
             loadSyncState();
+            updateSidebarToolState(true);
             renderTodayDate();
             renderDashboard();
             renderHabitTabs();
@@ -347,6 +348,13 @@
                 currentHabitId = data.habits[0].id;
                 renderHeatmap();
             }
+        }
+
+        function updateSidebarToolState(force = false) {
+            const panel = document.querySelector('.sidebar-bottom');
+            if (!panel) return;
+            const shouldOpen = window.innerWidth > 980;
+            if (force || shouldOpen) panel.open = shouldOpen;
         }
 
         // 加载本地数据
@@ -5113,6 +5121,8 @@
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape') closeTopModal();
         });
+
+        window.addEventListener('resize', () => updateSidebarToolState());
 
         // 启动应用
         (async () => {
