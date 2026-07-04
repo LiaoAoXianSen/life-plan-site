@@ -69,6 +69,7 @@ npm run test:headed
 - `.git`
 - `ai-memory`
 - `docs`
+- `test-results`
 - 已有 `*.zip`
 - 常见缓存、临时和构建目录
 

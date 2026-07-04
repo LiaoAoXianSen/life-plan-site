@@ -10,6 +10,7 @@ $excludeDirs = @(
     'ai-memory',
     'docs',
     'node_modules',
+    'test-results',
     '.tmp',
     'tmp',
     'temp',
