@@ -58,6 +58,12 @@ npm run test:headed
 .\scripts\package-clean.ps1
 ```
 
+默认只保留最近 5 个 `life-plan-site-clean-*.zip`，生成新包后会自动删除更旧的包。需要临时调整保留数量时，可以传入数字：
+
+```powershell
+.\scripts\package-clean.ps1 8
+```
+
 压缩包会排除：
 
 - `.git`
@@ -69,6 +75,7 @@ npm run test:headed
 交付约定：
 
 - 每次完成一轮可交付功能修改并通过检查后，默认运行 `.\scripts\package-clean.ps1` 生成新的干净压缩包。
+- 压缩包保留最近 5 个，避免项目目录长期堆积历史包。
 - 用户不需要每次单独提醒“打包”。
 - 如果只是解释问题、查看代码、轻微文档调整或未形成可交付版本，可以不打包。
 - 最终回复里应给出新压缩包路径。
