@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人生规划系统</title>
+<link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./wheel-tool.css">
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+        <h2>人生规划系统</h2>
+        <div class="nav-item active" onclick="switchPage('dashboard', this)">📊 首页仪表盘</div>
+        <div class="nav-item" onclick="switchPage('records', this)">📝 所有记录</div>
+        <div class="nav-item" onclick="switchPage('ideas', this)">💡 灵感池</div>
+        <div class="nav-item" onclick="switchPage('materials', this)">📚 素材库</div>
+        <div class="nav-item" onclick="switchPage('search', this)">🔎 全局搜索</div>
+        <div class="nav-item" onclick="switchPage('todos', this)">✅ 待办总览</div>
+        <div class="nav-item" onclick="switchPage('habits', this)">🔥 习惯热力图</div>
+        <div class="nav-item" onclick="switchPage('goals', this)">🎯 目标管理</div>
+        <div class="nav-item" onclick="switchPage('wheel', this)">🎡 工具转盘</div>
+        
+        <div class="sidebar-bottom">
+            <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="openTypeSelect()">+ 新建记录</button>
+            <div class="sidebar-button-row">
+                <button class="btn btn-secondary" style="flex:1" onclick="exportData()">导出备份</button>
+                <button class="btn btn-secondary" style="flex:1" onclick="importData()">导入恢复</button>
+            </div>
+            <div class="sidebar-button-row sidebar-button-row-compact">
+                <button class="btn btn-secondary sync-btn" onclick="openSnapshotModal()">🛟 本地快照</button>
+                <button class="btn btn-secondary sync-btn" onclick="openSyncSettings()">☁️ 云同步</button>
+            </div>
+            <div id="sync-status" class="sync-status"></div>
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main">
+        <!-- 首页仪表盘 -->
+        <div id="page-dashboard" class="page active">
+            <div class="page-header">
+                <div class="page-title">首页仪表盘</div>
+                <button class="btn btn-primary" onclick="openTypeSelect()">+ 新建记录</button>
+            </div>
+
+            <div class="dashboard-hero">
+                <div class="hero-panel">
+                    <div>
+                        <div class="hero-date" id="hero-date"></div>
+                        <div class="hero-title" id="hero-title">今天先把最重要的事推进一点</div>
+                        <div class="hero-meta" id="hero-meta"></div>
+                    </div>
+                    <div class="quick-create">
+                        <button class="btn" onclick="createRecord('日计划')">新建日计划</button>
+                        <button class="btn" onclick="createRecord('日记')">写日记</button>
+                        <button class="btn" onclick="createRecord('工作记录')">记工作</button>
+                        <button class="btn" onclick="createRecord('灵感碎片')">记灵感</button>
+                        <button class="btn" onclick="openTodoModal()">加待办</button>
+                    </div>
+                </div>
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <div class="summary-value" id="summary-todos">0</div>
+                        <div class="summary-label">今日待办</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-value" id="summary-habits">0</div>
+                        <div class="summary-label">习惯完成</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-value" id="summary-goals">0</div>
+                        <div class="summary-label">进行目标</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-value" id="summary-records">0</div>
+                        <div class="summary-label">本周记录</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">今日概览 · <span id="today-date"></span></div>
+                <div class="today-grid">
+                    <div>
+                        <div class="section-title">今日待办</div>
+                        <div id="today-todos"></div>
+                    </div>
+                    <div>
+                        <div class="section-title-row">
+                            <div class="section-title">无截止待办池</div>
+                            <div class="todo-pool-toolbar">
+                                <button class="btn btn-secondary todo-pool-mode" data-mode="random" onclick="renderFloatingTodos('random')">随机</button>
+                                <button class="btn btn-secondary todo-pool-mode" data-mode="newest" onclick="renderFloatingTodos('newest')">最新</button>
+                                <button class="btn btn-secondary todo-pool-mode" data-mode="oldest" onclick="renderFloatingTodos('oldest')">最老</button>
+                            </div>
+                        </div>
+                        <div id="floating-todos"></div>
+                    </div>
+                    <div>
+                        <div class="section-title">今日习惯快捷打卡</div>
+                        <div id="today-habits"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">进行中的周期记录</div>
+                <div id="active-periods"></div>
+            </div>
+
+            <div>
+                <div class="card-title" style="margin-bottom: 14px;">近期记录时间轴</div>
+                <div id="timeline"></div>
+            </div>
+        </div>
+
+        <!-- 所有记录页 -->
+        <div id="page-records" class="page">
+            <div class="page-header">
+                <div class="page-title">所有记录</div>
+                <div class="page-actions">
+                    <button class="btn btn-secondary" onclick="openTemplateManage()">📋 模板管理</button>
+                    <button class="btn btn-primary" onclick="openTypeSelect()">+ 新建记录</button>
+                </div>
+            </div>
+            <div class="filter-bar">
+                <input type="search" id="record-search" placeholder="搜索标题、内容、类型" oninput="renderAllRecords()">
+                <select id="record-type-filter" onchange="renderAllRecords()">
+                    <option value="all">全部类型</option>
+                    <option value="日记">日记</option>
+                    <option value="日计划">日计划</option>
+                    <option value="工作记录">工作记录</option>
+                    <option value="灵感碎片">灵感碎片</option>
+                    <option value="周复盘">周复盘</option>
+                    <option value="月复盘">月复盘</option>
+                    <option value="年复盘">年复盘</option>
+                    <option value="周计划">周计划</option>
+                    <option value="月计划">月计划</option>
+                    <option value="年度计划">年度计划</option>
+                    <option value="3年计划">3年计划</option>
+                    <option value="终身愿景">终身愿景</option>
+                </select>
+                <select id="record-day-order" onchange="renderAllRecords()">
+                    <option value="desc">当日倒序</option>
+                    <option value="asc">当日正序</option>
+                </select>
+                <select id="record-idea-status-filter" onchange="renderAllRecords()">
+                    <option value="all">全部灵感状态</option>
+                    <option value="待整理">待整理</option>
+                    <option value="待实践">待实践</option>
+                    <option value="实践中">实践中</option>
+                    <option value="已验证">已验证</option>
+                    <option value="已放弃">已放弃</option>
+                    <option value="unprocessed">未处理灵感</option>
+                    <option value="needsConclusion">已实践未写结论</option>
+                </select>
+                <input type="search" id="record-idea-tag-filter" placeholder="灵感标签筛选" oninput="renderAllRecords()">
+            </div>
+            <div class="calendar-toolbar">
+                <div class="segmented" id="record-view-tabs">
+                    <button class="active" onclick="setRecordView('list', this)">列表</button>
+                    <button onclick="setRecordView('day', this)">日视图</button>
+                    <button onclick="setRecordView('week', this)">周视图</button>
+                    <button onclick="setRecordView('month', this)">月视图</button>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="shiftRecordCursor(-1)">‹</button>
+                    <strong id="record-view-title"></strong>
+                    <button class="btn btn-secondary" onclick="shiftRecordCursor(1)">›</button>
+                    <button class="btn btn-secondary" onclick="resetRecordCursor()">今天</button>
+                </div>
+            </div>
+            <div id="all-records"></div>
+        </div>
+
+        <!-- 灵感池页 -->
+        <div id="page-ideas" class="page">
+            <div class="page-header">
+                <div>
+                    <div class="page-title">灵感池</div>
+                    <div class="page-subtitle">灵感仍然是时间轴记录，这里只负责状态、标签和下一步。</div>
+                </div>
+                <button class="btn btn-primary" onclick="createRecord('灵感碎片')">+ 记录灵感</button>
+            </div>
+            <div class="filter-bar">
+                <input type="search" id="idea-search" placeholder="搜索灵感标题、内容、标签" oninput="renderIdeaPool()">
+                <select id="idea-status-filter" onchange="renderIdeaPool()">
+                    <option value="all">全部状态</option>
+                    <option value="unprocessed">未处理</option>
+                    <option value="needsConclusion">已实践未写结论</option>
+                    <option value="待整理">待整理</option>
+                    <option value="待实践">待实践</option>
+                    <option value="实践中">实践中</option>
+                    <option value="已验证">已验证</option>
+                    <option value="已放弃">已放弃</option>
+                </select>
+                <input type="search" id="idea-tag-filter" placeholder="按标签，例如 AI / 工作" oninput="renderIdeaPool()">
+            </div>
+            <div id="idea-pool-summary" class="mini-summary-grid"></div>
+            <div id="idea-pool-list"></div>
+        </div>
+
+        <!-- 素材库页 -->
+        <div id="page-materials" class="page">
+            <div class="page-header">
+                <div>
+                    <div class="page-title">素材库</div>
+                    <div class="page-subtitle">金句、提示词、摘抄和方法，都可以按标签收纳与随机展示。</div>
+                </div>
+                <button class="btn btn-primary" onclick="openMaterialModal()">+ 新增素材</button>
+            </div>
+            <div class="material-random-panel">
+                <div class="section-title-row">
+                    <div class="section-title">随机展示</div>
+                    <button class="btn btn-secondary todo-mini-btn" onclick="refreshMaterialRandom()">换一批</button>
+                </div>
+                <div id="material-tag-picker" class="tag-picker"></div>
+                <div id="material-random-list" class="material-grid"></div>
+            </div>
+            <div class="filter-bar">
+                <input type="search" id="material-search" placeholder="搜索素材内容、来源、备注、标签" oninput="renderMaterialsPage()">
+                <select id="material-type-filter" onchange="renderMaterialsPage()">
+                    <option value="all">全部类型</option>
+                    <option value="金句">金句</option>
+                    <option value="提示词">提示词</option>
+                    <option value="摘抄">摘抄</option>
+                    <option value="观点">观点</option>
+                    <option value="方法">方法</option>
+                </select>
+                <input type="search" id="material-tag-filter" placeholder="按标签筛选" oninput="renderMaterialsPage()">
+            </div>
+            <div id="material-list" class="material-grid"></div>
+        </div>
+
+        <!-- 全局搜索页 -->
+        <div id="page-search" class="page">
+            <div class="page-header">
+                <div>
+                    <div class="page-title">全局搜索</div>
+                    <div class="page-subtitle">跨记录、待办、目标、素材、模板和转盘公共项搜索。</div>
+                </div>
+            </div>
+            <div class="global-search-panel">
+                <input type="search" id="global-search-input" placeholder="输入关键词，例如 工作 / AI / 提示词" oninput="renderGlobalSearch()">
+                <select id="global-search-scope" onchange="renderGlobalSearch()">
+                    <option value="all">全部模块</option>
+                    <option value="records">记录</option>
+                    <option value="todos">待办</option>
+                    <option value="goals">目标</option>
+                    <option value="materials">素材库</option>
+                    <option value="templates">模板</option>
+                    <option value="wheel">转盘公共项</option>
+                </select>
+            </div>
+            <div id="global-search-results"></div>
+        </div>
+
+        <!-- 待办总览页 -->
+        <div id="page-todos" class="page">
+            <div class="page-header">
+                <div class="page-title">待办总览</div>
+                <button class="btn btn-primary" onclick="openTodoModal()">+ 新建通用待办</button>
+            </div>
+            <div class="filter-bar">
+                <span style="font-size:13px; color:#666;">日期：</span>
+                <input type="date" id="filter-start" onchange="renderTodoTable()">
+                <span>至</span>
+                <input type="date" id="filter-end" onchange="renderTodoTable()">
+                <select id="filter-status" onchange="renderTodoTable()">
+                    <option value="all">全部状态</option>
+                    <option value="todo">待办</option>
+                    <option value="done">已完成</option>
+                </select>
+                <select id="filter-urgency" onchange="renderTodoTable()">
+                    <option value="all">全部紧急度</option>
+                    <option value="urgent">紧急</option>
+                    <option value="high">高</option>
+                    <option value="medium">中</option>
+                    <option value="low">低</option>
+                </select>
+                <select id="filter-group" onchange="renderTodoTable()">
+                    <option value="all">全部分组</option>
+                    <option value="健身">健身</option>
+                    <option value="学习">学习</option>
+                    <option value="工作">工作</option>
+                    <option value="生活">生活</option>
+                    <option value="其他">其他</option>
+                </select>
+                <select id="filter-mode" onchange="renderTodoTable()">
+                    <option value="all">全部模式</option>
+                    <option value="exclusive">专属</option>
+                    <option value="shared">通用</option>
+                </select>
+            </div>
+            <table class="todo-table">
+                <thead>
+                    <tr>
+                        <th style="width: 36px;"></th>
+                        <th>任务名称</th>
+                        <th style="width: 110px;">截止日期</th>
+                        <th style="width: 86px;">紧急度</th>
+                        <th style="width: 80px;">分组</th>
+                        <th style="width: 80px;">模式</th>
+                        <th>关联记录</th>
+                    </tr>
+                </thead>
+                <tbody id="todo-table-body"></tbody>
+            </table>
+        </div>
+
+        <!-- 习惯热力图页 -->
+        <div id="page-habits" class="page">
+            <div class="page-header">
+                <div class="page-title">习惯热力图</div>
+                <button class="btn btn-primary" onclick="openHabitModal()">+ 新建习惯</button>
+            </div>
+            
+            <div class="card">
+                <div class="calendar-toolbar">
+                    <div class="segmented" id="habit-view-tabs">
+                        <button class="active" onclick="setHabitView('year', this)">年度热力图</button>
+                        <button onclick="setHabitView('matrix', this)">习惯矩阵</button>
+                    </div>
+                    <select class="year-select" id="habit-matrix-days" onchange="renderHabitMatrix()" style="max-width:150px;">
+                        <option value="14">近14天</option>
+                        <option value="30" selected>近30天</option>
+                        <option value="60">近60天</option>
+                    </select>
+                </div>
+                <div class="habit-tabs" id="habit-tabs"></div>
+                
+                <div id="habit-view-year" class="habit-view active">
+                    <div class="heatmap-header">
+                        <div style="font-size: 14px; font-weight: 500;" id="current-habit-name">选择习惯查看热力图</div>
+                        <select class="year-select" id="year-select" onchange="renderHeatmap()"></select>
+                    </div>
+
+                    <div class="heatmap-container">
+                        <div class="heatmap-wrapper">
+                            <div class="weekday-labels">
+                                <span>一</span><span>三</span><span>五</span><span>日</span>
+                            </div>
+                            <div class="heatmap" id="heatmap"></div>
+                            <div class="heatmap-labels" id="heatmap-months"></div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid" id="habit-stats">
+                        <div class="stat-card">
+                            <div class="stat-value">-</div>
+                            <div class="stat-label">累计打卡</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">-</div>
+                            <div class="stat-label">当前连续</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">-</div>
+                            <div class="stat-label">最长连续</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">-</div>
+                            <div class="stat-label">本月完成率</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">-</div>
+                            <div class="stat-label">本年完成率</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="habit-view-matrix" class="habit-view">
+                    <div class="habit-matrix" id="habit-matrix"></div>
+                </div>
+
+                <div style="text-align: right; margin-top: 16px;">
+                    <button class="btn btn-secondary" onclick="editCurrentHabit()">编辑规则</button>
+                    <button class="btn btn-danger" onclick="deleteCurrentHabit()">删除习惯</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目标管理页 -->
+        <div id="page-goals" class="page">
+            <div class="page-header">
+                <div class="page-title">目标管理</div>
+                <button class="btn btn-primary" onclick="openGoalModal()">+ 新建目标</button>
+            </div>
+            <div id="goal-list"></div>
+        </div>
+
+        <!-- 工具转盘页 -->
+        <div id="page-wheel" class="page">
+            <div class="page-header">
+                <div>
+                    <div class="page-title">工具转盘</div>
+                    <div class="page-subtitle">普通转盘、标签二段抽取、公共项库和抽取历史都存在这里。</div>
+                </div>
+                <div class="page-actions">
+                    <button class="btn btn-secondary" onclick="openWheelBatchImport()">批量导入</button>
+                    <button class="btn btn-primary" onclick="createWheel()">+ 新建转盘</button>
+                </div>
+            </div>
+
+            <div class="wheel-shell">
+                <section class="wheel-stage card">
+                    <div class="wheel-mode-bar">
+                        <div class="segmented" id="wheel-mode-tabs">
+                            <button class="active" onclick="setWheelMode('normal', this)">普通转盘</button>
+                            <button onclick="setWheelMode('tag', this)">标签转盘</button>
+                        </div>
+                        <select id="wheel-selector" onchange="selectWheel(this.value)"></select>
+                    </div>
+                    <div id="wheel-stage-summary" class="wheel-stage-summary"></div>
+                    <div class="wheel-canvas-wrap">
+                        <canvas id="wheel-canvas" width="360" height="360"></canvas>
+                        <div class="wheel-pointer"></div>
+                    </div>
+                    <div id="wheel-stage-hint" class="wheel-stage-hint"></div>
+                    <div id="wheel-result" class="wheel-result"></div>
+                    <div class="wheel-actions">
+                        <button class="btn btn-primary" onclick="spinWheel()">开始抽取</button>
+                        <button class="btn btn-secondary" onclick="renderWheelPage()">刷新</button>
+                    </div>
+                </section>
+
+                <section class="wheel-panel card">
+                    <div class="calendar-toolbar">
+                        <div class="segmented wheel-tabs" id="wheel-panel-tabs">
+                            <button class="active" onclick="setWheelPanel('items', this)">转盘项</button>
+                            <button onclick="setWheelPanel('library', this)">公共项</button>
+                            <button onclick="setWheelPanel('tags', this)">标签</button>
+                            <button onclick="setWheelPanel('history', this)">记录</button>
+                        </div>
+                    </div>
+                    <div id="wheel-panel-body"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- 选择记录类型弹窗 -->
+    <div id="type-select-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title">新建记录</div>
+                <button class="close-btn" onclick="closeTypeSelect()">×</button>
+            </div>
+            
+            <div class="type-section">
+                <h4>日常记录</h4>
+                <div class="type-cards">
+                    <div class="type-card" onclick="createRecord('日记')">
+                        <div class="icon">📝</div>
+                        <div class="name">日记</div>
+                    </div>
+                    <div class="type-card" onclick="createRecord('日计划')">
+                        <div class="icon">📅</div>
+                        <div class="name">日计划</div>
+                    </div>
+                    <div class="type-card" onclick="createRecord('工作记录')">
+                        <div class="icon">💼</div>
+                        <div class="name">工作记录</div>
+                    </div>
+                    <div class="type-card" onclick="createRecord('灵感碎片')">
+                        <div class="icon">💡</div>
+                        <div class="name">灵感碎片</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="type-section">
+                <h4>周期复盘</h4>
+                <div class="type-cards">
+                    <div class="type-card" onclick="createRecord('周复盘')">
+                        <div class="icon">📊</div>
+                        <div class="name">周复盘</div>
+                    </div>
+                    <div class="type-card" onclick="createRecord('月复盘')">
+                        <div class="icon">📈</div>
+                        <div class="name">月复盘</div>
+                    </div>
+                    <div class="type-card" onclick="createRecord('年复盘')">
+                        <div class="icon">🏆</div>
+                        <div class="name">年复盘</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="type-section">
+                <h4>周期规划</h4>
+                <div class="type-cards">
+                    <div class="type-card" onclick="createRecord('周计划')">
+                        <div class="icon">🗓️</div>
+                        <div class="name">周计划</div>
+                    </div>
+                    <div class="type-card" onclick="createRecord('月计划')">
+                        <div class="icon">📆</div>
+                        <div class="name">月计划</div>
+                    </div>
+                    <div class="type-card" onclick="createRecord('年度计划')">
+                        <div class="icon">🎯</div>
+                        <div class="name">年度计划</div>
+                    </div>
+                    <div class="type-card" onclick="createRecord('3年计划')">
+                        <div class="icon">🚀</div>
+                        <div class="name">3年计划</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="type-section">
+                <h4>长期愿景</h4>
+                <div class="type-cards">
+                    <div class="type-card" onclick="createRecord('终身愿景')">
+                        <div class="icon">🌟</div>
+                        <div class="name">终身愿景</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑记录弹窗 -->
+    <div id="record-modal" class="modal-overlay">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <div class="modal-title" id="record-modal-title">编辑记录</div>
+                <button class="close-btn" onclick="closeRecordModal()">×</button>
+            </div>
+
+            <div class="template-select">
+                <span style="font-size:13px; color:#666;">选择模板：</span>
+                <select id="template-select" onchange="applyTemplate()">
+                    <option value="">空白</option>
+                </select>
+                <button class="btn btn-secondary" style="padding:5px 10px; font-size:12px;" onclick="saveAsTemplate()">保存为模板</button>
+            </div>
+            <div id="built-in-template-editor" class="template-editor"></div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>记录类型</label>
+                    <select id="record-type" onchange="handleRecordTypeChange()">
+                        <option value="日记">日记</option>
+                        <option value="日计划">日计划</option>
+                        <option value="工作记录">工作记录</option>
+                        <option value="灵感碎片">灵感碎片</option>
+                        <option value="周复盘">周复盘</option>
+                        <option value="周计划">周计划</option>
+                        <option value="月复盘">月复盘</option>
+                        <option value="月计划">月计划</option>
+                        <option value="年复盘">年复盘</option>
+                        <option value="年度计划">年度计划</option>
+                        <option value="3年计划">3年计划</option>
+                        <option value="终身愿景">终身愿景</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>标题</label>
+                    <input type="text" id="record-title" placeholder="输入记录标题" oninput="scheduleRecordAutoSave()">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>开始日期</label>
+                    <input type="date" id="record-start-date" oninput="handleRecordDateChange()">
+                </div>
+                <div class="form-group">
+                    <label>结束日期</label>
+                    <input type="date" id="record-end-date" oninput="handleRecordDateChange()">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>开始时间</label>
+                    <input type="time" id="record-time" oninput="scheduleRecordAutoSave()">
+                </div>
+                <div class="form-group">
+                    <label>结束时间</label>
+                    <input type="time" id="record-end-time" oninput="scheduleRecordAutoSave()">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label id="record-content-label">正文内容</label>
+                <div id="record-content-note" class="content-sync-note"></div>
+                <textarea id="record-content" placeholder="记录详细内容..." oninput="scheduleRecordAutoSave()"></textarea>
+            </div>
+
+            <div id="idea-fields" class="idea-fields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>灵感状态</label>
+                        <select id="idea-status" oninput="scheduleRecordAutoSave()">
+                            <option value="待整理">待整理</option>
+                            <option value="待实践">待实践</option>
+                            <option value="实践中">实践中</option>
+                            <option value="已验证">已验证</option>
+                            <option value="已放弃">已放弃</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>灵感标签</label>
+                        <input type="text" id="idea-tags" placeholder="用逗号分隔，例如 AI, 工作" oninput="scheduleRecordAutoSave()">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>下一步动作</label>
+                        <input type="text" id="idea-next-action" placeholder="这条灵感下一步怎么实践" oninput="scheduleRecordAutoSave()">
+                    </div>
+                    <div class="form-group">
+                        <label>关联待办</label>
+                        <select id="idea-todo-id" onchange="scheduleRecordAutoSave()">
+                            <option value="">不关联</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>结果结论</label>
+                    <textarea id="idea-conclusion" placeholder="实践之后补一句：有用、一般、放弃原因..." oninput="scheduleRecordAutoSave()"></textarea>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>专属待办清单</label>
+                <div id="record-todos" class="todo-list"></div>
+                <div class="todo-add">
+                    <input type="text" id="new-todo-input" placeholder="添加待办后按回车" onkeydown="if(event.key==='Enter') addRecordTodo()">
+                    <button class="btn btn-primary" onclick="addRecordTodo()">添加</button>
+                </div>
+            </div>
+
+            <div class="save-status" id="save-status"></div>
+
+            <div style="text-align: right; margin-top: 16px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn btn-danger" id="delete-record-btn" style="display:none;" onclick="deleteRecord()">删除</button>
+                <button class="btn btn-secondary" onclick="previewCurrentRecord()">预览</button>
+                <button class="btn btn-primary" onclick="saveRecordManual()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="record-preview-modal" class="modal-overlay">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <div class="modal-title">记录详情</div>
+                <button class="close-btn" onclick="closeRecordPreview()">×</button>
+            </div>
+            <div id="record-preview-body"></div>
+        </div>
+    </div>
+
+    <!-- 素材编辑弹窗 -->
+    <div id="material-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title" id="material-modal-title">新增素材</div>
+                <button class="close-btn" onclick="closeMaterialModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label>类型</label>
+                <select id="material-type">
+                    <option value="金句">金句</option>
+                    <option value="提示词">提示词</option>
+                    <option value="摘抄">摘抄</option>
+                    <option value="观点">观点</option>
+                    <option value="方法">方法</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>内容</label>
+                <textarea id="material-content" placeholder="粘贴金句、提示词或摘抄内容"></textarea>
+            </div>
+            <div class="form-group">
+                <label>标签</label>
+                <input id="material-tags" placeholder="用逗号分隔，例如 AI, 工作">
+            </div>
+            <div class="form-group">
+                <label>来源</label>
+                <input id="material-source" placeholder="书名、链接、作者或看到的位置">
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <textarea id="material-note" placeholder="为什么留下它，适合什么时候用"></textarea>
+            </div>
+            <div class="modal-action-row">
+                <button class="btn btn-danger" id="delete-material-btn" onclick="deleteCurrentMaterial()">删除</button>
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="closeMaterialModal()">取消</button>
+                    <button class="btn btn-primary" onclick="saveMaterial()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="sync-modal" class="modal-overlay">
+        <div class="modal modal-md">
+            <div class="modal-header">
+                <div class="modal-title">云同步</div>
+                <button class="close-btn" onclick="closeSyncSettings()">×</button>
+            </div>
+            <div class="form-group">
+                <label>同步中转地址</label>
+                <input type="text" id="sync-webdav-url" placeholder="https://你的-worker地址.workers.dev/">
+            </div>
+            <div class="form-group" style="display:none;">
+                <label>账号</label>
+                <input type="text" id="sync-username" placeholder="坚果云账号">
+            </div>
+            <div class="form-group" style="display:none;">
+                <label>应用密码</label>
+                <input type="password" id="sync-password" placeholder="坚果云第三方应用密码">
+            </div>
+            <div class="form-group">
+                <label>云端路径</label>
+                <input type="text" id="sync-remote-path" placeholder="/life-plan.json">
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="sync-auto" checked> 自动同步（修改后 20 秒上传，每 5 分钟检查云端）</label>
+            </div>
+            <div id="sync-modal-status" class="sync-modal-status">同步状态会显示在这里。</div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="testCloudSync()">测试连接</button>
+                <button class="btn btn-secondary" onclick="runCloudSync('down')">从云端拉取</button>
+                <button class="btn btn-secondary" onclick="runCloudSync('up')">上传到云端</button>
+                <button class="btn btn-primary" onclick="saveSyncSettings()">保存并同步</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="snapshot-modal" class="modal-overlay">
+        <div class="modal modal-md">
+            <div class="modal-header">
+                <div class="modal-title">本地快照</div>
+                <button class="close-btn" onclick="closeSnapshotModal()">×</button>
+            </div>
+            <div class="snapshot-help">
+                自动保留最近 20 份快照。现在会记录版本号、上一个版本和合并来源；点“预览”可以先看内容概况，再决定是否恢复。
+            </div>
+            <div id="snapshot-preview" class="snapshot-preview"></div>
+            <div id="snapshot-list" class="snapshot-list"></div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:14px;">
+                <button class="btn btn-secondary" onclick="createLocalSnapshot('手动快照')">立即创建快照</button>
+                <button class="btn btn-secondary" onclick="closeSnapshotModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建/编辑习惯弹窗 -->
+    <div id="habit-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title" id="habit-modal-title">新建习惯</div>
+                <button class="close-btn" onclick="closeHabitModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label>习惯名称</label>
+                <input type="text" id="habit-name" placeholder="例如：运动30分钟">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>重复规则</label>
+                    <select id="habit-rule" onchange="toggleHabitRule()">
+                        <option value="daily">每天</option>
+                        <option value="weekly-fixed">固定周几</option>
+                        <option value="weekly-count">每周N次</option>
+                        <option value="monthly-count">每月N次</option>
+                        <option value="interval">间隔N天</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>每日次数</label>
+                    <select id="habit-times">
+                        <option value="1">每天1次</option>
+                        <option value="multi">每天多次</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" id="rule-weekdays" style="display: none;">
+                <label>选择星期</label>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <label><input type="checkbox" value="1"> 周一</label>
+                    <label><input type="checkbox" value="2"> 周二</label>
+                    <label><input type="checkbox" value="3"> 周三</label>
+                    <label><input type="checkbox" value="4"> 周四</label>
+                    <label><input type="checkbox" value="5"> 周五</label>
+                    <label><input type="checkbox" value="6"> 周六</label>
+                    <label><input type="checkbox" value="0"> 周日</label>
+                </div>
+            </div>
+            <div class="form-group" id="rule-count" style="display: none;">
+                <label>次数 / 间隔天数</label>
+                <input type="number" id="habit-count" value="3" min="1">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>场景标签</label>
+                    <select id="habit-tag">
+                        <option value="全天">全天</option>
+                        <option value="晨间">晨间</option>
+                        <option value="午间">午间</option>
+                        <option value="晚间">晚间</option>
+                        <option value="学习">学习</option>
+                        <option value="运动">运动</option>
+                        <option value="工作">工作</option>
+                        <option value="生活">生活</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>总目标次数</label>
+                    <input type="number" id="habit-goal" value="0" min="0">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>打卡备注</label>
+                <select id="habit-note-mode">
+                    <option value="ask">未设置，打卡时默认弹窗提醒</option>
+                    <option value="always">需要备注，每次都先弹窗</option>
+                    <option value="never">不需要备注，直接快捷打卡</option>
+                </select>
+            </div>
+            <div style="text-align: right; margin-top: 18px;">
+                <button class="btn btn-primary" onclick="saveHabit()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="habit-note-modal" class="modal-overlay">
+        <div class="modal modal-sm habit-note-dialog">
+            <div class="modal-header">
+                <div class="modal-title" id="habit-note-modal-title">习惯备注</div>
+                <button class="close-btn" onclick="closeHabitNoteModal()">×</button>
+            </div>
+            <div class="form-group habit-note-field">
+                <textarea id="habit-note-input" rows="3" placeholder="这次做了什么？可留空"></textarea>
+            </div>
+            <div class="habit-note-foot">
+                <label class="habit-note-toggle">
+                    <input type="checkbox" id="habit-note-disable">
+                    <span>以后不提醒</span>
+                </label>
+                <div class="habit-note-actions">
+                    <button class="btn btn-secondary" id="habit-note-skip-btn" onclick="submitHabitNoteModal(false)">跳过</button>
+                    <button class="btn btn-primary" id="habit-note-save-btn" onclick="submitHabitNoteModal(true)">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建目标弹窗 -->
+    <div id="goal-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title" id="goal-modal-title">新建目标</div>
+                <button class="close-btn" onclick="closeGoalModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label>目标名称</label>
+                <input type="text" id="goal-name" placeholder="例如：减重20斤">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>目标周期</label>
+                    <input type="text" id="goal-period" placeholder="例如：3个月">
+                </div>
+                <div class="form-group">
+                    <label>状态</label>
+                    <select id="goal-status">
+                        <option value="进行中">进行中</option>
+                        <option value="已完成">已完成</option>
+                        <option value="已搁置">已搁置</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>总目标描述</label>
+                <input type="text" id="goal-target" placeholder="例如：体重从80kg减到70kg">
+            </div>
+            <div class="form-group">
+                <label>当前进度（0-100）</label>
+                <input type="number" id="goal-progress" value="0" min="0" max="100">
+            </div>
+            <div style="text-align: right; margin-top: 18px; display: flex; gap: 10px; justify-content: space-between;">
+                <button class="btn btn-danger" id="delete-goal-btn" style="display:none;" onclick="deleteCurrentGoal()">删除</button>
+                <button class="btn btn-primary" onclick="saveGoal()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模板管理弹窗 -->
+    <div id="template-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title">模板管理</div>
+                <button class="close-btn" onclick="closeTemplateManage()">×</button>
+            </div>
+            <div id="template-list"></div>
+        </div>
+    </div>
+
+    <!-- 待办详情弹窗 -->
+    <div id="todo-detail-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title" id="todo-detail-title">待办详情</div>
+                <button class="close-btn" onclick="closeTodoDetail()">×</button>
+            </div>
+            <div id="todo-detail-view" class="todo-detail-view"></div>
+            <div id="todo-detail-edit-panel" class="todo-detail-edit-panel">
+                <div class="form-group">
+                    <label>任务名称</label>
+                    <input type="text" id="todo-detail-text">
+                </div>
+                <div class="form-section-title">计划安排</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>计划开始</label>
+                        <input type="date" id="todo-detail-plan-start">
+                    </div>
+                    <div class="form-group">
+                        <label>计划结束</label>
+                        <input type="date" id="todo-detail-plan-end">
+                    </div>
+                    <div class="form-group">
+                        <label>截止日期</label>
+                        <input type="date" id="todo-detail-date">
+                        <button type="button" class="mini-link" onclick="document.getElementById('todo-detail-date').value=''">设为无截止</button>
+                    </div>
+                    <div class="form-group">
+                        <label>紧急程度</label>
+                        <select id="todo-detail-urgency">
+                            <option value="medium">中</option>
+                            <option value="urgent">紧急</option>
+                            <option value="high">高</option>
+                            <option value="low">低</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>分组</label>
+                        <select id="todo-detail-group">
+                            <option value="其他">其他</option>
+                            <option value="健身">健身</option>
+                            <option value="学习">学习</option>
+                            <option value="工作">工作</option>
+                            <option value="生活">生活</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="todo-date-presets" aria-label="快捷选择待办时间">
+                    <button type="button" onclick="applyTodoDatePreset('today')">今日</button>
+                    <button type="button" onclick="applyTodoDatePreset('tomorrow')">明日</button>
+                    <button type="button" onclick="applyTodoDatePreset('this-week')">本周</button>
+                    <button type="button" onclick="applyTodoDatePreset('next-week')">下周</button>
+                    <button type="button" onclick="applyTodoDatePreset('no-due')">无截止</button>
+                </div>
+            </div>
+            <div class="form-section-title">执行记录</div>
+            <div id="todo-session-editor" class="todo-session-editor">
+                <input type="date" id="todo-session-date">
+                <input type="time" id="todo-session-start">
+                <input type="time" id="todo-session-end">
+                <input type="text" id="todo-session-note" placeholder="这次做了什么，可不填">
+                <button class="btn btn-primary" onclick="addTodoSession()">记录一次执行</button>
+            </div>
+            <div id="todo-detail-sessions" class="todo-session-list"></div>
+            <div class="form-group" id="todo-subtodo-section">
+                <label>子任务</label>
+                <div id="todo-detail-subtodos" class="todo-list"></div>
+                <div class="todo-add" id="todo-subtodo-add">
+                    <input type="text" id="new-subtodo-input" placeholder="添加子任务" onkeydown="if(event.key==='Enter') addSubTodo()">
+                    <button class="btn btn-primary" onclick="addSubTodo()">添加</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>关联记录</label>
+                <div id="todo-detail-records"></div>
+            </div>
+            <div id="todo-detail-view-actions" class="modal-action-row">
+                <button class="btn btn-danger" onclick="deleteCurrentTodo()">删除待办</button>
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="addQuickTodoSession(currentTodoId)">执行一次</button>
+                    <button class="btn btn-primary" onclick="setTodoDetailMode('edit')">编辑</button>
+                </div>
+            </div>
+            <div id="todo-detail-edit-actions" class="modal-action-row">
+                <button class="btn btn-danger" onclick="deleteCurrentTodo()">删除待办</button>
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="currentTodoId ? setTodoDetailMode('view') : closeTodoDetail()">取消</button>
+                    <button class="btn btn-primary" onclick="saveTodoDetail()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./app.js"></script>
+    <script src="./wheel-tool.js"></script>
+</body>
+</html>
