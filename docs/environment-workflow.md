@@ -38,7 +38,19 @@ http://localhost:5173/
 .\scripts\check.ps1
 ```
 
-该脚本会检查 `app.js` 和 `wheel-tool.js` 的 JavaScript 语法，并显示 Git 工作区状态。
+该脚本会检查 `app.js`、`wheel-tool.js`、`playwright.config.js` 的 JavaScript 语法，运行 Playwright 冒烟测试，并显示 Git 工作区状态。
+
+直接运行 Playwright 冒烟测试：
+
+```powershell
+npm test
+```
+
+有界面模式运行：
+
+```powershell
+npm run test:headed
+```
 
 生成干净交付压缩包：
 
@@ -61,6 +73,28 @@ http://localhost:5173/
 - 确认无误后做本地提交。
 - 不自动添加 remote。
 - 不执行 `git push`，除非用户明确要求并提供远程仓库策略。
+
+## Playwright
+
+项目本地安装了 Node.js 版 Playwright：
+
+```text
+@playwright/test
+```
+
+Chromium 浏览器文件安装在当前 Windows 用户的 Playwright 缓存目录中，例如：
+
+```text
+C:\Users\lihao\AppData\Local\ms-playwright
+```
+
+当前冒烟测试在：
+
+```text
+tests\smoke.spec.js
+```
+
+测试会自动启动本地静态服务，打开首页，检查核心页面导航，并对全局搜索做基础输入验证。
 
 ## 测试数据
 

@@ -7,6 +7,14 @@ try {
     Write-Host "Checking JavaScript syntax..."
     node --check .\app.js
     node --check .\wheel-tool.js
+    if (Test-Path .\playwright.config.js) {
+        node --check .\playwright.config.js
+    }
+
+    if (Test-Path .\package.json) {
+        Write-Host "Running Playwright smoke tests..."
+        npm test
+    }
 
     Write-Host "Checking Git working tree..."
     $status = git status --short

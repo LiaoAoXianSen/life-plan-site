@@ -16,6 +16,9 @@
 - `scripts/check.ps1`：基础检查脚本。
 - `scripts/package-clean.ps1`：干净交付压缩包脚本。
 - `test-data/sample-data.json`：脱敏测试数据。
+- `package.json` / `package-lock.json`：Node 项目依赖和测试脚本。
+- `playwright.config.js`：Playwright 冒烟测试配置。
+- `tests/smoke.spec.js`：核心页面自动化冒烟测试。
 
 ## 2. 数据总览
 
@@ -472,6 +475,7 @@
 - 当前项目位置为 `D:\project\life-plan-site`。
 - 本地环境工作流见 `docs/environment-workflow.md`。
 - 常用检查命令是 `.\scripts\check.ps1`。
+- Playwright 测试命令是 `npm test`。
 - 干净打包命令是 `.\scripts\package-clean.ps1`。
 - 数据主要依赖浏览器本地存储，换浏览器或清缓存前应先导出 JSON 或使用云同步。
 - `app.js` 文件较大，后续改动建议按功能块小步修改并做浏览器冒烟测试。
