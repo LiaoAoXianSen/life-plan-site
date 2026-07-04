@@ -86,10 +86,18 @@
         overflow-y: auto;
         padding-right: 3px;
     }
-    .sidebar-bottom {
+    .sidebar-primary-action {
         margin-top: auto;
         padding-top: 18px;
         border-top: 1px solid var(--line);
+    }
+    .sidebar-primary-action .btn {
+        width: 100%;
+    }
+    .sidebar-bottom {
+        margin-top: 10px;
+        padding-top: 0;
+        border-top: none;
         flex: 0 0 auto;
     }
     .sidebar-bottom summary {
@@ -1813,6 +1821,14 @@
             padding-top: 8px;
             display: block;
         }
+        .sidebar-primary-action {
+            margin-top: 6px;
+            padding-top: 8px;
+        }
+        .sidebar-primary-action .btn {
+            min-height: 34px;
+            padding: 7px 10px;
+        }
         .sidebar-bottom summary {
             display: inline-flex;
             align-items: center;
@@ -1829,11 +1845,6 @@
             align-items: start;
         }
         .sidebar-bottom[open] summary { grid-column: 1 / -1; }
-        .sidebar-bottom > .btn {
-            margin-bottom: 0 !important;
-            min-height: 32px;
-            padding: 6px 8px;
-        }
         .sidebar-button-row {
             margin-top: 0;
             gap: 6px;
@@ -1889,7 +1900,6 @@
         .habit-quick-btn { width: 100%; }
         .sidebar-button-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .sidebar-bottom[open] { grid-template-columns: 1fr 1fr; }
-        .sidebar-bottom > .btn { grid-column: 1 / -1; }
         .card-title { display: block; }
         .record-row { grid-template-columns: 48px minmax(0, 1fr); gap: 8px; }
         .calendar-grid { grid-template-columns: repeat(7, minmax(96px, 1fr)); overflow-x: auto; }

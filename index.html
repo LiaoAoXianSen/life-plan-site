@@ -24,9 +24,11 @@
             <div class="nav-item" onclick="switchPage('wheel', this)">🎡 工具转盘</div>
         </div>
         
+        <div class="sidebar-primary-action">
+            <button class="btn btn-primary" onclick="openTypeSelect()">+ 新建记录</button>
+        </div>
         <details class="sidebar-bottom">
             <summary>工具与备份</summary>
-            <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="openTypeSelect()">+ 新建记录</button>
             <div class="sidebar-button-row">
                 <button class="btn btn-secondary" style="flex:1" onclick="exportData()">导出备份</button>
                 <button class="btn btn-secondary" style="flex:1" onclick="importData()">导入恢复</button>
