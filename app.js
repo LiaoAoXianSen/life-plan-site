@@ -864,11 +864,27 @@
             const text = message || '';
             const sideEl = document.getElementById('sync-status');
             const modalEl = document.getElementById('sync-modal-status');
+            const inlineEl = document.getElementById('sync-status-inline');
             [sideEl, modalEl].forEach(el => {
                 if (!el) return;
                 el.textContent = text;
                 el.classList.toggle('is-error', !!isError);
             });
+            if (inlineEl) {
+                inlineEl.textContent = getSyncStatusSummary(text, isError);
+                inlineEl.classList.toggle('is-error', !!isError);
+            }
+        }
+
+        function getSyncStatusSummary(message = '', isError = false) {
+            const text = String(message || '').trim();
+            if (isError) return '同步：失败';
+            if (!text) return syncConfig.webdavUrl ? '同步：待检查' : '同步：未配置';
+            if (text.includes('未配置')) return '同步：未配置';
+            if (text.includes('正在') || text.includes('稍后')) return '同步：进行中';
+            if (text.includes('完成') || text.includes('已上传') || text.includes('已拉取') || text.includes('一致') || text.includes('已同步')) return '同步：已同步';
+            if (text.includes('已加载')) return '同步：已配置';
+            return `同步：${text.replace(/\s+/g, ' ').slice(0, 16)}`;
         }
 
         function openSyncSettings() {

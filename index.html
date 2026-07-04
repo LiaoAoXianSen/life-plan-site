@@ -28,7 +28,10 @@
             <button class="btn btn-primary" onclick="openTypeSelect()">+ 新建记录</button>
         </div>
         <details class="sidebar-bottom">
-            <summary>数据与备份</summary>
+            <summary>
+                <span>数据与备份</span>
+                <span id="sync-status-inline" class="sync-status-inline">同步：未配置</span>
+            </summary>
             <div class="sidebar-button-row">
                 <button class="btn btn-secondary" style="flex:1" onclick="exportData()">导出备份</button>
                 <button class="btn btn-secondary" style="flex:1" onclick="importData()">导入恢复</button>
