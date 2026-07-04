@@ -14,6 +14,7 @@ test('loads the app and opens core pages', async ({ page }) => {
     const pages = [
         ['灵感池', '#page-ideas'],
         ['素材库', '#page-materials'],
+        ['标签中心', '#page-tags'],
         ['全局搜索', '#page-search'],
         ['待办总览', '#page-todos'],
         ['习惯热力图', '#page-habits'],
@@ -34,4 +35,28 @@ test('global search page accepts a keyword', async ({ page }) => {
     await page.locator('.nav-item', { hasText: '全局搜索' }).click();
     await page.locator('#global-search-input').fill('工作');
     await expect(page.locator('#global-search-results')).toBeVisible();
+});
+
+test('idea can be converted to a linked todo', async ({ page }) => {
+    const sample = require('../test-data/sample-data.json');
+    const data = JSON.parse(JSON.stringify(sample));
+    data.todos = data.todos.filter(todo => todo.id !== 'sample-todo-idea');
+    const idea = data.records.find(record => record.id === 'sample-record-idea');
+    idea.ideaTodoId = '';
+    idea.ideaStatus = '待整理';
+
+    await page.goto('/');
+    await page.evaluate(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), data);
+    await page.reload();
+    await page.locator('.nav-item', { hasText: '灵感池' }).click();
+    await page.locator('.idea-card', { hasText: '把灵感转成小实验' }).getByRole('button', { name: '转成待办' }).click();
+
+    await expect(page.locator('#todo-detail-modal')).toHaveClass(/active/);
+    await expect(page.locator('#todo-detail-title')).toHaveText('待办详情');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const updatedIdea = stored.records.find(record => record.id === 'sample-record-idea');
+    const linkedTodo = stored.todos.find(todo => todo.id === updatedIdea.ideaTodoId);
+    expect(updatedIdea.ideaStatus).toBe('待实践');
+    expect(linkedTodo.text).toContain('选一个灵感转成待办');
 });

@@ -13,9 +13,10 @@
         <h2>人生规划系统</h2>
         <div class="nav-item active" onclick="switchPage('dashboard', this)">📊 首页仪表盘</div>
         <div class="nav-item" onclick="switchPage('records', this)">📝 所有记录</div>
-        <div class="nav-item" onclick="switchPage('ideas', this)">💡 灵感池</div>
-        <div class="nav-item" onclick="switchPage('materials', this)">📚 素材库</div>
-        <div class="nav-item" onclick="switchPage('search', this)">🔎 全局搜索</div>
+                <div class="nav-item" onclick="switchPage('ideas', this)">💡 灵感池</div>
+                <div class="nav-item" onclick="switchPage('materials', this)">📚 素材库</div>
+                <div class="nav-item" onclick="switchPage('tags', this)">🏷️ 标签中心</div>
+                <div class="nav-item" onclick="switchPage('search', this)">🔎 全局搜索</div>
         <div class="nav-item" onclick="switchPage('todos', this)">✅ 待办总览</div>
         <div class="nav-item" onclick="switchPage('habits', this)">🔥 习惯热力图</div>
         <div class="nav-item" onclick="switchPage('goals', this)">🎯 目标管理</div>
@@ -78,6 +79,8 @@
                     </div>
                 </div>
             </div>
+
+            <div class="command-center" id="dashboard-command-center"></div>
 
             <div class="card">
                 <div class="card-title">今日概览 · <span id="today-date"></span></div>
@@ -231,6 +234,27 @@
                 <input type="search" id="material-tag-filter" placeholder="按标签筛选" oninput="renderMaterialsPage()">
             </div>
             <div id="material-list" class="material-grid"></div>
+        </div>
+
+        <!-- 标签中心页 -->
+        <div id="page-tags" class="page">
+            <div class="page-header">
+                <div>
+                    <div class="page-title">标签中心</div>
+                    <div class="page-subtitle">先统一查看灵感、素材和转盘标签，避免标签体系越用越散。</div>
+                </div>
+            </div>
+            <div class="global-search-panel">
+                <input type="search" id="tag-center-search" placeholder="搜索标签，例如 AI / 工作 / 学习" oninput="renderTagCenter()">
+                <select id="tag-center-scope" onchange="renderTagCenter()">
+                    <option value="all">全部来源</option>
+                    <option value="ideas">灵感标签</option>
+                    <option value="materials">素材标签</option>
+                    <option value="wheel">转盘标签</option>
+                </select>
+            </div>
+            <div id="tag-center-summary" class="mini-summary-grid"></div>
+            <div id="tag-center-list"></div>
         </div>
 
         <!-- 全局搜索页 -->

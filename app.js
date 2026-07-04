@@ -1933,6 +1933,7 @@
             if (pageName === 'records') renderAllRecords();
             if (pageName === 'ideas') renderIdeaPool();
             if (pageName === 'materials') renderMaterialsPage();
+            if (pageName === 'tags') renderTagCenter();
             if (pageName === 'search') renderGlobalSearch();
             if (pageName === 'todos') renderTodoTable();
             if (pageName === 'habits') { renderHabitTabs(); if(currentHabitId) renderHeatmap(); if(currentHabitView === 'matrix') renderHabitMatrix(); }
@@ -1943,7 +1944,17 @@
         function refreshKnowledgeViews() {
             renderIdeaPool();
             renderMaterialsPage();
+            renderTagCenter();
             renderGlobalSearch();
+        }
+
+        function getNavItemByPage(pageName) {
+            return Array.from(document.querySelectorAll('.nav-item'))
+                .find(item => (item.getAttribute('onclick') || '').includes(`'${pageName}'`));
+        }
+
+        function navigateToPage(pageName) {
+            switchPage(pageName, getNavItemByPage(pageName));
         }
 
         // ================== 首页仪表盘 ==================
@@ -1954,6 +1965,7 @@
 
         function renderDashboard() {
             renderDashboardSummary();
+            renderDashboardCommandCenter();
             renderTodayTodos();
             renderFloatingTodos(currentFloatingTodoMode);
             renderTodayHabits();
@@ -1987,6 +1999,98 @@
                 `进行中目标 ${activeGoals}`,
                 `本周记录 ${weekRecords}`
             ].map(text => `<span>${text}</span>`).join('');
+        }
+
+        function getDashboardMaterialPicks() {
+            return [...data.materials]
+                .sort(() => Math.random() - 0.5)
+                .slice(0, 2);
+        }
+
+        function renderGoalFocusList() {
+            const goals = [...data.goals]
+                .filter(goal => goal.status === '进行中')
+                .sort((a, b) => Number(b.progress || 0) - Number(a.progress || 0))
+                .slice(0, 3);
+            if (!goals.length) return '<div class="empty-state compact-empty">暂无进行中的目标</div>';
+            return goals.map(goal => `
+                <div class="command-row" onclick="openGoalDetail('${goal.id}')">
+                    <span>${escapeHtml(goal.name || '未命名目标')}</span>
+                    <strong>${Number(goal.progress || 0)}%</strong>
+                </div>
+            `).join('');
+        }
+
+        function renderDashboardCommandCenter() {
+            const container = document.getElementById('dashboard-command-center');
+            if (!container) return;
+            const ideas = data.records.filter(record => record.type === '灵感碎片');
+            const unprocessedIdeas = ideas.filter(isIdeaUnprocessed);
+            const needsConclusionIdeas = ideas.filter(ideaNeedsConclusion);
+            const today = getTodayStr();
+            const urgentTodos = data.todos
+                .filter(todo => !todo.done && (isTodoOverdue(todo, today) || ['urgent', 'high'].includes(todo.urgency)))
+                .sort(compareTodosForFocus)
+                .slice(0, 4);
+            const materialPicks = getDashboardMaterialPicks();
+
+            container.innerHTML = `
+                <div class="command-card command-card-ideas">
+                    <div class="command-card-head">
+                        <div>
+                            <div class="section-title">今日指挥中心</div>
+                            <p>先看哪里卡住，再决定下一步。</p>
+                        </div>
+                        <button class="btn btn-secondary todo-mini-btn" onclick="navigateToPage('tags')">标签中心</button>
+                    </div>
+                    <div class="command-metric-grid">
+                        <button onclick="jumpToIdeas('unprocessed')" class="command-metric">
+                            <strong>${unprocessedIdeas.length}</strong>
+                            <span>未处理灵感</span>
+                        </button>
+                        <button onclick="jumpToIdeas('needsConclusion')" class="command-metric">
+                            <strong>${needsConclusionIdeas.length}</strong>
+                            <span>待写结论</span>
+                        </button>
+                        <button onclick="navigateToPage('todos')" class="command-metric">
+                            <strong>${urgentTodos.length}</strong>
+                            <span>高压待办</span>
+                        </button>
+                    </div>
+                    ${urgentTodos.length ? `
+                        <div class="command-list">
+                            ${urgentTodos.map(todo => `
+                                <div class="command-row" onclick="openTodoDetail('${todo.id}')">
+                                    <span>${escapeHtml(todo.text || '未命名待办')}</span>
+                                    ${renderTodoUrgencyBadge(todo)}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<div class="empty-state compact-empty">暂时没有超期或高优先级待办</div>'}
+                </div>
+                <div class="command-card">
+                    <div class="command-card-head">
+                        <div>
+                            <div class="section-title">随机复习素材</div>
+                            <p>从素材库随手捞两条，给今天一点燃料。</p>
+                        </div>
+                        <button class="btn btn-secondary todo-mini-btn" onclick="navigateToPage('materials')">去素材库</button>
+                    </div>
+                    <div class="command-materials">
+                        ${materialPicks.length ? materialPicks.map(material => renderMaterialCard(material, true)).join('') : '<div class="empty-state compact-empty">素材库还没有内容</div>'}
+                    </div>
+                </div>
+                <div class="command-card">
+                    <div class="command-card-head">
+                        <div>
+                            <div class="section-title">目标进度</div>
+                            <p>只看进行中的目标，避免长期目标隐身。</p>
+                        </div>
+                        <button class="btn btn-secondary todo-mini-btn" onclick="navigateToPage('goals')">看目标</button>
+                    </div>
+                    <div class="command-list">${renderGoalFocusList()}</div>
+                </div>
+            `;
         }
 
         // 今日待办
@@ -2495,6 +2599,11 @@
                                 <div><strong>关联待办</strong><span>${escapeHtml(getIdeaTodo(record)?.text || '未关联')}</span></div>
                                 <div class="wide"><strong>结果结论</strong><span>${escapeHtml(record.ideaConclusion || '还没有结论')}</span></div>
                             </div>
+                            ${fromEditor ? '' : `
+                                <div class="idea-card-actions">
+                                    <button class="btn btn-secondary todo-mini-btn" onclick="convertIdeaToTodo('${record.id}')">${getIdeaTodo(record) ? '打开关联待办' : '转成待办'}</button>
+                                </div>
+                            `}
                         </div>
                     ` : ''}
                     ${todos.length ? `
@@ -3154,7 +3263,197 @@
                         </div>
                         <div class="idea-card-actions">
                             <button class="btn btn-secondary todo-mini-btn" onclick="openRecordPreview('${record.id}')">查看</button>
+                            <button class="btn btn-secondary todo-mini-btn" onclick="convertIdeaToTodo('${record.id}')">${todo ? '打开待办' : '转成待办'}</button>
                             <button class="btn btn-primary todo-mini-btn" onclick="openRecordModal('${record.id}')">编辑推进</button>
+                        </div>
+                    </article>
+                `;
+            }).join('')}</div>`;
+        }
+
+        function getIdeaTodoText(record) {
+            return (record.ideaNextAction || record.title || record.content || '实践一条灵感')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 120) || '实践一条灵感';
+        }
+
+        function convertIdeaToTodo(recordId) {
+            const record = data.records.find(item => item.id === recordId && item.type === '灵感碎片');
+            if (!record) return;
+            const existingTodo = getIdeaTodo(record);
+            if (existingTodo) {
+                openTodoDetail(existingTodo.id);
+                return;
+            }
+
+            const now = getLocalDateTimeStr();
+            const todo = {
+                id: genId(),
+                text: getIdeaTodoText(record),
+                planStartDate: '',
+                planEndDate: '',
+                dueDate: '',
+                urgency: 'medium',
+                group: '学习',
+                done: false,
+                subTodos: [],
+                sessions: [],
+                isExclusive: false,
+                createdAt: now,
+                updatedAt: now,
+                completedAt: ''
+            };
+            data.todos.push(todo);
+            record.ideaTodoId = todo.id;
+            if (getIdeaStatus(record) === '待整理') record.ideaStatus = '待实践';
+            record.updatedAt = now;
+            saveData();
+            renderIdeaPool();
+            renderAllRecords();
+            renderDashboard();
+            renderGlobalSearch();
+            openTodoDetail(todo.id);
+        }
+
+        function jumpToIdeas(status = 'all', tag = '') {
+            navigateToPage('ideas');
+            const statusEl = document.getElementById('idea-status-filter');
+            const tagEl = document.getElementById('idea-tag-filter');
+            const searchEl = document.getElementById('idea-search');
+            if (statusEl) statusEl.value = status;
+            if (tagEl) tagEl.value = tag || '';
+            if (searchEl) searchEl.value = '';
+            renderIdeaPool();
+        }
+
+        function jumpToMaterials(tag = '') {
+            navigateToPage('materials');
+            const tagEl = document.getElementById('material-tag-filter');
+            const searchEl = document.getElementById('material-search');
+            const typeEl = document.getElementById('material-type-filter');
+            if (tagEl) tagEl.value = tag || '';
+            if (searchEl) searchEl.value = '';
+            if (typeEl) typeEl.value = 'all';
+            renderMaterialsPage();
+        }
+
+        function jumpToWheelTag(tagId = '') {
+            navigateToPage('wheel');
+            currentWheelPanel = 'tags';
+            renderWheelPage();
+            if (tagId) {
+                setTimeout(() => {
+                    const row = Array.from(document.querySelectorAll('[data-wheel-tag-id]'))
+                        .find(item => item.getAttribute('data-wheel-tag-id') === tagId);
+                    if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }, 50);
+            }
+        }
+
+        // ================== 标签中心 ==================
+        function getTagCenterItems() {
+            const map = new Map();
+            const ensure = (name) => {
+                const clean = String(name || '').trim();
+                if (!clean) return null;
+                const key = clean.toLowerCase();
+                if (!map.has(key)) {
+                    map.set(key, {
+                        name: clean,
+                        ideas: [],
+                        materials: [],
+                        wheelItems: [],
+                        wheelTags: []
+                    });
+                }
+                return map.get(key);
+            };
+
+            data.records
+                .filter(record => record.type === '灵感碎片')
+                .forEach(record => getIdeaTags(record).forEach(tag => ensure(tag)?.ideas.push(record)));
+
+            data.materials.forEach(material => {
+                normalizeTagList(material.tags).forEach(tag => ensure(tag)?.materials.push(material));
+            });
+
+            data.wheelTags.forEach(tag => {
+                const item = ensure(tag.name);
+                if (item) item.wheelTags.push(tag);
+            });
+
+            data.wheelLibraryItems.forEach(libraryItem => {
+                (libraryItem.tagIds || []).forEach(tagId => {
+                    const tag = data.wheelTags.find(item => item.id === tagId);
+                    const centerItem = ensure(tag?.name);
+                    if (centerItem) centerItem.wheelItems.push(libraryItem);
+                });
+            });
+
+            return Array.from(map.values()).sort((a, b) => {
+                const totalB = b.ideas.length + b.materials.length + b.wheelItems.length + b.wheelTags.length;
+                const totalA = a.ideas.length + a.materials.length + a.wheelItems.length + a.wheelTags.length;
+                return totalB - totalA || a.name.localeCompare(b.name, 'zh-CN');
+            });
+        }
+
+        function getFilteredTagCenterItems() {
+            const keyword = (document.getElementById('tag-center-search')?.value || '').trim().toLowerCase();
+            const scope = document.getElementById('tag-center-scope')?.value || 'all';
+            return getTagCenterItems()
+                .filter(item => {
+                    if (scope === 'ideas') return item.ideas.length > 0;
+                    if (scope === 'materials') return item.materials.length > 0;
+                    if (scope === 'wheel') return item.wheelItems.length > 0 || item.wheelTags.length > 0;
+                    return true;
+                })
+                .filter(item => !keyword || item.name.toLowerCase().includes(keyword));
+        }
+
+        function renderTagCenterSummary(items) {
+            const container = document.getElementById('tag-center-summary');
+            if (!container) return;
+            const all = getTagCenterItems();
+            const ideaTags = all.filter(item => item.ideas.length).length;
+            const materialTags = all.filter(item => item.materials.length).length;
+            const wheelTags = all.filter(item => item.wheelItems.length || item.wheelTags.length).length;
+            container.innerHTML = `
+                <div class="mini-summary-card"><strong>${all.length}</strong><span>全部标签</span></div>
+                <div class="mini-summary-card"><strong>${ideaTags}</strong><span>灵感标签</span></div>
+                <div class="mini-summary-card"><strong>${materialTags}</strong><span>素材标签</span></div>
+                <div class="mini-summary-card"><strong>${wheelTags}</strong><span>转盘标签</span></div>
+                <div class="mini-summary-card"><strong>${items.length}</strong><span>当前筛选</span></div>
+            `;
+        }
+
+        function renderTagCenter() {
+            const list = document.getElementById('tag-center-list');
+            if (!list) return;
+            const items = getFilteredTagCenterItems();
+            renderTagCenterSummary(items);
+            if (!items.length) {
+                list.innerHTML = '<div class="empty-state">暂无匹配标签</div>';
+                return;
+            }
+            list.innerHTML = `<div class="tag-center-grid">${items.map(item => {
+                const wheelTag = item.wheelTags[0];
+                const total = item.ideas.length + item.materials.length + item.wheelItems.length;
+                return `
+                    <article class="tag-center-card">
+                        <div class="tag-center-head">
+                            <span class="tag-pill">${escapeHtml(item.name)}</span>
+                            <strong>${total}</strong>
+                        </div>
+                        <div class="tag-center-counts">
+                            <button onclick="jumpToIdeas('all', ${escapeJsArg(item.name)})"><strong>${item.ideas.length}</strong><span>灵感</span></button>
+                            <button onclick="jumpToMaterials(${escapeJsArg(item.name)})"><strong>${item.materials.length}</strong><span>素材</span></button>
+                            <button onclick="jumpToWheelTag(${escapeJsArg(wheelTag?.id || '')})"><strong>${item.wheelItems.length}</strong><span>转盘项</span></button>
+                        </div>
+                        <div class="tag-center-preview">
+                            ${item.ideas[0] ? `<span>灵感：${escapeHtml(item.ideas[0].title || '未命名灵感')}</span>` : ''}
+                            ${item.materials[0] ? `<span>素材：${escapeHtml((item.materials[0].content || '').slice(0, 34))}</span>` : ''}
+                            ${item.wheelItems[0] ? `<span>转盘：${escapeHtml(item.wheelItems[0].name || '未命名公共项')}</span>` : ''}
                         </div>
                     </article>
                 `;
@@ -3309,6 +3608,8 @@
             saveData();
             closeMaterialModal();
             renderMaterialsPage();
+            renderTagCenter();
+            renderDashboard();
             renderGlobalSearch();
         }
 
@@ -3320,6 +3621,8 @@
             saveData();
             closeMaterialModal();
             renderMaterialsPage();
+            renderTagCenter();
+            renderDashboard();
             renderGlobalSearch();
         }
 
@@ -3971,6 +4274,10 @@
             data.records.forEach(r => {
                 if (r.todoIds) {
                     r.todoIds = r.todoIds.filter(id => id !== currentTodoId);
+                }
+                if (r.ideaTodoId === currentTodoId) {
+                    r.ideaTodoId = '';
+                    r.updatedAt = getLocalDateTimeStr();
                 }
             });
             

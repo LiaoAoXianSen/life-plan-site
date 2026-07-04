@@ -53,6 +53,7 @@
 - `records`：所有记录。
 - `ideas`：灵感池。
 - `materials`：素材库。
+- `tags`：标签中心。
 - `search`：全局搜索。
 - `todos`：待办总览。
 - `habits`：习惯热力图。
@@ -70,6 +71,7 @@
 - 今日待办：`renderTodayTodos`
 - 待办池：`renderFloatingTodos`
 - 今日习惯：`renderTodayHabits`
+- 今日指挥中心：`renderDashboardCommandCenter`
 - 当前周期：`renderActivePeriods`
 - 今日时间轴：`renderTimeline`
 
@@ -80,6 +82,8 @@
 - 待办截止：`buildTodoDueScheduleItem`
 - 待办执行记录：`buildTodoSessionScheduleItem`
 - 习惯计划：`buildHabitScheduleItem`
+
+首页指挥中心展示未处理灵感、已实践未写结论灵感、高压待办、随机素材复习和进行中目标摘要。
 
 ## 5. 记录系统
 
@@ -149,11 +153,16 @@
 - 灵感筛选：`getFilteredIdeas`
 - 灵感统计：`renderIdeaSummary`
 - 灵感池渲染：`renderIdeaPool`
+- 灵感转待办：`convertIdeaToTodo`
+- 灵感筛选跳转：`jumpToIdeas`
 
 当前判定：
 
 - `待整理` 和 `待实践` 算未处理。
 - `实践中` 或 `已验证` 但没有结论，算“已实践未写结论”。
+- 灵感转待办会优先使用 `ideaNextAction`，其次使用标题或正文，创建待办后写回 `ideaTodoId`。
+- 如果灵感已有关联待办，转待办按钮会直接打开已有待办，不重复创建。
+- `待整理` 灵感转待办后会自动推进到 `待实践`，其他状态保持不变。
 
 ## 8. 素材库
 
@@ -182,6 +191,7 @@
 - 新增/编辑弹窗：`openMaterialModal`
 - 保存素材：`saveMaterial`
 - 删除素材：`deleteCurrentMaterial`
+- 素材筛选跳转：`jumpToMaterials`
 
 随机展示规则：
 
@@ -190,7 +200,32 @@
 - 每次总共随机展示 3 条，不是每个标签 3 条。
 - 未选择标签时，从全部素材中随机展示。
 
-## 9. 全局搜索
+## 9. 标签中心
+
+标签中心是只读治理视图，暂不做重命名或合并，避免误改历史数据。
+
+覆盖来源：
+
+- 灵感标签：`records` 中 `type === '灵感碎片'` 的 `ideaTags`
+- 素材标签：`materials.tags`
+- 转盘标签：`wheelTags` 以及 `wheelLibraryItems.tagIds`
+
+核心入口：
+
+- 标签聚合：`getTagCenterItems`
+- 标签筛选：`getFilteredTagCenterItems`
+- 标签统计：`renderTagCenterSummary`
+- 页面渲染：`renderTagCenter`
+- 转盘标签跳转：`jumpToWheelTag`
+
+交互规则：
+
+- 可按标签名搜索。
+- 可按来源筛选：全部、灵感标签、素材标签、转盘标签。
+- 每个标签展示关联灵感数、素材数、转盘公共项数。
+- 点击统计卡可跳转到灵感池、素材库或转盘标签面板，并自动带入对应筛选。
+
+## 10. 全局搜索
 
 全局搜索用于跨模块查找内容，也支持按模块搜索。
 
@@ -212,7 +247,7 @@
 
 搜索内容覆盖标题、正文、类型、日期、状态、标签、备注、执行记录、子任务、来源、目标描述等字段。结果按模块分组，点击后打开详情或跳转到对应页面。
 
-## 10. 待办系统
+## 11. 待办系统
 
 待办既可以独立创建，也可以来自记录内待办，还可以由转盘结果转换。
 
@@ -252,7 +287,7 @@
 - 未保存的新待办不能记录“执行一次”。
 - 执行记录会进入首页/记录视图的时间轴。
 
-## 11. 习惯系统
+## 12. 习惯系统
 
 习惯用于周期性打卡和热力图统计。
 
@@ -293,7 +328,7 @@
 - 添加习惯到时间轴：`addHabitToTimeline`
 - 从时间轴移除习惯：`removeHabitFromTimeline`
 
-## 12. 目标管理
+## 13. 目标管理
 
 目标用于记录长期目标和进度。
 
@@ -317,7 +352,7 @@
 
 目标会参与首页统计和全局搜索。
 
-## 13. 工具转盘
+## 14. 工具转盘
 
 工具转盘逻辑在 `wheel-tool.js`，样式在 `wheel-tool.css`。它复用主应用数据和保存函数。
 
@@ -353,7 +388,7 @@
 
 转盘公共项也纳入全局搜索。
 
-## 14. 数据备份、快照与云同步
+## 15. 数据备份、快照与云同步
 
 项目已经有完整的数据保护能力，不需要再“从零新增备份”。
 
@@ -398,7 +433,7 @@
 - 本地和云端都有变化时，先创建快照，再按条目身份和更新时间进行保守合并。
 - 删除使用 `deletedItems` 墓碑参与合并，避免被旧云端数据复活。
 
-## 15. 样式与视觉系统
+## 16. 样式与视觉系统
 
 主样式使用 `styles.css` 的 CSS 变量：
 
@@ -418,9 +453,10 @@
 - 目标：`.goal-*`
 - 快照/同步：`.snapshot-*`、`.sync-*`
 - 知识模块：`.idea-*`、`.material-*`、`.global-search-*`
+- 标签中心和首页指挥中心：`.tag-center-*`、`.command-*`
 - 转盘：`wheel-tool.css` 内 `.wheel-*`
 
-## 16. 常见改动索引
+## 17. 常见改动索引
 
 新增记录类型：
 
@@ -469,7 +505,7 @@
 - Canvas 绘制由 `drawWheelCanvas` 控制。
 - 转待办由 `convertWheelResultToTodo` 控制。
 
-## 17. 当前维护注意
+## 18. 当前维护注意
 
 - 这是静态前端项目，没有构建系统和 `package.json`。
 - 当前项目位置为 `D:\project\life-plan-site`。

@@ -559,7 +559,7 @@
             </div>
             <div class="wheel-list">
                 ${data.wheelTags.map(tag => `
-                    <div class="wheel-row">
+                    <div class="wheel-row" data-wheel-tag-id="${safeHtml(tag.id)}">
                         <span class="wheel-color-dot" style="background:${safeHtml(tag.color)}"></span>
                         <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
                         <button class="wheel-mini-btn" onclick="editWheelTag('${tag.id}')">修改</button>

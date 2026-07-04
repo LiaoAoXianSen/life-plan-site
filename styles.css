@@ -1495,6 +1495,80 @@
     }
     .mini-summary-card strong { display: block; color: var(--accent); font-size: 20px; line-height: 1; }
     .mini-summary-card span { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; font-weight: 750; }
+    .command-center {
+        display: grid;
+        grid-template-columns: 1.15fr .95fr .9fr;
+        gap: 14px;
+        margin: 18px 0;
+    }
+    .command-card,
+    .tag-center-card {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: linear-gradient(145deg, rgba(255,255,255,.9), rgba(246,251,247,.86));
+        box-shadow: 0 14px 28px rgba(35,60,45,.06);
+    }
+    .command-card-head,
+    .tag-center-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+    .command-card-head p {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+    }
+    .command-metric-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+    .command-metric {
+        display: grid;
+        gap: 5px;
+        padding: 11px 8px;
+        border: 1px solid #dbe8df;
+        border-radius: var(--radius);
+        background: #fff;
+        cursor: pointer;
+        text-align: left;
+    }
+    .command-metric strong { color: var(--accent); font-size: 24px; line-height: 1; }
+    .command-metric span { color: var(--muted); font-size: 12px; font-weight: 800; }
+    .command-list { display: grid; gap: 8px; }
+    .command-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 10px;
+        border: 1px solid #e0e9e3;
+        border-radius: var(--radius);
+        background: rgba(255,255,255,.78);
+        cursor: pointer;
+    }
+    .command-row span {
+        min-width: 0;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 760;
+        overflow-wrap: anywhere;
+    }
+    .command-row strong { color: var(--accent); }
+    .command-materials {
+        display: grid;
+        gap: 9px;
+    }
+    .compact-empty {
+        padding: 16px 12px;
+        background: rgba(255,255,255,.5);
+    }
     .idea-grid,
     .material-grid {
         display: grid;
@@ -1636,6 +1710,41 @@
         line-height: 1.55;
         overflow-wrap: anywhere;
     }
+    .tag-center-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 12px;
+    }
+    .tag-center-head strong {
+        color: var(--accent);
+        font-size: 24px;
+        line-height: 1;
+    }
+    .tag-center-counts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .tag-center-counts button {
+        display: grid;
+        gap: 5px;
+        padding: 10px;
+        border: 1px solid #dfe8e2;
+        border-radius: var(--radius);
+        background: #fff;
+        cursor: pointer;
+        text-align: left;
+    }
+    .tag-center-counts strong { color: var(--accent); font-size: 20px; line-height: 1; }
+    .tag-center-counts span { color: var(--muted); font-size: 12px; font-weight: 800; }
+    .tag-center-preview {
+        display: grid;
+        gap: 5px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+    }
     .empty-state { text-align: center; padding: 36px 16px; color: var(--faint); font-size: 13px; border: 1px dashed #cbd8d0; border-radius: var(--radius); background: rgba(255,255,255,.52); }
 
     ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1651,7 +1760,7 @@
         .sidebar-bottom { margin-top: 10px; padding-top: 10px; }
         .main { width: 100%; height: auto; overflow: visible; padding: 18px 14px 38px; }
         .page, .card, .hero-panel { max-width: 100%; }
-        .dashboard-hero, .today-grid { grid-template-columns: 1fr; }
+        .dashboard-hero, .today-grid, .command-center { grid-template-columns: 1fr; }
         .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
         .todo-table { min-width: 860px; }
         #page-todos { overflow-x: auto; }
