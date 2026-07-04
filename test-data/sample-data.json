@@ -1,0 +1,232 @@
+{
+  "records": [
+    {
+      "id": "sample-record-diary",
+      "type": "日记",
+      "title": "2026年07月04日 日记",
+      "content": "今天整理个人管理系统，确认记录、待办、习惯、目标都可以串起来。",
+      "startDate": "2026-07-04",
+      "endDate": "2026-07-04",
+      "time": "20:00",
+      "endTime": "",
+      "todoIds": ["sample-todo-review"],
+      "createdAt": "2026-07-04T20:00:00",
+      "updatedAt": "2026-07-04T20:10:00"
+    },
+    {
+      "id": "sample-record-idea",
+      "type": "灵感碎片",
+      "title": "把灵感转成小实验",
+      "content": "灵感不要只停留在收藏，最好能给它一个最小实践动作。",
+      "startDate": "2026-07-04",
+      "endDate": "2026-07-04",
+      "time": "21:00",
+      "endTime": "",
+      "todoIds": [],
+      "ideaStatus": "待实践",
+      "ideaTags": ["产品", "实践"],
+      "ideaNextAction": "选一个灵感转成待办，并在当天执行 15 分钟。",
+      "ideaTodoId": "sample-todo-idea",
+      "ideaConclusion": "",
+      "createdAt": "2026-07-04T21:00:00",
+      "updatedAt": "2026-07-04T21:10:00"
+    }
+  ],
+  "todos": [
+    {
+      "id": "sample-todo-review",
+      "text": "复盘今天的记录系统",
+      "planStartDate": "2026-07-04",
+      "planEndDate": "2026-07-04",
+      "dueDate": "2026-07-04",
+      "urgency": "medium",
+      "group": "工作",
+      "done": false,
+      "subTodos": [
+        { "text": "看一遍首页时间轴", "done": true },
+        { "text": "确认导出备份可用", "done": false }
+      ],
+      "sessions": [
+        {
+          "id": "sample-session-review",
+          "date": "2026-07-04",
+          "startTime": "20:30",
+          "endTime": "20:50",
+          "note": "完成了一次界面检查",
+          "createdAt": "2026-07-04T20:50:00"
+        }
+      ],
+      "isExclusive": false,
+      "createdAt": "2026-07-04T20:00:00",
+      "updatedAt": "2026-07-04T20:50:00",
+      "completedAt": ""
+    },
+    {
+      "id": "sample-todo-idea",
+      "text": "把一个灵感转成小实验",
+      "planStartDate": "2026-07-04",
+      "planEndDate": "2026-07-05",
+      "dueDate": "2026-07-05",
+      "urgency": "high",
+      "group": "学习",
+      "done": false,
+      "subTodos": [],
+      "sessions": [],
+      "isExclusive": false,
+      "createdAt": "2026-07-04T21:10:00",
+      "updatedAt": "2026-07-04T21:10:00",
+      "completedAt": ""
+    }
+  ],
+  "habits": [
+    {
+      "id": "sample-habit-read",
+      "name": "阅读 20 分钟",
+      "rule": "daily",
+      "times": "once",
+      "count": 1,
+      "tag": "学习",
+      "goal": 0,
+      "noteMode": "ask",
+      "createdAt": "2026-07-04T09:00:00",
+      "updatedAt": "2026-07-04T09:00:00"
+    }
+  ],
+  "checkins": [
+    {
+      "id": "sample-checkin-read",
+      "habitId": "sample-habit-read",
+      "date": "2026-07-04",
+      "time": "08:30",
+      "createdAt": "2026-07-04T08:30:00",
+      "note": "读了产品设计相关内容"
+    }
+  ],
+  "templates": [
+    {
+      "id": "sample-template-work",
+      "name": "简单工作记录",
+      "type": "工作记录",
+      "content": "完成：\n\n问题：\n\n下一步：",
+      "todos": [],
+      "createdAt": "2026-07-04T10:00:00"
+    }
+  ],
+  "goals": [
+    {
+      "id": "sample-goal-system",
+      "name": "把个人系统稳定用起来",
+      "period": "1个月",
+      "status": "进行中",
+      "target": "每天至少记录 1 条，周末做一次复盘",
+      "progress": 35,
+      "createdAt": "2026-07-04T10:00:00",
+      "updatedAt": "2026-07-04T10:00:00"
+    }
+  ],
+  "deletedItems": [],
+  "materials": [
+    {
+      "id": "sample-material-prompt",
+      "type": "提示词",
+      "content": "请把这个想法拆成一个今天可以完成的 15 分钟实验。",
+      "tags": ["AI", "实践"],
+      "source": "自建",
+      "note": "适合处理灵感池里迟迟没动的想法",
+      "createdAt": "2026-07-04T12:00:00",
+      "updatedAt": "2026-07-04T12:00:00"
+    },
+    {
+      "id": "sample-material-quote",
+      "type": "金句",
+      "content": "系统不是为了记录更多，而是为了让下一步更清楚。",
+      "tags": ["复盘", "方法"],
+      "source": "自建",
+      "note": "适合放在首页随机复习",
+      "createdAt": "2026-07-04T12:10:00",
+      "updatedAt": "2026-07-04T12:10:00"
+    }
+  ],
+  "wheels": [
+    {
+      "id": "sample-wheel-normal",
+      "name": "休息方式",
+      "mode": "normal",
+      "items": [
+        {
+          "id": "sample-wheel-item-walk",
+          "name": "散步",
+          "note": "",
+          "weight": 2,
+          "enabled": true,
+          "createdAt": "2026-07-04T13:00:00",
+          "updatedAt": "2026-07-04T13:00:00"
+        },
+        {
+          "id": "sample-wheel-item-tea",
+          "name": "泡茶",
+          "note": "",
+          "weight": 1,
+          "enabled": true,
+          "createdAt": "2026-07-04T13:00:00",
+          "updatedAt": "2026-07-04T13:00:00"
+        }
+      ],
+      "tagIds": [],
+      "createdAt": "2026-07-04T13:00:00",
+      "updatedAt": "2026-07-04T13:00:00"
+    },
+    {
+      "id": "sample-wheel-tag",
+      "name": "随机实践",
+      "mode": "tag",
+      "items": [],
+      "tagIds": ["sample-wheel-tag-study", "sample-wheel-tag-life"],
+      "createdAt": "2026-07-04T13:10:00",
+      "updatedAt": "2026-07-04T13:10:00"
+    }
+  ],
+  "wheelTags": [
+    {
+      "id": "sample-wheel-tag-study",
+      "name": "学习",
+      "color": "#2f7d6d",
+      "weight": 2,
+      "enabled": true,
+      "createdAt": "2026-07-04T13:10:00",
+      "updatedAt": "2026-07-04T13:10:00"
+    },
+    {
+      "id": "sample-wheel-tag-life",
+      "name": "生活",
+      "color": "#e86c52",
+      "weight": 1,
+      "enabled": true,
+      "createdAt": "2026-07-04T13:10:00",
+      "updatedAt": "2026-07-04T13:10:00"
+    }
+  ],
+  "wheelLibraryItems": [
+    {
+      "id": "sample-library-review",
+      "name": "复习一条素材",
+      "note": "从素材库里抽一条看一遍",
+      "weight": 1,
+      "enabled": true,
+      "tagIds": ["sample-wheel-tag-study"],
+      "createdAt": "2026-07-04T13:10:00",
+      "updatedAt": "2026-07-04T13:10:00"
+    },
+    {
+      "id": "sample-library-clean",
+      "name": "整理桌面 5 分钟",
+      "note": "低门槛行动",
+      "weight": 1,
+      "enabled": true,
+      "tagIds": ["sample-wheel-tag-life"],
+      "createdAt": "2026-07-04T13:10:00",
+      "updatedAt": "2026-07-04T13:10:00"
+    }
+  ],
+  "wheelHistory": []
+}

@@ -11,6 +11,11 @@
 - `wheel-tool.css`：工具转盘独立样式。
 - `docs/knowledge-features.md`：灵感池、素材库、全局搜索的专题说明。
 - `docs/project-feature-index.md`：当前总索引文档。
+- `docs/environment-workflow.md`：本地 Git、启动、检查、打包和测试数据工作流。
+- `scripts/serve.ps1`：本地静态预览脚本。
+- `scripts/check.ps1`：基础检查脚本。
+- `scripts/package-clean.ps1`：干净交付压缩包脚本。
+- `test-data/sample-data.json`：脱敏测试数据。
 
 ## 2. 数据总览
 
@@ -464,6 +469,10 @@
 ## 17. 当前维护注意
 
 - 这是静态前端项目，没有构建系统和 `package.json`。
+- 当前项目位置为 `D:\project\life-plan-site`。
+- 本地环境工作流见 `docs/environment-workflow.md`。
+- 常用检查命令是 `.\scripts\check.ps1`。
+- 干净打包命令是 `.\scripts\package-clean.ps1`。
 - 数据主要依赖浏览器本地存储，换浏览器或清缓存前应先导出 JSON 或使用云同步。
 - `app.js` 文件较大，后续改动建议按功能块小步修改并做浏览器冒烟测试。
 - `materials`、灵感字段和转盘集合已经纳入数据归一化、搜索、导出、快照和云同步。
