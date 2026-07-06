@@ -441,10 +441,6 @@
                     <div class="page-title">工具转盘</div>
                     <div class="page-subtitle">普通转盘、标签二段抽取、公共项库和抽取历史都存在这里。</div>
                 </div>
-                <div class="page-actions">
-                    <button class="btn btn-secondary" onclick="openWheelBatchImport()">批量导入</button>
-                    <button class="btn btn-primary" onclick="openWheelCreateModal()">+ 新建转盘</button>
-                </div>
             </div>
 
             <div class="wheel-shell">
@@ -456,6 +452,34 @@
                         </div>
                         <select id="wheel-selector" onchange="selectWheel(this.value)"></select>
                     </div>
+                    <section class="wheel-panel card collapsed" id="wheel-panel">
+                        <div class="wheel-panel-dock">
+                            <div class="wheel-panel-dock-copy">
+                                <div class="wheel-panel-kicker">转盘菜单</div>
+                                <div class="wheel-panel-title">要改什么，直接点</div>
+                                <div class="wheel-panel-copy">菜单跟着转盘选择走，不再压在页面最下面。</div>
+                            </div>
+                            <div class="wheel-panel-menu" aria-label="转盘管理快捷入口">
+                                <button type="button" onclick="openWheelCreateModal()">新建</button>
+                                <button type="button" onclick="setWheelPanel('items')">当前盘</button>
+                                <button type="button" onclick="setWheelPanel('library')">公共项</button>
+                                <button type="button" onclick="setWheelPanel('tags')">标签</button>
+                                <button type="button" onclick="setWheelPanel('history')">记录/备份</button>
+                            </div>
+                            <button id="wheel-panel-toggle" class="btn btn-secondary wheel-panel-toggle" type="button" onclick="toggleWheelPanelCollapse()" aria-controls="wheel-panel-content" aria-expanded="false">展开管理</button>
+                        </div>
+                        <div id="wheel-panel-content" class="wheel-panel-content" hidden>
+                            <div class="calendar-toolbar wheel-panel-toolbar">
+                                <div class="segmented wheel-tabs" id="wheel-panel-tabs">
+                                    <button class="active" onclick="setWheelPanel('items', this)">转盘项</button>
+                                    <button onclick="setWheelPanel('library', this)">公共项</button>
+                                    <button onclick="setWheelPanel('tags', this)">标签</button>
+                                    <button onclick="setWheelPanel('history', this)">记录</button>
+                                </div>
+                            </div>
+                            <div id="wheel-panel-body"></div>
+                        </div>
+                    </section>
                     <div id="wheel-stage-summary" class="wheel-stage-summary"></div>
                     <div class="wheel-canvas-wrap">
                         <canvas id="wheel-canvas" width="360" height="360"></canvas>
@@ -466,29 +490,6 @@
                     <div class="wheel-actions">
                         <button class="btn btn-primary" onclick="spinWheel()">开始抽取</button>
                         <button class="btn btn-secondary" onclick="renderWheelPage()">刷新</button>
-                    </div>
-                </section>
-
-                <section class="wheel-panel card collapsed" id="wheel-panel">
-                    <div class="wheel-panel-dock">
-                        <div class="wheel-panel-dock-copy">
-                            <div class="wheel-panel-kicker">管理底仓</div>
-                            <div class="wheel-panel-title">补充选项、标签和抽取记录</div>
-                            <div class="wheel-panel-copy">第一屏只保留结果和轮盘，需要维护内容时再展开下面这块。</div>
-                        </div>
-                        <div id="wheel-panel-summary" class="wheel-panel-summary"></div>
-                        <button id="wheel-panel-toggle" class="btn btn-secondary wheel-panel-toggle" type="button" onclick="toggleWheelPanelCollapse()" aria-controls="wheel-panel-content" aria-expanded="false">展开管理</button>
-                    </div>
-                    <div id="wheel-panel-content" class="wheel-panel-content" hidden>
-                        <div class="calendar-toolbar wheel-panel-toolbar">
-                            <div class="segmented wheel-tabs" id="wheel-panel-tabs">
-                                <button class="active" onclick="setWheelPanel('items', this)">转盘项</button>
-                                <button onclick="setWheelPanel('library', this)">公共项</button>
-                                <button onclick="setWheelPanel('tags', this)">标签</button>
-                                <button onclick="setWheelPanel('history', this)">记录</button>
-                            </div>
-                        </div>
-                        <div id="wheel-panel-body"></div>
                     </div>
                 </section>
             </div>
@@ -824,8 +825,12 @@
                 <label>第一个选项</label>
                 <input type="text" id="wheel-create-first-item" placeholder="普通转盘至少先放一个选项">
             </div>
+            <div class="form-group" id="wheel-create-tag-group" style="display:none;">
+                <label>选择标签</label>
+                <div id="wheel-create-tag-options" class="wheel-create-tag-options"></div>
+            </div>
             <div class="form-group" id="wheel-create-tag-help" style="display:none;">
-                <div class="sync-status">标签转盘会默认选中全部标签，后续可以在“转盘项”里细调标签范围。</div>
+                <div class="sync-status">标签转盘只会从已选择标签里抽取公共项；公共项仍在公共项库维护。</div>
             </div>
             <div class="modal-action-row">
                 <button class="btn btn-secondary" onclick="closeWheelCreateModal()">取消</button>

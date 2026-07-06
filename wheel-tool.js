@@ -6,6 +6,7 @@
     let wheelPanelCollapsed = true;
     let wheelCreateMode = 'normal';
     let wheelLibraryCopyTagFilter = '';
+    let wheelDragState = null;
 
     function createWheelStageState() {
         return {
@@ -108,8 +109,148 @@
         });
     }
 
+    function ensureWheelWeight(value) {
+        return Math.max(1, Math.round(Number(value) || 1));
+    }
+
+    function ensureWheelTimestamp(value, fallback) {
+        return typeof value === 'string' && value ? value : fallback;
+    }
+
+    function dedupeWheelItemsByName(items = []) {
+        const seen = new Set();
+        return (Array.isArray(items) ? items : []).filter(item => {
+            const key = normalizeName(item?.name);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }
+
+    function normalizeWheelDataShape() {
+        ensureWheelCollections();
+        const stamp = now();
+        const rawTags = data.wheelTags.map(tag => {
+            const createdAt = ensureWheelTimestamp(tag?.createdAt, stamp);
+            return {
+                id: tag?.id || id(),
+                name: String(tag?.name || '未命名标签').trim() || '未命名标签',
+                color: tag?.color || palette[data.wheelTags.length % palette.length],
+                weight: ensureWheelWeight(tag?.weight),
+                enabled: tag?.enabled !== false,
+                createdAt,
+                updatedAt: ensureWheelTimestamp(tag?.updatedAt, createdAt)
+            };
+        });
+        const tagIdRemap = new Map();
+        const seenTags = new Map();
+        rawTags.forEach(tag => {
+            const key = normalizeName(tag.name);
+            const existingId = seenTags.get(key);
+            if (existingId) tagIdRemap.set(tag.id, existingId);
+            else {
+                seenTags.set(key, tag.id);
+                tagIdRemap.set(tag.id, tag.id);
+            }
+        });
+        data.wheelTags = rawTags.filter(tag => tagIdRemap.get(tag.id) === tag.id);
+        const validTagIds = new Set(data.wheelTags.map(tag => tag.id));
+        const ensureUncategorizedTagId = () => {
+            const key = normalizeName('未分类');
+            let tag = data.wheelTags.find(item => normalizeName(item.name) === key);
+            if (!tag) {
+                tag = {
+                    id: id(),
+                    name: '未分类',
+                    color: '#8a8f98',
+                    weight: 1,
+                    enabled: true,
+                    createdAt: stamp,
+                    updatedAt: stamp
+                };
+                data.wheelTags.push(tag);
+                validTagIds.add(tag.id);
+            }
+            return tag.id;
+        };
+        const normalizeTagIds = (tagIds, fallbackToUncategorized = false) => {
+            const seen = new Set();
+            const normalized = (Array.isArray(tagIds) ? tagIds : [])
+                .map(tagId => tagIdRemap.get(tagId) || tagId)
+                .filter(tagId => validTagIds.has(tagId))
+                .filter(tagId => {
+                    if (seen.has(tagId)) return false;
+                    seen.add(tagId);
+                    return true;
+                });
+            if (!normalized.length && fallbackToUncategorized) normalized.push(ensureUncategorizedTagId());
+            return normalized;
+        };
+        data.wheelLibraryItems = dedupeWheelItemsByName(data.wheelLibraryItems.map(item => {
+            const createdAt = ensureWheelTimestamp(item?.createdAt, stamp);
+            return {
+                id: item?.id || id(),
+                name: String(item?.name || '未命名公共项').trim() || '未命名公共项',
+                note: item?.note || '',
+                weight: ensureWheelWeight(item?.weight),
+                enabled: item?.enabled !== false,
+                tagIds: normalizeTagIds(item?.tagIds, true),
+                createdAt,
+                updatedAt: ensureWheelTimestamp(item?.updatedAt, createdAt)
+            };
+        }));
+        data.wheels = data.wheels.map(wheel => {
+            const createdAt = ensureWheelTimestamp(wheel?.createdAt, stamp);
+            const mode = wheel?.mode === 'tag' ? 'tag' : 'normal';
+            const normalized = {
+                id: wheel?.id || id(),
+                name: String(wheel?.name || '未命名转盘').trim() || '未命名转盘',
+                mode,
+                items: [],
+                createdAt,
+                updatedAt: ensureWheelTimestamp(wheel?.updatedAt, createdAt)
+            };
+            if (mode === 'tag') {
+                normalized.tagIds = normalizeTagIds(wheel?.tagIds);
+                return normalized;
+            }
+            normalized.items = dedupeWheelItemsByName(wheel?.items).map(item => {
+                const itemCreatedAt = ensureWheelTimestamp(item?.createdAt, stamp);
+                return {
+                    id: item?.id || id(),
+                    name: String(item?.name || '未命名选项').trim() || '未命名选项',
+                    note: item?.note || '',
+                    weight: ensureWheelWeight(item?.weight),
+                    enabled: item?.enabled !== false,
+                    sourceLibraryItemId: item?.sourceLibraryItemId || undefined,
+                    createdAt: itemCreatedAt,
+                    updatedAt: ensureWheelTimestamp(item?.updatedAt, itemCreatedAt)
+                };
+            });
+            return normalized;
+        });
+        data.wheelHistory = (Array.isArray(data.wheelHistory) ? data.wheelHistory : []).map(item => {
+            const createdAt = ensureWheelTimestamp(item?.createdAt, stamp);
+            return {
+                id: item?.id || id(),
+                wheelId: item?.wheelId || '',
+                wheelName: item?.wheelName || '未命名转盘',
+                mode: item?.mode === 'tag' ? 'tag' : 'normal',
+                tagId: item?.tagId || '',
+                tagName: item?.tagName || '',
+                resultId: item?.resultId || '',
+                resultName: item?.resultName || '未命名结果',
+                note: item?.note || '',
+                convertedTodoId: item?.convertedTodoId || '',
+                createdAt,
+                updatedAt: ensureWheelTimestamp(item?.updatedAt, createdAt)
+            };
+        });
+    }
+
     function ensureSeedData() {
         ensureWheelCollections();
+        normalizeWheelDataShape();
         if (data.wheels.length || data.wheelTags.length || data.wheelLibraryItems.length || data.wheelHistory.length) return;
 
         const stamp = now();
@@ -184,9 +325,9 @@
     function getEnabledEntries(wheel) {
         if (!wheel) return [];
         if (wheel.mode === 'tag') {
-            const selected = Array.isArray(wheel.tagIds) && wheel.tagIds.length ? new Set(wheel.tagIds) : null;
+            const selected = new Set(Array.isArray(wheel.tagIds) ? wheel.tagIds : []);
             return data.wheelTags
-                .filter(tag => tag.enabled !== false && (!selected || selected.has(tag.id)))
+                .filter(tag => tag.enabled !== false && selected.has(tag.id))
                 .filter(tag => data.wheelLibraryItems.some(item => item.enabled !== false && item.tagIds?.includes(tag.id)));
         }
         return (wheel.items || []).filter(item => item.enabled !== false);
@@ -282,9 +423,9 @@
 
     function getTagCandidatesForWheel(wheel) {
         if (!wheel || wheel.mode !== 'tag') return [];
-        const selected = Array.isArray(wheel.tagIds) && wheel.tagIds.length ? new Set(wheel.tagIds) : null;
+        const selected = new Set(Array.isArray(wheel.tagIds) ? wheel.tagIds : []);
         return data.wheelTags
-            .filter(tag => tag.enabled !== false && (!selected || selected.has(tag.id)))
+            .filter(tag => tag.enabled !== false && selected.has(tag.id))
             .map(tag => ({ tag, items: getTagItemPool(tag.id) }))
             .filter(entry => entry.items.length > 0);
     }
@@ -560,6 +701,97 @@
         `;
     }
 
+    function getWheelPointerAngle(event, element) {
+        const rect = element.getBoundingClientRect();
+        const x = event.clientX - rect.left - rect.width / 2;
+        const y = event.clientY - rect.top - rect.height / 2;
+        return Math.atan2(y, x) * 180 / Math.PI;
+    }
+
+    function attachWheelPointerGestures(entries) {
+        const canvasWrap = document.querySelector('.wheel-canvas-wrap');
+        if (!canvasWrap) return;
+        const startDrag = (clientX, clientY, pointerId = 'mouse') => {
+            wheelDragState = {
+                pointerId,
+                startX: clientX,
+                startY: clientY,
+                startAngle: getWheelPointerAngle({ clientX, clientY }, canvasWrap),
+                startRotation: wheelRotation,
+                moved: false,
+                suppressClick: false
+            };
+            canvasWrap.classList.add('dragging');
+        };
+        const moveDrag = (clientX, clientY) => {
+            if (!wheelDragState || wheelSpinning) return;
+            const dx = clientX - wheelDragState.startX;
+            const dy = clientY - wheelDragState.startY;
+            if (Math.hypot(dx, dy) > 8) wheelDragState.moved = true;
+            if (!wheelDragState.moved) return;
+            const currentAngle = getWheelPointerAngle({ clientX, clientY }, canvasWrap);
+            wheelRotation = wheelDragState.startRotation + currentAngle - wheelDragState.startAngle;
+            drawWheelCanvas(entries);
+        };
+        const finishDrag = () => {
+            if (!wheelDragState) return;
+            const shouldSpin = wheelDragState.moved;
+            canvasWrap.classList.remove('dragging');
+            wheelDragState = null;
+            if (shouldSpin && !wheelSpinning) spinWheel();
+            if (shouldSpin) {
+                canvasWrap.dataset.suppressNextClick = '1';
+                window.setTimeout(() => {
+                    if (canvasWrap.dataset.suppressNextClick === '1') delete canvasWrap.dataset.suppressNextClick;
+                }, 0);
+            }
+        };
+        canvasWrap.onpointerdown = event => {
+            if (wheelSpinning || !entries.length || event.button > 0) return;
+            startDrag(event.clientX, event.clientY, event.pointerId);
+            canvasWrap.setPointerCapture?.(event.pointerId);
+        };
+        canvasWrap.onpointermove = event => {
+            if (!wheelDragState || wheelDragState.pointerId !== event.pointerId || wheelSpinning) return;
+            moveDrag(event.clientX, event.clientY);
+        };
+        const finishPointer = event => {
+            if (!wheelDragState || wheelDragState.pointerId !== event.pointerId) return;
+            canvasWrap.releasePointerCapture?.(event.pointerId);
+            finishDrag();
+        };
+        canvasWrap.onpointerup = finishPointer;
+        canvasWrap.onpointercancel = event => {
+            if (wheelDragState?.pointerId === event.pointerId) {
+                canvasWrap.releasePointerCapture?.(event.pointerId);
+                canvasWrap.classList.remove('dragging');
+                wheelDragState = null;
+                drawWheelCanvas(entries);
+            }
+        };
+        canvasWrap.onmousedown = event => {
+            if (wheelDragState || wheelSpinning || !entries.length || event.button > 0) return;
+            startDrag(event.clientX, event.clientY);
+            const handleMove = moveEvent => moveDrag(moveEvent.clientX, moveEvent.clientY);
+            const handleUp = () => {
+                window.removeEventListener('mousemove', handleMove);
+                finishDrag();
+            };
+            window.addEventListener('mousemove', handleMove);
+            window.addEventListener('mouseup', handleUp, { once: true });
+            event.preventDefault();
+        };
+        canvasWrap.onclick = event => {
+            if (canvasWrap.dataset.suppressNextClick === '1') {
+                delete canvasWrap.dataset.suppressNextClick;
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            if (!wheelSpinning) spinWheel();
+        };
+    }
+
     function renderStage() {
         const wheel = getCurrentWheel();
         const tagItemsStage = isTagItemsStage(wheel);
@@ -585,13 +817,7 @@
                 stageHint.textContent = '点击转盘或按钮都可以开始，普通转盘会直接给出最终结果。';
             }
         }
-        const canvas = document.getElementById('wheel-canvas');
-        const canvasWrap = document.querySelector('.wheel-canvas-wrap');
-        const spinFromCanvas = () => {
-            if (!wheelSpinning) spinWheel();
-        };
-        if (canvas) canvas.onclick = spinFromCanvas;
-        if (canvasWrap) canvasWrap.onclick = spinFromCanvas;
+        attachWheelPointerGestures(entries);
         renderResult();
     }
 
@@ -644,6 +870,7 @@
                     <div class="wheel-hint">名称不能重复，权重越高越容易抽中。</div>
                 </div>
                 <div class="wheel-head-actions">
+                    <button class="btn btn-secondary" onclick="openWheelBatchImport()">批量导入</button>
                     <button class="btn btn-secondary" onclick="renameWheel('${wheel.id}')">改名</button>
                     <button class="btn btn-danger" onclick="deleteWheel('${wheel.id}')">删除转盘</button>
                 </div>
@@ -832,21 +1059,37 @@
         document.getElementById('wheel-create-mode-normal')?.classList.toggle('active', wheelCreateMode === 'normal');
         document.getElementById('wheel-create-mode-tag')?.classList.toggle('active', wheelCreateMode === 'tag');
         const firstItemGroup = document.getElementById('wheel-create-first-item-group');
+        const tagGroup = document.getElementById('wheel-create-tag-group');
+        const tagOptions = document.getElementById('wheel-create-tag-options');
         const tagHelp = document.getElementById('wheel-create-tag-help');
         if (firstItemGroup) firstItemGroup.style.display = wheelCreateMode === 'tag' ? 'none' : '';
+        if (tagGroup) tagGroup.style.display = wheelCreateMode === 'tag' ? '' : 'none';
+        if (tagOptions && wheelCreateMode === 'tag') {
+            tagOptions.innerHTML = data.wheelTags.map(tag => `
+                <label class="wheel-create-tag-option">
+                    <input type="checkbox" value="${safeHtml(tag.id)}" checked>
+                    <span class="wheel-color-dot" style="background:${safeHtml(tag.color || '#216e4e')}"></span>
+                    <span>${safeHtml(tag.name)}</span>
+                </label>
+            `).join('') || '<div class="empty-state">还没有标签，请先在“标签”菜单里新增。</div>';
+        }
         if (tagHelp) tagHelp.style.display = wheelCreateMode === 'tag' ? '' : 'none';
     }
 
-    function createWheelFromForm({ mode, name, firstItem = '' }) {
+    function createWheelFromForm({ mode, name, firstItem = '', tagIds = [] }) {
         const trimmed = String(name || '').trim() || (mode === 'tag' ? '新的标签转盘' : '新的普通转盘');
         const stamp = now();
         const items = [];
+        let selectedTagIds;
         if (mode !== 'tag') {
             const firstName = String(firstItem || '').trim();
             if (!firstName) return alert('普通转盘至少需要 1 个转盘项');
             items.push({ id: id(), name: firstName, note: '', weight: 1, enabled: true, createdAt: stamp, updatedAt: stamp });
+        } else {
+            selectedTagIds = uniqueTagIds(tagIds);
+            if (!selectedTagIds.length) return alert('标签转盘至少需要选择一个标签');
         }
-        const wheel = { id: id(), name: trimmed, mode, items, tagIds: mode === 'tag' ? uniqueTagIds(data.wheelTags.map(tag => tag.id)) : undefined, createdAt: stamp, updatedAt: stamp };
+        const wheel = { id: id(), name: trimmed, mode, items, tagIds: mode === 'tag' ? selectedTagIds : undefined, createdAt: stamp, updatedAt: stamp };
         data.wheels.unshift(wheel);
         currentWheelId = wheel.id;
         currentWheelMode = mode;
@@ -881,7 +1124,8 @@
     window.saveWheelCreateModal = function saveWheelCreateModal() {
         const name = document.getElementById('wheel-create-name')?.value || '';
         const firstItem = document.getElementById('wheel-create-first-item')?.value || '';
-        const wheel = createWheelFromForm({ mode: wheelCreateMode, name, firstItem });
+        const tagIds = Array.from(document.querySelectorAll('#wheel-create-tag-options input:checked')).map(input => input.value);
+        const wheel = createWheelFromForm({ mode: wheelCreateMode, name, firstItem, tagIds });
         if (!wheel) return;
         closeWheelCreateModal();
         currentWheelPanel = 'items';
@@ -1030,7 +1274,9 @@
         const weight = Math.max(1, Number(document.getElementById('wheel-library-weight')?.value) || 1);
         if (!name) return alert('请输入公共项名称');
         if (data.wheelLibraryItems.some(item => normalizeName(item.name) === normalizeName(name))) return alert('公共项里已经有同名内容');
-        data.wheelLibraryItems.push({ id: id(), name, note: '', weight, enabled: true, tagIds: uniqueTagIds(ensureTagsByText(tagText)), createdAt: now(), updatedAt: now() });
+        const tagIds = uniqueTagIds(ensureTagsByText(tagText));
+        if (!tagIds.length) return alert('公共项至少需要绑定一个标签');
+        data.wheelLibraryItems.push({ id: id(), name, note: '', weight, enabled: true, tagIds, createdAt: now(), updatedAt: now() });
         persist();
         renderWheelPage();
     };
@@ -1047,8 +1293,13 @@
                 skipped.push(item.name);
                 return;
             }
+            const tagIds = uniqueTagIds(ensureTagsByText(item.tagText));
+            if (!tagIds.length) {
+                skipped.push(`${item.name}(缺少标签)`);
+                return;
+            }
             seen.add(key);
-            data.wheelLibraryItems.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, tagIds: uniqueTagIds(ensureTagsByText(item.tagText)), createdAt: now(), updatedAt: now() });
+            data.wheelLibraryItems.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, tagIds, createdAt: now(), updatedAt: now() });
             added++;
         });
         persist();
@@ -1068,8 +1319,10 @@
         if (tagText === null) return;
         const weight = prompt('权重', item.weight);
         if (weight === null) return;
+        const tagIds = uniqueTagIds(ensureTagsByText(tagText));
+        if (!tagIds.length) return alert('公共项至少需要绑定一个标签');
         item.name = trimmed;
-        item.tagIds = uniqueTagIds(ensureTagsByText(tagText));
+        item.tagIds = tagIds;
         item.weight = Math.max(1, Number(weight) || 1);
         item.updatedAt = now();
         persist();
@@ -1134,9 +1387,14 @@
     window.deleteWheelTag = function deleteWheelTag(tagId) {
         const tag = data.wheelTags.find(item => item.id === tagId);
         if (!tag || !confirm(`删除标签“${tag.name}”吗？会从公共项和标签转盘配置里移除。`)) return;
+        const orphanedItems = data.wheelLibraryItems.filter(item => item.tagIds?.includes(tagId) && (item.tagIds || []).length === 1);
+        if (orphanedItems.length) return alert(`不能删除：${orphanedItems.length} 个公共项只绑定了这个标签，请先给它们添加其他标签或删除公共项。`);
         data.wheelTags = data.wheelTags.filter(item => item.id !== tagId);
         data.wheelLibraryItems.forEach(item => item.tagIds = (item.tagIds || []).filter(id => id !== tagId));
-        data.wheels.forEach(wheel => wheel.tagIds = (wheel.tagIds || []).filter(id => id !== tagId));
+        data.wheels.forEach(wheel => {
+            if (wheel.mode === 'tag') wheel.tagIds = (wheel.tagIds || []).filter(id => id !== tagId);
+            else delete wheel.tagIds;
+        });
         if (typeof markDeletedItem === 'function') markDeletedItem('wheelTags', tagId, { name: tag.name });
         persist();
         renderWheelPage();
@@ -1148,6 +1406,11 @@
         const set = new Set(wheel.tagIds || []);
         if (checked) set.add(tagId);
         else set.delete(tagId);
+        if (!set.size) {
+            alert('标签转盘至少需要选择一个标签');
+            renderWheelPage();
+            return;
+        }
         wheel.tagIds = uniqueTagIds(Array.from(set));
         wheel.updatedAt = now();
         persist();
@@ -1183,6 +1446,7 @@
                     data.wheelTags = Array.isArray(imported.wheelTags) ? imported.wheelTags : [];
                     data.wheelLibraryItems = Array.isArray(imported.wheelLibraryItems) ? imported.wheelLibraryItems : [];
                     data.wheelHistory = Array.isArray(imported.wheelHistory) ? imported.wheelHistory : [];
+                    normalizeWheelDataShape();
                     currentWheelId = data.wheels[0]?.id || null;
                     currentWheelMode = data.wheels[0]?.mode || 'normal';
                     currentWheelResultId = null;
@@ -1224,7 +1488,7 @@
         const delta = ((desired - normalizedStart) + 360) % 360;
         const target = start + 1800 + delta;
         const startTime = performance.now();
-        const duration = 3600;
+        const duration = Number(window.__wheelSpinDurationMs) || 3600;
         function tick(time) {
             const progress = Math.min(1, (time - startTime) / duration);
             const eased = 1 - Math.pow(1 - progress, 2.4);
