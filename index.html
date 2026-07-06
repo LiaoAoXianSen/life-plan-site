@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>人生规划系统</title>
 <link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./habit-style.css">
 <link rel="stylesheet" href="./wheel-tool.css">
 </head>
 <body>
@@ -12,16 +13,16 @@
     <div class="sidebar">
         <h2>人生规划系统</h2>
         <div class="nav-list">
-            <div class="nav-item active" onclick="switchPage('dashboard', this)">📊 首页仪表盘</div>
-            <div class="nav-item" onclick="switchPage('records', this)">📝 所有记录</div>
-            <div class="nav-item" onclick="switchPage('ideas', this)">💡 灵感池</div>
-            <div class="nav-item" onclick="switchPage('materials', this)">📚 素材库</div>
-            <div class="nav-item" onclick="switchPage('tags', this)">🏷️ 标签中心</div>
-            <div class="nav-item" onclick="switchPage('search', this)">🔎 全局搜索</div>
-            <div class="nav-item" onclick="switchPage('todos', this)">✅ 待办总览</div>
-            <div class="nav-item" onclick="switchPage('habits', this)">🔥 习惯热力图</div>
-            <div class="nav-item" onclick="switchPage('goals', this)">🎯 目标管理</div>
-            <div class="nav-item" onclick="switchPage('wheel', this)">🎡 工具转盘</div>
+            <div class="nav-item active" data-page-target="dashboard" onclick="switchPage('dashboard', this)">📊 首页仪表盘</div>
+            <div class="nav-item" data-page-target="records" onclick="switchPage('records', this)">📝 所有记录</div>
+            <div class="nav-item" data-page-target="ideas" onclick="switchPage('ideas', this)">💡 灵感池</div>
+            <div class="nav-item" data-page-target="materials" onclick="switchPage('materials', this)">📚 素材库</div>
+            <div class="nav-item" data-page-target="tags" onclick="switchPage('tags', this)">🏷️ 标签中心</div>
+            <div class="nav-item" data-page-target="search" onclick="switchPage('search', this)">🔎 全局搜索</div>
+            <div class="nav-item" data-page-target="todos" onclick="switchPage('todos', this)">✅ 待办总览</div>
+            <div class="nav-item" data-page-target="habits" onclick="switchPage('habits', this)">🔥 习惯打卡</div>
+            <div class="nav-item" data-page-target="goals" onclick="switchPage('goals', this)">🎯 目标管理</div>
+            <div class="nav-item" data-page-target="wheel" onclick="switchPage('wheel', this)">🎡 工具转盘</div>
         </div>
         
         <div class="sidebar-primary-action">
@@ -30,7 +31,10 @@
         <details class="sidebar-bottom">
             <summary>
                 <span>数据与备份</span>
-                <span id="sync-status-inline" class="sync-status-inline">同步：未配置</span>
+                <span class="sync-status-stack">
+                    <span id="sync-status-inline" class="sync-status-inline">同步：未配置</span>
+                    <span id="wheel-sync-status-inline" class="sync-status-inline">转盘：未配置</span>
+                </span>
             </summary>
             <div class="sidebar-button-row">
                 <button class="btn btn-secondary" style="flex:1" onclick="exportData()">导出备份</button>
@@ -151,6 +155,8 @@
                     <option value="年度计划">年度计划</option>
                     <option value="3年计划">3年计划</option>
                     <option value="终身愿景">终身愿景</option>
+                    <option value="待办">待办完成/执行</option>
+                    <option value="习惯">习惯打卡</option>
                 </select>
                 <select id="record-day-order" onchange="renderAllRecords()">
                     <option value="desc">当日倒序</option>
@@ -341,11 +347,16 @@
             </table>
         </div>
 
-        <!-- 习惯热力图页 -->
+        <!-- 习惯打卡页 -->
         <div id="page-habits" class="page">
             <div class="page-header">
-                <div class="page-title">习惯热力图</div>
-                <button class="btn btn-primary" onclick="openHabitModal()">+ 新建习惯</button>
+                <div class="page-title">习惯打卡</div>
+                <div class="page-actions">
+                    <button class="btn btn-secondary" onclick="openHabitCurrencyModal()">币种管理</button>
+                    <button class="btn btn-secondary" onclick="openHabitPointAdjustModal()">调整积分</button>
+                    <button class="btn btn-secondary" onclick="openHabitRewardModal()">新增心愿</button>
+                    <button class="btn btn-primary" onclick="openHabitModal()">+ 新建习惯</button>
+                </div>
             </div>
             
             <div class="card">
@@ -406,11 +417,12 @@
                     <div class="habit-matrix" id="habit-matrix"></div>
                 </div>
 
-                <div style="text-align: right; margin-top: 16px;">
+                <div id="habit-detail-actions" style="text-align: right; margin-top: 16px;">
                     <button class="btn btn-secondary" onclick="editCurrentHabit()">编辑规则</button>
                     <button class="btn btn-danger" onclick="deleteCurrentHabit()">删除习惯</button>
                 </div>
             </div>
+            <div class="habit-rewards-panel" id="habit-rewards-panel"></div>
         </div>
 
         <!-- 目标管理页 -->
@@ -431,7 +443,7 @@
                 </div>
                 <div class="page-actions">
                     <button class="btn btn-secondary" onclick="openWheelBatchImport()">批量导入</button>
-                    <button class="btn btn-primary" onclick="createWheel()">+ 新建转盘</button>
+                    <button class="btn btn-primary" onclick="openWheelCreateModal()">+ 新建转盘</button>
                 </div>
             </div>
 
@@ -457,16 +469,27 @@
                     </div>
                 </section>
 
-                <section class="wheel-panel card">
-                    <div class="calendar-toolbar">
-                        <div class="segmented wheel-tabs" id="wheel-panel-tabs">
-                            <button class="active" onclick="setWheelPanel('items', this)">转盘项</button>
-                            <button onclick="setWheelPanel('library', this)">公共项</button>
-                            <button onclick="setWheelPanel('tags', this)">标签</button>
-                            <button onclick="setWheelPanel('history', this)">记录</button>
+                <section class="wheel-panel card collapsed" id="wheel-panel">
+                    <div class="wheel-panel-dock">
+                        <div class="wheel-panel-dock-copy">
+                            <div class="wheel-panel-kicker">管理底仓</div>
+                            <div class="wheel-panel-title">补充选项、标签和抽取记录</div>
+                            <div class="wheel-panel-copy">第一屏只保留结果和轮盘，需要维护内容时再展开下面这块。</div>
                         </div>
+                        <div id="wheel-panel-summary" class="wheel-panel-summary"></div>
+                        <button id="wheel-panel-toggle" class="btn btn-secondary wheel-panel-toggle" type="button" onclick="toggleWheelPanelCollapse()" aria-controls="wheel-panel-content" aria-expanded="false">展开管理</button>
                     </div>
-                    <div id="wheel-panel-body"></div>
+                    <div id="wheel-panel-content" class="wheel-panel-content" hidden>
+                        <div class="calendar-toolbar wheel-panel-toolbar">
+                            <div class="segmented wheel-tabs" id="wheel-panel-tabs">
+                                <button class="active" onclick="setWheelPanel('items', this)">转盘项</button>
+                                <button onclick="setWheelPanel('library', this)">公共项</button>
+                                <button onclick="setWheelPanel('tags', this)">标签</button>
+                                <button onclick="setWheelPanel('history', this)">记录</button>
+                            </div>
+                        </div>
+                        <div id="wheel-panel-body"></div>
+                    </div>
                 </section>
             </div>
         </div>
@@ -737,7 +760,7 @@
                 <button class="close-btn" onclick="closeSyncSettings()">×</button>
             </div>
             <div class="form-group">
-                <label>同步中转地址</label>
+                <label>同步中转地址（主数据与大转盘共用）</label>
                 <input type="text" id="sync-webdav-url" placeholder="https://你的-worker地址.workers.dev/">
             </div>
             <div class="form-group" style="display:none;">
@@ -761,6 +784,52 @@
                 <button class="btn btn-secondary" onclick="runCloudSync('down')">从云端拉取</button>
                 <button class="btn btn-secondary" onclick="runCloudSync('up')">上传到云端</button>
                 <button class="btn btn-primary" onclick="saveSyncSettings()">保存并同步</button>
+            </div>
+            <hr style="border:none; border-top:1px solid #ece8df; margin:18px 0;">
+            <div class="form-group">
+                <label>共享大转盘云端路径</label>
+                <input type="text" id="wheel-sync-remote-path" placeholder="/apps/wheel-app/data.json">
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="wheel-sync-auto" checked> 自动同步共享大转盘（修改后 20 秒上传，每 5 分钟检查云端）</label>
+            </div>
+            <div id="wheel-sync-modal-status" class="sync-modal-status">大转盘同步状态会显示在这里。</div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="testWheelCloudSync()">测试连接</button>
+                <button class="btn btn-secondary" onclick="runWheelCloudSync('down')">从云端拉取转盘</button>
+                <button class="btn btn-secondary" onclick="runWheelCloudSync('up')">上传转盘到云端</button>
+                <button class="btn btn-primary" onclick="saveWheelSyncSettings()">保存转盘同步</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="wheel-create-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title">新建转盘</div>
+                <button class="close-btn" onclick="closeWheelCreateModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label>转盘类型</label>
+                <div class="segmented wheel-create-mode-tabs">
+                    <button type="button" id="wheel-create-mode-normal" class="active" onclick="setWheelCreateMode('normal')">普通转盘</button>
+                    <button type="button" id="wheel-create-mode-tag" onclick="setWheelCreateMode('tag')">标签转盘</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>转盘名称</label>
+                <input type="text" id="wheel-create-name" placeholder="例如：今天吃什么 / 周末做什么">
+            </div>
+            <div class="form-group" id="wheel-create-first-item-group">
+                <label>第一个选项</label>
+                <input type="text" id="wheel-create-first-item" placeholder="普通转盘至少先放一个选项">
+            </div>
+            <div class="form-group" id="wheel-create-tag-help" style="display:none;">
+                <div class="sync-status">标签转盘会默认选中全部标签，后续可以在“转盘项”里细调标签范围。</div>
+            </div>
+            <div class="modal-action-row">
+                <button class="btn btn-secondary" onclick="closeWheelCreateModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveWheelCreateModal()">创建并编辑</button>
             </div>
         </div>
     </div>
@@ -848,6 +917,118 @@
                     <input type="number" id="habit-goal" value="0" min="0">
                 </div>
             </div>
+            <details class="habit-advanced" id="habit-points-panel">
+                <summary>积分与扣分</summary>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>完成奖励</label>
+                        <input type="number" id="habit-reward-points" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>奖励币种</label>
+                        <input type="text" id="habit-reward-currency" value="金币" placeholder="金币" list="habit-currency-options">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>漏打扣分</label>
+                        <input type="number" id="habit-penalty-points" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>扣分币种</label>
+                        <input type="text" id="habit-penalty-currency" value="金币" placeholder="金币" list="habit-currency-options">
+                    </div>
+                </div>
+                <label class="habit-inline-toggle">
+                    <input type="checkbox" id="habit-random-reward" onchange="toggleHabitRewardRange()">
+                    <span>随机奖励范围</span>
+                </label>
+                <div class="form-row" id="habit-reward-range" style="display:none;">
+                    <div class="form-group">
+                        <label>最少数量</label>
+                        <input type="number" id="habit-reward-min" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>最多数量</label>
+                        <input type="number" id="habit-reward-max" value="0" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>断签扣分方式</label>
+                        <select id="habit-break-penalty-mode" onchange="toggleHabitBreakPenaltyMode()">
+                            <option value="none">不扣分</option>
+                            <option value="fixed">统一扣分</option>
+                            <option value="stage">按下一阶段扣分</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="habit-break-fixed-fields" style="display:none;">
+                        <label>统一断签扣分</label>
+                        <div class="habit-inline-inputs">
+                            <input type="number" id="habit-break-penalty-points" value="0" min="0">
+                            <input type="text" id="habit-break-penalty-currency" value="金币" placeholder="金币" list="habit-currency-options">
+                        </div>
+                    </div>
+                </div>
+                <div class="habit-milestone-editor">
+                    <div class="habit-milestone-head">
+                        <span>周期</span>
+                        <span>达成奖励</span>
+                        <span>奖励币种</span>
+                        <span>断签扣分</span>
+                        <span>扣分币种</span>
+                    </div>
+                    <div class="habit-milestone-row">
+                        <label><input type="checkbox" id="habit-milestone-7-enabled"> 7天</label>
+                        <input type="number" id="habit-milestone-7-reward" value="0" min="0">
+                        <input type="text" id="habit-milestone-7-currency" value="金币" list="habit-currency-options">
+                        <input type="number" id="habit-milestone-7-penalty" value="0" min="0">
+                        <input type="text" id="habit-milestone-7-penalty-currency" value="金币" list="habit-currency-options">
+                    </div>
+                    <div class="habit-milestone-row">
+                        <label><input type="checkbox" id="habit-milestone-15-enabled"> 15天</label>
+                        <input type="number" id="habit-milestone-15-reward" value="0" min="0">
+                        <input type="text" id="habit-milestone-15-currency" value="金币" list="habit-currency-options">
+                        <input type="number" id="habit-milestone-15-penalty" value="0" min="0">
+                        <input type="text" id="habit-milestone-15-penalty-currency" value="金币" list="habit-currency-options">
+                    </div>
+                    <div class="habit-milestone-row">
+                        <label><input type="checkbox" id="habit-milestone-21-enabled"> 21天</label>
+                        <input type="number" id="habit-milestone-21-reward" value="0" min="0">
+                        <input type="text" id="habit-milestone-21-currency" value="金币" list="habit-currency-options">
+                        <input type="number" id="habit-milestone-21-penalty" value="0" min="0">
+                        <input type="text" id="habit-milestone-21-penalty-currency" value="金币" list="habit-currency-options">
+                    </div>
+                    <div class="habit-milestone-row">
+                        <label><input type="checkbox" id="habit-milestone-30-enabled"> 30天</label>
+                        <input type="number" id="habit-milestone-30-reward" value="0" min="0">
+                        <input type="text" id="habit-milestone-30-currency" value="金币" list="habit-currency-options">
+                        <input type="number" id="habit-milestone-30-penalty" value="0" min="0">
+                        <input type="text" id="habit-milestone-30-penalty-currency" value="金币" list="habit-currency-options">
+                    </div>
+                    <div class="habit-milestone-row">
+                        <label><input type="checkbox" id="habit-milestone-90-enabled"> 季度</label>
+                        <input type="number" id="habit-milestone-90-reward" value="0" min="0">
+                        <input type="text" id="habit-milestone-90-currency" value="金币" list="habit-currency-options">
+                        <input type="number" id="habit-milestone-90-penalty" value="0" min="0">
+                        <input type="text" id="habit-milestone-90-penalty-currency" value="金币" list="habit-currency-options">
+                    </div>
+                    <div class="habit-milestone-row">
+                        <label><input type="checkbox" id="habit-milestone-180-enabled"> 半年</label>
+                        <input type="number" id="habit-milestone-180-reward" value="0" min="0">
+                        <input type="text" id="habit-milestone-180-currency" value="金币" list="habit-currency-options">
+                        <input type="number" id="habit-milestone-180-penalty" value="0" min="0">
+                        <input type="text" id="habit-milestone-180-penalty-currency" value="金币" list="habit-currency-options">
+                    </div>
+                    <div class="habit-milestone-row">
+                        <label><input type="checkbox" id="habit-milestone-365-enabled"> 一年</label>
+                        <input type="number" id="habit-milestone-365-reward" value="0" min="0">
+                        <input type="text" id="habit-milestone-365-currency" value="金币" list="habit-currency-options">
+                        <input type="number" id="habit-milestone-365-penalty" value="0" min="0">
+                        <input type="text" id="habit-milestone-365-penalty-currency" value="金币" list="habit-currency-options">
+                    </div>
+                </div>
+            </details>
             <div class="form-group">
                 <label>打卡备注</label>
                 <select id="habit-note-mode">
@@ -861,6 +1042,98 @@
             </div>
         </div>
     </div>
+
+    <div id="habit-reward-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title">新增心愿</div>
+                <button class="close-btn" onclick="closeHabitRewardModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label>心愿名称</label>
+                <input type="text" id="habit-reward-name" placeholder="例如：奶茶、游戏时间、一次短途旅行">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>所需数量</label>
+                    <input type="number" id="habit-reward-cost" value="10" min="1">
+                </div>
+                <div class="form-group">
+                    <label>币种</label>
+                    <input type="text" id="habit-reward-currency-cost" value="金币" placeholder="金币" list="habit-currency-options">
+                </div>
+                <div class="form-group">
+                    <label>库存限制</label>
+                    <input type="number" id="habit-reward-stock" value="0" min="0">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <textarea id="habit-reward-note" rows="3" placeholder="兑换规则，可为空"></textarea>
+            </div>
+            <div class="modal-action-row">
+                <button class="btn btn-secondary" onclick="closeHabitRewardModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveHabitReward()">保存心愿</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="habit-currency-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title">币种管理</div>
+                <button class="close-btn" onclick="closeHabitCurrencyModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label>新增币种</label>
+                <div class="habit-currency-add">
+                    <input type="text" id="habit-currency-new-name" placeholder="例如：学习币、运动币、旅行币">
+                    <button class="btn btn-secondary" onclick="addHabitCurrencyFromModal()">添加</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>已有币种</label>
+                <select id="habit-currency-existing" onchange="document.getElementById('habit-currency-new-name').value=this.value"></select>
+            </div>
+            <div class="habit-currency-list" id="habit-currency-list"></div>
+        </div>
+    </div>
+
+    <div id="habit-point-adjust-modal" class="modal-overlay">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div class="modal-title">调整积分</div>
+                <button class="close-btn" onclick="closeHabitPointAdjustModal()">×</button>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>类型</label>
+                    <select id="habit-point-adjust-type">
+                        <option value="add">加金币</option>
+                        <option value="subtract">扣金币</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>数量</label>
+                    <input type="number" id="habit-point-adjust-amount" value="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>币种</label>
+                    <input type="text" id="habit-point-adjust-currency" value="金币" placeholder="金币" list="habit-currency-options">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>原因</label>
+                <input type="text" id="habit-point-adjust-note" placeholder="例如：额外完成、违规扣分">
+            </div>
+            <div class="modal-action-row">
+                <button class="btn btn-secondary" onclick="closeHabitPointAdjustModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveHabitPointAdjust()">保存调整</button>
+            </div>
+        </div>
+    </div>
+
+    <datalist id="habit-currency-options"></datalist>
 
     <div id="habit-note-modal" class="modal-overlay">
         <div class="modal modal-sm habit-note-dialog">
@@ -1029,6 +1302,8 @@
         </div>
     </div>
 
+    <script src="./habit-engine.js"></script>
+    <script src="./habit-ui.js"></script>
     <script src="./app.js"></script>
     <script src="./wheel-tool.js"></script>
 </body>

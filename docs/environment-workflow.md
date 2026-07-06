@@ -58,25 +58,27 @@ npm run test:headed
 .\scripts\package-clean.ps1
 ```
 
-默认只保留最近 5 个 `life-plan-site-clean-*.zip`，生成新包后会自动删除更旧的包。需要临时调整保留数量时，可以传入数字：
+默认只保留最近 5 个 `life-plan-site-runtime-*.zip`，生成新包后会自动删除更旧的 runtime 包。需要临时调整保留数量时，可以使用 `-KeepCount`：
 
 ```powershell
-.\scripts\package-clean.ps1 8
+.\scripts\package-clean.ps1 -KeepCount 8
 ```
 
-压缩包会排除：
+压缩包只包含运行文件白名单：
 
-- `.git`
-- `ai-memory`
-- `docs`
-- `test-results`
-- 已有 `*.zip`
-- 常见缓存、临时和构建目录
+- `index.html`
+- `app.js`
+- `styles.css`
+- `habit-engine.js`
+- `habit-ui.js`
+- `habit-style.css`
+- `wheel-tool.js`
+- `wheel-tool.css`
 
 交付约定：
 
 - 每次完成一轮可交付功能修改并通过检查后，默认运行 `.\scripts\package-clean.ps1` 生成新的干净压缩包。
-- 压缩包保留最近 5 个，避免项目目录长期堆积历史包。
+- runtime 压缩包默认保留最近 5 个，避免项目目录长期堆积历史包。
 - 用户不需要每次单独提醒“打包”。
 - 如果只是解释问题、查看代码、轻微文档调整或未形成可交付版本，可以不打包。
 - 最终回复里应给出新压缩包路径。
@@ -110,6 +112,52 @@ tests\smoke.spec.js
 ```
 
 测试会自动启动本地静态服务，打开首页，检查核心页面导航，并对全局搜索做基础输入验证。
+
+## 最近一次转盘页面验证位置
+
+2026-07-04 这轮工具转盘视觉重构，最新一轮验证时使用的本地访问地址和截图位置如下：
+
+访问地址：
+
+```text
+http://127.0.0.1:4173/
+```
+
+截图文件：
+
+```text
+D:\project\_codex-temp\life-plan-wheel-desktop.png
+D:\project\_codex-temp\life-plan-wheel-result.png
+D:\project\_codex-temp\life-plan-wheel-mobile.png
+D:\project\_codex-temp\life-plan-wheel-mobile-stage.png
+D:\project\_codex-temp\life-plan-wheel-desktop-v2.png
+D:\project\_codex-temp\life-plan-wheel-result-v2.png
+D:\project\_codex-temp\life-plan-wheel-mobile-stage-v2.png
+D:\project\_codex-temp\life-plan-wheel-desktop-v3.png
+D:\project\_codex-temp\life-plan-wheel-result-v3.png
+D:\project\_codex-temp\life-plan-wheel-mobile-stage-v3.png
+D:\project\_codex-temp\wheel-panel-collapsed-desktop-v5.png
+D:\project\_codex-temp\wheel-panel-expanded-desktop-v5.png
+D:\project\_codex-temp\wheel-panel-collapsed-mobile-v5.png
+D:\project\_codex-temp\wheel-panel-expanded-mobile-v5.png
+```
+
+对应页面：
+
+- `life-plan-wheel-desktop.png`：工具转盘桌面初始态
+- `life-plan-wheel-result.png`：工具转盘桌面抽取结果态
+- `life-plan-wheel-mobile.png`：工具转盘移动端页首态
+- `life-plan-wheel-mobile-stage.png`：工具转盘移动端轮盘主体态
+- `life-plan-wheel-desktop-v2.png`：工具转盘桌面改版后的主舞台初始态
+- `life-plan-wheel-result-v2.png`：工具转盘桌面改版后的抽取结果态
+- `life-plan-wheel-mobile-stage-v2.png`：工具转盘移动端改版后的轮盘主体态
+- `life-plan-wheel-desktop-v3.png`：工具转盘桌面端加入前置操作区后的最新主舞台初始态
+- `life-plan-wheel-result-v3.png`：工具转盘桌面端加入前置操作区后的最新结果态
+- `life-plan-wheel-mobile-stage-v3.png`：工具转盘移动端加入抽屉式管理区后的最新轮盘主体态
+- `wheel-panel-collapsed-desktop-v5.png`：工具转盘桌面端收起管理底仓后的当前主舞台态
+- `wheel-panel-expanded-desktop-v5.png`：工具转盘桌面端展开管理底仓后的当前维护态
+- `wheel-panel-collapsed-mobile-v5.png`：工具转盘移动端收起管理底仓后的页首与主舞台态
+- `wheel-panel-expanded-mobile-v5.png`：工具转盘移动端展开管理底仓后的当前维护态
 
 ## 测试数据
 

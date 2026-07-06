@@ -508,15 +508,15 @@
 
 ## 18. 当前维护注意
 
-- 这是静态前端项目，没有构建系统和 `package.json`。
+- 这是静态前端项目，没有构建系统；`package.json` 只用于 Playwright smoke 测试依赖和脚本。
 - 当前项目位置为 `D:\project\life-plan-site`。
 - 本地环境工作流见 `docs/environment-workflow.md`。
 - 常用检查命令是 `.\scripts\check.ps1`。
 - Playwright 测试命令是 `npm test`。
 - 干净打包命令是 `.\scripts\package-clean.ps1`。
 - 完成一轮可交付功能修改并通过检查后，默认生成干净压缩包并在最终回复提供路径。
-- 干净压缩包默认只保留最近 5 个，旧包由 `scripts/package-clean.ps1` 自动清理。
+- runtime 压缩包默认保留最近 5 个，旧包由 `scripts/package-clean.ps1` 自动清理。
 - 数据主要依赖浏览器本地存储，换浏览器或清缓存前应先导出 JSON 或使用云同步。
 - `app.js` 文件较大，后续改动建议按功能块小步修改并做浏览器冒烟测试。
 - `materials`、灵感字段和转盘集合已经纳入数据归一化、搜索、导出、快照和云同步。
-- 交付代码压缩包通常应排除 `ai-memory`、`docs`、`test-results`、已有 `.zip` 和缓存目录。
+- 交付 runtime 压缩包只包含 `index.html`、`app.js`、`styles.css`、`habit-engine.js`、`habit-ui.js`、`habit-style.css`、`wheel-tool.js`、`wheel-tool.css`。

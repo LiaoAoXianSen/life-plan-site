@@ -6,6 +6,8 @@ Push-Location $root
 try {
     Write-Host "Checking JavaScript syntax..."
     node --check .\app.js
+    node --check .\habit-engine.js
+    node --check .\habit-ui.js
     node --check .\wheel-tool.js
     if (Test-Path .\playwright.config.js) {
         node --check .\playwright.config.js

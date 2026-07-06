@@ -4,6 +4,9 @@
             todos: [],
             habits: [],
             checkins: [],
+            habitPointLedger: [],
+            habitRewards: [],
+            habitCurrencies: [],
             templates: [],
             goals: [],
             deletedItems: [],
@@ -37,11 +40,26 @@
         let currentWheelMode = 'normal';
         let currentWheelPanel = 'items';
         let currentWheelResultId = null;
+        const HABIT_DEFAULT_CURRENCY = '金币';
+        const HABIT_MILESTONE_DAYS = [7, 15, 21, 30, 90, 180, 365];
+        const HABIT_MILESTONE_LABELS = {
+            7: '一周',
+            15: '15天',
+            21: '21天',
+            30: '30天',
+            90: '一个季度',
+            180: '半年',
+            365: '一年'
+        };
         let syncConfig = {
             webdavUrl: '',
             username: '',
             password: '',
             remotePath: '/life-plan.json',
+            autoSync: true
+        };
+        let wheelSyncConfig = {
+            remotePath: '/apps/wheel-app/data.json',
             autoSync: true
         };
         let syncState = {
@@ -53,10 +71,22 @@
             lastPushAt: '',
             lastConflictAt: ''
         };
+        let wheelSyncState = {
+            dirty: false,
+            lastLocalHash: '',
+            lastRemoteHash: '',
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: ''
+        };
         let suppressDirtyMark = false;
         let autoSyncTimer = null;
         let syncIntervalTimer = null;
+        let wheelAutoSyncTimer = null;
+        let wheelSyncIntervalTimer = null;
         let isCloudSyncing = false;
+        let isWheelCloudSyncing = false;
         const builtInTemplates = [
             {
                 id: 'builtin-diary-daily-review',
@@ -339,6 +369,7 @@
         function init() {
             loadData();
             loadSyncState();
+            loadWheelSyncState();
             updateSidebarToolState(true);
             renderTodayDate();
             renderDashboard();
@@ -348,6 +379,9 @@
                 currentHabitId = data.habits[0].id;
                 renderHeatmap();
             }
+            renderHabitRewards();
+            renderHabitCurrencyOptions();
+            settleYesterdayHabitPenalties();
         }
 
         function updateSidebarToolState(force = false) {
@@ -373,13 +407,15 @@
                 localStorage.setItem('lifePlanData', normalized);
             }
             loadSyncConfig();
+            loadWheelSyncConfig();
         }
 
         function normalizeDataShape(target = data) {
             if (!target || typeof target !== 'object') return data;
-            ['records','todos','habits','checkins','templates','goals','deletedItems','materials','wheels','wheelTags','wheelLibraryItems','wheelHistory'].forEach(key => {
+            ['records','todos','habits','checkins','habitPointLedger','habitRewards','habitCurrencies','templates','goals','deletedItems','materials','wheels','wheelTags','wheelLibraryItems','wheelHistory'].forEach(key => {
                 if (!Array.isArray(target[key])) target[key] = [];
             });
+            target.habitCurrencies = normalizeHabitCurrencyList(target.habitCurrencies, target);
             pruneDeletedItems(target);
             target.records = target.records.filter(record => !record?.isHabitRecord);
             target.todos.forEach(t => {
@@ -404,6 +440,17 @@
                 if (!habit.id || seenHabitIds.has(habit.id)) habit.id = genId();
                 seenHabitIds.add(habit.id);
                 if (!['ask', 'always', 'never'].includes(habit.noteMode)) habit.noteMode = 'ask';
+                habit.rewardPoints = Math.max(0, parseInt(habit.rewardPoints ?? 0, 10) || 0);
+                habit.rewardCurrency = normalizeHabitCurrency(habit.rewardCurrency);
+                habit.penaltyPoints = Math.max(0, parseInt(habit.penaltyPoints ?? 0, 10) || 0);
+                habit.penaltyCurrency = normalizeHabitCurrency(habit.penaltyCurrency || habit.rewardCurrency);
+                habit.randomReward = !!habit.randomReward;
+                habit.rewardMin = Math.max(0, parseInt(habit.rewardMin ?? habit.rewardPoints, 10) || 0);
+                habit.rewardMax = Math.max(habit.rewardMin, parseInt(habit.rewardMax ?? habit.rewardPoints, 10) || habit.rewardMin);
+                if (!['none', 'fixed', 'stage'].includes(habit.breakPenaltyMode)) habit.breakPenaltyMode = 'none';
+                habit.breakPenaltyPoints = Math.max(0, parseInt(habit.breakPenaltyPoints ?? 0, 10) || 0);
+                habit.breakPenaltyCurrency = normalizeHabitCurrency(habit.breakPenaltyCurrency || habit.penaltyCurrency);
+                habit.milestoneRewards = normalizeHabitMilestoneRewards(habit.milestoneRewards);
             });
             target.records.forEach(r => {
                 if (!Array.isArray(r.todoIds)) r.todoIds = [];
@@ -434,6 +481,30 @@
                 if (!checkin.createdAt) checkin.createdAt = checkin.checkinAt || getLocalDateTimeStr();
                 if (!checkin.updatedAt) checkin.updatedAt = checkin.createdAt;
             });
+            target.habitPointLedger.forEach(entry => {
+                if (!entry.id) entry.id = genId();
+                entry.amount = parseInt(entry.amount || 0, 10) || 0;
+                if (typeof entry.type !== 'string') entry.type = 'adjust';
+                if (typeof entry.note !== 'string') entry.note = '';
+                if (typeof entry.date !== 'string') entry.date = getTodayStr();
+                if (typeof entry.habitId !== 'string') entry.habitId = '';
+                if (typeof entry.rewardId !== 'string') entry.rewardId = '';
+                if (typeof entry.sourceId !== 'string') entry.sourceId = '';
+                entry.currency = normalizeHabitCurrency(entry.currency);
+                if (!entry.createdAt) entry.createdAt = getLocalDateTimeStr();
+                if (!entry.updatedAt) entry.updatedAt = entry.createdAt;
+            });
+            target.habitRewards.forEach(reward => {
+                if (!reward.id) reward.id = genId();
+                if (typeof reward.name !== 'string') reward.name = '未命名心愿';
+                reward.cost = Math.max(1, parseInt(reward.cost || 1, 10) || 1);
+                reward.currency = normalizeHabitCurrency(reward.currency);
+                reward.stock = Math.max(0, parseInt(reward.stock || 0, 10) || 0);
+                reward.redeemedCount = Math.max(0, parseInt(reward.redeemedCount || 0, 10) || 0);
+                if (typeof reward.note !== 'string') reward.note = '';
+                if (!reward.createdAt) reward.createdAt = getLocalDateTimeStr();
+                if (!reward.updatedAt) reward.updatedAt = reward.createdAt;
+            });
             target.goals.forEach(g => {
                 if (typeof g.progress !== 'number') g.progress = g.status === '已完成' ? 100 : 0;
             });
@@ -447,18 +518,67 @@
                 if (!material.createdAt) material.createdAt = getLocalDateTimeStr();
                 if (!material.updatedAt) material.updatedAt = material.createdAt;
             });
+            target.wheelTags.forEach(tag => {
+                if (!tag.id) tag.id = genId();
+            });
+            const wheelTagIdRemap = new Map();
+            const seenWheelTagNames = new Map();
+            target.wheelTags.forEach(tag => {
+                const name = String(tag.name || '未命名标签').trim() || '未命名标签';
+                const key = name.toLowerCase();
+                if (seenWheelTagNames.has(key)) {
+                    wheelTagIdRemap.set(tag.id, seenWheelTagNames.get(key));
+                } else {
+                    seenWheelTagNames.set(key, tag.id);
+                    wheelTagIdRemap.set(tag.id, tag.id);
+                }
+            });
+            target.wheelTags = target.wheelTags.filter(tag => wheelTagIdRemap.get(tag.id) === tag.id);
+            const validWheelTagIds = () => new Set(target.wheelTags.map(tag => tag.id).filter(Boolean));
+            const normalizeWheelTagIds = tagIds => {
+                const valid = validWheelTagIds();
+                const seen = new Set();
+                return (Array.isArray(tagIds) ? tagIds : [])
+                    .map(tagId => wheelTagIdRemap.get(tagId) || tagId)
+                    .filter(tagId => typeof tagId === 'string' && tagId && valid.has(tagId))
+                    .filter(tagId => {
+                        if (seen.has(tagId)) return false;
+                        seen.add(tagId);
+                        return true;
+                    });
+            };
             target.wheels.forEach(wheel => {
                 if (!wheel.id) wheel.id = genId();
                 if (!wheel.name) wheel.name = '未命名转盘';
                 if (wheel.mode !== 'tag') wheel.mode = 'normal';
                 if (!Array.isArray(wheel.items)) wheel.items = [];
+                if (wheel.mode === 'tag') {
+                    if (!Array.isArray(wheel.tagIds)) wheel.tagIds = [];
+                    wheel.tagIds = normalizeWheelTagIds(wheel.tagIds);
+                } else {
+                    delete wheel.tagIds;
+                }
                 wheel.items.forEach(item => {
                     if (!item.id) item.id = genId();
                     if (!item.name) item.name = '未命名选项';
                     item.weight = Math.max(1, Number(item.weight) || 1);
                     if (typeof item.note !== 'string') item.note = '';
                     if (item.enabled === undefined) item.enabled = true;
+                    if (typeof item.sourceLibraryItemId !== 'string') delete item.sourceLibraryItemId;
+                    if (!item.createdAt) item.createdAt = getLocalDateTimeStr();
+                    if (!item.updatedAt) item.updatedAt = item.createdAt;
                 });
+                if (wheel.mode === 'tag') {
+                    wheel.items = [];
+                } else {
+                    const seenWheelItems = new Set();
+                    wheel.items = wheel.items.filter(item => {
+                        const key = String(item.name || '').trim().toLowerCase();
+                        if (!key || seenWheelItems.has(key)) return false;
+                        seenWheelItems.add(key);
+                        return true;
+                    });
+                }
                 if (!wheel.createdAt) wheel.createdAt = getLocalDateTimeStr();
                 if (!wheel.updatedAt) wheel.updatedAt = wheel.createdAt;
             });
@@ -475,15 +595,32 @@
                 if (!item.id) item.id = genId();
                 if (!item.name) item.name = '未命名公共项';
                 if (!Array.isArray(item.tagIds)) item.tagIds = [];
+                item.tagIds = normalizeWheelTagIds(item.tagIds);
                 item.weight = Math.max(1, Number(item.weight) || 1);
                 if (typeof item.note !== 'string') item.note = '';
                 if (item.enabled === undefined) item.enabled = true;
                 if (!item.createdAt) item.createdAt = getLocalDateTimeStr();
                 if (!item.updatedAt) item.updatedAt = item.createdAt;
             });
+            const seenWheelLibraryItems = new Set();
+            target.wheelLibraryItems = target.wheelLibraryItems.filter(item => {
+                const key = String(item.name || '').trim().toLowerCase();
+                if (!key || seenWheelLibraryItems.has(key)) return false;
+                seenWheelLibraryItems.add(key);
+                return true;
+            });
             target.wheelHistory.forEach(history => {
                 if (!history.id) history.id = genId();
+                if (typeof history.wheelId !== 'string') history.wheelId = '';
+                if (typeof history.wheelName !== 'string') history.wheelName = '未命名转盘';
+                if (history.mode !== 'tag') history.mode = 'normal';
+                if (typeof history.tagId !== 'string') delete history.tagId;
+                if (typeof history.tagName !== 'string') delete history.tagName;
+                if (typeof history.resultId !== 'string') delete history.resultId;
+                if (typeof history.resultName !== 'string') history.resultName = '未命名结果';
+                if (typeof history.note !== 'string') history.note = '';
                 if (!history.createdAt) history.createdAt = getLocalDateTimeStr();
+                if (!history.updatedAt) history.updatedAt = history.createdAt;
                 if (typeof history.convertedTodoId !== 'string') history.convertedTodoId = '';
             });
             return target;
@@ -502,6 +639,69 @@
             return hashString(JSON.stringify(value || {}));
         }
 
+        function getWheelSnapshot(source = data) {
+            return {
+                wheels: Array.isArray(source.wheels) ? source.wheels : [],
+                wheelTags: Array.isArray(source.wheelTags) ? source.wheelTags : [],
+                wheelLibraryItems: Array.isArray(source.wheelLibraryItems) ? source.wheelLibraryItems : [],
+                wheelHistory: Array.isArray(source.wheelHistory) ? source.wheelHistory : []
+            };
+        }
+
+        function getWheelDataHash(value = getWheelSnapshot()) {
+            return hashString(JSON.stringify(value || {}));
+        }
+
+        function applyWheelSnapshot(snapshot, shouldRender = true) {
+            const next = snapshot && typeof snapshot === 'object' ? snapshot : {};
+            data.wheels = Array.isArray(next.wheels) ? next.wheels : [];
+            data.wheelTags = Array.isArray(next.wheelTags) ? next.wheelTags : [];
+            data.wheelLibraryItems = Array.isArray(next.wheelLibraryItems) ? next.wheelLibraryItems : [];
+            data.wheelHistory = Array.isArray(next.wheelHistory) ? next.wheelHistory : [];
+            normalizeDataShape();
+            saveDataFromWheelSync();
+            if (shouldRender) renderAfterDataChange();
+        }
+
+        function getWheelEntityUpdatedTime(item) {
+            if (!item || typeof item !== 'object') return 0;
+            return getItemUpdatedTime(item);
+        }
+
+        function mergeWheelEntities(localItems = [], remoteItems = []) {
+            const merged = new Map();
+            [...localItems, ...remoteItems].forEach((item, index) => {
+                if (!item || typeof item !== 'object') return;
+                const key = item.id ? `id:${item.id}` : `json:${index}:${JSON.stringify(item)}`;
+                const current = merged.get(key);
+                if (!current || getWheelEntityUpdatedTime(item) >= getWheelEntityUpdatedTime(current)) {
+                    merged.set(key, item);
+                }
+            });
+            return Array.from(merged.values()).filter(item => !item?.deletedAt);
+        }
+
+        function mergeWheelSnapshots(localSnapshot, remoteSnapshot) {
+            const local = getWheelSnapshot(localSnapshot || {});
+            const remote = getWheelSnapshot(remoteSnapshot || {});
+            const remoteWheelMap = new Map(remote.wheels.map(item => [item.id, item]));
+            return {
+                wheels: mergeWheelEntities(local.wheels, remote.wheels).map(wheel => {
+                    const localWheel = local.wheels.find(item => item.id === wheel.id);
+                    const remoteWheel = remoteWheelMap.get(wheel.id);
+                    const baseWheel = !localWheel ? remoteWheel : !remoteWheel ? localWheel
+                        : getWheelEntityUpdatedTime(remoteWheel) >= getWheelEntityUpdatedTime(localWheel) ? remoteWheel : localWheel;
+                    return {
+                        ...baseWheel,
+                        items: mergeWheelEntities(localWheel?.items || [], remoteWheel?.items || [])
+                    };
+                }),
+                wheelTags: mergeWheelEntities(local.wheelTags, remote.wheelTags),
+                wheelLibraryItems: mergeWheelEntities(local.wheelLibraryItems, remote.wheelLibraryItems),
+                wheelHistory: mergeWheelEntities(local.wheelHistory, remote.wheelHistory)
+            };
+        }
+
         // 保存数据
         function saveData() {
             normalizeDataShape();
@@ -511,6 +711,13 @@
                 syncState.lastLocalHash = getDataHash();
                 saveSyncState();
                 scheduleAutoCloudSync('本地修改，稍后自动同步');
+                const currentWheelHash = getWheelDataHash();
+                if (currentWheelHash !== wheelSyncState.lastLocalHash) {
+                    wheelSyncState.dirty = true;
+                    wheelSyncState.lastLocalHash = currentWheelHash;
+                    saveWheelSyncState();
+                    scheduleAutoWheelCloudSync('大转盘数据已修改，稍后自动同步');
+                }
             }
         }
 
@@ -529,7 +736,31 @@
             localStorage.setItem('lifePlanSyncState', JSON.stringify(syncState));
         }
 
+        function loadWheelSyncState() {
+            try {
+                const saved = localStorage.getItem('lifePlanWheelSyncState');
+                if (saved) wheelSyncState = { ...wheelSyncState, ...JSON.parse(saved) };
+            } catch (err) {
+                console.warn('大转盘同步状态读取失败', err);
+            }
+            wheelSyncState.lastLocalHash = wheelSyncState.lastLocalHash || getWheelDataHash();
+        }
+
+        function saveWheelSyncState() {
+            wheelSyncState.lastLocalHash = getWheelDataHash();
+            localStorage.setItem('lifePlanWheelSyncState', JSON.stringify(wheelSyncState));
+        }
+
         function saveDataFromSync() {
+            suppressDirtyMark = true;
+            try {
+                saveData();
+            } finally {
+                suppressDirtyMark = false;
+            }
+        }
+
+        function saveDataFromWheelSync() {
             suppressDirtyMark = true;
             try {
                 saveData();
@@ -688,6 +919,9 @@
                 todos: snapshotData.todos || [],
                 habits: snapshotData.habits || [],
                 checkins: snapshotData.checkins || [],
+                habitPointLedger: snapshotData.habitPointLedger || [],
+                habitRewards: snapshotData.habitRewards || [],
+                habitCurrencies: snapshotData.habitCurrencies || [],
                 goals: snapshotData.goals || [],
                 materials: snapshotData.materials || []
             };
@@ -819,6 +1053,8 @@
             renderAllRecords();
             renderTodoTable();
             renderHabitTabs();
+            renderHabitRewards();
+            renderHabitCurrencyOptions();
             renderGoalList();
             renderWheelPage();
             refreshKnowledgeViews();
@@ -842,9 +1078,33 @@
             updateSyncStatus(syncConfig.webdavUrl ? '已加载云同步配置' : '未配置云同步');
         }
 
+        function loadWheelSyncConfig() {
+            try {
+                const saved = localStorage.getItem('lifePlanWheelSyncConfig');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (!syncConfig.webdavUrl && parsed.webdavUrl) syncConfig.webdavUrl = parsed.webdavUrl;
+                    wheelSyncConfig = { ...wheelSyncConfig, ...parsed };
+                    delete wheelSyncConfig.webdavUrl;
+                }
+            } catch (err) {
+                console.warn('大转盘同步配置读取失败', err);
+            }
+            wheelSyncConfig.remotePath = wheelSyncConfig.remotePath || '/apps/wheel-app/data.json';
+            wheelSyncConfig.autoSync = wheelSyncConfig.autoSync !== false;
+            saveSyncConfigToLocal();
+            applyWheelSyncSettingsToForm();
+            updateWheelSyncStatus(syncConfig.webdavUrl ? '已加载大转盘同步配置' : '未配置大转盘同步');
+        }
+
         function saveSyncConfigToLocal() {
             localStorage.setItem('lifePlanSyncConfig', JSON.stringify(syncConfig));
             applySyncSettingsToForm();
+        }
+
+        function saveWheelSyncConfigToLocal() {
+            localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify(wheelSyncConfig));
+            applyWheelSyncSettingsToForm();
         }
 
         function applySyncSettingsToForm() {
@@ -858,6 +1118,13 @@
                 else if (id === 'sync-password') el.value = syncConfig.password || '';
                 else if (id === 'sync-remote-path') el.value = syncConfig.remotePath || '';
             });
+        }
+
+        function applyWheelSyncSettingsToForm() {
+            const pathEl = document.getElementById('wheel-sync-remote-path');
+            const autoEl = document.getElementById('wheel-sync-auto');
+            if (pathEl) pathEl.value = wheelSyncConfig.remotePath || '';
+            if (autoEl) autoEl.checked = !!wheelSyncConfig.autoSync;
         }
 
         function updateSyncStatus(message, isError = false) {
@@ -887,8 +1154,35 @@
             return `同步：${text.replace(/\s+/g, ' ').slice(0, 16)}`;
         }
 
+        function updateWheelSyncStatus(message, isError = false) {
+            const text = message || '';
+            const modalEl = document.getElementById('wheel-sync-modal-status');
+            const inlineEl = document.getElementById('wheel-sync-status-inline');
+            [modalEl].forEach(el => {
+                if (!el) return;
+                el.textContent = text;
+                el.classList.toggle('is-error', !!isError);
+            });
+            if (inlineEl) {
+                inlineEl.textContent = getWheelSyncStatusSummary(text, isError);
+                inlineEl.classList.toggle('is-error', !!isError);
+            }
+        }
+
+        function getWheelSyncStatusSummary(message = '', isError = false) {
+            const text = String(message || '').trim();
+            if (isError) return '转盘：失败';
+            if (!text) return syncConfig.webdavUrl ? '转盘：待检查' : '转盘：未配置';
+            if (text.includes('未配置')) return '转盘：未配置';
+            if (text.includes('正在') || text.includes('稍后')) return '转盘：进行中';
+            if (text.includes('完成') || text.includes('已上传') || text.includes('已拉取') || text.includes('一致') || text.includes('已同步')) return '转盘：已同步';
+            if (text.includes('已加载')) return '转盘：已配置';
+            return `转盘：${text.replace(/\s+/g, ' ').slice(0, 16)}`;
+        }
+
         function openSyncSettings() {
             applySyncSettingsToForm();
+            applyWheelSyncSettingsToForm();
             document.getElementById('sync-modal').classList.add('active');
         }
 
@@ -905,9 +1199,19 @@
             saveSyncConfigToLocal();
         }
 
-        async function webdavRequest(path, method, body = null) {
-            if (!syncConfig.webdavUrl) throw new Error('请先填写 Cloudflare Worker 同步中转地址');
-            const base = syncConfig.webdavUrl.replace(/\/+$/, '/');
+        function readWheelSyncForm() {
+            readSyncForm();
+            const pathInput = document.getElementById('wheel-sync-remote-path');
+            const autoInput = document.getElementById('wheel-sync-auto');
+            wheelSyncConfig.remotePath = pathInput?.value.trim() || '/apps/wheel-app/data.json';
+            wheelSyncConfig.autoSync = !!autoInput?.checked;
+            delete wheelSyncConfig.webdavUrl;
+            saveWheelSyncConfigToLocal();
+        }
+
+        async function webdavRequestWithConfig(config, path, method, body = null) {
+            if (!config.webdavUrl) throw new Error('请先填写 Cloudflare Worker 同步中转地址');
+            const base = config.webdavUrl.replace(/\/+$/, '/');
             const target = String(path || '').replace(/^\/+/, '');
             const url = base + target;
             const headers = {};
@@ -924,8 +1228,21 @@
             return response;
         }
 
-        function getItemMergeKey(item, fallbackIndex) {
+        async function webdavRequest(path, method, body = null) {
+            return webdavRequestWithConfig(syncConfig, path, method, body);
+        }
+
+        function getHabitLedgerMergeKey(entry) {
+            if (!entry || typeof entry !== 'object') return '';
+            if (entry.sourceId && ['checkin', 'milestone', 'reverse', 'miss', 'break', 'reverse-penalty'].includes(entry.type)) {
+                return `ledger:${entry.type}:${entry.sourceId}:${normalizeHabitCurrency(entry.currency)}`;
+            }
+            return '';
+        }
+
+        function getItemMergeKey(item, fallbackIndex, collection = '') {
             if (!item || typeof item !== 'object') return `value-${fallbackIndex}`;
+            if (collection === 'habitPointLedger') return getHabitLedgerMergeKey(item) || (item.id ? `id:${item.id}` : `value-${fallbackIndex}`);
             if (item.id) return `id:${item.id}`;
             if (item.habitId && item.date) return `habit:${item.habitId}:${item.date}`;
             if (item.type && item.period) return `period:${item.type}:${item.period}`;
@@ -989,9 +1306,9 @@
 
         function mergeArrayByIdentity(collection, localItems = [], remoteItems = [], deletionMap = new Map()) {
             const merged = new Map();
-            localItems.forEach((item, index) => merged.set(getItemMergeKey(item, index), item));
+            localItems.forEach((item, index) => merged.set(getItemMergeKey(item, index, collection), item));
             remoteItems.forEach((remoteItem, index) => {
-                const key = getItemMergeKey(remoteItem, index);
+                const key = getItemMergeKey(remoteItem, index, collection);
                 const localItem = merged.get(key);
                 if (!localItem || getItemUpdatedTime(remoteItem) >= getItemUpdatedTime(localItem)) {
                     merged.set(key, remoteItem);
@@ -1003,7 +1320,7 @@
         function mergeCloudData(localData, remoteData) {
             const merged = { ...localData, ...remoteData };
             const deletionMap = buildDeletionMap(localData, remoteData);
-            ['records', 'todos', 'habits', 'checkins', 'templates', 'goals', 'materials', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].forEach(key => {
+            ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].forEach(key => {
                 merged[key] = mergeArrayByIdentity(key, localData[key] || [], remoteData[key] || [], deletionMap);
             });
             merged.deletedItems = Array.from(deletionMap.values());
@@ -1239,6 +1556,9 @@
             if (!document.hidden && syncConfig.autoSync && syncConfig.webdavUrl) {
                 runCloudSync('both').catch(err => updateSyncStatus(err.message || '恢复页面同步失败', true));
             }
+            if (!document.hidden && wheelSyncConfig.autoSync && syncConfig.webdavUrl) {
+                runWheelCloudSync('both', true).catch(err => updateWheelSyncStatus(err.message || '恢复页面大转盘同步失败', true));
+            }
         });
 
         async function testCloudSync() {
@@ -1267,6 +1587,208 @@
                 await runCloudSync('both');
             } catch (err) {
                 updateSyncStatus(err.message || '保存失败', true);
+            }
+        }
+
+        async function fetchRemoteWheelData() {
+            let response;
+            try {
+                response = await webdavRequestWithConfig(syncConfig, wheelSyncConfig.remotePath, 'GET');
+            } catch (err) {
+                if (err.status === 404) return null;
+                throw err;
+            }
+            const text = await response.text();
+            if (!text.trim()) return null;
+            const remoteData = JSON.parse(text);
+            return { data: getWheelSnapshot(remoteData), hash: getWheelDataHash(getWheelSnapshot(remoteData)) };
+        }
+
+        async function syncWheelDownFromCloud() {
+            const remote = await fetchRemoteWheelData();
+            if (!remote) return false;
+            const localSnapshot = getWheelSnapshot();
+            const localHash = getWheelDataHash(localSnapshot);
+            const localChanged = wheelSyncState.dirty || (!!wheelSyncState.lastRemoteHash && localHash !== wheelSyncState.lastRemoteHash) || (!wheelSyncState.lastRemoteHash && localHash !== remote.hash);
+            const shouldMerge = localChanged && localHash !== remote.hash;
+            const nextSnapshot = shouldMerge ? mergeWheelSnapshots(localSnapshot, remote.data) : remote.data;
+            applyWheelSnapshot(nextSnapshot, true);
+            wheelSyncState.dirty = shouldMerge;
+            wheelSyncState.lastRemoteHash = remote.hash;
+            wheelSyncState.lastPullAt = new Date().toISOString();
+            if (!shouldMerge) wheelSyncState.lastSyncAt = wheelSyncState.lastPullAt;
+            saveWheelSyncState();
+            return shouldMerge ? 'merged' : 'pulled';
+        }
+
+        async function syncWheelUpToCloud(force = false) {
+            const localSnapshot = getWheelSnapshot();
+            const localHash = getWheelDataHash(localSnapshot);
+            if (!force && !wheelSyncState.dirty && wheelSyncState.lastRemoteHash === localHash) return false;
+            const remotePath = wheelSyncConfig.remotePath.startsWith('/') ? wheelSyncConfig.remotePath : `/${wheelSyncConfig.remotePath}`;
+            const folderPath = remotePath.split('/').slice(0, -1).join('/');
+            if (folderPath) {
+                try { await webdavRequestWithConfig(syncConfig, folderPath, 'MKCOL'); } catch (err) {}
+            }
+            await webdavRequestWithConfig(syncConfig, remotePath, 'PUT', JSON.stringify(localSnapshot, null, 2));
+            wheelSyncState.dirty = false;
+            wheelSyncState.lastRemoteHash = localHash;
+            wheelSyncState.lastPushAt = new Date().toISOString();
+            wheelSyncState.lastSyncAt = wheelSyncState.lastPushAt;
+            saveWheelSyncState();
+            return true;
+        }
+
+        async function runWheelCloudSync(direction = 'both', silent = false) {
+            if (isWheelCloudSyncing) {
+                if (!silent) updateWheelSyncStatus('已有大转盘同步任务进行中。');
+                return;
+            }
+            try {
+                isWheelCloudSyncing = true;
+                readWheelSyncForm();
+                if (!syncConfig.webdavUrl) {
+                    if (!silent) updateWheelSyncStatus('请先填写统一同步中转地址', true);
+                    return;
+                }
+                if (!silent) updateWheelSyncStatus(`正在同步大转盘... ${formatClockTime(new Date(), true)}`);
+
+                if (direction === 'up') {
+                    const remote = await fetchRemoteWheelData();
+                    const localSnapshot = getWheelSnapshot();
+                    const localHash = getWheelDataHash(localSnapshot);
+                    const remoteChanged = remote && remote.hash !== localHash && (!wheelSyncState.lastRemoteHash || remote.hash !== wheelSyncState.lastRemoteHash);
+                    if (remoteChanged) {
+                        applyWheelSnapshot(mergeWheelSnapshots(localSnapshot, remote.data), false);
+                        wheelSyncState.dirty = true;
+                        wheelSyncState.lastConflictAt = new Date().toISOString();
+                        saveWheelSyncState();
+                        await syncWheelUpToCloud(true);
+                        renderAfterDataChange();
+                        updateWheelSyncStatus(`大转盘云端也有变化，已合并后上传 ${formatClockTime(new Date(), true)}`);
+                        return;
+                    }
+                    const uploaded = await syncWheelUpToCloud(true);
+                    updateWheelSyncStatus(uploaded ? `大转盘上传完成 ${formatClockTime(new Date(), true)}` : '大转盘本地没有变化，无需上传');
+                    return;
+                }
+
+                if (direction === 'down') {
+                    const pulled = await syncWheelDownFromCloud();
+                    if (!pulled) {
+                        updateWheelSyncStatus('云端还没有大转盘文件，请先上传到云端');
+                        return;
+                    }
+                    if (pulled === 'merged') {
+                        await syncWheelUpToCloud(true);
+                        renderAfterDataChange();
+                        updateWheelSyncStatus(`大转盘本地也有变化，已合并后回写云端 ${formatClockTime(new Date(), true)}`);
+                        return;
+                    }
+                    renderAfterDataChange();
+                    updateWheelSyncStatus(`大转盘拉取完成 ${formatClockTime(new Date(), true)}`);
+                    return;
+                }
+
+                const remote = await fetchRemoteWheelData();
+                const localSnapshot = getWheelSnapshot();
+                const localHash = getWheelDataHash(localSnapshot);
+                const remoteHash = remote ? remote.hash : '';
+                const localChanged = wheelSyncState.dirty || (!!wheelSyncState.lastRemoteHash && localHash !== wheelSyncState.lastRemoteHash) || !wheelSyncState.lastRemoteHash;
+                const remoteChanged = remote && wheelSyncState.lastRemoteHash && remoteHash !== wheelSyncState.lastRemoteHash;
+
+                if (!remote) {
+                    await syncWheelUpToCloud(true);
+                    updateWheelSyncStatus(`云端无大转盘文件，已上传本地数据 ${formatClockTime(new Date(), true)}`);
+                    return;
+                }
+
+                if (!localChanged && !remoteChanged) {
+                    wheelSyncState.lastPullAt = new Date().toISOString();
+                    saveWheelSyncState();
+                    if (!silent) updateWheelSyncStatus(`大转盘云端和本地一致 ${formatClockTime(new Date(), true)}`);
+                    return;
+                }
+
+                if (!localChanged && remoteHash !== localHash) {
+                    applyWheelSnapshot(remote.data, true);
+                    wheelSyncState.dirty = false;
+                    wheelSyncState.lastRemoteHash = remoteHash;
+                    wheelSyncState.lastPullAt = new Date().toISOString();
+                    wheelSyncState.lastSyncAt = wheelSyncState.lastPullAt;
+                    saveWheelSyncState();
+                    updateWheelSyncStatus(`发现大转盘云端更新，已拉取 ${formatClockTime(new Date(), true)}`);
+                    return;
+                }
+
+                if (localChanged && !remoteChanged) {
+                    await syncWheelUpToCloud(false);
+                    updateWheelSyncStatus(`发现大转盘本地更新，已上传 ${formatClockTime(new Date(), true)}`);
+                    return;
+                }
+
+                applyWheelSnapshot(mergeWheelSnapshots(localSnapshot, remote.data), false);
+                wheelSyncState.dirty = true;
+                wheelSyncState.lastConflictAt = new Date().toISOString();
+                saveWheelSyncState();
+                await syncWheelUpToCloud(true);
+                renderAfterDataChange();
+                updateWheelSyncStatus(`大转盘两端都有变化，已保守合并 ${formatClockTime(new Date(), true)}`);
+            } catch (err) {
+                updateWheelSyncStatus(err.message || '大转盘同步失败', true);
+                throw err;
+            } finally {
+                isWheelCloudSyncing = false;
+            }
+        }
+
+        function scheduleAutoWheelCloudSync(reason = '') {
+            if (!wheelSyncConfig.autoSync || !syncConfig.webdavUrl) return;
+            clearTimeout(wheelAutoSyncTimer);
+            if (reason) updateWheelSyncStatus(reason);
+            wheelAutoSyncTimer = setTimeout(() => {
+                runWheelCloudSync('both', true).catch(err => updateWheelSyncStatus(err.message || '大转盘自动同步失败', true));
+            }, 20000);
+        }
+
+        function startPeriodicWheelCloudSync() {
+            clearInterval(wheelSyncIntervalTimer);
+            if (!wheelSyncConfig.autoSync || !syncConfig.webdavUrl) return;
+            wheelSyncIntervalTimer = setInterval(() => {
+                if (document.hidden) return;
+                runWheelCloudSync('both', true).catch(err => updateWheelSyncStatus(err.message || '大转盘定时同步失败', true));
+            }, 300000);
+        }
+
+        async function testWheelCloudSync() {
+            try {
+                readWheelSyncForm();
+                if (!syncConfig.webdavUrl) throw new Error('请先填写统一同步中转地址');
+                updateWheelSyncStatus('正在测试大转盘连接...');
+                const remotePath = wheelSyncConfig.remotePath.startsWith('/') ? wheelSyncConfig.remotePath : `/${wheelSyncConfig.remotePath}`;
+                const folderPath = remotePath.split('/').slice(0, -1).join('/') || '/';
+                try {
+                    await webdavRequestWithConfig(syncConfig, folderPath, 'PROPFIND');
+                } catch (err) {
+                    if (err.status === 404) {
+                        updateWheelSyncStatus('连接成功，大转盘云端目录还不存在，首次上传会自动创建');
+                        return;
+                    }
+                    throw err;
+                }
+                updateWheelSyncStatus('大转盘连接成功');
+            } catch (err) {
+                updateWheelSyncStatus(err.message || '大转盘连接失败', true);
+            }
+        }
+
+        async function saveWheelSyncSettings() {
+            try {
+                readWheelSyncForm();
+                startPeriodicWheelCloudSync();
+                await runWheelCloudSync('both');
+            } catch (err) {
+                updateWheelSyncStatus(err.message || '大转盘保存失败', true);
             }
         }
 
@@ -1449,7 +1971,7 @@
             const tone = getScheduleItemTone({ sourceType: 'record', type: record.type });
             const startMinutes = parseTimeToMinutes(record.recordTime);
             const endMinutes = parseTimeToMinutes(record.recordEndTime);
-            const duration = endMinutes && startMinutes !== null && endMinutes > startMinutes ? endMinutes - startMinutes : 60;
+            const explicitEndMinutes = startMinutes !== null && endMinutes !== null && endMinutes > startMinutes ? endMinutes : null;
             const ideaMeta = getIdeaMetaParts(record);
             const dateMeta = record.endDate && record.endDate !== record.startDate ? `${formatDate(record.startDate)} ~ ${formatDate(record.endDate)}` : '';
 
@@ -1466,7 +1988,7 @@
                 done: false,
                 allDay: startMinutes === null,
                 startMinutes,
-                endMinutes: startMinutes === null ? null : Math.min(startMinutes + duration, 23 * 60 + 59),
+                endMinutes: explicitEndMinutes,
                 timeLabel: record.recordTime || '全天',
                 click: `openRecordPreview('${record.id}')`,
                 tone
@@ -1519,7 +2041,7 @@
         function buildTodoSessionScheduleItem(todo, session) {
             const startMinutes = parseTimeToMinutes(session.startTime);
             const endMinutes = parseTimeToMinutes(session.endTime);
-            const duration = endMinutes && startMinutes !== null && endMinutes > startMinutes ? endMinutes - startMinutes : 45;
+            const explicitEndMinutes = startMinutes !== null && endMinutes !== null && endMinutes > startMinutes ? endMinutes : null;
             return {
                 key: `todo-session:${todo.id}:${session.id}`,
                 id: todo.id,
@@ -1533,7 +2055,7 @@
                 done: !!todo.done,
                 allDay: startMinutes === null,
                 startMinutes,
-                endMinutes: startMinutes === null ? null : Math.min(startMinutes + duration, 23 * 60 + 59),
+                endMinutes: explicitEndMinutes,
                 timeLabel: session.startTime || '执行',
                 click: `openTodoDetail('${todo.id}')`,
                 tone: getScheduleItemTone({ sourceType: 'todo', type: '待办执行' })
@@ -1566,7 +2088,7 @@
                 done: count >= 1,
                 allDay: !(count > 0 && startMinutes !== null),
                 startMinutes: count > 0 ? startMinutes : null,
-                endMinutes: count > 0 && startMinutes !== null ? Math.min(startMinutes + 30, 23 * 60 + 59) : null,
+                endMinutes: null,
                 timeLabel: count > 0 ? (checkinTime || '已打卡') : '待打卡',
                 click: `focusHabitFromSchedule('${habit.id}')`,
                 habitTag: habit.tag,
@@ -1653,6 +2175,11 @@
             return `${item.date}T00:00:00`;
         }
 
+        function getScheduleLayoutEndMinutes(item, fallbackMinutes = 15) {
+            if (item?.endMinutes !== null && item?.endMinutes > item?.startMinutes) return item.endMinutes;
+            return Math.min((item?.startMinutes || 0) + fallbackMinutes, 23 * 60 + 59);
+        }
+
         function sortScheduleItemsInDay(items) {
             const order = getDayOrder();
             return [...items].sort((a, b) => {
@@ -1666,14 +2193,14 @@
             const sorted = [...items].sort((a, b) => {
                 const startDiff = a.startMinutes - b.startMinutes;
                 if (startDiff !== 0) return startDiff;
-                return (b.endMinutes || b.startMinutes + 60) - (a.endMinutes || a.startMinutes + 60);
+                return getScheduleLayoutEndMinutes(b) - getScheduleLayoutEndMinutes(a);
             });
             const clusters = [];
             let current = [];
             let clusterEnd = -1;
 
             sorted.forEach(item => {
-                const itemEnd = item.endMinutes || item.startMinutes + 60;
+                const itemEnd = getScheduleLayoutEndMinutes(item);
                 if (current.length === 0 || item.startMinutes < clusterEnd) {
                     current.push(item);
                     clusterEnd = Math.max(clusterEnd, itemEnd);
@@ -1689,7 +2216,7 @@
             clusters.forEach(cluster => {
                 const columns = [];
                 const placements = cluster.map(item => {
-                    const itemEnd = item.endMinutes || item.startMinutes + 60;
+                    const itemEnd = getScheduleLayoutEndMinutes(item);
                     let columnIndex = columns.findIndex(columnEnd => columnEnd <= item.startMinutes);
                     if (columnIndex === -1) {
                         columnIndex = columns.length;
@@ -1960,7 +2487,7 @@
             if (pageName === 'tags') renderTagCenter();
             if (pageName === 'search') renderGlobalSearch();
             if (pageName === 'todos') renderTodoTable();
-            if (pageName === 'habits') { renderHabitTabs(); if(currentHabitId) renderHeatmap(); if(currentHabitView === 'matrix') renderHabitMatrix(); }
+            if (pageName === 'habits') { renderHabitTabs(); renderHabitRewards(); if(currentHabitId) renderHeatmap(); if(currentHabitView === 'matrix') renderHabitMatrix(); }
             if (pageName === 'goals') renderGoalList();
             if (pageName === 'wheel') renderWheelPage();
         }
@@ -2305,16 +2832,31 @@
                 const doneCount = getCheckinCount(habit.id, today);
                 const latestCheckin = getLatestHabitCheckin(habit.id, today);
                 const latestTime = latestCheckin ? getCheckinClockTime(latestCheckin) : '';
-                const latestNote = getCheckinNoteSummary(latestCheckin?.note, 40);
+                const latestNote = getCheckinNoteSummary(latestCheckin?.note, 22);
                 const statusClass = doneCount === 0 ? 'is-pending' : (doneCount >= targetCount ? 'is-done' : 'is-active');
                 const statusText = doneCount === 0
                     ? '待开始'
                     : (doneCount >= targetCount ? '今日达标' : `进行中 ${doneCount}/${targetCount}`);
+                const rewardMeta = habit.randomReward
+                    ? (
+                        Math.max(0, parseInt(habit.rewardMin ?? habit.rewardPoints ?? 0, 10) || 0) > 0 ||
+                        Math.max(0, parseInt(habit.rewardMax ?? habit.rewardPoints ?? 0, 10) || 0) > 0
+                    )
+                        ? {
+                            text: `+${habit.rewardMin ?? habit.rewardPoints ?? 0}-${habit.rewardMax ?? habit.rewardPoints ?? 0} ${normalizeHabitCurrency(habit.rewardCurrency)}`,
+                            className: 'is-points'
+                        }
+                        : null
+                    : (Math.max(0, parseInt(habit.rewardPoints ?? 0, 10) || 0) > 0
+                        ? { text: `+${habit.rewardPoints} ${normalizeHabitCurrency(habit.rewardCurrency)}`, className: 'is-points' }
+                        : null);
                 const infoParts = [
-                    getHabitRuleText(habit),
-                    `${doneCount}/${targetCount}`,
-                    latestTime || '未记录'
-                ];
+                    { text: getHabitRuleText(habit) },
+                    { text: `${doneCount}/${targetCount}` },
+                    { text: latestTime || '未记录' },
+                    rewardMeta,
+                    habit.penaltyPoints > 0 ? { text: `漏打 -${habit.penaltyPoints}`, className: 'is-penalty' } : null
+                ].filter(Boolean);
                 const primaryActionText = targetCount > 1 && doneCount > 0 ? '再记一次' : '打卡';
                 const actionButtons = doneCount === 0
                     ? `
@@ -2333,7 +2875,7 @@
                         `;
 
                 return `
-                    <article class="habit-quick-card ${doneCount > 0 ? 'done' : ''} ${targetCount > 1 ? 'multi' : ''}">
+                    <article class="habit-quick-card compact ${doneCount > 0 ? 'done' : ''} ${targetCount > 1 ? 'multi' : ''}">
                         <div class="habit-quick-head">
                             <div class="habit-quick-main">
                                 <div class="habit-quick-title-row">
@@ -2341,7 +2883,7 @@
                                     <span class="habit-quick-tag">${escapeHtml(habit.tag || '习惯')}</span>
                                     <span class="habit-quick-status ${statusClass}">${escapeHtml(statusText)}</span>
                                 </div>
-                                <div class="habit-quick-meta">${infoParts.map(part => `<span>${escapeHtml(part)}</span>`).join('')}</div>
+                                <div class="habit-quick-meta">${infoParts.map(part => `<span class="${part.className || ''}">${escapeHtml(part.text)}</span>`).join('')}</div>
                                 ${latestNote ? `<div class="habit-quick-note-inline">备注：${escapeHtml(latestNote)}</div>` : ''}
                             </div>
                             <div class="habit-quick-actions compact">
@@ -2453,7 +2995,7 @@
         function renderScheduleCard(item) {
             const label = item.filterType === '待办' ? '待办' : (item.sourceType === 'habit' ? '习惯' : item.type);
             const preview = item.preview ? `<div class="item-preview">${escapeHtml(item.preview)}</div>` : '';
-            const metaParts = [item.meta, item.sourceType === 'todo' && item.done ? '已完成' : '', item.sourceType === 'habit' ? item.timeLabel : ''].filter(Boolean);
+            const metaParts = [item.meta, item.filterType === '待办' && item.done ? '已完成' : '', item.sourceType === 'habit' ? item.timeLabel : ''].filter(Boolean);
             const toneStyle = `--event-bg:${item.tone.bg}; --event-border:${item.tone.border}; --event-ink:${item.tone.ink};`;
             return `
                 <div class="record-row">
@@ -2470,7 +3012,7 @@
 
         function focusHabitFromSchedule(habitId) {
             currentHabitId = habitId;
-            const navEl = Array.from(document.querySelectorAll('.nav-item')).find(el => el.textContent.includes('习惯热力图'));
+            const navEl = Array.from(document.querySelectorAll('.nav-item')).find(el => el.textContent.includes('习惯打卡'));
             switchPage('habits', navEl);
             renderHabitTabs();
             if (currentHabitView === 'matrix') renderHabitMatrix();
@@ -3026,13 +3568,103 @@
             };
         }
 
+        function hasRecordIdeaOnlyFilter() {
+            const ideaStatusFilter = document.getElementById('record-idea-status-filter')?.value || 'all';
+            const ideaTagFilter = (document.getElementById('record-idea-tag-filter')?.value || '').trim();
+            return ideaStatusFilter !== 'all' || !!ideaTagFilter;
+        }
+
+        function scheduleItemMatchesKeyword(item, keyword = '') {
+            const keywordText = String(keyword || '').trim().toLowerCase();
+            if (!keywordText) return true;
+            const haystack = [item.type, item.title, item.preview, item.meta, item.date, item.timeLabel]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+            return haystack.includes(keywordText);
+        }
+
+        function getAllRecordEventItems() {
+            const { keyword, typeFilter } = getRecordViewFilters();
+            const recordItems = getFilteredRecords().map(record => buildRecordScheduleItem(record));
+            if (hasRecordIdeaOnlyFilter()) return recordItems;
+
+            const operationItems = [];
+            if (typeFilter === 'all' || typeFilter === '待办') {
+                data.todos.forEach(todo => {
+                    (todo.sessions || []).forEach(session => {
+                        if (!session.date) return;
+                        const item = buildTodoSessionScheduleItem(todo, session);
+                        if (scheduleItemMatchesKeyword(item, keyword)) operationItems.push(item);
+                    });
+                });
+            }
+
+            if (typeFilter === 'all' || typeFilter === '习惯') {
+                const seenHabitDates = new Set();
+                data.checkins.forEach(checkin => {
+                    if (!checkin.habitId || !checkin.date) return;
+                    const key = `${checkin.habitId}:${checkin.date}`;
+                    if (seenHabitDates.has(key)) return;
+                    seenHabitDates.add(key);
+                    const habit = data.habits.find(item => item.id === checkin.habitId);
+                    if (!habit) return;
+                    const item = buildHabitScheduleItem(habit, checkin.date);
+                    if (item.done && scheduleItemMatchesKeyword(item, keyword)) operationItems.push(item);
+                });
+            }
+
+            return [...recordItems, ...operationItems];
+        }
+
         function getViewScheduleItems(startDate, endDate) {
-            return buildScheduleItemsForRange(startDate, endDate, {
-                ...getRecordViewFilters(),
-                includeRecords: true,
+            const filters = getRecordViewFilters();
+            const recordItems = getFilteredRecords()
+                .filter(record => record.startDate && record.startDate >= startDate && record.startDate <= endDate)
+                .map(record => buildRecordScheduleItem(record));
+            const operationItems = hasRecordIdeaOnlyFilter() ? [] : buildScheduleItemsForRange(startDate, endDate, {
+                ...filters,
+                includeRecords: false,
                 includeTodos: true,
-                includeHabits: true
+                includeHabits: true,
+                includeTodoPlans: false,
+                includeTodoDue: false,
+                includeTodoSessions: true
             });
+            return [...recordItems, ...operationItems];
+        }
+
+        function renderRecordEventGroups(items) {
+            const keyword = (document.getElementById('record-search')?.value || '').trim();
+            const typeFilter = document.getElementById('record-type-filter')?.value || 'all';
+            const ideaStatusFilter = document.getElementById('record-idea-status-filter')?.value || 'all';
+            const ideaTagFilter = (document.getElementById('record-idea-tag-filter')?.value || '').trim();
+            const groups = {};
+            items.forEach(item => {
+                if (!groups[item.date]) groups[item.date] = [];
+                groups[item.date].push(item);
+            });
+
+            if (Object.keys(groups).length === 0) {
+                return keyword || typeFilter !== 'all' || ideaStatusFilter !== 'all' || ideaTagFilter
+                    ? '<div class="empty-state">没有匹配的记录，换个关键词试试</div>'
+                    : '<div class="empty-state">暂无记录</div>';
+            }
+
+            return Object.entries(groups)
+                .sort(([a], [b]) => b.localeCompare(a))
+                .map(([date, groupItems]) => `
+                    <div class="timeline-group">
+                        <div class="timeline-date">${formatDate(date)}</div>
+                        ${sortScheduleItemsInDay(groupItems).map(item => {
+                            if (item.sourceType === 'record') {
+                                const record = data.records.find(recordItem => recordItem.id === item.id);
+                                return record ? renderRecordCard(record) : renderScheduleCard(item);
+                            }
+                            return renderScheduleCard(item);
+                        }).join('')}
+                    </div>
+                `).join('');
         }
 
         function renderMonthCalendar(items, monthCursorDate) {
@@ -3086,7 +3718,7 @@
         }
 
         function renderAgendaView(items, dates, mode) {
-            const hourHeight = 64;
+            const hourHeight = mode === 'week' ? 54 : 62;
             const startHour = 6;
             const endHour = 23;
             const hours = [];
@@ -3111,7 +3743,7 @@
             document.getElementById('record-view-title').textContent = title;
 
             return `
-                <div class="agenda-shell">
+                <div class="agenda-shell agenda-${mode}" style="--agenda-hour-height:${hourHeight}px;">
                     <div class="agenda-head" style="grid-template-columns: 72px repeat(${dates.length}, minmax(0, 1fr));">
                         <div class="agenda-corner"></div>
                         ${dates.map(date => {
@@ -3153,15 +3785,22 @@
                                             ${byDate[date].timed.map(item => {
                                                 const toneStyle = `--event-bg:${item.tone.bg}; --event-border:${item.tone.border}; --event-ink:${item.tone.ink};`;
                                                 const top = Math.max((item.startMinutes - startHour * 60) * hourHeight / 60, 0);
-                                                const height = Math.max(((item.endMinutes || item.startMinutes + 60) - item.startMinutes) * hourHeight / 60, 38);
-                                                const gap = 4;
+                                                const hasExplicitEnd = item.endMinutes !== null && item.endMinutes > item.startMinutes;
+                                                const visualEnd = hasExplicitEnd ? item.endMinutes : item.startMinutes;
+                                                const height = Math.max((visualEnd - item.startMinutes) * hourHeight / 60, hasExplicitEnd ? 22 : 18);
+                                                const gap = 2;
                                                 const columnCount = item.layoutColumns || 1;
                                                 const columnIndex = item.layoutColumn || 0;
-                                                const width = `calc((100% - 16px - ${gap * (columnCount - 1)}px) / ${columnCount})`;
-                                                const left = `calc(8px + (${width} + ${gap}px) * ${columnIndex})`;
+                                                const width = `calc((100% - 8px - ${gap * (columnCount - 1)}px) / ${columnCount})`;
+                                                const left = `calc(4px + (${width} + ${gap}px) * ${columnIndex})`;
+                                                const densityClass = [
+                                                    height < 46 ? 'is-short' : '',
+                                                    columnCount > 1 ? 'is-overlap' : ''
+                                                ].filter(Boolean).join(' ');
+                                                const timeText = `${formatMinutesLabel(item.startMinutes)}${hasExplicitEnd ? ` - ${formatMinutesLabel(item.endMinutes)}` : ''}`;
                                                 return `
-                                                    <div class="agenda-event-block ${item.done ? 'is-done' : ''}" style="${toneStyle}; top:${top}px; height:${height}px; left:${left}; width:${width};" onclick="${item.click}">
-                                                        <div class="agenda-event-time">${formatMinutesLabel(item.startMinutes)}${item.endMinutes ? ` - ${formatMinutesLabel(item.endMinutes)}` : ''}</div>
+                                                    <div class="agenda-event-block ${item.done ? 'is-done' : ''} ${densityClass}" style="${toneStyle}; top:${top}px; height:${height}px; left:${left}; width:${width};" onclick="${item.click}" title="${escapeHtml(`${timeText} ${item.title}`)}">
+                                                        <div class="agenda-event-time">${timeText}</div>
                                                         <div class="agenda-event-title">${escapeHtml(item.title)}</div>
                                                         ${item.meta ? `<div class="agenda-event-meta">${escapeHtml(item.meta)}</div>` : ''}
                                                     </div>
@@ -3180,11 +3819,10 @@
         // 所有记录页渲染
         function renderAllRecords() {
             const container = document.getElementById('all-records');
-            const records = getFilteredRecords();
 
             if (currentRecordView === 'list') {
                 document.getElementById('record-view-title').textContent = '全部记录';
-                container.innerHTML = renderRecordGroups(records);
+                container.innerHTML = renderRecordEventGroups(getAllRecordEventItems());
                 return;
             }
 
@@ -3877,10 +4515,25 @@
         function toggleTodo(todoId) {
             const todo = data.todos.find(t => t.id === todoId);
             if (todo) {
+                const now = new Date();
+                const today = getTodayStr();
+                todo.sessions = Array.isArray(todo.sessions) ? todo.sessions : [];
                 todo.done = !todo.done;
-                todo.completedAt = todo.done ? getLocalDateTimeStr() : '';
-                todo.updatedAt = getLocalDateTimeStr();
+                todo.completedAt = todo.done ? getLocalDateTimeStr(now) : '';
+                if (todo.done && !hasTodoSessionOnDate(todo, today)) {
+                    todo.sessions.push({
+                        id: genId(),
+                        date: today,
+                        startTime: formatClockTime(now),
+                        endTime: '',
+                        note: '勾选完成',
+                        createdAt: getLocalDateTimeStr(now)
+                    });
+                }
+                todo.updatedAt = getLocalDateTimeStr(now);
                 saveData();
+                renderDashboard();
+                renderTodoTable();
                 renderAllRecords();
             }
         }
@@ -4311,13 +4964,17 @@
             renderDashboard();
             renderAllRecords();
         }
-        // ================== 习惯热力图 ==================
+        // ================== 习惯打卡 ==================
         function setHabitView(view, button) {
             currentHabitView = view;
             document.querySelectorAll('#habit-view-tabs button').forEach(btn => btn.classList.remove('active'));
             if (button) button.classList.add('active');
             document.getElementById('habit-view-year').classList.toggle('active', view === 'year');
             document.getElementById('habit-view-matrix').classList.toggle('active', view === 'matrix');
+            const habitTabsEl = document.getElementById('habit-tabs');
+            if (habitTabsEl) habitTabsEl.style.display = view === 'year' ? 'flex' : 'none';
+            const habitActionsEl = document.getElementById('habit-detail-actions');
+            if (habitActionsEl) habitActionsEl.style.display = view === 'year' ? 'block' : 'none';
             if (view === 'matrix') renderHabitMatrix();
             if (view === 'year' && currentHabitId) renderHeatmap();
         }
@@ -4364,6 +5021,182 @@
                     ${h.name}
                 </div>
             `).join('');
+            container.style.display = currentHabitView === 'year' ? 'flex' : 'none';
+        }
+
+        function renderHabitRewards() {
+            const panel = document.getElementById('habit-rewards-panel');
+            if (!panel) return;
+            const balances = getHabitPointBalances();
+            const balanceChips = Object.entries(balances)
+                .sort(([a], [b]) => a.localeCompare(b, 'zh-Hans-CN'))
+                .map(([currency, value]) => `<span class="habit-balance-chip"><b>${value}</b>${escapeHtml(currency)}</span>`)
+                .join('');
+            const earned = summarizeHabitLedgerByCurrency(entry => entry.amount > 0);
+            const spent = summarizeHabitLedgerByCurrency(entry => entry.amount < 0 && entry.type === 'redeem', true);
+            const latestEntries = [...data.habitPointLedger]
+                .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+                .slice(0, 6);
+            const rewards = [...data.habitRewards]
+                .sort((a, b) => normalizeHabitCurrency(a.currency).localeCompare(normalizeHabitCurrency(b.currency), 'zh-Hans-CN') || (a.cost || 0) - (b.cost || 0));
+
+            panel.innerHTML = `
+                <div class="habit-wallet-card">
+                    <div>
+                        <div class="habit-wallet-label">钱包余额</div>
+                        <div class="habit-balance-list">${balanceChips}</div>
+                    </div>
+                    <div class="habit-wallet-stats">
+                        <span>累计获得 ${escapeHtml(earned || '0 金币')}</span>
+                        <span>已兑换 ${escapeHtml(spent || '0 金币')}</span>
+                    </div>
+                    <div class="habit-wallet-actions">
+                        <button class="btn btn-secondary" onclick="settleYesterdayHabitPenalties()">结算昨日扣分</button>
+                        <button class="btn btn-secondary" onclick="openHabitRewardModal()">新增心愿</button>
+                    </div>
+                </div>
+                <div class="habit-shop-grid">
+                    <section class="habit-shop-section">
+                        <div class="habit-shop-title">心愿兑换</div>
+                        <div class="habit-reward-list">
+                            ${rewards.length ? rewards.map(reward => renderHabitRewardCard(reward, balances)).join('') : '<div class="empty-state">还没有心愿，先添加一个能让你真的想兑换的奖励</div>'}
+                        </div>
+                    </section>
+                    <section class="habit-shop-section">
+                        <div class="habit-shop-title">近期流水</div>
+                        <div class="habit-ledger-list">
+                            ${latestEntries.length ? latestEntries.map(renderHabitLedgerRow).join('') : '<div class="empty-state">暂无积分流水</div>'}
+                        </div>
+                    </section>
+                </div>
+            `;
+        }
+
+        function renderHabitRewardCard(reward, balances) {
+            const currency = normalizeHabitCurrency(reward.currency);
+            const balance = balances[currency] || 0;
+            const stockLeft = reward.stock > 0 ? Math.max(0, reward.stock - (reward.redeemedCount || 0)) : Infinity;
+            const disabled = balance < reward.cost || stockLeft <= 0;
+            return `
+                <article class="habit-reward-card">
+                    <div class="habit-reward-main">
+                        <strong>${escapeHtml(reward.name)}</strong>
+                        <span>${reward.stock > 0 ? `剩余 ${stockLeft}` : '不限次数'} · 已兑 ${reward.redeemedCount || 0} · ${escapeHtml(currency)}</span>
+                        ${reward.note ? `<p>${escapeHtml(getCheckinNoteSummary(reward.note, 34))}</p>` : ''}
+                    </div>
+                    <button class="habit-redeem-btn" ${disabled ? 'disabled' : ''} onclick="redeemHabitReward('${reward.id}')">${escapeHtml(formatHabitCurrencyAmount(reward.cost, currency))}</button>
+                </article>
+            `;
+        }
+
+        function renderHabitLedgerRow(entry) {
+            const habit = entry.habitId ? data.habits.find(item => item.id === entry.habitId) : null;
+            const reward = entry.rewardId ? data.habitRewards.find(item => item.id === entry.rewardId) : null;
+            const title = entry.note || habit?.name || reward?.name || '积分调整';
+            return `
+                <div class="habit-ledger-row ${entry.amount >= 0 ? 'is-plus' : 'is-minus'}">
+                    <div>
+                        <strong>${escapeHtml(title)}</strong>
+                        <span>${formatStoredDateTime(entry.createdAt || entry.date || '')}</span>
+                    </div>
+                    <b>${entry.amount > 0 ? '+' : ''}${formatHabitCurrencyAmount(entry.amount, entry.currency)}</b>
+                </div>
+            `;
+        }
+
+        function openHabitRewardModal() {
+            document.getElementById('habit-reward-name').value = '';
+            document.getElementById('habit-reward-cost').value = '10';
+            document.getElementById('habit-reward-currency-cost').value = HABIT_DEFAULT_CURRENCY;
+            document.getElementById('habit-reward-stock').value = '0';
+            document.getElementById('habit-reward-note').value = '';
+            document.getElementById('habit-reward-modal').classList.add('active');
+        }
+
+        function closeHabitRewardModal() {
+            document.getElementById('habit-reward-modal').classList.remove('active');
+        }
+
+        function saveHabitReward() {
+            const name = document.getElementById('habit-reward-name').value.trim();
+            if (!name) {
+                alert('请输入心愿名称');
+                return;
+            }
+            const currency = ensureHabitCurrency(document.getElementById('habit-reward-currency-cost').value);
+            const now = getLocalDateTimeStr();
+            data.habitRewards.push({
+                id: genId(),
+                name,
+                cost: Math.max(1, parseInt(document.getElementById('habit-reward-cost').value || '10', 10) || 10),
+                currency,
+                stock: Math.max(0, parseInt(document.getElementById('habit-reward-stock').value || '0', 10) || 0),
+                redeemedCount: 0,
+                note: document.getElementById('habit-reward-note').value.trim(),
+                createdAt: now,
+                updatedAt: now
+            });
+            saveData();
+            closeHabitRewardModal();
+            renderHabitCurrencyOptions();
+            renderHabitRewards();
+        }
+
+        function redeemHabitReward(rewardId) {
+            const reward = data.habitRewards.find(item => item.id === rewardId);
+            if (!reward) return;
+            const currency = normalizeHabitCurrency(reward.currency);
+            const stockLeft = reward.stock > 0 ? Math.max(0, reward.stock - (reward.redeemedCount || 0)) : Infinity;
+            if (stockLeft <= 0) {
+                alert('这个心愿已经没有库存了');
+                return;
+            }
+            if (getHabitPointBalance(currency) < reward.cost) {
+                alert(`${currency} 不够，先攒一点再兑换`);
+                return;
+            }
+            if (!confirm(`确认兑换「${reward.name}」吗？将扣除 ${formatHabitCurrencyAmount(reward.cost, currency)}。`)) return;
+            reward.redeemedCount = (reward.redeemedCount || 0) + 1;
+            reward.updatedAt = getLocalDateTimeStr();
+            addHabitPointEntry({
+                amount: -reward.cost,
+                currency,
+                type: 'redeem',
+                rewardId: reward.id,
+                note: `兑换「${reward.name}」`
+            });
+            saveData();
+            renderHabitRewards();
+        }
+
+        function openHabitPointAdjustModal() {
+            document.getElementById('habit-point-adjust-type').value = 'add';
+            document.getElementById('habit-point-adjust-amount').value = '1';
+            document.getElementById('habit-point-adjust-currency').value = HABIT_DEFAULT_CURRENCY;
+            document.getElementById('habit-point-adjust-note').value = '';
+            document.getElementById('habit-point-adjust-modal').classList.add('active');
+        }
+
+        function closeHabitPointAdjustModal() {
+            document.getElementById('habit-point-adjust-modal').classList.remove('active');
+        }
+
+        function saveHabitPointAdjust() {
+            const type = document.getElementById('habit-point-adjust-type').value;
+            const amount = Math.max(1, parseInt(document.getElementById('habit-point-adjust-amount').value || '1', 10) || 1);
+            const currency = ensureHabitCurrency(document.getElementById('habit-point-adjust-currency').value);
+            const note = document.getElementById('habit-point-adjust-note').value.trim() || (type === 'add' ? `手动增加${currency}` : `手动扣除${currency}`);
+            addHabitPointEntry({
+                amount: type === 'add' ? amount : -amount,
+                currency,
+                type: 'adjust',
+                note
+            });
+            saveData();
+            closeHabitPointAdjustModal();
+            renderHabitCurrencyOptions();
+            renderHabitRewards();
+            renderTodayHabits();
         }
 
         function initYearSelect() {
@@ -4422,6 +5255,411 @@
             return habit.noteMode !== 'never';
         }
 
+        function normalizeHabitCurrency(value) {
+            return window.HabitEngine?.normalizeCurrency(value) || HABIT_DEFAULT_CURRENCY;
+        }
+
+        function normalizeHabitCurrencyList(items = [], source = data) {
+            const map = new Map();
+            const add = (name, meta = {}) => {
+                const currency = normalizeHabitCurrency(name);
+                if (!currency) return;
+                const existing = map.get(currency);
+                map.set(currency, {
+                    id: existing?.id || meta.id || genId(),
+                    name: currency,
+                    createdAt: existing?.createdAt || meta.createdAt || getLocalDateTimeStr(),
+                    updatedAt: meta.updatedAt || existing?.updatedAt || meta.createdAt || getLocalDateTimeStr()
+                });
+            };
+            add(HABIT_DEFAULT_CURRENCY, { id: 'habit-currency-default' });
+            if (Array.isArray(items)) {
+                items.forEach(item => add(typeof item === 'string' ? item : item?.name, item || {}));
+            }
+            (source?.habits || []).forEach(habit => {
+                add(habit.rewardCurrency);
+                add(habit.penaltyCurrency);
+                add(habit.breakPenaltyCurrency);
+                normalizeHabitMilestoneRewards(habit.milestoneRewards).forEach(milestone => {
+                    add(milestone.currency);
+                    add(milestone.penaltyCurrency);
+                });
+            });
+            (source?.habitRewards || []).forEach(reward => add(reward.currency));
+            (source?.habitPointLedger || []).forEach(entry => add(entry.currency));
+            return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+        }
+
+        function getHabitCurrencyNames() {
+            data.habitCurrencies = normalizeHabitCurrencyList(data.habitCurrencies);
+            return data.habitCurrencies.map(item => item.name);
+        }
+
+        function renderHabitCurrencyOptions() {
+            const names = getHabitCurrencyNames();
+            const optionHtml = names.map(name => `<option value="${escapeHtml(name)}"></option>`).join('');
+            const listEl = document.getElementById('habit-currency-options');
+            if (listEl) listEl.innerHTML = optionHtml;
+            const container = document.getElementById('habit-currency-list');
+            if (container) {
+                container.innerHTML = names.map(name => `<span class="habit-currency-pill">${escapeHtml(name)}</span>`).join('');
+            }
+            const selectEl = document.getElementById('habit-currency-existing');
+            if (selectEl) {
+                selectEl.innerHTML = names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+            }
+        }
+
+        function openHabitCurrencyModal() {
+            renderHabitCurrencyOptions();
+            document.getElementById('habit-currency-new-name').value = '';
+            document.getElementById('habit-currency-modal').classList.add('active');
+            setTimeout(() => document.getElementById('habit-currency-new-name')?.focus(), 0);
+        }
+
+        function closeHabitCurrencyModal() {
+            document.getElementById('habit-currency-modal').classList.remove('active');
+        }
+
+        function addHabitCurrencyFromModal() {
+            const input = document.getElementById('habit-currency-new-name');
+            const name = ensureHabitCurrency(input?.value);
+            if (!name) return;
+            saveData();
+            renderHabitCurrencyOptions();
+            if (input) input.value = '';
+        }
+
+        function ensureHabitCurrency(value) {
+            const name = normalizeHabitCurrency(value);
+            const now = getLocalDateTimeStr();
+            const exists = (data.habitCurrencies || []).some(item => normalizeHabitCurrency(item?.name || item) === name);
+            if (!exists) {
+                data.habitCurrencies = normalizeHabitCurrencyList([
+                    ...(data.habitCurrencies || []),
+                    { id: genId(), name, createdAt: now, updatedAt: now }
+                ]);
+            } else {
+                data.habitCurrencies = normalizeHabitCurrencyList(data.habitCurrencies);
+            }
+            return name;
+        }
+
+        function formatHabitCurrencyAmount(amount, currency = HABIT_DEFAULT_CURRENCY) {
+            return window.HabitEngine?.formatCurrencyAmount(amount, currency) || `${amount} ${normalizeHabitCurrency(currency)}`;
+        }
+
+        function getHabitPointBalances() {
+            return window.HabitEngine?.getBalances(data.habitPointLedger) || { [HABIT_DEFAULT_CURRENCY]: 0 };
+        }
+
+        function getHabitPointBalance(currency = HABIT_DEFAULT_CURRENCY) {
+            return getHabitPointBalances()[normalizeHabitCurrency(currency)] || 0;
+        }
+
+        function summarizeHabitLedgerByCurrency(filterFn, absolute = false) {
+            const totals = {};
+            data.habitPointLedger.filter(filterFn).forEach(entry => {
+                const currency = normalizeHabitCurrency(entry.currency);
+                const amount = parseInt(entry.amount || 0, 10) || 0;
+                totals[currency] = (totals[currency] || 0) + (absolute ? Math.abs(amount) : amount);
+            });
+            return Object.entries(totals)
+                .filter(([, amount]) => amount !== 0)
+                .sort(([a], [b]) => a.localeCompare(b, 'zh-Hans-CN'))
+                .map(([currency, amount]) => formatHabitCurrencyAmount(amount, currency))
+                .join(' · ');
+        }
+
+        function getHabitMilestoneDefaults() {
+            return window.HabitEngine?.getMilestoneDefaults() || [];
+        }
+
+        function normalizeHabitMilestoneRewards(milestones = []) {
+            return window.HabitEngine?.normalizeMilestoneRewards(milestones) || [];
+        }
+
+        function getEnabledHabitMilestones(habit, purpose = 'reward') {
+            const milestones = normalizeHabitMilestoneRewards(habit?.milestoneRewards);
+            return milestones
+                .filter(item => item.enabled && (purpose === 'penalty' ? item.penaltyAmount > 0 : item.rewardAmount > 0))
+                .sort((a, b) => a.days - b.days);
+        }
+
+        function getHabitCycleLength(habit) {
+            const milestones = normalizeHabitMilestoneRewards(habit?.milestoneRewards).filter(item => item.enabled);
+            return milestones.length ? Math.max(...milestones.map(item => item.days)) : 0;
+        }
+
+        function getCompletedHabitDateSet(habit, upToDate = '') {
+            const dateSet = new Set();
+            if (!habit) return dateSet;
+            const byDate = {};
+            data.checkins.forEach(checkin => {
+                if (checkin.habitId !== habit.id) return;
+                if (upToDate && checkin.date > upToDate) return;
+                byDate[checkin.date] = (byDate[checkin.date] || 0) + 1;
+            });
+            const targetCount = getHabitTargetCount(habit);
+            Object.entries(byDate).forEach(([date, count]) => {
+                if (count >= targetCount) dateSet.add(date);
+            });
+            return dateSet;
+        }
+
+        function getHabitStreakEndingOn(habit, date) {
+            const dateSet = getCompletedHabitDateSet(habit, date);
+            let streak = 0;
+            let cursor = date;
+            while (dateSet.has(cursor)) {
+                streak++;
+                cursor = addDays(cursor, -1);
+            }
+            return streak;
+        }
+
+        function getHabitStreakBeforeDate(habit, date) {
+            return getHabitStreakEndingOn(habit, addDays(date, -1));
+        }
+
+        function getMilestoneCyclePosition(habit, streak) {
+            const cycleLength = getHabitCycleLength(habit);
+            if (!cycleLength || streak <= 0) return null;
+            return window.HabitEngine?.getCyclePosition(streak, cycleLength) || null;
+        }
+
+        function getNextHabitMilestoneForPenalty(habit, previousStreak) {
+            const milestones = getEnabledHabitMilestones(habit, 'penalty');
+            const cycleLength = getHabitCycleLength(habit);
+            if (!milestones.length || !cycleLength || previousStreak <= 0) return null;
+            const dayInCycle = ((previousStreak - 1) % cycleLength) + 1;
+            return milestones.find(item => item.days > dayInCycle) || milestones[0];
+        }
+
+        function getHabitRewardValue(habit) {
+            if (!habit) return 0;
+            if (habit.randomReward) {
+                const min = Math.max(0, parseInt(habit.rewardMin ?? habit.rewardPoints ?? 0, 10) || 0);
+                const max = Math.max(min, parseInt(habit.rewardMax ?? habit.rewardPoints ?? min, 10) || min);
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+            return Math.max(0, parseInt(habit.rewardPoints ?? 0, 10) || 0);
+        }
+
+        function addHabitPointEntry({ amount, type, habitId = '', rewardId = '', sourceId = '', date = getTodayStr(), note = '', currency = HABIT_DEFAULT_CURRENCY }) {
+            const value = parseInt(amount || 0, 10) || 0;
+            if (value === 0) return null;
+            const now = getLocalDateTimeStr();
+            const entry = {
+                id: genId(),
+                amount: value,
+                currency: normalizeHabitCurrency(currency),
+                type,
+                habitId,
+                rewardId,
+                sourceId,
+                date,
+                note,
+                createdAt: now,
+                updatedAt: now
+            };
+            data.habitPointLedger.push(entry);
+            return entry;
+        }
+
+        function addHabitCheckinReward(habit, checkin) {
+            if (!habit || !checkin) return null;
+            if (data.habitPointLedger.some(entry => entry.type === 'checkin' && entry.sourceId === checkin.id)) return null;
+            const amount = getHabitRewardValue(habit);
+            return addHabitPointEntry({
+                amount,
+                type: 'checkin',
+                habitId: habit.id,
+                sourceId: checkin.id,
+                date: checkin.date,
+                note: `完成「${habit.name}」`,
+                currency: habit.rewardCurrency
+            });
+        }
+
+        function addHabitMilestoneRewards(habit, checkin) {
+            if (!habit || !checkin) return [];
+            if (getCheckinCount(habit.id, checkin.date) < getHabitTargetCount(habit)) return [];
+            const position = getMilestoneCyclePosition(habit, getHabitStreakEndingOn(habit, checkin.date));
+            if (!position) return [];
+            const rewards = [];
+            getEnabledHabitMilestones(habit, 'reward').forEach(milestone => {
+                if (milestone.days !== position.dayInCycle) return;
+                const sourceId = `${checkin.id}:milestone:${position.cycleLength}:${position.cycleIndex}:${milestone.days}`;
+                if (data.habitPointLedger.some(entry => entry.type === 'milestone' && entry.sourceId === sourceId)) return;
+                const entry = addHabitPointEntry({
+                    amount: milestone.rewardAmount,
+                    currency: milestone.currency,
+                    type: 'milestone',
+                    habitId: habit.id,
+                    sourceId,
+                    date: checkin.date,
+                    note: `连续${HABIT_MILESTONE_LABELS[milestone.days] || `${milestone.days}天`}奖励「${habit.name}」`
+                });
+                if (entry) rewards.push(entry);
+            });
+            return rewards;
+        }
+
+        function reverseHabitCheckinReward(habit, checkin, reason = '撤销打卡') {
+            if (!habit || !checkin) return null;
+            if (data.habitPointLedger.some(entry => entry.type === 'reverse' && entry.sourceId === checkin.id)) return null;
+            const related = data.habitPointLedger.filter(entry =>
+                (entry.type === 'checkin' && entry.sourceId === checkin.id) ||
+                (entry.type === 'milestone' && String(entry.sourceId || '').startsWith(`${checkin.id}:milestone:`))
+            );
+            const totalsByCurrency = {};
+            related.forEach(entry => {
+                const currency = normalizeHabitCurrency(entry.currency);
+                totalsByCurrency[currency] = (totalsByCurrency[currency] || 0) + (parseInt(entry.amount || 0, 10) || 0);
+            });
+            const reversals = [];
+            Object.entries(totalsByCurrency).forEach(([currency, total]) => {
+                if (total === 0) return;
+                const entry = addHabitPointEntry({
+                    amount: -total,
+                    currency,
+                    type: 'reverse',
+                    habitId: habit.id,
+                    sourceId: checkin.id,
+                    date: checkin.date,
+                    note: `${reason}「${habit.name}」`
+                });
+                if (entry) reversals.push(entry);
+            });
+            return reversals[0] || null;
+        }
+
+        function reverseHabitPenaltiesForDate(habit, date, reason = '补卡冲销扣分') {
+            if (!habit || !date) return [];
+            const sourceId = `${habit.id}:${date}:penalty-reversal`;
+            const penaltyEntries = data.habitPointLedger.filter(entry =>
+                entry.habitId === habit.id &&
+                entry.date === date &&
+                ['miss', 'break'].includes(entry.type) &&
+                (parseInt(entry.amount || 0, 10) || 0) < 0
+            );
+            if (!penaltyEntries.length) return [];
+            const existingReversals = data.habitPointLedger.filter(entry =>
+                entry.type === 'reverse-penalty' &&
+                String(entry.sourceId || '').startsWith(`${sourceId}:`)
+            );
+            const alreadyReversedByCurrency = {};
+            existingReversals.forEach(entry => {
+                const currency = normalizeHabitCurrency(entry.currency);
+                alreadyReversedByCurrency[currency] = (alreadyReversedByCurrency[currency] || 0) + (parseInt(entry.amount || 0, 10) || 0);
+            });
+
+            const penaltyTotalsByCurrency = {};
+            penaltyEntries.forEach(entry => {
+                const currency = normalizeHabitCurrency(entry.currency);
+                penaltyTotalsByCurrency[currency] = (penaltyTotalsByCurrency[currency] || 0) + Math.abs(parseInt(entry.amount || 0, 10) || 0);
+            });
+
+            const reversals = [];
+            Object.entries(penaltyTotalsByCurrency).forEach(([currency, total]) => {
+                const remaining = total - (alreadyReversedByCurrency[currency] || 0);
+                if (remaining <= 0) return;
+                const entry = addHabitPointEntry({
+                    amount: remaining,
+                    currency,
+                    type: 'reverse-penalty',
+                    habitId: habit.id,
+                    sourceId: `${sourceId}:${currency}`,
+                    date,
+                    note: `${reason}「${habit.name}」`
+                });
+                if (entry) reversals.push(entry);
+            });
+            return reversals;
+        }
+
+        function applyHabitMissPenalty(habit, date) {
+            const penalty = Math.max(0, parseInt(habit?.penaltyPoints || 0, 10) || 0);
+            if (!habit || penalty <= 0) return null;
+            const sourceId = `${habit.id}:${date}:miss`;
+            if (data.habitPointLedger.some(entry => entry.sourceId === sourceId)) return null;
+            if (!isHabitDueOnDate(habit, date)) return null;
+            if (getCheckinCount(habit.id, date) >= getHabitTargetCount(habit)) return null;
+            return addHabitPointEntry({
+                amount: -penalty,
+                type: 'miss',
+                habitId: habit.id,
+                sourceId,
+                date,
+                note: `未完成「${habit.name}」`,
+                currency: habit.penaltyCurrency
+            });
+        }
+
+        function applyHabitBreakPenalty(habit, date) {
+            if (!habit || !isHabitDueOnDate(habit, date)) return null;
+            if (getCheckinCount(habit.id, date) >= getHabitTargetCount(habit)) return null;
+            const previousStreak = getHabitStreakBeforeDate(habit, date);
+            if (previousStreak <= 0) return null;
+
+            if (habit.breakPenaltyMode === 'fixed') {
+                const penalty = Math.max(0, parseInt(habit.breakPenaltyPoints || 0, 10) || 0);
+                if (penalty <= 0) return null;
+                const sourceId = `${habit.id}:${date}:break:fixed`;
+                if (data.habitPointLedger.some(entry => entry.sourceId === sourceId)) return null;
+                return addHabitPointEntry({
+                    amount: -penalty,
+                    currency: habit.breakPenaltyCurrency,
+                    type: 'break',
+                    habitId: habit.id,
+                    sourceId,
+                    date,
+                    note: `断签「${habit.name}」`
+                });
+            }
+
+            if (habit.breakPenaltyMode === 'stage') {
+                const milestone = getNextHabitMilestoneForPenalty(habit, previousStreak);
+                if (!milestone) return null;
+                const sourceId = `${habit.id}:${date}:break:stage:${milestone.days}`;
+                if (data.habitPointLedger.some(entry => entry.sourceId === sourceId)) return null;
+                return addHabitPointEntry({
+                    amount: -milestone.penaltyAmount,
+                    currency: milestone.penaltyCurrency,
+                    type: 'break',
+                    habitId: habit.id,
+                    sourceId,
+                    date,
+                    note: `未达${HABIT_MILESTONE_LABELS[milestone.days] || `${milestone.days}天`}断签「${habit.name}」`
+                });
+            }
+
+            return null;
+        }
+
+        function settleHabitPenaltiesThroughYesterday() {
+            const yesterday = addDays(getTodayStr(), -1);
+            let changed = false;
+            data.habits.forEach(habit => {
+                const start = habit.startDate || yesterday;
+                if (start > yesterday) return;
+                for (let date = start; date <= yesterday; date = addDays(date, 1)) {
+                    if (applyHabitMissPenalty(habit, date)) changed = true;
+                    if (applyHabitBreakPenalty(habit, date)) changed = true;
+                }
+            });
+            if (changed) {
+                saveData();
+                renderHabitRewards();
+                renderTodayHabits();
+            }
+        }
+
+        function settleYesterdayHabitPenalties() {
+            settleHabitPenaltiesThroughYesterday();
+        }
+
         function appendHabitCheckin(habit, date, note = '') {
             if (!habit) return false;
             if (date > getTodayStr()) {
@@ -4430,7 +5668,11 @@
             }
             if (habit.timesPerDay === '1' && getCheckinCount(habit.id, date) > 0) return false;
             const now = new Date();
-            data.checkins.push(createHabitCheckin(habit.id, date, now, note));
+            const checkin = createHabitCheckin(habit.id, date, now, note);
+            data.checkins.push(checkin);
+            addHabitCheckinReward(habit, checkin);
+            addHabitMilestoneRewards(habit, checkin);
+            reverseHabitPenaltiesForDate(habit, date);
             touchHabit(habit, now);
             saveData();
             return true;
@@ -4440,6 +5682,7 @@
             renderDashboard();
             renderAllRecords();
             renderHabitMatrix();
+            renderHabitRewards();
             if (currentHabitId) renderHeatmap();
         }
 
@@ -4541,17 +5784,27 @@
             if (habit.timesPerDay === '1') {
                 // 每天1次：切换有无
                 if (isChecked) {
+                    getHabitCheckinsOnDate(habitId, date).forEach(checkin => reverseHabitCheckinReward(habit, checkin));
                     data.checkins = data.checkins.filter(c => !(c.habitId === habitId && c.date === date));
                 } else {
-                    data.checkins.push(createHabitCheckin(habitId, date, now));
+                    const checkin = createHabitCheckin(habitId, date, now);
+                    data.checkins.push(checkin);
+                    addHabitCheckinReward(habit, checkin);
+                    addHabitMilestoneRewards(habit, checkin);
+                    reverseHabitPenaltiesForDate(habit, date);
                 }
             } else {
                 // 每天多次：左键+1
-                data.checkins.push(createHabitCheckin(habitId, date, now));
+                const checkin = createHabitCheckin(habitId, date, now);
+                data.checkins.push(checkin);
+                addHabitCheckinReward(habit, checkin);
+                addHabitMilestoneRewards(habit, checkin);
+                reverseHabitPenaltiesForDate(habit, date);
             }
 
             touchHabit(habit, now);
             saveData();
+            renderHabitRewards();
             if (currentHabitView === 'matrix') renderHabitMatrix();
             renderAllRecords();
         }
@@ -4565,10 +5818,12 @@
             if (!confirm(`确认要减少【${data.habits.find(h=>h.id===habitId).name}】${date} 的打卡次数吗？`)) return;
 
             const habit = data.habits.find(h => h.id === habitId);
+            reverseHabitCheckinReward(habit, existing);
             data.checkins = data.checkins.filter(c => c.id !== existing.id);
             touchHabit(habit);
             
             saveData();
+            renderHabitRewards();
             if (currentHabitView === 'matrix') renderHabitMatrix();
             renderAllRecords();
         }
@@ -4829,6 +6084,20 @@
             document.getElementById('habit-goal').value = '0';
             document.getElementById('habit-count').value = '3';
             document.getElementById('habit-note-mode').value = 'ask';
+            document.getElementById('habit-reward-points').value = '0';
+            document.getElementById('habit-reward-currency').value = HABIT_DEFAULT_CURRENCY;
+            document.getElementById('habit-penalty-points').value = '0';
+            document.getElementById('habit-penalty-currency').value = HABIT_DEFAULT_CURRENCY;
+            document.getElementById('habit-random-reward').checked = false;
+            document.getElementById('habit-reward-min').value = '0';
+            document.getElementById('habit-reward-max').value = '0';
+            document.getElementById('habit-break-penalty-mode').value = 'none';
+            document.getElementById('habit-break-penalty-points').value = '0';
+            document.getElementById('habit-break-penalty-currency').value = HABIT_DEFAULT_CURRENCY;
+            HabitUi.resetMilestoneFields();
+            document.getElementById('habit-points-panel').open = false;
+            toggleHabitRewardRange();
+            toggleHabitBreakPenaltyMode();
             
             document.querySelectorAll('#rule-weekdays input').forEach(i => i.checked = false);
             toggleHabitRule();
@@ -4850,6 +6119,24 @@
             document.getElementById('habit-goal').value = habit.goalCount || 0;
             document.getElementById('habit-count').value = habit.count || 3;
             document.getElementById('habit-note-mode').value = habit.noteMode || 'ask';
+            document.getElementById('habit-reward-points').value = habit.rewardPoints ?? 0;
+            document.getElementById('habit-reward-currency').value = normalizeHabitCurrency(habit.rewardCurrency);
+            document.getElementById('habit-penalty-points').value = habit.penaltyPoints ?? 0;
+            document.getElementById('habit-penalty-currency').value = normalizeHabitCurrency(habit.penaltyCurrency);
+            document.getElementById('habit-random-reward').checked = !!habit.randomReward;
+            document.getElementById('habit-reward-min').value = habit.rewardMin ?? habit.rewardPoints ?? 0;
+            document.getElementById('habit-reward-max').value = habit.rewardMax ?? habit.rewardPoints ?? 0;
+            document.getElementById('habit-break-penalty-mode').value = habit.breakPenaltyMode || 'none';
+            document.getElementById('habit-break-penalty-points').value = habit.breakPenaltyPoints ?? 0;
+            document.getElementById('habit-break-penalty-currency').value = normalizeHabitCurrency(habit.breakPenaltyCurrency);
+            HabitUi.loadMilestoneFields(habit.milestoneRewards);
+            document.getElementById('habit-points-panel').open = !!(
+                habit.penaltyPoints ||
+                habit.randomReward ||
+                habit.breakPenaltyMode !== 'none' ||
+                (habit.rewardPoints ?? 0) > 0 ||
+                normalizeHabitMilestoneRewards(habit.milestoneRewards).some(item => item.enabled)
+            );
 
             if (habit.weekdays) {
                 document.querySelectorAll('#rule-weekdays input').forEach(i => {
@@ -4858,6 +6145,8 @@
             }
 
             toggleHabitRule();
+            toggleHabitRewardRange();
+            toggleHabitBreakPenaltyMode();
             document.getElementById('habit-modal').classList.add('active');
         }
 
@@ -4870,6 +6159,18 @@
             const rule = document.getElementById('habit-rule').value;
             document.getElementById('rule-weekdays').style.display = rule === 'weekly-fixed' ? 'block' : 'none';
             document.getElementById('rule-count').style.display = ['weekly-count','monthly-count','interval'].includes(rule) ? 'block' : 'none';
+        }
+
+        function toggleHabitRewardRange() {
+            const enabled = document.getElementById('habit-random-reward')?.checked;
+            const rangeEl = document.getElementById('habit-reward-range');
+            if (rangeEl) rangeEl.style.display = enabled ? 'grid' : 'none';
+        }
+
+        function toggleHabitBreakPenaltyMode() {
+            const mode = document.getElementById('habit-break-penalty-mode')?.value || 'none';
+            const fixedEl = document.getElementById('habit-break-fixed-fields');
+            if (fixedEl) fixedEl.style.display = mode === 'fixed' ? 'block' : 'none';
         }
 
         function saveHabit() {
@@ -4890,6 +6191,16 @@
             }
 
             const count = parseInt(document.getElementById('habit-count').value) || 3;
+            const randomReward = !!document.getElementById('habit-random-reward').checked;
+            const rewardPoints = Math.max(0, parseInt(document.getElementById('habit-reward-points').value || '0', 10) || 0);
+            const rewardMin = Math.max(0, parseInt(document.getElementById('habit-reward-min').value || rewardPoints, 10) || 0);
+            const rewardMax = Math.max(rewardMin, parseInt(document.getElementById('habit-reward-max').value || rewardMin, 10) || rewardMin);
+            const breakPenaltyMode = document.getElementById('habit-break-penalty-mode').value || 'none';
+            const milestoneRewards = HabitUi.collectMilestoneFields().map(item => ({
+                ...item,
+                currency: ensureHabitCurrency(item.currency),
+                penaltyCurrency: ensureHabitCurrency(item.penaltyCurrency)
+            }));
 
             const habitData = {
                 name: name,
@@ -4899,7 +6210,18 @@
                 timesPerDay: document.getElementById('habit-times').value,
                 tag: document.getElementById('habit-tag').value,
                 goalCount: parseInt(document.getElementById('habit-goal').value) || 0,
-                noteMode: document.getElementById('habit-note-mode').value || 'ask'
+                noteMode: document.getElementById('habit-note-mode').value || 'ask',
+                rewardPoints,
+                rewardCurrency: ensureHabitCurrency(document.getElementById('habit-reward-currency').value),
+                penaltyPoints: Math.max(0, parseInt(document.getElementById('habit-penalty-points').value || '0', 10) || 0),
+                penaltyCurrency: ensureHabitCurrency(document.getElementById('habit-penalty-currency').value),
+                randomReward,
+                rewardMin,
+                rewardMax,
+                breakPenaltyMode,
+                breakPenaltyPoints: Math.max(0, parseInt(document.getElementById('habit-break-penalty-points').value || '0', 10) || 0),
+                breakPenaltyCurrency: ensureHabitCurrency(document.getElementById('habit-break-penalty-currency').value),
+                milestoneRewards
             };
 
             const habitComparable = habit => JSON.stringify({
@@ -4910,7 +6232,18 @@
                 timesPerDay: habit.timesPerDay || '1',
                 tag: habit.tag || '',
                 goalCount: habit.goalCount || 0,
-                noteMode: habit.noteMode || 'ask'
+                noteMode: habit.noteMode || 'ask',
+                rewardPoints: habit.rewardPoints ?? 0,
+                rewardCurrency: normalizeHabitCurrency(habit.rewardCurrency),
+                penaltyPoints: habit.penaltyPoints || 0,
+                penaltyCurrency: normalizeHabitCurrency(habit.penaltyCurrency),
+                randomReward: !!habit.randomReward,
+                rewardMin: habit.rewardMin ?? habit.rewardPoints ?? 0,
+                rewardMax: habit.rewardMax ?? habit.rewardPoints ?? 0,
+                breakPenaltyMode: habit.breakPenaltyMode || 'none',
+                breakPenaltyPoints: habit.breakPenaltyPoints || 0,
+                breakPenaltyCurrency: normalizeHabitCurrency(habit.breakPenaltyCurrency),
+                milestoneRewards: normalizeHabitMilestoneRewards(habit.milestoneRewards)
             });
 
             if (editingHabitId) {
@@ -4947,7 +6280,9 @@
 
             saveData();
             closeHabitModal();
+            renderHabitCurrencyOptions();
             renderHabitTabs();
+            renderHabitRewards();
             renderHeatmap();
             renderHabitMatrix();
             renderDashboard();
@@ -4967,6 +6302,7 @@
             currentHabitId = data.habits.length > 0 ? data.habits[0].id : null;
             saveData();
             renderHabitTabs();
+            renderHabitRewards();
             renderHeatmap();
             renderHabitMatrix();
             renderDashboard();
@@ -5122,6 +6458,9 @@
                 'record-preview-modal': closeRecordPreview,
                 'habit-modal': closeHabitModal,
                 'habit-note-modal': closeHabitNoteModal,
+                'habit-reward-modal': closeHabitRewardModal,
+                'habit-currency-modal': closeHabitCurrencyModal,
+                'habit-point-adjust-modal': closeHabitPointAdjustModal,
                 'goal-modal': closeGoalModal,
                 'template-modal': closeTemplateManage,
                 'todo-detail-modal': closeTodoDetail,
@@ -5144,11 +6483,19 @@
         (async () => {
             init();
             startPeriodicCloudSync();
+            startPeriodicWheelCloudSync();
             if (syncConfig.autoSync && syncConfig.webdavUrl) {
                 try {
                     await runCloudSync('both');
                 } catch (err) {
                     updateSyncStatus(err.message || '自动同步失败', true);
+                }
+            }
+            if (wheelSyncConfig.autoSync && syncConfig.webdavUrl) {
+                try {
+                    await runWheelCloudSync('both', true);
+                } catch (err) {
+                    updateWheelSyncStatus(err.message || '大转盘自动同步失败', true);
                 }
             }
         })();

@@ -1,8 +1,11 @@
 (function () {
-    const palette = ['#2f7d6d', '#e86c52', '#3e65b0', '#ebb050', '#755b9c', '#3697a4', '#c64b6e', '#5b8457'];
+    const palette = ['#ff6b6b', '#ff9f43', '#ffd166', '#06d6a0', '#2ec4b6', '#00bbf9', '#5c7cfa', '#9b5de5', '#f15bb5', '#8ac926'];
     let wheelRotation = 0;
     let wheelSpinning = false;
     let wheelStageState = createWheelStageState();
+    let wheelPanelCollapsed = true;
+    let wheelCreateMode = 'normal';
+    let wheelLibraryCopyTagFilter = '';
 
     function createWheelStageState() {
         return {
@@ -45,6 +48,18 @@
 
     function normalizeName(value) {
         return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    }
+
+    function uniqueTagIds(tagIds = []) {
+        const valid = new Set(data.wheelTags.map(tag => tag.id));
+        const seen = new Set();
+        return (Array.isArray(tagIds) ? tagIds : [])
+            .filter(tagId => valid.has(tagId))
+            .filter(tagId => {
+                if (seen.has(tagId)) return false;
+                seen.add(tagId);
+                return true;
+            });
     }
 
     function getTagById(tagId) {
@@ -129,7 +144,16 @@
             id: id(),
             name: '默认普通转盘',
             mode: 'normal',
-            items: seedItems.map(item => ({ id: id(), name: item.name, note: item.note, weight: item.weight, enabled: true, sourceLibraryItemId: item.id })),
+            items: seedItems.map(item => ({
+                id: id(),
+                name: item.name,
+                note: item.note,
+                weight: item.weight,
+                enabled: true,
+                sourceLibraryItemId: item.id,
+                createdAt: stamp,
+                updatedAt: stamp
+            })),
             createdAt: stamp,
             updatedAt: stamp
         });
@@ -172,6 +196,13 @@
         return tagIds.map(tagId => data.wheelTags.find(tag => tag.id === tagId)?.name).filter(Boolean);
     }
 
+    function getFilteredLibraryItemsForCopy() {
+        return data.wheelLibraryItems.filter(item => (
+            item.enabled !== false
+            && (!wheelLibraryCopyTagFilter || item.tagIds?.includes(wheelLibraryCopyTagFilter))
+        ));
+    }
+
     function tagChips(tagIds = []) {
         const tags = tagIds.map(tagId => data.wheelTags.find(tag => tag.id === tagId)).filter(Boolean);
         if (!tags.length) return '<span class="wheel-chip muted">无标签</span>';
@@ -186,6 +217,29 @@
             if (draw <= 0) return item;
         }
         return items[0];
+    }
+
+    function downloadTextFile(filename, content, type = 'application/json;charset=utf-8') {
+        const blob = new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function csvCell(value) {
+        return `"${String(value ?? '').replace(/"/g, '""')}"`;
+    }
+
+    function getWheelBackupSnapshot() {
+        return {
+            wheels: data.wheels || [],
+            wheelTags: data.wheelTags || [],
+            wheelLibraryItems: data.wheelLibraryItems || [],
+            wheelHistory: data.wheelHistory || []
+        };
     }
 
     function resetWheelStageState() {
@@ -235,6 +289,35 @@
             .filter(entry => entry.items.length > 0);
     }
 
+    function countWheelHistory(wheelId = '') {
+        return data.wheelHistory.filter(item => item.wheelId === wheelId).length;
+    }
+
+    function getWheelHeadline(wheel) {
+        if (!wheel) return '工具转盘';
+        if (wheel.name === '默认普通转盘') return '今天做什么';
+        if (wheel.name === '默认标签转盘') return '先抽个方向';
+        return wheel.name || '未命名转盘';
+    }
+
+    function getWheelPanelSummaryMarkup(wheel) {
+        const activeWheelCount = isTagItemsStage(wheel)
+            ? (Number(wheelStageState.itemCount) || 0)
+            : getEnabledEntries(wheel).length;
+        const activeLabel = wheel?.mode === 'tag'
+            ? (isTagItemsStage(wheel) ? '标签内候选' : '可抽标签')
+            : '当前选项';
+        const libraryCount = data.wheelLibraryItems.filter(item => item.enabled !== false).length;
+        const tagCount = data.wheelTags.filter(tag => tag.enabled !== false).length;
+        const historyCount = countWheelHistory(wheel?.id || '');
+        return `
+            <span class="wheel-panel-stat"><strong>${activeWheelCount}</strong><span>${activeLabel}</span></span>
+            <span class="wheel-panel-stat"><strong>${libraryCount}</strong><span>公共项</span></span>
+            <span class="wheel-panel-stat"><strong>${tagCount}</strong><span>标签</span></span>
+            <span class="wheel-panel-stat"><strong>${historyCount}</strong><span>记录</span></span>
+        `;
+    }
+
     function drawWheelCanvas(entries = [], selectedIndex = -1) {
         const canvas = document.getElementById('wheel-canvas');
         if (!canvas) return;
@@ -243,116 +326,172 @@
         const height = canvas.height;
         const cx = width / 2;
         const cy = height / 2;
-        const radius = Math.min(width, height) / 2 - 16;
+        const radius = Math.min(width, height) / 2 - 20;
+        const innerRadius = Math.max(52, radius * 0.28);
         ctx.clearRect(0, 0, width, height);
 
         if (!entries.length) {
             ctx.beginPath();
-            ctx.fillStyle = '#dfe7e1';
+            ctx.fillStyle = '#eef2f7';
             ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.fillStyle = '#ffffff';
+            ctx.arc(cx, cy, innerRadius, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#647269';
             ctx.font = '700 18px Microsoft YaHei, sans-serif';
             ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
             ctx.fillText('暂无可抽内容', cx, cy);
             return;
         }
 
         const slice = Math.PI * 2 / entries.length;
         const rotation = wheelRotation * Math.PI / 180;
-        ctx.save();
+        const labelRadius = innerRadius + (radius - innerRadius) * (entries.length <= 6 ? 0.5 : entries.length <= 12 ? 0.56 : 0.6);
+
         ctx.beginPath();
-        ctx.fillStyle = '#f6f9f6';
-        ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.arc(cx, cy, radius + 10, 0, Math.PI * 2);
         ctx.fill();
-        ctx.restore();
+
+        ctx.beginPath();
+        ctx.fillStyle = '#f7f9fc';
+        ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+        ctx.fill();
+
         entries.forEach((entry, index) => {
             const start = rotation + index * slice;
             const end = start + slice;
             const mid = start + slice / 2;
             ctx.beginPath();
-            ctx.moveTo(cx, cy);
             ctx.arc(cx, cy, radius, start, end);
+            ctx.arc(cx, cy, innerRadius, end, start, true);
             ctx.closePath();
-            ctx.fillStyle = selectedIndex === index ? '#c45532' : (entry.color || palette[index % palette.length]);
+            ctx.fillStyle = selectedIndex === index ? '#fb5d57' : (entry.color || palette[index % palette.length]);
             ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255,255,255,.92)';
+            ctx.stroke();
 
-            const lines = splitWheelLabel(entry.name, entries.length <= 4 ? 4 : 5, 2);
-            const labelRadius = entries.length <= 4 ? radius * 0.62 : entries.length <= 8 ? radius * 0.68 : radius * 0.73;
+            const lines = splitWheelLabel(entry.name, entries.length <= 4 ? 4 : entries.length <= 10 ? 5 : 6, 2);
             const labelX = cx + Math.cos(mid) * labelRadius;
             const labelY = cy + Math.sin(mid) * labelRadius;
             ctx.save();
             ctx.translate(labelX, labelY);
-            if (entries.length > 6) {
-                let textAngle = mid;
-                if (textAngle > Math.PI / 2 && textAngle < Math.PI * 1.5) textAngle += Math.PI;
-                ctx.rotate(textAngle);
-            }
-            ctx.fillStyle = '#fff';
-            ctx.shadowColor = 'rgba(16, 23, 19, .18)';
-            ctx.shadowBlur = 8;
-            ctx.font = entries.length <= 4 ? '800 17px Microsoft YaHei, sans-serif' : '800 14px Microsoft YaHei, sans-serif';
+            let textAngle = mid;
+            if (textAngle > Math.PI / 2 && textAngle < Math.PI * 1.5) textAngle += Math.PI;
+            ctx.rotate(textAngle);
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = 'rgba(16, 23, 19, .14)';
+            ctx.shadowBlur = 10;
+            ctx.font = entries.length <= 4 ? '800 17px Microsoft YaHei, sans-serif' : entries.length <= 10 ? '800 14px Microsoft YaHei, sans-serif' : '800 12px Microsoft YaHei, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            const lineOffset = lines.length > 1 ? 9 : 0;
+            const lineHeight = entries.length <= 10 ? 18 : 16;
+            const lineOffset = lines.length > 1 ? lineHeight / 2 : 0;
             lines.forEach((line, lineIndex) => {
-                ctx.fillText(line, 0, lineIndex * 18 - lineOffset);
+                ctx.fillText(line, 0, lineIndex * lineHeight - lineOffset);
             });
             ctx.restore();
         });
 
         ctx.beginPath();
-        ctx.fillStyle = '#fff';
-        ctx.arc(cx, cy, 34, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(23,33,27,.12)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255,255,255,.95)';
+        ctx.lineWidth = 10;
+        ctx.arc(cx, cy, radius + 1, 0, Math.PI * 2);
         ctx.stroke();
+
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(23,33,27,.06)';
+        ctx.lineWidth = 2;
+        ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.fillStyle = '#ffffff';
+        ctx.arc(cx, cy, innerRadius + 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        const centerGradient = ctx.createRadialGradient(cx, cy, 10, cx, cy, innerRadius + 8);
+        centerGradient.addColorStop(0, '#ffffff');
+        centerGradient.addColorStop(1, '#f2f5f9');
+        ctx.beginPath();
+        ctx.fillStyle = centerGradient;
+        ctx.arc(cx, cy, innerRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(23,33,27,.08)';
+        ctx.lineWidth = 2;
+        ctx.arc(cx, cy, innerRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#68766f';
+        ctx.font = '700 12px Microsoft YaHei, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('点击旋转', cx, cy - 9);
+        ctx.fillStyle = '#16201b';
+        ctx.font = '900 16px Microsoft YaHei, sans-serif';
+        ctx.fillText('GO', cx, cy + 13);
     }
 
     function renderSelector() {
         const selector = document.getElementById('wheel-selector');
         if (!selector) return;
-        selector.innerHTML = data.wheels.map(wheel => `<option value="${wheel.id}" ${wheel.id === currentWheelId ? 'selected' : ''}>${safeHtml(wheel.name)} · ${wheel.mode === 'tag' ? '标签' : '普通'}</option>`).join('');
+        const modeWheels = data.wheels.filter(wheel => (wheel.mode || 'normal') === currentWheelMode);
+        const fallbackWheel = modeWheels[0] || data.wheels[0] || null;
+        if (!modeWheels.some(wheel => wheel.id === currentWheelId)) {
+            currentWheelId = fallbackWheel?.id || null;
+            if (fallbackWheel) currentWheelMode = fallbackWheel.mode || 'normal';
+        }
+        selector.innerHTML = modeWheels.map(wheel => `<option value="${wheel.id}" ${wheel.id === currentWheelId ? 'selected' : ''}>${safeHtml(wheel.name)} · ${wheel.mode === 'tag' ? '标签' : '普通'}</option>`).join('');
+        selector.disabled = modeWheels.length === 0;
     }
 
     function renderStageSummary(wheel) {
         const container = document.getElementById('wheel-stage-summary');
         if (!container) return;
+        const historyCount = countWheelHistory(wheel?.id || '');
+        const headline = safeHtml(getWheelHeadline(wheel));
         if (isTagItemsStage(wheel)) {
             const tag = getTagById(wheelStageState.tagId);
             const tagColor = wheelStageState.tagColor || tag?.color || '#216e4e';
             container.innerHTML = `
-                <div class="wheel-stage-card active">
+                <div class="wheel-stage-card hero active">
                     <div class="wheel-stage-card-top">
                         <span class="wheel-stage-badge">第二段</span>
-                        <span class="wheel-stage-badge muted">已锁定标签</span>
+                        <span class="wheel-stage-badge muted">标签已锁定</span>
                     </div>
-                    <div class="wheel-stage-title">先抽到了 ${getTagChipMarkup(wheelStageState.tagName, tagColor)}</div>
-                    <div class="wheel-stage-copy">现在继续从这个标签下的 ${Number(wheelStageState.itemCount) || 0} 个候选内容里抽具体结果。</div>
+                    <div class="wheel-stage-pill">${headline}</div>
+                    <div class="wheel-stage-title">已锁定 ${getTagChipMarkup(wheelStageState.tagName, tagColor)}</div>
+                    <div class="wheel-stage-copy">继续转一次，就会从这个标签的 ${Number(wheelStageState.itemCount) || 0} 个候选里抽出最终答案。</div>
+                    <div class="wheel-stage-stats compact">
+                        <div class="wheel-stage-stat"><strong>${Number(wheelStageState.itemCount) || 0}</strong><span>标签内候选</span></div>
+                        <div class="wheel-stage-stat"><strong>${historyCount}</strong><span>本转盘记录</span></div>
+                    </div>
                 </div>
             `;
             return;
         }
         if (wheel?.mode === 'tag') {
             const tagCandidates = getTagCandidatesForWheel(wheel).slice(0, 6);
+            const totalPool = getTagCandidatesForWheel(wheel).reduce((sum, entry) => sum + entry.items.length, 0);
             container.innerHTML = `
-                <div class="wheel-stage-card">
+                <div class="wheel-stage-card hero">
                     <div class="wheel-stage-card-top">
-                        <span class="wheel-stage-badge">第一段</span>
-                        <span class="wheel-stage-badge muted">标签转盘</span>
+                        <span class="wheel-stage-badge">标签转盘</span>
+                        <span class="wheel-stage-badge muted">两段抽取</span>
                     </div>
-                    <div class="wheel-stage-title">先抽标签，再继续抽具体内容</div>
-                    <div class="wheel-stage-copy">第一轮只会在标签之间转动，抽中后会自动切到该标签对应的内容池。</div>
-                    <div class="wheel-stage-stats">
-                        <div class="wheel-stage-stat">
-                            <strong>${tagCandidates.length}</strong>
-                            <span>当前可抽标签</span>
-                        </div>
-                        <div class="wheel-stage-stat">
-                            <strong>${tagCandidates.reduce((sum, entry) => sum + entry.items.length, 0)}</strong>
-                            <span>候选公共项</span>
-                        </div>
+                    <div class="wheel-stage-pill">${headline}</div>
+                    <div class="wheel-stage-title">先抽一个方向，再抽一个具体答案</div>
+                    <div class="wheel-stage-copy">适合先定方向、再定具体答案的场景，主舞台会比原来更聚焦。</div>
+                    <div class="wheel-stage-stats compact">
+                        <div class="wheel-stage-stat"><strong>${tagCandidates.length}</strong><span>当前标签</span></div>
+                        <div class="wheel-stage-stat"><strong>${totalPool}</strong><span>候选内容</span></div>
+                        <div class="wheel-stage-stat"><strong>${historyCount}</strong><span>本转盘记录</span></div>
                     </div>
                     ${tagCandidates.length ? `
                         <div class="wheel-stage-quick-tags">
@@ -368,13 +507,21 @@
             `;
             return;
         }
+        const enabledCount = getEnabledEntries(wheel).length;
         container.innerHTML = `
-            <div class="wheel-stage-card">
+            <div class="wheel-stage-card hero">
                 <div class="wheel-stage-card-top">
-                    <span class="wheel-stage-badge">普通模式</span>
+                    <span class="wheel-stage-badge">普通转盘</span>
+                    <span class="wheel-stage-badge muted">一步出结果</span>
                 </div>
-                <div class="wheel-stage-title">一次抽出最终结果</div>
-                <div class="wheel-stage-copy">点击转盘或下方按钮都可以直接开始，不会再进入第二段。</div>
+                <div class="wheel-stage-pill">${headline}</div>
+                <div class="wheel-stage-title">把选择交给转盘，先转出一个明确答案</div>
+                <div class="wheel-stage-copy">先抽出一个明确答案，别让选择继续占脑子。</div>
+                <div class="wheel-stage-stats compact">
+                    <div class="wheel-stage-stat"><strong>${enabledCount}</strong><span>当前选项</span></div>
+                    <div class="wheel-stage-stat"><strong>${historyCount}</strong><span>本转盘记录</span></div>
+                    <div class="wheel-stage-stat"><strong>直接</strong><span>一步出结果</span></div>
+                </div>
             </div>
         `;
     }
@@ -385,17 +532,26 @@
         const wheel = getCurrentWheel();
         const history = data.wheelHistory.find(item => item.id === currentWheelResultId);
         if (!history) {
-            container.innerHTML = isTagItemsStage(wheel)
-                ? '<div class="wheel-result-empty">再转一次就会得到最终内容，结果卡片也会显示在这里。</div>'
-                : '<div class="wheel-result-empty">抽取后会在这里显示结果，你可以选择是否转入待办。</div>';
+            const itemCount = isTagItemsStage(wheel) ? Number(wheelStageState.itemCount) || 0 : getStageEntries(wheel).length;
+            container.innerHTML = `
+                <div class="wheel-result-card pending">
+                    <div class="wheel-result-kicker">${isTagItemsStage(wheel) ? '第二段已就绪' : '准备开始'}</div>
+                    <div class="wheel-result-title">${isTagItemsStage(wheel) ? '再转一次' : '转一转'}</div>
+                    <div class="wheel-result-note">${isTagItemsStage(wheel) ? `当前标签下还有 ${itemCount} 个候选内容，下一次就会给出最终结果。` : `当前转盘有 ${itemCount} 个可抽选项，点击轮盘或下方按钮都可以直接开始。`}</div>
+                </div>
+            `;
             return;
         }
         const converted = history.convertedTodoId && data.todos.some(todo => todo.id === history.convertedTodoId);
         container.innerHTML = `
             <div class="wheel-result-card">
-                <div class="wheel-result-kicker">${history.mode === 'tag' ? `最终结果 · 来自标签 ${safeHtml(history.tagName || '-')}` : '最终结果 · 普通转盘'}</div>
+                <div class="wheel-result-meta">
+                    <span class="wheel-result-meta-item">${safeHtml(history.wheelName || '当前转盘')}</span>
+                    <span class="wheel-result-meta-item">${history.mode === 'tag' ? `标签 · ${safeHtml(history.tagName || '-')}` : '普通模式'}</span>
+                </div>
+                <div class="wheel-result-kicker">${history.mode === 'tag' ? '最终结果' : '这次抽中了'}</div>
                 <div class="wheel-result-title">${safeHtml(history.resultName || '未命名结果')}</div>
-                ${history.note ? `<div class="wheel-result-note">${safeHtml(history.note)}</div>` : ''}
+                <div class="wheel-result-note">${history.note ? safeHtml(history.note) : '如果这个答案正好对味，就直接把它转成待办，省掉继续纠结的那一步。'}</div>
                 <div class="wheel-result-actions">
                     <button class="btn btn-primary" ${converted ? 'disabled' : ''} onclick="convertWheelResultToTodo('${history.id}')">${converted ? '已转入待办' : '转入待办'}</button>
                     <button class="btn btn-secondary" onclick="clearWheelCurrentResult()">只保留记录</button>
@@ -480,6 +636,7 @@
                 </div>
             `;
         }
+        const filteredLibraryItems = getFilteredLibraryItemsForCopy();
         return `
             <div class="wheel-panel-head">
                 <div>
@@ -496,10 +653,18 @@
                 <input id="wheel-item-weight" type="number" min="1" value="1" title="权重">
                 <button class="btn btn-primary" onclick="addWheelItem('${wheel.id}')">添加</button>
             </div>
+            <div class="tag-filter-strip inline wheel-copy-filter">
+                <button type="button" class="${!wheelLibraryCopyTagFilter ? 'active' : ''}" onclick="setWheelLibraryCopyFilter('')">全部公共项</button>
+                ${data.wheelTags.map(tag => `
+                    <button type="button" class="${wheelLibraryCopyTagFilter === tag.id ? 'active' : ''}" onclick="setWheelLibraryCopyFilter('${tag.id}')">
+                        <span class="wheel-color-dot" style="background:${safeHtml(tag.color)}"></span>${safeHtml(tag.name)}
+                    </button>
+                `).join('')}
+            </div>
             <div class="wheel-inline-form wide">
                 <select id="wheel-library-copy-select">
                     <option value="">从公共项复制到当前转盘</option>
-                    ${data.wheelLibraryItems.map(item => `<option value="${item.id}">${safeHtml(item.name)} · ${tagNames(item.tagIds).join('/') || '无标签'}</option>`).join('')}
+                    ${filteredLibraryItems.map(item => `<option value="${item.id}">${safeHtml(item.name)}</option>`).join('')}
                 </select>
                 <button class="btn btn-secondary" onclick="copyLibraryItemToWheel('${wheel.id}')">复制</button>
             </div>
@@ -579,7 +744,12 @@
                     <div class="card-title">抽取记录</div>
                     <div class="wheel-hint">记录每次抽取，结果仍然由你决定是否转待办。</div>
                 </div>
-                <button class="btn btn-danger" onclick="clearWheelHistory()">清空记录</button>
+                <div class="wheel-head-actions">
+                    <button class="btn btn-secondary" onclick="exportWheelHistoryCsv()">导出记录</button>
+                    <button class="btn btn-secondary" onclick="exportWheelBackupJson()">导出JSON</button>
+                    <button class="btn btn-secondary" onclick="importWheelBackupJson()">恢复JSON</button>
+                    <button class="btn btn-danger" onclick="clearWheelHistory()">清空记录</button>
+                </div>
             </div>
             <div class="wheel-list history">
                 ${history.map(item => `
@@ -598,6 +768,21 @@
         ensureSeedData();
         const wheel = getCurrentWheel();
         renderStage();
+        const panel = document.getElementById('wheel-panel');
+        const content = document.getElementById('wheel-panel-content');
+        const summary = document.getElementById('wheel-panel-summary');
+        const toggle = document.getElementById('wheel-panel-toggle');
+        if (panel) {
+            panel.classList.toggle('collapsed', wheelPanelCollapsed);
+            panel.classList.toggle('expanded', !wheelPanelCollapsed);
+        }
+        if (content) content.hidden = wheelPanelCollapsed;
+        if (summary) summary.innerHTML = getWheelPanelSummaryMarkup(wheel);
+        if (toggle) {
+            toggle.textContent = wheelPanelCollapsed ? '展开管理' : '收起管理';
+            toggle.setAttribute('aria-expanded', String(!wheelPanelCollapsed));
+            toggle.setAttribute('aria-controls', 'wheel-panel-content');
+        }
         const body = document.getElementById('wheel-panel-body');
         if (!body) return;
         document.querySelectorAll('#wheel-panel-tabs button').forEach(btn => {
@@ -620,6 +805,17 @@
 
     window.setWheelPanel = function setWheelPanel(panel) {
         currentWheelPanel = panel;
+        wheelPanelCollapsed = false;
+        renderWheelPage();
+    };
+
+    window.setWheelLibraryCopyFilter = function setWheelLibraryCopyFilter(tagId = '') {
+        wheelLibraryCopyTagFilter = String(tagId || '');
+        renderWheelPage();
+    };
+
+    window.toggleWheelPanelCollapse = function toggleWheelPanelCollapse() {
+        wheelPanelCollapsed = !wheelPanelCollapsed;
         renderWheelPage();
     };
 
@@ -632,24 +828,69 @@
         renderWheelPage();
     };
 
-    window.createWheel = function createWheel() {
-        const name = prompt('转盘名称', currentWheelMode === 'tag' ? '新的标签转盘' : '新的普通转盘');
-        if (name === null) return;
-        const trimmed = name.trim() || '未命名转盘';
+    function updateWheelCreateModeUi() {
+        document.getElementById('wheel-create-mode-normal')?.classList.toggle('active', wheelCreateMode === 'normal');
+        document.getElementById('wheel-create-mode-tag')?.classList.toggle('active', wheelCreateMode === 'tag');
+        const firstItemGroup = document.getElementById('wheel-create-first-item-group');
+        const tagHelp = document.getElementById('wheel-create-tag-help');
+        if (firstItemGroup) firstItemGroup.style.display = wheelCreateMode === 'tag' ? 'none' : '';
+        if (tagHelp) tagHelp.style.display = wheelCreateMode === 'tag' ? '' : 'none';
+    }
+
+    function createWheelFromForm({ mode, name, firstItem = '' }) {
+        const trimmed = String(name || '').trim() || (mode === 'tag' ? '新的标签转盘' : '新的普通转盘');
         const stamp = now();
         const items = [];
-        if (currentWheelMode !== 'tag') {
-            const firstItem = prompt('第一个转盘项（普通转盘至少需要 1 项）', '');
-            if (firstItem === null) return;
-            const firstName = firstItem.trim();
+        if (mode !== 'tag') {
+            const firstName = String(firstItem || '').trim();
             if (!firstName) return alert('普通转盘至少需要 1 个转盘项');
             items.push({ id: id(), name: firstName, note: '', weight: 1, enabled: true, createdAt: stamp, updatedAt: stamp });
         }
-        const wheel = { id: id(), name: trimmed, mode: currentWheelMode, items, tagIds: currentWheelMode === 'tag' ? data.wheelTags.map(tag => tag.id) : [], createdAt: stamp, updatedAt: stamp };
+        const wheel = { id: id(), name: trimmed, mode, items, tagIds: mode === 'tag' ? uniqueTagIds(data.wheelTags.map(tag => tag.id)) : undefined, createdAt: stamp, updatedAt: stamp };
         data.wheels.unshift(wheel);
         currentWheelId = wheel.id;
+        currentWheelMode = mode;
         persist();
         renderWheelPage();
+        return wheel;
+    }
+
+    window.openWheelCreateModal = function openWheelCreateModal(mode = currentWheelMode) {
+        wheelCreateMode = mode === 'tag' ? 'tag' : 'normal';
+        const nameInput = document.getElementById('wheel-create-name');
+        const firstItemInput = document.getElementById('wheel-create-first-item');
+        if (nameInput) nameInput.value = wheelCreateMode === 'tag' ? '新的标签转盘' : '新的普通转盘';
+        if (firstItemInput) firstItemInput.value = '';
+        updateWheelCreateModeUi();
+        document.getElementById('wheel-create-modal')?.classList.add('active');
+    };
+
+    window.closeWheelCreateModal = function closeWheelCreateModal() {
+        document.getElementById('wheel-create-modal')?.classList.remove('active');
+    };
+
+    window.setWheelCreateMode = function setWheelCreateMode(mode) {
+        wheelCreateMode = mode === 'tag' ? 'tag' : 'normal';
+        const nameInput = document.getElementById('wheel-create-name');
+        if (nameInput && (!nameInput.value.trim() || ['新的普通转盘', '新的标签转盘'].includes(nameInput.value.trim()))) {
+            nameInput.value = wheelCreateMode === 'tag' ? '新的标签转盘' : '新的普通转盘';
+        }
+        updateWheelCreateModeUi();
+    };
+
+    window.saveWheelCreateModal = function saveWheelCreateModal() {
+        const name = document.getElementById('wheel-create-name')?.value || '';
+        const firstItem = document.getElementById('wheel-create-first-item')?.value || '';
+        const wheel = createWheelFromForm({ mode: wheelCreateMode, name, firstItem });
+        if (!wheel) return;
+        closeWheelCreateModal();
+        currentWheelPanel = 'items';
+        wheelPanelCollapsed = false;
+        renderWheelPage();
+    };
+
+    window.createWheel = function createWheel() {
+        openWheelCreateModal(currentWheelMode);
     };
 
     window.renameWheel = function renameWheel(wheelId) {
@@ -729,6 +970,8 @@
         const libraryId = document.getElementById('wheel-library-copy-select')?.value;
         const library = data.wheelLibraryItems.find(item => item.id === libraryId);
         if (!wheel || !library) return alert('请选择公共项');
+        if (wheel.mode !== 'normal') return alert('只有普通转盘可以复制公共项');
+        if (wheelLibraryCopyTagFilter && !library.tagIds?.includes(wheelLibraryCopyTagFilter)) return alert('请选择当前标签筛选下的公共项');
         if ((wheel.items || []).some(item => normalizeName(item.name) === normalizeName(library.name))) return alert('当前转盘里已经有同名选项');
         wheel.items.push({ id: id(), name: library.name, note: library.note || '', weight: library.weight || 1, enabled: true, sourceLibraryItemId: library.id, createdAt: now(), updatedAt: now() });
         wheel.updatedAt = now();
@@ -761,7 +1004,16 @@
     };
 
     function ensureTagsByText(tagText) {
-        const names = String(tagText || '').split(/[,，、;；/]/).map(item => item.trim()).filter(Boolean);
+        const seen = new Set();
+        const names = String(tagText || '').split(/[,，、;；/]/)
+            .map(item => item.trim())
+            .filter(Boolean)
+            .filter(name => {
+                const key = normalizeName(name);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
         return names.map(name => {
             let tag = data.wheelTags.find(item => normalizeName(item.name) === normalizeName(name));
             if (!tag) {
@@ -778,7 +1030,7 @@
         const weight = Math.max(1, Number(document.getElementById('wheel-library-weight')?.value) || 1);
         if (!name) return alert('请输入公共项名称');
         if (data.wheelLibraryItems.some(item => normalizeName(item.name) === normalizeName(name))) return alert('公共项里已经有同名内容');
-        data.wheelLibraryItems.push({ id: id(), name, note: '', weight, enabled: true, tagIds: ensureTagsByText(tagText), createdAt: now(), updatedAt: now() });
+        data.wheelLibraryItems.push({ id: id(), name, note: '', weight, enabled: true, tagIds: uniqueTagIds(ensureTagsByText(tagText)), createdAt: now(), updatedAt: now() });
         persist();
         renderWheelPage();
     };
@@ -796,7 +1048,7 @@
                 return;
             }
             seen.add(key);
-            data.wheelLibraryItems.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, tagIds: ensureTagsByText(item.tagText), createdAt: now(), updatedAt: now() });
+            data.wheelLibraryItems.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, tagIds: uniqueTagIds(ensureTagsByText(item.tagText)), createdAt: now(), updatedAt: now() });
             added++;
         });
         persist();
@@ -817,7 +1069,7 @@
         const weight = prompt('权重', item.weight);
         if (weight === null) return;
         item.name = trimmed;
-        item.tagIds = ensureTagsByText(tagText);
+        item.tagIds = uniqueTagIds(ensureTagsByText(tagText));
         item.weight = Math.max(1, Number(weight) || 1);
         item.updatedAt = now();
         persist();
@@ -896,19 +1148,71 @@
         const set = new Set(wheel.tagIds || []);
         if (checked) set.add(tagId);
         else set.delete(tagId);
-        wheel.tagIds = Array.from(set);
+        wheel.tagIds = uniqueTagIds(Array.from(set));
         wheel.updatedAt = now();
         persist();
         renderWheelPage();
     };
 
     function saveHistory(payload) {
-        const history = { id: id(), createdAt: now(), convertedTodoId: '', ...payload };
+        const stamp = now();
+        const history = { id: id(), createdAt: stamp, updatedAt: stamp, convertedTodoId: '', ...payload };
         data.wheelHistory.unshift(history);
         currentWheelResultId = history.id;
         persist();
         return history;
     }
+
+    window.exportWheelBackupJson = function exportWheelBackupJson() {
+        downloadTextFile(`大转盘完整备份_${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(getWheelBackupSnapshot(), null, 2));
+    };
+
+    window.importWheelBackupJson = function importWheelBackupJson() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.onchange = event => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const imported = JSON.parse(String(reader.result || '{}'));
+                    if (!imported || typeof imported !== 'object') throw new Error('invalid');
+                    data.wheels = Array.isArray(imported.wheels) ? imported.wheels : [];
+                    data.wheelTags = Array.isArray(imported.wheelTags) ? imported.wheelTags : [];
+                    data.wheelLibraryItems = Array.isArray(imported.wheelLibraryItems) ? imported.wheelLibraryItems : [];
+                    data.wheelHistory = Array.isArray(imported.wheelHistory) ? imported.wheelHistory : [];
+                    currentWheelId = data.wheels[0]?.id || null;
+                    currentWheelMode = data.wheels[0]?.mode || 'normal';
+                    currentWheelResultId = null;
+                    resetWheelStageState();
+                    persist();
+                    renderWheelPage();
+                    alert('已恢复大转盘完整 JSON 备份');
+                } catch (err) {
+                    alert('备份文件不是有效的大转盘 JSON');
+                }
+            };
+            reader.readAsText(file, 'utf-8');
+        };
+        input.click();
+    };
+
+    window.exportWheelHistoryCsv = function exportWheelHistoryCsv() {
+        const header = ['时间', '转盘', '模式', '标签', '结果', '备注', '是否已转待办'];
+        const rows = data.wheelHistory.map(item => [
+            item.createdAt || '',
+            item.wheelName || '',
+            item.mode === 'tag' ? '标签转盘' : '普通转盘',
+            item.tagName || '',
+            item.resultName || '',
+            item.note || '',
+            item.convertedTodoId ? '是' : '否'
+        ]);
+        const csv = [header, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
+        downloadTextFile(`大转盘抽取记录_${new Date().toISOString().slice(0, 10)}.csv`, `\uFEFF${csv}`, 'text/csv;charset=utf-8');
+    };
 
     function animateSpin(entries, selectedIndex, done) {
         if (wheelSpinning) return;
@@ -918,12 +1222,12 @@
         const desired = 270 - (selectedIndex * slice + slice / 2);
         const normalizedStart = ((start % 360) + 360) % 360;
         const delta = ((desired - normalizedStart) + 360) % 360;
-        const target = start + 1440 + delta;
+        const target = start + 1800 + delta;
         const startTime = performance.now();
-        const duration = 1700;
+        const duration = 3600;
         function tick(time) {
             const progress = Math.min(1, (time - startTime) / duration);
-            const eased = 1 - Math.pow(1 - progress, 3);
+            const eased = 1 - Math.pow(1 - progress, 2.4);
             wheelRotation = start + (target - start) * eased;
             drawWheelCanvas(entries, progress === 1 ? selectedIndex : -1);
             if (progress < 1) requestAnimationFrame(tick);

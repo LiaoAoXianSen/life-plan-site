@@ -94,6 +94,14 @@
     .sidebar-primary-action .btn {
         width: 100%;
     }
+    .sync-status-stack {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+        min-width: 0;
+        white-space: nowrap;
+    }
     .sync-status-inline {
         padding: 4px 8px;
         border: 1px solid #dbe6de;
@@ -103,8 +111,10 @@
         font-size: 11px;
         font-weight: 800;
         line-height: 1.35;
+        max-width: 88px;
         white-space: nowrap;
-        overflow-wrap: anywhere;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .sync-status-inline.is-error {
         border-color: #efc6ba;
@@ -509,65 +519,67 @@
     .calendar-more { font-size: 12px; color: var(--muted); font-weight: 800; padding-top: 2px; }
     .agenda-shell {
         background: #fff;
-        border: 1px solid var(--line);
-        border-radius: calc(var(--radius) + 2px);
+        border: 1px solid #e4e9e5;
+        border-radius: 8px;
         overflow: hidden;
-        box-shadow: var(--shadow);
+        box-shadow: none;
+        --agenda-hour-height: 60px;
     }
     .agenda-head {
         display: grid;
-        background: var(--surface-soft);
-        border-bottom: 1px solid var(--line);
+        background: #fff;
+        border-bottom: 1px solid #edf1ee;
     }
     .agenda-corner {
-        border-right: 1px solid var(--line);
-        background: var(--surface-soft);
+        border-right: 1px solid #edf1ee;
+        background: #fff;
     }
     .agenda-day-head {
         min-width: 0;
-        padding: 12px 10px 11px;
-        border-right: 1px solid var(--line);
-        background: var(--surface-soft);
+        padding: 10px 12px;
+        border-right: 1px solid #edf1ee;
+        background: #fff;
     }
-    .agenda-day-head.is-today { background: #e9f7f0; }
+    .agenda-day-head.is-today { background: #edf7f3; }
     .agenda-day-head:last-child { border-right: none; }
-    .agenda-day-label { font-size: 12px; color: var(--muted); font-weight: 850; margin-bottom: 6px; }
-    .agenda-day-number { font-size: 24px; font-weight: 900; color: var(--text); line-height: 1; }
-    .agenda-day-extra { font-size: 12px; color: var(--faint); margin-left: 6px; font-weight: 700; }
+    .agenda-day-label { font-size: 13px; color: #333; font-weight: 850; margin-bottom: 8px; }
+    .agenda-day-number { font-size: 15px; font-weight: 900; color: #333; line-height: 1; }
+    .agenda-day-extra { font-size: 12px; color: #779287; margin-left: 7px; font-weight: 800; }
     .agenda-all-day {
         display: grid;
-        border-bottom: 1px solid var(--line);
+        border-bottom: 1px solid #edf1ee;
     }
     .agenda-all-day-label {
-        border-right: 1px solid var(--line);
-        background: #fbfdfb;
-        color: var(--muted);
+        border-right: 1px solid #edf1ee;
+        background: #fff;
+        color: #333;
         font-size: 12px;
         font-weight: 850;
         padding: 12px 10px;
     }
     .agenda-all-day-cell {
-        min-height: 74px;
-        padding: 8px;
-        border-right: 1px solid var(--line);
-        background: #fcfffd;
+        min-height: 68px;
+        padding: 4px;
+        border-right: 1px solid #edf1ee;
+        background: #fff;
         display: grid;
         align-content: start;
-        gap: 6px;
+        gap: 3px;
     }
     .agenda-all-day-cell:last-child { border-right: none; }
     .agenda-all-day-item,
     .agenda-event-block {
         background: var(--event-bg, #eef6f1);
         color: var(--event-ink, var(--text));
-        border: 1px solid var(--event-border, #d3e2d8);
-        box-shadow: inset 0 0 0 1px rgba(255,255,255,.24);
+        border: 0;
+        border-left: 3px solid var(--event-border, #8db29b);
+        box-shadow: none;
     }
     .agenda-all-day-item {
-        border-radius: 10px;
-        padding: 8px 10px;
+        border-radius: 4px;
+        padding: 4px 6px;
         font-size: 12px;
-        font-weight: 800;
+        font-weight: 850;
         cursor: pointer;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -580,16 +592,16 @@
         background: #fff;
     }
     .agenda-time-axis {
-        border-right: 1px solid var(--line);
+        border-right: 1px solid #edf1ee;
         background: #fff;
     }
     .agenda-hour-label {
-        height: 64px;
-        border-top: 1px solid #edf2ee;
+        height: var(--agenda-hour-height);
+        border-top: 1px solid #edf1ee;
         text-align: right;
-        padding: 4px 10px 0 0;
+        padding: 3px 10px 0 0;
         font-size: 12px;
-        color: var(--faint);
+        color: #9a9f9c;
         font-weight: 800;
         font-variant-numeric: tabular-nums;
     }
@@ -604,30 +616,30 @@
     }
     .agenda-day-column {
         position: relative;
-        min-height: 1152px;
-        border-right: 1px solid var(--line);
+        min-height: calc(var(--agenda-hour-height) * 18);
+        border-right: 1px solid #edf1ee;
         background:
             repeating-linear-gradient(
                 to bottom,
                 rgba(0,0,0,0),
-                rgba(0,0,0,0) 63px,
-                #edf2ee 63px,
-                #edf2ee 64px
+                rgba(0,0,0,0) calc(var(--agenda-hour-height) - 1px),
+                #edf1ee calc(var(--agenda-hour-height) - 1px),
+                #edf1ee var(--agenda-hour-height)
             );
     }
     .agenda-day-column.is-today {
         background:
-            linear-gradient(180deg, rgba(70, 140, 98, .08), rgba(70, 140, 98, .03)),
+            linear-gradient(180deg, rgba(69, 143, 117, .07), rgba(69, 143, 117, .025)),
             repeating-linear-gradient(
                 to bottom,
                 rgba(0,0,0,0),
-                rgba(0,0,0,0) 63px,
-                #edf2ee 63px,
-                #edf2ee 64px
+                rgba(0,0,0,0) calc(var(--agenda-hour-height) - 1px),
+                #edf1ee calc(var(--agenda-hour-height) - 1px),
+                #edf1ee var(--agenda-hour-height)
             );
     }
     .agenda-day-column:last-child { border-right: none; }
-    .agenda-hour-slot { height: 64px; }
+    .agenda-hour-slot { height: var(--agenda-hour-height); }
     .agenda-event-layer {
         position: absolute;
         inset: 0;
@@ -635,33 +647,49 @@
     }
     .agenda-event-block {
         position: absolute;
-        left: 8px;
-        border-radius: 12px;
-        padding: 8px 10px;
+        left: 4px;
+        border-radius: 5px;
+        padding: 4px 6px;
         cursor: pointer;
         overflow: hidden;
         pointer-events: auto;
-        box-shadow: 0 10px 18px rgba(25, 42, 31, .08);
+        opacity: .9;
     }
-    .agenda-event-block.is-done { opacity: .58; }
+    .agenda-event-block:hover { opacity: 1; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+    .agenda-event-block.is-done { opacity: .55; }
     .agenda-event-time {
-        font-size: 11px;
-        color: rgba(49, 69, 56, .72);
-        font-weight: 800;
-        margin-bottom: 3px;
+        font-size: 10px;
+        color: rgba(49, 69, 56, .68);
+        font-weight: 850;
+        margin-bottom: 1px;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .agenda-event-title {
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 900;
-        line-height: 1.35;
-        overflow-wrap: anywhere;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .agenda-event-meta {
-        margin-top: 4px;
-        font-size: 11px;
+        margin-top: 2px;
+        font-size: 10px;
         color: rgba(49, 69, 56, .72);
         font-weight: 700;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
+    .agenda-week .agenda-event-meta,
+    .agenda-event-block.is-short .agenda-event-meta { display: none; }
+    .agenda-event-block.is-short { padding-top: 3px; padding-bottom: 3px; }
+    .agenda-event-block.is-short .agenda-event-time { display: none; }
+    .agenda-event-block.is-overlap { padding-left: 5px; padding-right: 4px; }
     .agenda-more {
         font-size: 12px;
         color: var(--muted);
@@ -794,6 +822,30 @@
         border-radius: 999px;
         font-size: 13px;
     }
+    .habit-advanced {
+        margin: 4px 0 14px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #f8fbf8;
+    }
+    .habit-advanced summary {
+        cursor: pointer;
+        color: var(--text);
+        font-weight: 850;
+        list-style: none;
+    }
+    .habit-advanced summary::-webkit-details-marker { display: none; }
+    .habit-advanced[open] summary { margin-bottom: 12px; }
+    .habit-inline-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        color: var(--muted);
+        font-weight: 750;
+    }
+    .habit-inline-toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
     .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
     .form-section-title {
         margin: 18px 0 10px;
@@ -1021,14 +1073,17 @@
     .todo-text { flex: 1; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
     .todo-text small { display: block; margin-top: 3px; color: var(--faint); font-size: 12px; font-weight: 650; }
     .todo-meta { font-size: 12px; color: var(--faint); white-space: nowrap; }
-    .habit-quick-list { display: grid; gap: 8px; }
+    .habit-quick-list { display: grid; gap: 10px; }
     .habit-quick-card {
-        padding: 10px 12px;
-        border-radius: 16px;
+        padding: 12px 14px;
+        border-radius: 18px;
         border: 1px solid #d8e5dd;
-        border-left: 4px solid #8fbea2;
+        border-left: 5px solid #8fbea2;
         background: rgba(255,255,255,.84);
         box-shadow: 0 8px 20px rgba(35,60,45,.045);
+    }
+    .habit-quick-card.compact {
+        padding-block: 11px;
     }
     .habit-quick-card.done {
         border-color: #c3dccb;
@@ -1042,9 +1097,9 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 10px;
+        gap: 14px;
     }
-    .habit-quick-main { min-width: 0; }
+    .habit-quick-main { min-width: 0; flex: 1 1 auto; }
     .habit-quick-title-row {
         display: flex;
         align-items: center;
@@ -1052,7 +1107,7 @@
         flex-wrap: wrap;
     }
     .habit-quick-title {
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 900;
         color: var(--text);
         line-height: 1.35;
@@ -1107,17 +1162,25 @@
         font-size: 10px;
         font-weight: 750;
     }
+    .habit-quick-meta span.is-points,
+    .habit-quick-meta span.is-penalty {
+        background: #fff7df;
+        border-color: #eadb9e;
+        color: #8a6a10;
+    }
     .habit-quick-note-inline {
         margin-top: 5px;
         color: #597064;
         font-size: 12px;
-        line-height: 1.45;
-        overflow-wrap: anywhere;
+        line-height: 1.35;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .habit-quick-actions {
         display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
+        flex-wrap: nowrap;
+        gap: 8px;
         flex: 0 0 auto;
         justify-content: flex-end;
         align-items: center;
@@ -1126,17 +1189,18 @@
         gap: 6px;
     }
     .habit-quick-btn {
-        min-height: 28px;
-        padding: 0 10px;
+        min-height: 38px;
+        padding: 0 15px;
         border-radius: 999px;
         border: 1px solid #cad8cf;
         background: #fff;
         color: var(--text);
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 850;
         line-height: 1;
         cursor: pointer;
         transition: .18s ease;
+        white-space: nowrap;
     }
     .habit-quick-btn:hover {
         transform: translateY(-1px);
@@ -1317,6 +1381,7 @@
     .tag-生活 { background: #eaf6ee; color: #216e4e; }
 
     .habit-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .habit-tabs[style*="display: none"] { margin-bottom: 0; }
     .habit-tab { padding: 8px 13px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; font-size: 14px; transition: .18s ease; line-height: 1.4; font-weight: 800; }
     .habit-tab:hover { background: #fff; }
     .habit-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -1327,6 +1392,135 @@
     .habit-tab.tag-运动.active { background: #2f80ed; border-color: #2f80ed; }
     .habit-tab.tag-工作.active { background: #b97706; border-color: #b97706; }
     .habit-tab.tag-生活.active { background: #216e4e; border-color: #216e4e; }
+    .habit-rewards-panel {
+        display: grid;
+        gap: 12px;
+        margin-top: 14px;
+    }
+    .habit-wallet-card {
+        display: grid;
+        grid-template-columns: minmax(120px, .7fr) minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid #d9e4dc;
+        border-radius: var(--radius);
+        background: linear-gradient(135deg, #ffffff, #f7fbf2);
+        box-shadow: 0 12px 30px rgba(35,60,45,.06);
+    }
+    .habit-wallet-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 850;
+    }
+    .habit-wallet-value {
+        font-size: 34px;
+        line-height: 1;
+        color: #8a6a10;
+        font-weight: 950;
+    }
+    .habit-wallet-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+    }
+    .habit-wallet-stats span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: #fff7df;
+        border: 1px solid #eadb9e;
+        color: #80620f;
+        font-size: 12px;
+        font-weight: 850;
+    }
+    .habit-wallet-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+    .habit-shop-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+        gap: 12px;
+    }
+    .habit-shop-section {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255,255,255,.82);
+    }
+    .habit-shop-title {
+        margin-bottom: 10px;
+        color: var(--text);
+        font-size: 15px;
+        font-weight: 900;
+    }
+    .habit-reward-list,
+    .habit-ledger-list {
+        display: grid;
+        gap: 8px;
+    }
+    .habit-reward-card,
+    .habit-ledger-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px;
+        border: 1px solid #e1e9e3;
+        border-radius: var(--radius);
+        background: #fff;
+    }
+    .habit-reward-main { min-width: 0; }
+    .habit-reward-main strong,
+    .habit-ledger-row strong {
+        display: block;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 900;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .habit-reward-main span,
+    .habit-ledger-row span {
+        display: block;
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 750;
+    }
+    .habit-reward-main p {
+        margin: 3px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+    }
+    .habit-redeem-btn {
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid #eadb9e;
+        border-radius: 999px;
+        background: #fff7df;
+        color: #80620f;
+        font-size: 12px;
+        font-weight: 900;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .habit-redeem-btn:disabled {
+        cursor: not-allowed;
+        opacity: .45;
+    }
+    .habit-ledger-row b {
+        font-size: 15px;
+        white-space: nowrap;
+    }
+    .habit-ledger-row.is-plus b { color: var(--accent); }
+    .habit-ledger-row.is-minus b { color: var(--danger); }
     .heatmap-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; }
     .year-select { min-width: 110px; max-width: 150px; }
     .heatmap-container { overflow-x: auto; padding: 4px 0 10px; }
@@ -1858,6 +2052,14 @@
             border-radius: 999px;
             background: rgba(255,255,255,.76);
         }
+        .sync-status-stack {
+            flex: 0 1 auto;
+        }
+        .sync-status-inline {
+            max-width: 82px;
+            padding: 3px 6px;
+            font-size: 10px;
+        }
         .sidebar-bottom[open] {
             display: grid;
             grid-template-columns: minmax(0, .8fr) minmax(0, 1.1fr) minmax(0, 1.1fr);
@@ -1914,10 +2116,20 @@
         .idea-detail-grid { grid-template-columns: 1fr; }
         .search-result-item { grid-template-columns: 1fr; }
         .modal { padding: 18px; }
-        .habit-quick-head { flex-direction: column; align-items: stretch; }
+        .habit-wallet-card,
+        .habit-shop-grid {
+            grid-template-columns: 1fr;
+        }
+        .habit-wallet-actions {
+            justify-content: stretch;
+        }
+        .habit-wallet-actions .btn {
+            flex: 1 1 140px;
+        }
+        .habit-quick-head { flex-direction: row; align-items: center; }
         .habit-quick-status { align-self: flex-start; }
-        .habit-quick-actions { justify-content: flex-start; }
-        .habit-quick-btn { width: 100%; }
+        .habit-quick-actions { justify-content: flex-end; flex-wrap: nowrap; }
+        .habit-quick-btn { width: auto; padding-inline: 13px; }
         .sidebar-button-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .sidebar-bottom[open] { grid-template-columns: 1fr 1fr; }
         .card-title { display: block; }
