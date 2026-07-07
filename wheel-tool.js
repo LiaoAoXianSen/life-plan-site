@@ -6,6 +6,9 @@
     let wheelPanelCollapsed = true;
     let wheelCreateMode = 'normal';
     let wheelLibraryCopyTagFilter = '';
+    let wheelLibraryTagFilter = '';
+    let wheelActionMenuOpen = false;
+    const wheelSelectedLibraryItemIds = new Set();
     let wheelDragState = null;
 
     function createWheelStageState() {
@@ -459,6 +462,54 @@
         `;
     }
 
+    function getFilteredLibraryItemsForManage() {
+        return data.wheelLibraryItems.filter(item => (
+            !wheelLibraryTagFilter || item.tagIds?.includes(wheelLibraryTagFilter)
+        ));
+    }
+
+    function getSelectedLibraryItemIds() {
+        const existing = new Set(data.wheelLibraryItems.map(item => item.id));
+        Array.from(wheelSelectedLibraryItemIds).forEach(itemId => {
+            if (!existing.has(itemId)) wheelSelectedLibraryItemIds.delete(itemId);
+        });
+        return Array.from(wheelSelectedLibraryItemIds);
+    }
+
+    function getWheelPanelMarkup(panel = currentWheelPanel) {
+        const wheel = getCurrentWheel();
+        if (panel === 'library') return renderLibraryPanel();
+        if (panel === 'tags') return renderTagsPanel();
+        if (panel === 'history') return renderHistoryPanel();
+        return renderItemsPanel(wheel);
+    }
+
+    function renderWheelModalBody(panel = currentWheelPanel) {
+        const body = document.getElementById(`wheel-${panel}-modal-body`);
+        if (body) body.innerHTML = getWheelPanelMarkup(panel);
+    }
+
+    function renderActiveWheelModalBody() {
+        ['items', 'library', 'tags', 'history'].forEach(panel => {
+            if (document.getElementById(`wheel-${panel}-modal`)?.classList.contains('active')) {
+                renderWheelModalBody(panel);
+            }
+        });
+    }
+
+    function renderWheelActionMenu() {
+        const menu = document.getElementById('wheel-action-menu');
+        const button = document.getElementById('wheel-action-menu-button');
+        if (menu) menu.hidden = !wheelActionMenuOpen;
+        if (button) button.setAttribute('aria-expanded', String(wheelActionMenuOpen));
+    }
+
+    function openWheelPanelModal(panel = 'items') {
+        currentWheelPanel = ['items', 'library', 'tags', 'history'].includes(panel) ? panel : 'items';
+        renderWheelModalBody(currentWheelPanel);
+        document.getElementById(`wheel-${currentWheelPanel}-modal`)?.classList.add('active');
+    }
+
     function drawWheelCanvas(entries = [], selectedIndex = -1) {
         const canvas = document.getElementById('wheel-canvas');
         if (!canvas) return;
@@ -908,13 +959,19 @@
     }
 
     function renderLibraryPanel() {
+        const filteredItems = getFilteredLibraryItemsForManage();
+        const selectedIds = new Set(getSelectedLibraryItemIds());
+        const selectedVisibleCount = filteredItems.filter(item => selectedIds.has(item.id)).length;
+        const selectedTotalCount = selectedIds.size;
+        const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
+        const tagOptions = data.wheelTags.map(tag => `<option value="${tag.id}">${safeHtml(tag.name)}</option>`).join('');
         return `
             <div class="wheel-panel-head">
                 <div>
                     <div class="card-title">公共项库</div>
                     <div class="wheel-hint">公共项可被普通转盘复制，也会被标签转盘用于二段抽取。</div>
                 </div>
-                <button class="btn btn-secondary" onclick="openWheelLibraryBatchImport()">批量公共项</button>
+                <button class="btn btn-secondary" onclick="focusWheelLibraryBatchImport()">批量公共项</button>
             </div>
             <div class="wheel-inline-form library-form">
                 <input id="wheel-library-name" placeholder="公共项名称">
@@ -922,15 +979,43 @@
                 <input id="wheel-library-weight" type="number" min="1" value="1">
                 <button class="btn btn-primary" onclick="addWheelLibraryItem()">添加</button>
             </div>
+            <div class="wheel-library-batch-box">
+                <textarea id="wheel-library-batch-text" rows="4" placeholder="每行一个公共项：名称,权重,标签1/标签2&#10;咖啡店学习,1,出门/学习/美食&#10;周末晨跑,2,运动/户外"></textarea>
+                <button class="btn btn-secondary" onclick="importWheelLibraryBatchFromTextarea()">导入多行公共项</button>
+            </div>
+            <div class="wheel-library-toolbar">
+                <label class="wheel-library-filter">
+                    <span>标签筛选</span>
+                    <select id="wheel-library-tag-filter" onchange="setWheelLibraryTagFilter(this.value)">
+                        <option value="">全部标签</option>
+                        ${data.wheelTags.map(tag => `<option value="${tag.id}" ${wheelLibraryTagFilter === tag.id ? 'selected' : ''}>${safeHtml(tag.name)}</option>`).join('')}
+                    </select>
+                </label>
+                <div class="wheel-library-bulk-actions">
+                    <label class="wheel-check-row wheel-select-all-row">
+                        <input type="checkbox" ${allVisibleSelected ? 'checked' : ''} ${filteredItems.length ? '' : 'disabled'} onchange="toggleAllWheelLibrarySelection(this.checked)">
+                        <span>选中当前筛选 ${selectedVisibleCount}/${filteredItems.length}</span>
+                    </label>
+                    <select id="wheel-library-batch-tag" ${data.wheelTags.length ? '' : 'disabled'}>
+                        <option value="">选择标签</option>
+                        ${tagOptions}
+                    </select>
+                    <button class="wheel-mini-btn primary" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('add')">添加到选中</button>
+                    <button class="wheel-mini-btn danger" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('remove')">从选中移除</button>
+                </div>
+            </div>
             <div class="wheel-list">
-                ${data.wheelLibraryItems.map(item => `
-                    <div class="wheel-row library">
+                ${filteredItems.map(item => `
+                    <div class="wheel-row library ${selectedIds.has(item.id) ? 'selected' : ''}">
+                        <label class="wheel-library-select">
+                            <input type="checkbox" aria-label="选择${safeHtml(item.name)}" ${selectedIds.has(item.id) ? 'checked' : ''} onchange="toggleWheelLibrarySelection('${item.id}', this.checked)">
+                        </label>
                         <span class="wheel-row-main"><strong>${safeHtml(item.name)}</strong><small>权重 ${item.weight} · ${item.enabled === false ? '已停用' : '启用中'}</small><span class="wheel-chip-row">${tagChips(item.tagIds)}</span></span>
                         <button class="wheel-mini-btn" onclick="editWheelLibraryItem('${item.id}')">修改</button>
                         <button class="wheel-mini-btn" onclick="toggleWheelLibraryItem('${item.id}')">${item.enabled === false ? '启用' : '停用'}</button>
                         <button class="wheel-mini-btn danger" onclick="deleteWheelLibraryItem('${item.id}')">删除</button>
                     </div>
-                `).join('') || '<div class="empty-state">暂无公共项。</div>'}
+                `).join('') || '<div class="empty-state">当前筛选下没有公共项。</div>'}
             </div>
         `;
     }
@@ -995,6 +1080,8 @@
         ensureSeedData();
         const wheel = getCurrentWheel();
         renderStage();
+        renderWheelActionMenu();
+        renderActiveWheelModalBody();
         const panel = document.getElementById('wheel-panel');
         const content = document.getElementById('wheel-panel-content');
         const summary = document.getElementById('wheel-panel-summary');
@@ -1031,13 +1118,31 @@
     };
 
     window.setWheelPanel = function setWheelPanel(panel) {
-        currentWheelPanel = panel;
-        wheelPanelCollapsed = false;
-        renderWheelPage();
+        openWheelPanelModal(panel);
+    };
+
+    window.closeWheelPanelModal = function closeWheelPanelModal(panel) {
+        document.getElementById(`wheel-${panel}-modal`)?.classList.remove('active');
+    };
+
+    window.toggleWheelActionMenu = function toggleWheelActionMenu(event) {
+        event?.stopPropagation();
+        wheelActionMenuOpen = !wheelActionMenuOpen;
+        renderWheelActionMenu();
+    };
+
+    window.closeWheelActionMenu = function closeWheelActionMenu() {
+        wheelActionMenuOpen = false;
+        renderWheelActionMenu();
     };
 
     window.setWheelLibraryCopyFilter = function setWheelLibraryCopyFilter(tagId = '') {
         wheelLibraryCopyTagFilter = String(tagId || '');
+        renderWheelPage();
+    };
+
+    window.setWheelLibraryTagFilter = function setWheelLibraryTagFilter(tagId = '') {
+        wheelLibraryTagFilter = String(tagId || '');
         renderWheelPage();
     };
 
@@ -1128,9 +1233,8 @@
         const wheel = createWheelFromForm({ mode: wheelCreateMode, name, firstItem, tagIds });
         if (!wheel) return;
         closeWheelCreateModal();
-        currentWheelPanel = 'items';
-        wheelPanelCollapsed = false;
         renderWheelPage();
+        openWheelPanelModal('items');
     };
 
     window.createWheel = function createWheel() {
@@ -1281,9 +1385,7 @@
         renderWheelPage();
     };
 
-    window.openWheelLibraryBatchImport = function openWheelLibraryBatchImport() {
-        const text = prompt('每行一个公共项。格式：名称,权重,标签1/标签2', '咖啡店学习,1,出门/学习/美食');
-        if (text === null) return;
+    function importWheelLibraryItemsFromText(text) {
         const seen = new Set(data.wheelLibraryItems.map(item => normalizeName(item.name)));
         let added = 0;
         const skipped = [];
@@ -1302,9 +1404,70 @@
             data.wheelLibraryItems.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, tagIds, createdAt: now(), updatedAt: now() });
             added++;
         });
+        return { added, skipped };
+    }
+
+    window.focusWheelLibraryBatchImport = function focusWheelLibraryBatchImport() {
+        const textarea = document.getElementById('wheel-library-batch-text');
+        textarea?.focus();
+    };
+
+    window.openWheelLibraryBatchImport = function openWheelLibraryBatchImport() {
+        window.focusWheelLibraryBatchImport();
+    };
+
+    window.importWheelLibraryBatchFromTextarea = function importWheelLibraryBatchFromTextarea() {
+        const textarea = document.getElementById('wheel-library-batch-text');
+        const text = textarea?.value.trim() || '';
+        if (!text) return alert('请先在多行文本框里输入公共项');
+        const { added, skipped } = importWheelLibraryItemsFromText(text);
         persist();
+        if (textarea) textarea.value = '';
         renderWheelPage();
         alert(`已导入公共项 ${added} 项${skipped.length ? `，跳过重复：${skipped.join('、')}` : ''}`);
+    };
+
+    window.toggleWheelLibrarySelection = function toggleWheelLibrarySelection(itemId, checked) {
+        if (checked) wheelSelectedLibraryItemIds.add(itemId);
+        else wheelSelectedLibraryItemIds.delete(itemId);
+        renderWheelPage();
+    };
+
+    window.toggleAllWheelLibrarySelection = function toggleAllWheelLibrarySelection(checked) {
+        getFilteredLibraryItemsForManage().forEach(item => {
+            if (checked) wheelSelectedLibraryItemIds.add(item.id);
+            else wheelSelectedLibraryItemIds.delete(item.id);
+        });
+        renderWheelPage();
+    };
+
+    window.applyWheelLibraryBatchTag = function applyWheelLibraryBatchTag(action = 'add') {
+        const tagId = document.getElementById('wheel-library-batch-tag')?.value || '';
+        const tag = data.wheelTags.find(item => item.id === tagId);
+        const selectedIds = getSelectedLibraryItemIds();
+        if (!tag) return alert('请选择要批量处理的标签');
+        if (!selectedIds.length) return alert('请先勾选公共项');
+        let changed = 0;
+        selectedIds.forEach(itemId => {
+            const item = data.wheelLibraryItems.find(entry => entry.id === itemId);
+            if (!item) return;
+            const set = new Set(item.tagIds || []);
+            if (action === 'remove') {
+                if (!set.has(tagId)) return;
+                if (set.size <= 1) return;
+                set.delete(tagId);
+            } else {
+                if (set.has(tagId)) return;
+                set.add(tagId);
+            }
+            item.tagIds = uniqueTagIds(Array.from(set));
+            item.updatedAt = now();
+            changed++;
+        });
+        if (!changed && action === 'remove') return alert('没有可移除的标签；公共项至少要保留一个标签');
+        if (!changed) return alert('选中的公共项已经包含这个标签');
+        persist();
+        renderWheelPage();
     };
 
     window.editWheelLibraryItem = function editWheelLibraryItem(itemId) {
@@ -1342,6 +1505,7 @@
         const item = data.wheelLibraryItems.find(entry => entry.id === itemId);
         if (!confirm('删除这个公共项吗？普通转盘里已复制的私有项不会受影响。')) return;
         data.wheelLibraryItems = data.wheelLibraryItems.filter(item => item.id !== itemId);
+        wheelSelectedLibraryItemIds.delete(itemId);
         if (typeof markDeletedItem === 'function') markDeletedItem('wheelLibraryItems', itemId, { name: item?.name || '' });
         persist();
         renderWheelPage();
@@ -1649,6 +1813,16 @@
         persist();
         renderWheelPage();
     };
+
+    document.addEventListener('click', event => {
+        if (!wheelActionMenuOpen) return;
+        if (event.target.closest?.('.wheel-action-menu-wrap')) return;
+        window.closeWheelActionMenu();
+    });
+
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && wheelActionMenuOpen) window.closeWheelActionMenu();
+    });
 
     if (location.hash === '#wheel' && typeof switchPage === 'function') {
         const nav = Array.from(document.querySelectorAll('.nav-item')).find(item => item.textContent.includes('工具转盘'));
