@@ -62,6 +62,15 @@
             remotePath: '/apps/wheel-app/data.json',
             autoSync: true
         };
+        let aiConfig = {
+            endpointUrl: '',
+            apiKey: '',
+            model: 'gpt-4.1-mini',
+            remoteEnabled: false,
+            userStyle: ''
+        };
+        let currentAiMode = 'todayPlan';
+        let aiLastResult = null;
         let syncState = {
             dirty: false,
             lastLocalHash: '',
@@ -408,6 +417,7 @@
             }
             loadSyncConfig();
             loadWheelSyncConfig();
+            loadAiConfig();
         }
 
         function normalizeDataShape(target = data) {
@@ -422,6 +432,7 @@
                 if (!Array.isArray(t.subTodos)) t.subTodos = [];
                 if (!Array.isArray(t.sessions)) t.sessions = [];
                 if (!t.group) t.group = '其他';
+                if (typeof t.note !== 'string') t.note = '';
                 if (!TODO_URGENCY_META[t.urgency]) t.urgency = 'medium';
                 if (typeof t.dueDate !== 'string') t.dueDate = '';
                 if (typeof t.planStartDate !== 'string') t.planStartDate = '';
@@ -1207,6 +1218,665 @@
             wheelSyncConfig.autoSync = !!autoInput?.checked;
             delete wheelSyncConfig.webdavUrl;
             saveWheelSyncConfigToLocal();
+        }
+
+        const AI_CONFIG_KEY = 'lifePlanAiConfig';
+
+        function loadAiConfig() {
+            try {
+                const saved = localStorage.getItem(AI_CONFIG_KEY);
+                if (saved) aiConfig = { ...aiConfig, ...JSON.parse(saved) };
+            } catch (err) {
+                console.warn('AI 配置读取失败', err);
+            }
+            aiConfig.endpointUrl = String(aiConfig.endpointUrl || '').trim();
+            aiConfig.apiKey = String(aiConfig.apiKey || '');
+            aiConfig.model = String(aiConfig.model || 'gpt-4.1-mini').trim() || 'gpt-4.1-mini';
+            aiConfig.remoteEnabled = !!aiConfig.remoteEnabled;
+            aiConfig.userStyle = String(aiConfig.userStyle || '');
+            applyAiSettingsToForm();
+            updateAiSettingsStatus(aiConfig.remoteEnabled && aiConfig.endpointUrl ? '已加载 AI 接口配置' : '未启用远程 AI，将使用本地规则');
+        }
+
+        function saveAiConfigToLocal() {
+            localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(aiConfig));
+            applyAiSettingsToForm();
+        }
+
+        function applyAiSettingsToForm() {
+            const enabledEl = document.getElementById('ai-remote-enabled');
+            const endpointEl = document.getElementById('ai-endpoint-url');
+            const keyEl = document.getElementById('ai-api-key');
+            const modelEl = document.getElementById('ai-model');
+            const styleEl = document.getElementById('ai-user-style');
+            if (enabledEl) enabledEl.checked = !!aiConfig.remoteEnabled;
+            if (endpointEl) endpointEl.value = aiConfig.endpointUrl || '';
+            if (keyEl) keyEl.value = aiConfig.apiKey || '';
+            if (modelEl) modelEl.value = aiConfig.model || 'gpt-4.1-mini';
+            if (styleEl) styleEl.value = aiConfig.userStyle || '';
+        }
+
+        function updateAiSettingsStatus(message, isError = false) {
+            const settingsEl = document.getElementById('ai-settings-status');
+            const assistantEl = document.getElementById('ai-assistant-status');
+            [settingsEl, assistantEl].forEach(el => {
+                if (!el) return;
+                el.textContent = message || '';
+                el.classList.toggle('is-error', !!isError);
+            });
+        }
+
+        function openAiSettings() {
+            applyAiSettingsToForm();
+            updateAiSettingsStatus(aiConfig.remoteEnabled && aiConfig.endpointUrl ? '已加载 AI 接口配置' : '未启用远程 AI，将使用本地规则');
+            document.getElementById('ai-settings-modal').classList.add('active');
+        }
+
+        function closeAiSettings() {
+            document.getElementById('ai-settings-modal').classList.remove('active');
+        }
+
+        function readAiSettingsForm() {
+            aiConfig.remoteEnabled = !!document.getElementById('ai-remote-enabled')?.checked;
+            aiConfig.endpointUrl = document.getElementById('ai-endpoint-url')?.value.trim() || '';
+            aiConfig.apiKey = document.getElementById('ai-api-key')?.value || '';
+            aiConfig.model = document.getElementById('ai-model')?.value.trim() || 'gpt-4.1-mini';
+            aiConfig.userStyle = document.getElementById('ai-user-style')?.value.trim() || '';
+        }
+
+        function saveAiSettings() {
+            readAiSettingsForm();
+            saveAiConfigToLocal();
+            updateAiSettingsStatus(aiConfig.remoteEnabled ? 'AI 设置已保存' : 'AI 设置已保存。远程接口未启用，将使用本地规则。');
+        }
+
+        function isRemoteAiReady() {
+            return !!(aiConfig.remoteEnabled && aiConfig.endpointUrl && aiConfig.apiKey && aiConfig.model);
+        }
+
+        function getAiChatCompletionsUrl(endpointUrl = aiConfig.endpointUrl) {
+            const clean = String(endpointUrl || '').trim().replace(/\/+$/, '');
+            if (!clean) return '';
+            if (/\/chat\/completions$/i.test(clean)) return clean;
+            if (/\/v\d+$/i.test(clean)) return `${clean}/chat/completions`;
+            return `${clean}/v1/chat/completions`;
+        }
+
+        async function testAiSettings() {
+            readAiSettingsForm();
+            saveAiConfigToLocal();
+            if (!isRemoteAiReady()) {
+                updateAiSettingsStatus('请先启用远程 AI，并填写接口地址、API Key 和模型。', true);
+                return;
+            }
+            updateAiSettingsStatus('正在测试 AI 接口...');
+            try {
+                const result = await requestRemoteAi({
+                    mode: 'settingsTest',
+                    title: '测试接口',
+                    instruction: '只返回 JSON：{"title":"AI 接口可用","summary":"一句中文确认","items":[]}',
+                    context: { now: getLocalDateTimeStr() }
+                });
+                updateAiSettingsStatus(result?.summary || result?.title || 'AI 接口测试成功');
+            } catch (err) {
+                updateAiSettingsStatus(err.message || 'AI 接口测试失败', true);
+            }
+        }
+
+        async function requestRemoteAi(payload) {
+            if (!isRemoteAiReady()) throw new Error('AI 接口未配置完整');
+            const targetUrl = getAiChatCompletionsUrl();
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${aiConfig.apiKey}`
+            };
+            const body = {
+                model: aiConfig.model,
+                temperature: 0.2,
+                messages: [
+                    {
+                        role: 'system',
+                        content: [
+                            '你是一个个人规划应用里的 AI 助手。',
+                            '请只返回严格 JSON，不要 Markdown。',
+                            'JSON 字段：title 字符串，summary 字符串，items 数组。',
+                            'items 每项字段：text 字符串，note 字符串，可选 urgency/group/dueDate/planStartDate/planEndDate/subTodos/reason。',
+                            '建议必须具体、短、可执行。'
+                        ].join('\n')
+                    },
+                    {
+                        role: 'user',
+                        content: JSON.stringify({
+                            ...payload,
+                            userStyle: aiConfig.userStyle || ''
+                        })
+                    }
+                ]
+            };
+            const response = await fetch(targetUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body)
+            });
+            const raw = await response.text();
+            if (!response.ok) {
+                throw new Error(`AI 请求失败：${response.status}${raw ? ` ${raw.slice(0, 160)}` : ''}`);
+            }
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (err) {
+                throw new Error('AI 返回不是合法 JSON');
+            }
+            const content = data?.choices?.[0]?.message?.content
+                || data?.output_text
+                || data?.content
+                || '';
+            if (!content) throw new Error('AI 返回为空');
+            return parseAiJson(content);
+        }
+
+        function parseAiJson(content) {
+            if (typeof content === 'object' && content) return normalizeAiResult(content);
+            const text = String(content || '').trim();
+            try {
+                return normalizeAiResult(JSON.parse(text));
+            } catch (err) {
+                const match = text.match(/\{[\s\S]*\}/);
+                if (!match) throw new Error('AI 返回内容无法解析为 JSON');
+                return normalizeAiResult(JSON.parse(match[0]));
+            }
+        }
+
+        function normalizeAiResult(result) {
+            const normalized = {
+                title: String(result?.title || 'AI 建议').trim() || 'AI 建议',
+                summary: String(result?.summary || '').trim(),
+                items: Array.isArray(result?.items) ? result.items : []
+            };
+            normalized.items = normalized.items
+                .map(item => ({
+                    text: String(item?.text || item?.title || '').trim(),
+                    note: String(item?.note || item?.reason || '').trim(),
+                    urgency: TODO_URGENCY_META[item?.urgency] ? item.urgency : 'medium',
+                    group: String(item?.group || '其他').trim() || '其他',
+                    dueDate: String(item?.dueDate || '').trim(),
+                    planStartDate: String(item?.planStartDate || '').trim(),
+                    planEndDate: String(item?.planEndDate || '').trim(),
+                    reason: String(item?.reason || '').trim(),
+                    subTodos: Array.isArray(item?.subTodos)
+                        ? item.subTodos.map(sub => ({ text: String(sub?.text || sub || '').trim(), done: !!sub?.done })).filter(sub => sub.text)
+                        : []
+                }))
+                .filter(item => item.text);
+            return normalized;
+        }
+
+        const AI_MODE_META = {
+            todayPlan: {
+                title: 'AI 今日计划',
+                subtitle: '根据今日待办、习惯、目标和近期记录，整理一个短行动清单。',
+                inputLabel: '补充今天的状态或限制',
+                placeholder: '例如：今天只有 2 小时深度工作，下午有会，优先推进项目交付。'
+            },
+            backlogTriage: {
+                title: 'AI 待办整理',
+                subtitle: '从未完成待办里挑出最值得今天推进的小步。',
+                inputLabel: '整理偏好',
+                placeholder: '例如：优先超期和高优先级；每条建议控制在 30 分钟内。'
+            },
+            todoBreakdown: {
+                title: 'AI 拆解待办',
+                subtitle: '选择一个待办，把它拆成可以勾选的子任务。',
+                inputLabel: '拆解要求',
+                placeholder: '例如：按准备、执行、收尾拆；每一步必须能直接开始。'
+            },
+            ideaNext: {
+                title: 'AI 灵感下一步',
+                subtitle: '选择一条灵感，把它变成一个小实验或下一步行动。',
+                inputLabel: '转化要求',
+                placeholder: '例如：先做最小验证，不要设计太大的项目。'
+            }
+        };
+
+        function openAiAssistant(mode = 'todayPlan') {
+            currentAiMode = AI_MODE_META[mode] ? mode : 'todayPlan';
+            aiLastResult = null;
+            document.getElementById('ai-assistant-modal').classList.add('active');
+            renderAiAssistant();
+        }
+
+        function closeAiAssistant() {
+            document.getElementById('ai-assistant-modal').classList.remove('active');
+            aiLastResult = null;
+        }
+
+        function setAiMode(mode) {
+            if (!AI_MODE_META[mode]) return;
+            currentAiMode = mode;
+            aiLastResult = null;
+            renderAiAssistant();
+        }
+
+        function renderAiAssistant() {
+            const meta = AI_MODE_META[currentAiMode] || AI_MODE_META.todayPlan;
+            const titleEl = document.getElementById('ai-assistant-title');
+            const subtitleEl = document.getElementById('ai-assistant-subtitle');
+            const labelEl = document.getElementById('ai-input-label');
+            const inputEl = document.getElementById('ai-user-input');
+            if (titleEl) titleEl.textContent = meta.title;
+            if (subtitleEl) subtitleEl.textContent = meta.subtitle;
+            if (labelEl) labelEl.textContent = meta.inputLabel;
+            if (inputEl) inputEl.placeholder = meta.placeholder;
+            document.querySelectorAll('[data-ai-mode]').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.aiMode === currentAiMode);
+            });
+            renderAiContextPanel();
+            renderAiResultPanel();
+            updateAiSettingsStatus(isRemoteAiReady() ? '远程 AI 已配置。' : '准备好了。未配置远程接口时会使用本地规则。');
+        }
+
+        function getAiTodoOptions() {
+            return [...data.todos]
+                .filter(todo => !todo.done)
+                .sort(compareTodosForFocus)
+                .slice(0, 40);
+        }
+
+        function getAiIdeaOptions() {
+            return [...data.records]
+                .filter(record => record.type === '灵感碎片' && (isIdeaUnprocessed(record) || ideaNeedsConclusion(record)))
+                .sort((a, b) => String(b.startDate || '').localeCompare(String(a.startDate || '')))
+                .slice(0, 40);
+        }
+
+        function getSelectedAiTodo() {
+            const options = getAiTodoOptions();
+            const selectedId = document.getElementById('ai-context-todo')?.value || currentTodoId || options[0]?.id || '';
+            return data.todos.find(todo => todo.id === selectedId) || options[0] || null;
+        }
+
+        function getSelectedAiIdea() {
+            const options = getAiIdeaOptions();
+            const selectedId = document.getElementById('ai-context-idea')?.value || options[0]?.id || '';
+            return data.records.find(record => record.id === selectedId) || options[0] || null;
+        }
+
+        function renderAiContextPanel() {
+            const container = document.getElementById('ai-context-panel');
+            if (!container) return;
+            const today = getTodayStr();
+            if (currentAiMode === 'todoBreakdown') {
+                const options = getAiTodoOptions();
+                const selected = getSelectedAiTodo();
+                container.innerHTML = `
+                    <div class="ai-context-title">选择待办</div>
+                    ${options.length ? `
+                        <select id="ai-context-todo" onchange="renderAiContextPanel()">
+                            ${options.map(todo => `<option value="${escapeHtml(todo.id)}" ${selected?.id === todo.id ? 'selected' : ''}>${escapeHtml(todo.text || '未命名待办')}</option>`).join('')}
+                        </select>
+                        <div class="ai-context-summary">${renderAiTodoContext(selected)}</div>
+                    ` : '<div class="empty-state compact-empty">暂无可拆解的未完成待办</div>'}
+                `;
+                return;
+            }
+            if (currentAiMode === 'ideaNext') {
+                const options = getAiIdeaOptions();
+                const selected = getSelectedAiIdea();
+                container.innerHTML = `
+                    <div class="ai-context-title">选择灵感</div>
+                    ${options.length ? `
+                        <select id="ai-context-idea" onchange="renderAiContextPanel()">
+                            ${options.map(record => `<option value="${escapeHtml(record.id)}" ${selected?.id === record.id ? 'selected' : ''}>${escapeHtml(record.title || record.content || '未命名灵感')}</option>`).join('')}
+                        </select>
+                        <div class="ai-context-summary">${renderAiIdeaContext(selected)}</div>
+                    ` : '<div class="empty-state compact-empty">暂无待处理或待写结论的灵感</div>'}
+                `;
+                return;
+            }
+            const todayTodos = data.todos.filter(todo => isTodoRelevantToday(todo) && !todo.done).sort(compareTodosForFocus);
+            const floatingTodos = data.todos.filter(todo => !todo.done && !todo.dueDate && !todo.planStartDate && !todo.planEndDate).sort(compareTodosForFocus);
+            const activeGoals = data.goals.filter(goal => goal.status === '进行中');
+            const dueHabits = data.habits.filter(habit => isHabitDueToday(habit));
+            const staleIdeas = getAiIdeaOptions();
+            container.innerHTML = `
+                <div class="ai-context-title">当前上下文</div>
+                <div class="ai-context-metrics">
+                    <span>今日未完成 ${todayTodos.length}</span>
+                    <span>无截止池 ${floatingTodos.length}</span>
+                    <span>进行中目标 ${activeGoals.length}</span>
+                    <span>今日习惯 ${dueHabits.length}</span>
+                    <span>待处理灵感 ${staleIdeas.length}</span>
+                </div>
+                <div class="ai-context-summary">
+                    <strong>今天：</strong>${escapeHtml(formatDate(today))}
+                    ${todayTodos[0] ? `<br><strong>优先待办：</strong>${escapeHtml(todayTodos[0].text || '')}` : ''}
+                    ${activeGoals[0] ? `<br><strong>目标：</strong>${escapeHtml(activeGoals[0].name || '')} ${Number(activeGoals[0].progress || 0)}%` : ''}
+                </div>
+            `;
+        }
+
+        function renderAiTodoContext(todo) {
+            if (!todo) return '';
+            const lines = [
+                `紧急度：${getTodoUrgencyMeta(todo.urgency).label}`,
+                `分组：${todo.group || '其他'}`,
+                `日期：${formatTodoDueDate(todo)}`,
+                todo.note ? `备注：${todo.note}` : '',
+                (todo.subTodos || []).length ? `已有子任务：${(todo.subTodos || []).map(sub => sub.text).join('、')}` : ''
+            ].filter(Boolean);
+            return lines.map(line => escapeHtml(line)).join('<br>');
+        }
+
+        function renderAiIdeaContext(record) {
+            if (!record) return '';
+            const lines = [
+                `状态：${getIdeaStatus(record)}`,
+                record.ideaTags?.length ? `标签：${record.ideaTags.join('、')}` : '',
+                record.content ? `内容：${record.content}` : '',
+                record.ideaNextAction ? `下一步：${record.ideaNextAction}` : '',
+                record.ideaConclusion ? `结论：${record.ideaConclusion}` : ''
+            ].filter(Boolean);
+            return lines.map(line => escapeHtml(line)).join('<br>');
+        }
+
+        function compactAiTodo(todo) {
+            return {
+                id: todo.id,
+                text: todo.text || '',
+                note: todo.note || '',
+                group: todo.group || '其他',
+                urgency: todo.urgency || 'medium',
+                dueDate: todo.dueDate || '',
+                planStartDate: todo.planStartDate || '',
+                planEndDate: todo.planEndDate || '',
+                overdueDays: getTodoOverdueDays(todo),
+                subTodos: (todo.subTodos || []).map(sub => ({ text: sub.text || '', done: !!sub.done })),
+                sessions: (todo.sessions || []).map(session => ({ date: session.date || '', startTime: session.startTime || '', note: session.note || '' }))
+            };
+        }
+
+        function compactAiIdea(record) {
+            return {
+                id: record.id,
+                title: record.title || '',
+                content: record.content || '',
+                status: getIdeaStatus(record),
+                tags: record.ideaTags || [],
+                nextAction: record.ideaNextAction || '',
+                conclusion: record.ideaConclusion || '',
+                startDate: record.startDate || ''
+            };
+        }
+
+        function buildAiPayload() {
+            const today = getTodayStr();
+            const userInput = document.getElementById('ai-user-input')?.value.trim() || '';
+            const base = {
+                mode: currentAiMode,
+                title: AI_MODE_META[currentAiMode]?.title || 'AI 助手',
+                today,
+                userInput,
+                context: {
+                    todayTodos: data.todos.filter(todo => isTodoRelevantToday(todo) && !todo.done).sort(compareTodosForFocus).slice(0, 10).map(compactAiTodo),
+                    overdueTodos: data.todos.filter(todo => isTodoOverdue(todo)).sort(compareTodosForFocus).slice(0, 10).map(compactAiTodo),
+                    floatingTodos: data.todos.filter(todo => !todo.done && !todo.dueDate && !todo.planStartDate && !todo.planEndDate).sort(compareTodosForFocus).slice(0, 12).map(compactAiTodo),
+                    activeGoals: data.goals.filter(goal => goal.status === '进行中').slice(0, 8),
+                    dueHabits: data.habits.filter(habit => isHabitDueToday(habit)).map(habit => ({ id: habit.id, name: habit.name, doneToday: getCheckinCount(habit.id, today) > 0 })),
+                    ideas: getAiIdeaOptions().slice(0, 8).map(compactAiIdea),
+                    recentRecords: [...data.records].sort((a, b) => String(b.startDate || '').localeCompare(String(a.startDate || ''))).slice(0, 8).map(record => ({
+                        type: record.type || '',
+                        title: record.title || '',
+                        startDate: record.startDate || '',
+                        content: String(record.content || '').slice(0, 280)
+                    }))
+                }
+            };
+            if (currentAiMode === 'todoBreakdown') {
+                base.context.selectedTodo = compactAiTodo(getSelectedAiTodo() || {});
+                base.instruction = '把 selectedTodo 拆成 3-6 个可直接勾选的子任务，items 每项就是一个子任务。';
+            } else if (currentAiMode === 'ideaNext') {
+                base.context.selectedIdea = compactAiIdea(getSelectedAiIdea() || {});
+                base.instruction = '把 selectedIdea 转成 1-3 个最小验证行动，第一项应适合创建为关联待办。';
+            } else if (currentAiMode === 'backlogTriage') {
+                base.instruction = '从 overdueTodos、floatingTodos 和 todayTodos 里挑 3-5 个最值得今天推进的小行动。';
+            } else {
+                base.instruction = '生成 3-5 个今日行动建议，兼顾待办、习惯、目标和近期记录。';
+            }
+            return base;
+        }
+
+        function generateLocalAiResult(payload) {
+            const today = payload.today || getTodayStr();
+            if (payload.mode === 'todoBreakdown') {
+                const todo = payload.context.selectedTodo;
+                if (!todo?.text) return { title: '暂无可拆解待办', summary: '先创建一个待办，再让 AI 拆解。', items: [] };
+                const existing = (todo.subTodos || []).filter(sub => sub.text && !sub.done).map(sub => sub.text);
+                const seeds = existing.length ? existing : [
+                    `明确 ${todo.text} 的完成标准`,
+                    `准备 ${todo.text} 需要的材料或入口`,
+                    `推进 ${todo.text} 的第一步`,
+                    `检查结果并记录下一步`
+                ];
+                return normalizeAiResult({
+                    title: `拆解：${todo.text}`,
+                    summary: '本地规则已把这个待办拆成可以勾选的小步。',
+                    items: seeds.slice(0, 6).map(text => ({
+                        text,
+                        note: todo.note || '来自 AI 本地规则拆解',
+                        group: todo.group || '其他',
+                        urgency: todo.urgency || 'medium'
+                    }))
+                });
+            }
+            if (payload.mode === 'ideaNext') {
+                const idea = payload.context.selectedIdea;
+                if (!idea?.title && !idea?.content) return { title: '暂无可转化灵感', summary: '先记录一条灵感，再让 AI 转成行动。', items: [] };
+                const name = idea.title || String(idea.content || '').slice(0, 24);
+                return normalizeAiResult({
+                    title: `灵感下一步：${name}`,
+                    summary: '建议先做一个最小验证，避免灵感停在收藏状态。',
+                    items: [
+                        {
+                            text: `验证灵感：${name}`,
+                            note: [idea.content, payload.userInput].filter(Boolean).join('\n\n'),
+                            group: '学习',
+                            urgency: 'medium',
+                            dueDate: today,
+                            planStartDate: today,
+                            planEndDate: today,
+                            subTodos: [
+                                { text: '写下要验证的问题' },
+                                { text: '找一个最小场景试一次' },
+                                { text: '记录结果和是否继续' }
+                            ]
+                        }
+                    ]
+                });
+            }
+            const sourceTodos = [
+                ...(payload.context.overdueTodos || []),
+                ...(payload.context.todayTodos || []),
+                ...(payload.context.floatingTodos || [])
+            ];
+            const seen = new Set();
+            const picked = sourceTodos.filter(todo => {
+                if (!todo?.text || seen.has(todo.id || todo.text)) return false;
+                seen.add(todo.id || todo.text);
+                return true;
+            }).slice(0, payload.mode === 'backlogTriage' ? 5 : 4);
+            if (!picked.length) {
+                return normalizeAiResult({
+                    title: '今日轻量计划',
+                    summary: '当前没有明显待办压力，可以创建一个很小的推进动作。',
+                    items: [{ text: '写下今天最重要的一件小事', note: payload.userInput || '来自 AI 本地规则建议', group: '其他', urgency: 'medium', dueDate: today, planStartDate: today, planEndDate: today }]
+                });
+            }
+            return normalizeAiResult({
+                title: payload.mode === 'backlogTriage' ? '待办整理建议' : '今日计划建议',
+                summary: '本地规则按超期、紧急度和今日相关性挑选了下一步。',
+                items: picked.map(todo => ({
+                    text: todo.dueDate && todo.dueDate < today ? `补上：${todo.text}` : `推进：${todo.text}`,
+                    note: [todo.note, payload.userInput, todo.overdueDays ? `已超期 ${todo.overdueDays} 天` : ''].filter(Boolean).join('\n'),
+                    group: todo.group || '其他',
+                    urgency: todo.urgency || 'medium',
+                    dueDate: todo.dueDate || today,
+                    planStartDate: today,
+                    planEndDate: today
+                }))
+            });
+        }
+
+        async function runAiAssistant() {
+            const payload = buildAiPayload();
+            updateAiSettingsStatus(isRemoteAiReady() ? '正在请求远程 AI...' : '正在使用本地规则生成建议...');
+            try {
+                aiLastResult = isRemoteAiReady()
+                    ? await requestRemoteAi(payload)
+                    : generateLocalAiResult(payload);
+                renderAiResultPanel();
+                updateAiSettingsStatus(isRemoteAiReady() ? 'AI 建议已生成。' : '本地规则建议已生成。');
+            } catch (err) {
+                const localResult = generateLocalAiResult(payload);
+                aiLastResult = localResult;
+                renderAiResultPanel();
+                updateAiSettingsStatus(`${err.message || '远程 AI 失败'}\n已改用本地规则生成建议。`, true);
+            }
+        }
+
+        function renderAiResultPanel() {
+            const panel = document.getElementById('ai-result-panel');
+            if (!panel) return;
+            if (!aiLastResult) {
+                panel.innerHTML = '';
+                return;
+            }
+            const actionLabel = currentAiMode === 'todoBreakdown'
+                ? '写入子任务'
+                : currentAiMode === 'ideaNext'
+                    ? '转成关联待办'
+                    : '加入今日待办';
+            panel.innerHTML = `
+                <div class="ai-result-head">
+                    <div>
+                        <div class="ai-result-title">${escapeHtml(aiLastResult.title)}</div>
+                        ${aiLastResult.summary ? `<div class="ai-result-summary">${escapeHtml(aiLastResult.summary)}</div>` : ''}
+                    </div>
+                    <button class="btn btn-primary" onclick="applyAiResult()">${actionLabel}</button>
+                </div>
+                ${aiLastResult.items.length ? `
+                    <div class="ai-result-list">
+                        ${aiLastResult.items.map((item, index) => `
+                            <div class="ai-result-item">
+                                <strong>${index + 1}. ${escapeHtml(item.text)}</strong>
+                                ${item.note ? `<span>${escapeHtml(item.note)}</span>` : ''}
+                                <div class="todo-detail-meta">
+                                    ${renderTodoUrgencyBadge(item)}
+                                    ${item.group ? `<span>${escapeHtml(item.group)}</span>` : ''}
+                                    ${item.dueDate ? `<span>截止 ${escapeHtml(item.dueDate)}</span>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '<div class="empty-state compact-empty">这次没有生成可落地的行动项</div>'}
+            `;
+        }
+
+        function createTodoFromAiItem(item, overrides = {}) {
+            const today = getTodayStr();
+            const planStartDate = overrides.planStartDate ?? item.planStartDate ?? today;
+            const planEndDate = overrides.planEndDate ?? item.planEndDate ?? planStartDate;
+            return {
+                id: genId(),
+                text: item.text,
+                note: item.note || item.reason || '',
+                done: false,
+                dueDate: overrides.dueDate ?? item.dueDate ?? today,
+                planStartDate,
+                planEndDate,
+                urgency: TODO_URGENCY_META[item.urgency] ? item.urgency : 'medium',
+                group: item.group || '其他',
+                subTodos: (item.subTodos || []).map(sub => ({ text: sub.text, done: false })),
+                sessions: [],
+                isExclusive: false,
+                createdAt: getLocalDateTimeStr(),
+                updatedAt: getLocalDateTimeStr(),
+                completedAt: '',
+                sourceType: 'ai'
+            };
+        }
+
+        function applyAiResult() {
+            if (!aiLastResult?.items?.length) {
+                alert('没有可应用的 AI 建议');
+                return;
+            }
+            if (currentAiMode === 'todoBreakdown') {
+                applyAiResultToSelectedTodo();
+                return;
+            }
+            if (currentAiMode === 'ideaNext') {
+                applyAiResultToSelectedIdea();
+                return;
+            }
+            const todos = aiLastResult.items.map(item => createTodoFromAiItem(item));
+            data.todos.push(...todos);
+            saveData();
+            renderDashboard();
+            renderTodoTable();
+            renderAllRecords();
+            alert(`已加入待办 ${todos.length} 项`);
+        }
+
+        function applyAiResultToSelectedTodo() {
+            const todo = getSelectedAiTodo();
+            if (!todo) {
+                alert('没有选中的待办');
+                return;
+            }
+            if (!Array.isArray(todo.subTodos)) todo.subTodos = [];
+            const existing = new Set(todo.subTodos.map(sub => sub.text));
+            const additions = aiLastResult.items
+                .map(item => item.text)
+                .filter(text => text && !existing.has(text))
+                .map(text => ({ text, done: false }));
+            todo.subTodos.push(...additions);
+            if (aiLastResult.summary) {
+                todo.note = [todo.note || '', `AI 拆解：${aiLastResult.summary}`].filter(Boolean).join('\n\n');
+            }
+            todo.updatedAt = getLocalDateTimeStr();
+            saveData();
+            tempSubTodos = JSON.parse(JSON.stringify(todo.subTodos));
+            renderDashboard();
+            renderTodoTable();
+            renderAllRecords();
+            if (currentTodoId === todo.id) {
+                renderTodoDetailView();
+                renderSubTodos();
+            }
+            alert(`已写入子任务 ${additions.length} 项`);
+        }
+
+        function applyAiResultToSelectedIdea() {
+            const idea = getSelectedAiIdea();
+            if (!idea) {
+                alert('没有选中的灵感');
+                return;
+            }
+            const first = aiLastResult.items[0];
+            const todo = createTodoFromAiItem(first, { dueDate: first.dueDate || getTodayStr() });
+            todo.sourceType = 'idea-ai';
+            data.todos.push(todo);
+            idea.ideaTodoId = todo.id;
+            idea.ideaStatus = '待实践';
+            idea.ideaNextAction = first.text;
+            idea.updatedAt = getLocalDateTimeStr();
+            saveData();
+            renderDashboard();
+            renderTodoTable();
+            renderAllRecords();
+            refreshKnowledgeViews();
+            alert('已转成关联待办，并把灵感状态更新为待实践');
         }
 
         async function webdavRequestWithConfig(config, path, method, body = null) {
@@ -4595,6 +5265,7 @@
         function openTodoModal() {
             currentTodoId = null;
             document.getElementById('todo-detail-text').value = '';
+            document.getElementById('todo-detail-note').value = '';
             document.getElementById('todo-detail-plan-start').value = '';
             document.getElementById('todo-detail-plan-end').value = '';
             document.getElementById('todo-detail-date').value = '';
@@ -4635,6 +5306,7 @@
 
         function loadTodoDetailForm(todo) {
             document.getElementById('todo-detail-text').value = todo.text || '';
+            document.getElementById('todo-detail-note').value = todo.note || '';
             document.getElementById('todo-detail-plan-start').value = todo.planStartDate || '';
             document.getElementById('todo-detail-plan-end').value = todo.planEndDate || '';
             document.getElementById('todo-detail-date').value = todo.dueDate || '';
@@ -4673,7 +5345,7 @@
                         ${meta.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
                         ${renderTodoUrgencyBadge(todo)}
                     </div>
-                    <div class="todo-detail-note">查看模式下不会误改内容；执行记录可直接“执行一次”或“删本次”，计划和子任务需要点“编辑”。</div>
+                    ${todo.note ? `<div class="todo-detail-note">${escapeHtml(todo.note).replace(/\n/g, '<br>')}</div>` : ''}
                 </div>
             `;
         }
@@ -4848,12 +5520,36 @@
             }
             const canEdit = currentTodoDetailMode === 'edit';
             container.innerHTML = tempSubTodos.map((s, i) => `
-                <li class="todo-item ${s.done ? 'done' : ''}">
-                    <input type="checkbox" ${s.done ? 'checked' : ''} ${canEdit ? `onchange="tempSubTodos[${i}].done = !tempSubTodos[${i}].done; renderSubTodos();"` : 'disabled'}>
+                <li class="todo-item todo-subtodo-item ${s.done ? 'done' : ''} ${canEdit ? 'is-editing' : 'is-viewing'}">
+                    <input type="checkbox" ${s.done ? 'checked' : ''} onchange="${canEdit ? `tempSubTodos[${i}].done = this.checked; renderSubTodos();` : `toggleSubTodoFromDetail(${i}, this.checked)`}">
                     <span class="todo-text">${escapeHtml(s.text)}</span>
                     ${canEdit ? `<button class="btn btn-secondary todo-mini-btn" onclick="tempSubTodos.splice(${i},1); renderSubTodos();">删除</button>` : ''}
                 </li>
             `).join('');
+        }
+
+        function syncTodoDoneFromSubTodos(todo, stamp = getLocalDateTimeStr()) {
+            if (!todo || !Array.isArray(todo.subTodos) || !todo.subTodos.length) return;
+            const allDone = todo.subTodos.every(s => s.done);
+            todo.done = allDone;
+            todo.completedAt = allDone ? (todo.completedAt || stamp) : '';
+        }
+
+        function toggleSubTodoFromDetail(index, checked) {
+            if (!currentTodoId) return;
+            const todo = data.todos.find(t => t.id === currentTodoId);
+            if (!todo || !Array.isArray(todo.subTodos) || !todo.subTodos[index]) return;
+            const stamp = getLocalDateTimeStr();
+            todo.subTodos[index].done = !!checked;
+            todo.updatedAt = stamp;
+            syncTodoDoneFromSubTodos(todo, stamp);
+            tempSubTodos = JSON.parse(JSON.stringify(todo.subTodos));
+            saveData();
+            renderTodoDetailView();
+            renderSubTodos();
+            renderDashboard();
+            renderTodoTable();
+            renderAllRecords();
         }
 
         function addSubTodo() {
@@ -4903,6 +5599,7 @@
 
             const todoData = {
                 text: text,
+                note: document.getElementById('todo-detail-note')?.value.trim() || '',
                 planStartDate,
                 planEndDate,
                 dueDate: document.getElementById('todo-detail-date').value,
@@ -4926,19 +5623,17 @@
             }
 
             // 自动计算主任务状态
-            if (todoData.subTodos && todoData.subTodos.length > 0) {
-                const allDone = todoData.subTodos.every(s => s.done);
-                const target = currentTodoId 
-                    ? data.todos.find(t => t.id === currentTodoId) 
-                    : data.todos[data.todos.length - 1];
-                if (target) target.done = allDone;
-            }
+            const target = currentTodoId 
+                ? data.todos.find(t => t.id === currentTodoId) 
+                : data.todos[data.todos.length - 1];
+            syncTodoDoneFromSubTodos(target, getLocalDateTimeStr());
 
             saveData();
             closeTodoDetail();
             renderTodoTable();
             renderDashboard();
             renderAllRecords();
+            renderGlobalSearch();
             refreshKnowledgeViews();
         }
 
@@ -6465,7 +7160,9 @@
                 'template-modal': closeTemplateManage,
                 'todo-detail-modal': closeTodoDetail,
                 'snapshot-modal': closeSnapshotModal,
-                'material-modal': closeMaterialModal
+                'material-modal': closeMaterialModal,
+                'ai-settings-modal': closeAiSettings,
+                'ai-assistant-modal': closeAiAssistant
             };
 
             const closeFn = closeMap[activeModal.id];

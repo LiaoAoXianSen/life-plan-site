@@ -1,5 +1,26 @@
 const { test, expect } = require('@playwright/test');
 
+function createEmptyData(overrides = {}) {
+    return {
+        records: [],
+        todos: [],
+        habits: [],
+        checkins: [],
+        habitPointLedger: [],
+        habitRewards: [],
+        habitCurrencies: [],
+        templates: [],
+        goals: [],
+        deletedItems: [],
+        materials: [],
+        wheels: [],
+        wheelTags: [],
+        wheelLibraryItems: [],
+        wheelHistory: [],
+        ...overrides
+    };
+}
+
 test('loads the app and opens core pages', async ({ page }) => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -37,6 +58,174 @@ test('global search page accepts a keyword', async ({ page }) => {
     await expect(page.locator('#global-search-results')).toBeVisible();
 });
 
+test('AI settings are saved outside main life plan data', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'AI 设置' }).click();
+    await expect(page.locator('#ai-settings-modal')).toHaveClass(/active/);
+    await page.locator('#ai-remote-enabled').check();
+    await page.locator('#ai-endpoint-url').fill('https://ai2.hhhl.cc/v1');
+    await page.locator('#ai-api-key').fill('test-key');
+    await page.locator('#ai-model').fill('test-model');
+    await page.locator('#ai-user-style').fill('短句，偏行动');
+    await page.getByRole('button', { name: '保存设置' }).click();
+
+    const savedConfig = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanAiConfig')));
+    const mainData = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(savedConfig).toMatchObject({
+        endpointUrl: 'https://ai2.hhhl.cc/v1',
+        apiKey: 'test-key',
+        model: 'test-model',
+        remoteEnabled: true,
+        userStyle: '短句，偏行动'
+    });
+    expect(JSON.stringify(mainData)).not.toContain('test-key');
+});
+
+test('AI remote calls accept an OpenAI-compatible base URL', async ({ page }) => {
+    const data = createEmptyData({
+        todos: [
+            {
+                id: 'remote-ai-todo',
+                text: '验证 CCS 模型接入',
+                note: '',
+                done: false,
+                dueDate: '',
+                planStartDate: '',
+                planEndDate: '',
+                urgency: 'medium',
+                group: '工作',
+                subTodos: [],
+                sessions: []
+            }
+        ]
+    });
+    const requests = [];
+    await page.route('https://ai2.hhhl.cc/v1/chat/completions', async route => {
+        requests.push(route.request().postDataJSON());
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                choices: [
+                    {
+                        message: {
+                            content: JSON.stringify({
+                                title: '远程 AI 建议',
+                                summary: '通过 Base URL 请求成功',
+                                items: [{ text: '用 CCS 模型生成行动项', note: '远程返回', group: '工作', urgency: 'medium' }]
+                            })
+                        }
+                    }
+                ]
+            })
+        });
+    });
+
+    await page.goto('/');
+    await page.evaluate(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({
+            endpointUrl: 'https://ai2.hhhl.cc/v1',
+            apiKey: 'test-key',
+            model: 'ccs-test-model',
+            remoteEnabled: true,
+            userStyle: ''
+        }));
+    }, data);
+    await page.reload();
+    await page.getByRole('button', { name: 'AI 今日计划' }).click();
+    await page.getByRole('button', { name: '生成建议' }).click();
+
+    await expect(page.locator('#ai-result-panel')).toContainText('用 CCS 模型生成行动项');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].model).toBe('ccs-test-model');
+});
+
+test('AI local today plan can create actionable todos', async ({ page }) => {
+    const data = createEmptyData({
+        todos: [
+            {
+                id: 'ai-overdue',
+                text: '完成 AI 接入方案',
+                note: '先做最小可用版本',
+                done: false,
+                dueDate: '2026-07-06',
+                planStartDate: '',
+                planEndDate: '',
+                urgency: 'high',
+                group: '工作',
+                subTodos: [],
+                sessions: []
+            }
+        ],
+        goals: [{ id: 'goal-ai', name: '打磨人生规划系统', period: '本周', target: '提高可用性', status: '进行中', progress: 40 }]
+    });
+
+    await page.goto('/');
+    await page.evaluate(value => {
+        localStorage.removeItem('lifePlanAiConfig');
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, data);
+    await page.reload();
+    await page.getByRole('button', { name: 'AI 今日计划' }).click();
+    await page.locator('#ai-user-input').fill('今天先把可验证的部分做完');
+    await page.getByRole('button', { name: '生成建议' }).click();
+    await expect(page.locator('#ai-result-panel')).toContainText('完成 AI 接入方案');
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已加入待办');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '加入今日待办' }).click();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const aiTodos = stored.todos.filter(todo => todo.sourceType === 'ai');
+    expect(aiTodos.length).toBeGreaterThan(0);
+    expect(aiTodos[0].text).toContain('完成 AI 接入方案');
+    expect(aiTodos[0].planStartDate).toBeTruthy();
+});
+
+test('AI local breakdown writes subtodos to the selected todo', async ({ page }) => {
+    const data = createEmptyData({
+        todos: [
+            {
+                id: 'ai-breakdown',
+                text: '整理 AI 助手交互',
+                note: '需要可配置、可落地',
+                done: false,
+                dueDate: '',
+                planStartDate: '',
+                planEndDate: '',
+                urgency: 'medium',
+                group: '工作',
+                subTodos: [],
+                sessions: []
+            }
+        ]
+    });
+
+    await page.goto('/');
+    await page.evaluate(value => {
+        localStorage.removeItem('lifePlanAiConfig');
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, data);
+    await page.reload();
+    await page.getByRole('button', { name: 'AI 今日计划' }).click();
+    await page.getByRole('button', { name: '拆解待办' }).click();
+    await page.getByRole('button', { name: '生成建议' }).click();
+    await expect(page.locator('#ai-result-panel')).toContainText('整理 AI 助手交互');
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已写入子任务');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '写入子任务' }).click();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const todo = stored.todos.find(item => item.id === 'ai-breakdown');
+    expect(todo.subTodos.length).toBeGreaterThanOrEqual(3);
+    expect(todo.note).toContain('AI 拆解');
+});
+
 test('idea can be converted to a linked todo', async ({ page }) => {
     const sample = require('../test-data/sample-data.json');
     const data = JSON.parse(JSON.stringify(sample));
@@ -59,6 +248,33 @@ test('idea can be converted to a linked todo', async ({ page }) => {
     const linkedTodo = stored.todos.find(todo => todo.id === updatedIdea.ideaTodoId);
     expect(updatedIdea.ideaStatus).toBe('待实践');
     expect(linkedTodo.text).toContain('选一个灵感转成待办');
+});
+
+test('todo detail supports notes and checkable subtodos in view mode', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => localStorage.removeItem('lifePlanData'));
+    await page.reload();
+
+    await page.locator('[data-page-target="todos"]').click();
+    await page.getByRole('button', { name: '+ 新建通用待办' }).click();
+    const modal = page.locator('#todo-detail-modal');
+    await modal.locator('#todo-detail-text').fill('整理项目上下文');
+    await modal.locator('#todo-detail-note').fill('后续补充参考链接和执行注意事项');
+    await modal.locator('#new-subtodo-input').fill('列出下一步');
+    await modal.getByRole('button', { name: '添加' }).click();
+    await modal.getByRole('button', { name: '保存' }).click();
+
+    await page.locator('.todo-title-cell', { hasText: '整理项目上下文' }).click();
+    await expect(modal.locator('.todo-detail-note')).toContainText('后续补充参考链接');
+    await expect(modal.locator('#todo-detail-edit-panel')).toBeHidden();
+    const subTodo = modal.locator('.todo-subtodo-item', { hasText: '列出下一步' });
+    await expect(subTodo.locator('input[type="checkbox"]')).toBeEnabled();
+    await subTodo.locator('input[type="checkbox"]').check();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const todo = stored.todos.find(item => item.text === '整理项目上下文');
+    expect(todo.note).toContain('参考链接');
+    expect(todo.subTodos[0].done).toBe(true);
 });
 
 test('habit checkins only award configured currencies', async ({ page }) => {
@@ -152,31 +368,62 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await page.reload();
     await page.locator('.nav-item', { hasText: '工具转盘' }).click();
     await expect(page.locator('#wheel-canvas')).toBeVisible();
-    await expect(page.locator('#wheel-panel-toggle')).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('#wheel-panel-content')).toBeHidden();
+    await expect(page.locator('#wheel-action-menu-button')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#wheel-action-menu')).toBeHidden();
 
-    await page.locator('#wheel-panel-toggle').click();
-    const copyFilter = page.locator('#wheel-panel-body .wheel-copy-filter');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '修改当前盘' }).click();
+    const itemsModal = page.locator('#wheel-items-modal');
+    await expect(itemsModal).toHaveClass(/active/);
+    const copyFilter = itemsModal.locator('.wheel-copy-filter');
     await copyFilter.getByRole('button', { name: /美食/ }).click();
-    await expect(page.locator('#wheel-library-copy-select option')).toHaveText(['从公共项复制到当前转盘', '火锅']);
+    await expect(itemsModal.locator('#wheel-library-copy-select option')).toHaveText(['从公共项复制到当前转盘', '火锅']);
 
-    await page.locator('#wheel-library-copy-select').selectOption('library-hotpot');
-    await page.getByRole('button', { name: '复制' }).click();
+    await itemsModal.locator('#wheel-library-copy-select').selectOption('library-hotpot');
+    await itemsModal.getByRole('button', { name: '复制' }).click();
     let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     let copied = stored.wheels[0].items.find(item => item.name === '火锅');
     expect(copied.sourceLibraryItemId).toBe('library-hotpot');
 
-    await page.locator('#wheel-library-copy-select').selectOption('library-hotpot');
+    await itemsModal.locator('#wheel-library-copy-select').selectOption('library-hotpot');
     page.once('dialog', dialog => {
         expect(dialog.message()).toContain('同名选项');
         dialog.accept();
     });
-    await page.getByRole('button', { name: '复制' }).click();
+    await itemsModal.getByRole('button', { name: '复制' }).click();
 
-    await page.locator('#wheel-panel-tabs').getByRole('button', { name: '记录' }).click();
-    await expect(page.getByRole('button', { name: '导出记录' })).toBeVisible();
+    await itemsModal.locator('.close-btn').click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
+    const libraryModal = page.locator('#wheel-library-modal');
+    await libraryModal.locator('#wheel-library-batch-text').fill('寿司,4,美食\n晨跑,2,运动');
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已导入公共项 2 项');
+        dialog.accept();
+    });
+    await libraryModal.getByRole('button', { name: '导入多行公共项' }).click();
+    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(2);
+    await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅', '寿司']);
+    await libraryModal.getByLabel('选择火锅').check();
+    await libraryModal.locator('#wheel-library-batch-tag').selectOption('tag-sport');
+    await libraryModal.getByRole('button', { name: '添加到选中' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(expect.arrayContaining(['tag-food', 'tag-sport']));
+    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-sport');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(3);
+    await libraryModal.locator('#wheel-library-batch-tag').selectOption('tag-sport');
+    await libraryModal.getByRole('button', { name: '从选中移除' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(['tag-food']);
+    await libraryModal.locator('.close-btn').click();
+
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '记录/备份' }).click();
+    const historyModal = page.locator('#wheel-history-modal');
+    await expect(historyModal.getByRole('button', { name: '导出记录' })).toBeVisible();
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: '导出记录' }).click();
+    await historyModal.getByRole('button', { name: '导出记录' }).click();
     await expect((await download).suggestedFilename()).toContain('大转盘抽取记录');
 
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
@@ -387,7 +634,8 @@ test('tag wheel creation requires and saves selected tags', async ({ page }) => 
     await page.evaluate(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), data);
     await page.reload();
     await page.locator('.nav-item', { hasText: '工具转盘' }).click();
-    await page.locator('.wheel-panel-menu').getByRole('button', { name: '新建' }).click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '新建转盘' }).click();
     await page.locator('#wheel-create-modal').getByRole('button', { name: '标签转盘' }).click();
     await expect(page.locator('#wheel-create-tag-options')).toContainText('美食');
     await page.locator('#wheel-create-tag-options input[value="tag-sport"]').uncheck();
@@ -436,20 +684,28 @@ test('wheel backup restore normalizes duplicate tags and copied data boundaries'
 
     await page.goto('/');
     await page.locator('.nav-item', { hasText: '工具转盘' }).click();
-    await page.locator('#wheel-panel-toggle').click();
-    await page.locator('#wheel-panel-tabs').getByRole('button', { name: '记录' }).click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '记录/备份' }).click();
+    const historyModal = page.locator('#wheel-history-modal');
 
-    page.once('dialog', dialog => dialog.accept());
     const chooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: '恢复JSON' }).click();
+    await historyModal.getByRole('button', { name: '恢复JSON' }).click();
     const chooser = await chooserPromise;
+    const restoredDialog = page.waitForEvent('dialog');
     await chooser.setFiles({
         name: 'dirty-wheel-backup.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(dirtyBackup), 'utf-8')
     });
+    const dialog = await restoredDialog;
+    expect(dialog.message()).toContain('已恢复');
+    await dialog.accept();
 
     await expect(page.locator('#wheel-selector')).toBeVisible();
+    await expect.poll(async () => page.evaluate(() => {
+        const stored = JSON.parse(localStorage.getItem('lifePlanData'));
+        return stored.wheels.some(wheel => wheel.id === 'dirty-normal');
+    })).toBe(true);
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     const normalWheel = stored.wheels.find(wheel => wheel.id === 'dirty-normal');
     const tagWheel = stored.wheels.find(wheel => wheel.id === 'dirty-tag');

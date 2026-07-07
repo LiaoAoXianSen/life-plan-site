@@ -44,6 +44,10 @@
                 <button class="btn btn-secondary sync-btn" onclick="openSnapshotModal()">🛟 本地快照</button>
                 <button class="btn btn-secondary sync-btn" onclick="openSyncSettings()">☁️ 云同步</button>
             </div>
+            <div class="sidebar-button-row sidebar-button-row-compact">
+                <button class="btn btn-secondary sync-btn" onclick="openAiAssistant('todayPlan')">AI 助手</button>
+                <button class="btn btn-secondary sync-btn" onclick="openAiSettings()">AI 设置</button>
+            </div>
             <div id="sync-status" class="sync-status"></div>
         </details>
     </div>
@@ -70,6 +74,7 @@
                         <button class="btn" onclick="createRecord('工作记录')">记工作</button>
                         <button class="btn" onclick="createRecord('灵感碎片')">记灵感</button>
                         <button class="btn" onclick="openTodoModal()">加待办</button>
+                        <button class="btn" onclick="openAiAssistant('todayPlan')">AI 今日计划</button>
                     </div>
                 </div>
                 <div class="summary-grid">
@@ -451,35 +456,17 @@
                             <button onclick="setWheelMode('tag', this)">标签转盘</button>
                         </div>
                         <select id="wheel-selector" onchange="selectWheel(this.value)"></select>
+                        <div class="wheel-action-menu-wrap">
+                            <button id="wheel-action-menu-button" class="btn btn-secondary wheel-action-menu-button" type="button" onclick="toggleWheelActionMenu(event)" aria-haspopup="true" aria-expanded="false">管理</button>
+                            <div id="wheel-action-menu" class="wheel-action-menu" hidden>
+                                <button type="button" onclick="closeWheelActionMenu(); openWheelCreateModal()">新建转盘</button>
+                                <button type="button" onclick="closeWheelActionMenu(); setWheelPanel('items')">修改当前盘</button>
+                                <button type="button" onclick="closeWheelActionMenu(); setWheelPanel('library')">公共项库</button>
+                                <button type="button" onclick="closeWheelActionMenu(); setWheelPanel('tags')">标签管理</button>
+                                <button type="button" onclick="closeWheelActionMenu(); setWheelPanel('history')">记录/备份</button>
+                            </div>
+                        </div>
                     </div>
-                    <section class="wheel-panel card collapsed" id="wheel-panel">
-                        <div class="wheel-panel-dock">
-                            <div class="wheel-panel-dock-copy">
-                                <div class="wheel-panel-kicker">转盘菜单</div>
-                                <div class="wheel-panel-title">要改什么，直接点</div>
-                                <div class="wheel-panel-copy">菜单跟着转盘选择走，不再压在页面最下面。</div>
-                            </div>
-                            <div class="wheel-panel-menu" aria-label="转盘管理快捷入口">
-                                <button type="button" onclick="openWheelCreateModal()">新建</button>
-                                <button type="button" onclick="setWheelPanel('items')">当前盘</button>
-                                <button type="button" onclick="setWheelPanel('library')">公共项</button>
-                                <button type="button" onclick="setWheelPanel('tags')">标签</button>
-                                <button type="button" onclick="setWheelPanel('history')">记录/备份</button>
-                            </div>
-                            <button id="wheel-panel-toggle" class="btn btn-secondary wheel-panel-toggle" type="button" onclick="toggleWheelPanelCollapse()" aria-controls="wheel-panel-content" aria-expanded="false">展开管理</button>
-                        </div>
-                        <div id="wheel-panel-content" class="wheel-panel-content" hidden>
-                            <div class="calendar-toolbar wheel-panel-toolbar">
-                                <div class="segmented wheel-tabs" id="wheel-panel-tabs">
-                                    <button class="active" onclick="setWheelPanel('items', this)">转盘项</button>
-                                    <button onclick="setWheelPanel('library', this)">公共项</button>
-                                    <button onclick="setWheelPanel('tags', this)">标签</button>
-                                    <button onclick="setWheelPanel('history', this)">记录</button>
-                                </div>
-                            </div>
-                            <div id="wheel-panel-body"></div>
-                        </div>
-                    </section>
                     <div id="wheel-stage-summary" class="wheel-stage-summary"></div>
                     <div class="wheel-canvas-wrap">
                         <canvas id="wheel-canvas" width="360" height="360"></canvas>
@@ -804,6 +791,71 @@
         </div>
     </div>
 
+    <div id="ai-settings-modal" class="modal-overlay">
+        <div class="modal modal-md">
+            <div class="modal-header">
+                <div class="modal-title">AI 设置</div>
+                <button class="close-btn" onclick="closeAiSettings()">×</button>
+            </div>
+            <div class="ai-settings-note">
+                AI 配置只保存在当前浏览器本地，不会写入主数据或云同步。接口地址可填写 OpenAI-compatible Base URL，例如 https://ai2.hhhl.cc/v1。
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="ai-remote-enabled"> 使用远程 AI 接口</label>
+            </div>
+            <div class="form-group">
+                <label>接口地址</label>
+                <input type="text" id="ai-endpoint-url" placeholder="https://ai2.hhhl.cc/v1">
+            </div>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="ai-api-key" placeholder="sk-...">
+            </div>
+            <div class="form-group">
+                <label>模型</label>
+                <input type="text" id="ai-model" placeholder="填写你的 CCS / OpenAI-compatible 模型名">
+            </div>
+            <div class="form-group">
+                <label>偏好说明</label>
+                <textarea id="ai-user-style" rows="3" placeholder="例如：建议要短、具体、偏行动；不要鸡汤。"></textarea>
+            </div>
+            <div id="ai-settings-status" class="sync-modal-status">AI 设置状态会显示在这里。</div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="testAiSettings()">测试接口</button>
+                <button class="btn btn-primary" onclick="saveAiSettings()">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="ai-assistant-modal" class="modal-overlay">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title" id="ai-assistant-title">AI 助手</div>
+                    <div class="ai-assistant-subtitle" id="ai-assistant-subtitle">先选一个小动作，让系统帮你把上下文整理成下一步。</div>
+                </div>
+                <button class="close-btn" onclick="closeAiAssistant()">×</button>
+            </div>
+            <div class="ai-mode-tabs segmented">
+                <button type="button" data-ai-mode="todayPlan" onclick="setAiMode('todayPlan')">今日计划</button>
+                <button type="button" data-ai-mode="backlogTriage" onclick="setAiMode('backlogTriage')">待办整理</button>
+                <button type="button" data-ai-mode="todoBreakdown" onclick="setAiMode('todoBreakdown')">拆解待办</button>
+                <button type="button" data-ai-mode="ideaNext" onclick="setAiMode('ideaNext')">灵感下一步</button>
+            </div>
+            <div class="ai-context-panel" id="ai-context-panel"></div>
+            <div class="form-group">
+                <label id="ai-input-label">补充说明</label>
+                <textarea id="ai-user-input" rows="4" placeholder="可以补充今天的精力、限制、想优先推进的事。"></textarea>
+            </div>
+            <div class="ai-action-row">
+                <button class="btn btn-secondary" onclick="openAiSettings()">AI 设置</button>
+                <button class="btn btn-primary" onclick="runAiAssistant()">生成建议</button>
+            </div>
+            <div id="ai-assistant-status" class="sync-modal-status">准备好了。未配置远程接口时会使用本地规则。</div>
+            <div id="ai-result-panel" class="ai-result-panel"></div>
+        </div>
+    </div>
+
     <div id="wheel-create-modal" class="modal-overlay">
         <div class="modal modal-sm">
             <div class="modal-header">
@@ -836,6 +888,46 @@
                 <button class="btn btn-secondary" onclick="closeWheelCreateModal()">取消</button>
                 <button class="btn btn-primary" onclick="saveWheelCreateModal()">创建并编辑</button>
             </div>
+        </div>
+    </div>
+
+    <div id="wheel-items-modal" class="modal-overlay">
+        <div class="modal modal-lg wheel-manage-modal">
+            <div class="modal-header">
+                <div class="modal-title">修改当前盘</div>
+                <button class="close-btn" onclick="closeWheelPanelModal('items')">×</button>
+            </div>
+            <div id="wheel-items-modal-body"></div>
+        </div>
+    </div>
+
+    <div id="wheel-library-modal" class="modal-overlay">
+        <div class="modal modal-lg wheel-manage-modal">
+            <div class="modal-header">
+                <div class="modal-title">公共项库</div>
+                <button class="close-btn" onclick="closeWheelPanelModal('library')">×</button>
+            </div>
+            <div id="wheel-library-modal-body"></div>
+        </div>
+    </div>
+
+    <div id="wheel-tags-modal" class="modal-overlay">
+        <div class="modal modal-lg wheel-manage-modal">
+            <div class="modal-header">
+                <div class="modal-title">标签管理</div>
+                <button class="close-btn" onclick="closeWheelPanelModal('tags')">×</button>
+            </div>
+            <div id="wheel-tags-modal-body"></div>
+        </div>
+    </div>
+
+    <div id="wheel-history-modal" class="modal-overlay">
+        <div class="modal modal-lg wheel-manage-modal">
+            <div class="modal-header">
+                <div class="modal-title">记录/备份</div>
+                <button class="close-btn" onclick="closeWheelPanelModal('history')">×</button>
+            </div>
+            <div id="wheel-history-modal-body"></div>
         </div>
     </div>
 
@@ -1155,7 +1247,7 @@
                     <span>以后不提醒</span>
                 </label>
                 <div class="habit-note-actions">
-                    <button class="btn btn-secondary" id="habit-note-skip-btn" onclick="submitHabitNoteModal(false)">跳过</button>
+                    <button class="habit-note-skip-btn" id="habit-note-skip-btn" onclick="submitHabitNoteModal(false)">本次不填</button>
                     <button class="btn btn-primary" id="habit-note-save-btn" onclick="submitHabitNoteModal(true)">保存</button>
                 </div>
             </div>
@@ -1225,6 +1317,10 @@
                 <div class="form-group">
                     <label>任务名称</label>
                     <input type="text" id="todo-detail-text">
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <textarea id="todo-detail-note" placeholder="后续要补充的背景、链接、提醒或想法"></textarea>
                 </div>
                 <div class="form-section-title">计划安排</div>
                 <div class="form-row">
