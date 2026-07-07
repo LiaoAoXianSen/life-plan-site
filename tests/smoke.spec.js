@@ -21,6 +21,19 @@ function createEmptyData(overrides = {}) {
     };
 }
 
+function hashString(str) {
+    let hash = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    return (hash >>> 0).toString(36);
+}
+
+function hashData(value) {
+    return hashString(JSON.stringify(value || {}));
+}
+
 test('loads the app and opens core pages', async ({ page }) => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -49,6 +62,131 @@ test('loads the app and opens core pages', async ({ page }) => {
     }
 
     expect(errors).toEqual([]);
+});
+
+test('auto sync does not upload unchanged data on reload', async ({ page }) => {
+    const data = createEmptyData({
+        habitCurrencies: [
+            {
+                id: 'habit-currency-default',
+                name: '金币',
+                createdAt: '2026-07-07T10:00:00',
+                updatedAt: '2026-07-07T10:00:00'
+            }
+        ]
+    });
+    const hash = hashData(data);
+    let getCount = 0;
+    let putCount = 0;
+
+    await page.route('https://sync.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (url.pathname === '/life-plan.json' && request.method() === 'GET') {
+            getCount += 1;
+            await route.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
+            return;
+        }
+        if (url.pathname === '/life-plan.json' && request.method() === 'PUT') {
+            putCount += 1;
+            await route.fulfill({ status: 204, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 404, body: '' });
+    });
+
+    await page.addInitScript(({ value, valueHash }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://sync.example.test',
+            username: '',
+            password: '',
+            remotePath: '/life-plan.json',
+            autoSync: true
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({
+            dirty: false,
+            lastLocalHash: valueHash,
+            lastRemoteHash: valueHash,
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: ''
+        }));
+    }, { value: data, valueHash: hash });
+
+    await page.goto('/');
+    await expect.poll(() => getCount).toBeGreaterThan(0);
+    await expect(page.locator('#sync-status-inline')).toContainText('同步：已同步');
+    await page.waitForTimeout(200);
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.habitCurrencies[0].createdAt).toBe('2026-07-07T10:00:00');
+    expect(putCount).toBe(0);
+});
+
+test('auto sync records matching remote hash instead of uploading first seen identical data', async ({ page }) => {
+    const data = createEmptyData({
+        habitCurrencies: [
+            {
+                id: 'habit-currency-default',
+                name: '金币',
+                createdAt: '2026-07-07T10:00:00',
+                updatedAt: '2026-07-07T10:00:00'
+            }
+        ]
+    });
+    const hash = hashData(data);
+    let getCount = 0;
+    let putCount = 0;
+
+    await page.route('https://sync.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (url.pathname === '/life-plan.json' && request.method() === 'GET') {
+            getCount += 1;
+            await route.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
+            return;
+        }
+        if (url.pathname === '/life-plan.json' && request.method() === 'PUT') {
+            putCount += 1;
+            await route.fulfill({ status: 204, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 404, body: '' });
+    });
+
+    await page.addInitScript(({ value }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://sync.example.test',
+            username: '',
+            password: '',
+            remotePath: '/life-plan.json',
+            autoSync: true
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({
+            dirty: false,
+            lastLocalHash: '',
+            lastRemoteHash: '',
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: ''
+        }));
+    }, { value: data });
+
+    await page.goto('/');
+    await expect.poll(() => getCount).toBeGreaterThan(0);
+    await expect(page.locator('#sync-status-inline')).toContainText('同步：已同步');
+    await page.waitForTimeout(200);
+
+    const syncState = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncState')));
+    expect(syncState.lastRemoteHash).toBe(hash);
+    expect(syncState.dirty).toBe(false);
+    expect(putCount).toBe(0);
 });
 
 test('global search page accepts a keyword', async ({ page }) => {

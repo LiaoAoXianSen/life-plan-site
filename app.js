@@ -1881,7 +1881,7 @@
 
         async function webdavRequestWithConfig(config, path, method, body = null) {
             if (!config.webdavUrl) throw new Error('请先填写 Cloudflare Worker 同步中转地址');
-            const base = config.webdavUrl.replace(/\/+$/, '/');
+            const base = `${config.webdavUrl.replace(/\/+$/, '')}/`;
             const target = String(path || '').replace(/^\/+/, '');
             const url = base + target;
             const headers = {};
@@ -2136,7 +2136,7 @@
                 const remote = await fetchRemoteData();
                 const localHash = getDataHash();
                 const remoteHash = remote ? remote.hash : '';
-                const localChanged = syncState.dirty || (!!syncState.lastRemoteHash && localHash !== syncState.lastRemoteHash) || !syncState.lastRemoteHash;
+                const localChanged = syncState.dirty || (!!syncState.lastRemoteHash && localHash !== syncState.lastRemoteHash) || (!syncState.lastRemoteHash && localHash !== remoteHash);
                 const remoteChanged = remote && syncState.lastRemoteHash && remoteHash !== syncState.lastRemoteHash;
 
                 if (!remote) {
@@ -2147,6 +2147,8 @@
 
                 if (!localChanged && !remoteChanged) {
                     syncState.lastPullAt = new Date().toISOString();
+                    syncState.lastRemoteHash = remoteHash;
+                    syncState.dirty = false;
                     saveSyncState();
                     updateSyncStatus(`云端和本地一致，无需同步 ${formatClockTime(new Date(), true)}`);
                     return;
@@ -2364,7 +2366,7 @@
                 const localSnapshot = getWheelSnapshot();
                 const localHash = getWheelDataHash(localSnapshot);
                 const remoteHash = remote ? remote.hash : '';
-                const localChanged = wheelSyncState.dirty || (!!wheelSyncState.lastRemoteHash && localHash !== wheelSyncState.lastRemoteHash) || !wheelSyncState.lastRemoteHash;
+                const localChanged = wheelSyncState.dirty || (!!wheelSyncState.lastRemoteHash && localHash !== wheelSyncState.lastRemoteHash) || (!wheelSyncState.lastRemoteHash && localHash !== remoteHash);
                 const remoteChanged = remote && wheelSyncState.lastRemoteHash && remoteHash !== wheelSyncState.lastRemoteHash;
 
                 if (!remote) {
@@ -2375,6 +2377,8 @@
 
                 if (!localChanged && !remoteChanged) {
                     wheelSyncState.lastPullAt = new Date().toISOString();
+                    wheelSyncState.lastRemoteHash = remoteHash;
+                    wheelSyncState.dirty = false;
                     saveWheelSyncState();
                     if (!silent) updateWheelSyncStatus(`大转盘云端和本地一致 ${formatClockTime(new Date(), true)}`);
                     return;
@@ -5994,15 +5998,18 @@
 
         function normalizeHabitCurrencyList(items = [], source = data) {
             const map = new Map();
+            const now = getLocalDateTimeStr();
             const add = (name, meta = {}) => {
                 const currency = normalizeHabitCurrency(name);
                 if (!currency) return;
                 const existing = map.get(currency);
+                const id = meta.id || existing?.id || (currency === HABIT_DEFAULT_CURRENCY ? 'habit-currency-default' : genId());
+                const createdAt = meta.createdAt || existing?.createdAt || now;
                 map.set(currency, {
-                    id: existing?.id || meta.id || genId(),
+                    id,
                     name: currency,
-                    createdAt: existing?.createdAt || meta.createdAt || getLocalDateTimeStr(),
-                    updatedAt: meta.updatedAt || existing?.updatedAt || meta.createdAt || getLocalDateTimeStr()
+                    createdAt,
+                    updatedAt: meta.updatedAt || existing?.updatedAt || meta.createdAt || createdAt
                 });
             };
             add(HABIT_DEFAULT_CURRENCY, { id: 'habit-currency-default' });
@@ -6024,8 +6031,7 @@
         }
 
         function getHabitCurrencyNames() {
-            data.habitCurrencies = normalizeHabitCurrencyList(data.habitCurrencies);
-            return data.habitCurrencies.map(item => item.name);
+            return normalizeHabitCurrencyList(data.habitCurrencies).map(item => item.name);
         }
 
         function renderHabitCurrencyOptions() {
