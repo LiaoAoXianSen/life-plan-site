@@ -71,6 +71,7 @@
         };
         let currentAiMode = 'todayPlan';
         let aiLastResult = null;
+        let currentAiSourceRecordId = '';
         let syncState = {
             dirty: false,
             lastLocalHash: '',
@@ -1339,8 +1340,9 @@
                         content: [
                             '你是一个个人规划应用里的 AI 助手。',
                             '请只返回严格 JSON，不要 Markdown。',
-                            'JSON 字段：title 字符串，summary 字符串，items 数组。',
+                            'JSON 字段：title 字符串，summary 字符串，items 数组，可选 diary 对象。',
                             'items 每项字段：text 字符串，note 字符串，可选 urgency/group/dueDate/planStartDate/planEndDate/subTodos/reason。',
+                            'diary 可选字段：oneLine/review/tomorrow/improve/thinking/smallJoy，均为字符串。',
                             '建议必须具体、短、可执行。'
                         ].join('\n')
                     },
@@ -1389,23 +1391,32 @@
         }
 
         function normalizeAiResult(result) {
+            const normalizeText = value => String(value || '').trim();
             const normalized = {
-                title: String(result?.title || 'AI 建议').trim() || 'AI 建议',
-                summary: String(result?.summary || '').trim(),
+                title: normalizeText(result?.title || 'AI 建议') || 'AI 建议',
+                summary: normalizeText(result?.summary),
                 items: Array.isArray(result?.items) ? result.items : []
+            };
+            normalized.diary = {
+                oneLine: normalizeText(result?.diary?.oneLine || result?.oneLine),
+                review: normalizeText(result?.diary?.review || result?.review),
+                tomorrow: normalizeText(result?.diary?.tomorrow || result?.tomorrow || result?.tomorrowFocus),
+                improve: normalizeText(result?.diary?.improve || result?.improve),
+                thinking: normalizeText(result?.diary?.thinking || result?.thinking),
+                smallJoy: normalizeText(result?.diary?.smallJoy || result?.smallJoy)
             };
             normalized.items = normalized.items
                 .map(item => ({
-                    text: String(item?.text || item?.title || '').trim(),
-                    note: String(item?.note || item?.reason || '').trim(),
+                    text: normalizeText(item?.text || item?.title),
+                    note: normalizeText(item?.note || item?.reason),
                     urgency: TODO_URGENCY_META[item?.urgency] ? item.urgency : 'medium',
-                    group: String(item?.group || '其他').trim() || '其他',
-                    dueDate: String(item?.dueDate || '').trim(),
-                    planStartDate: String(item?.planStartDate || '').trim(),
-                    planEndDate: String(item?.planEndDate || '').trim(),
-                    reason: String(item?.reason || '').trim(),
+                    group: normalizeText(item?.group || '其他') || '其他',
+                    dueDate: normalizeText(item?.dueDate),
+                    planStartDate: normalizeText(item?.planStartDate),
+                    planEndDate: normalizeText(item?.planEndDate),
+                    reason: normalizeText(item?.reason),
                     subTodos: Array.isArray(item?.subTodos)
-                        ? item.subTodos.map(sub => ({ text: String(sub?.text || sub || '').trim(), done: !!sub?.done })).filter(sub => sub.text)
+                        ? item.subTodos.map(sub => ({ text: normalizeText(sub?.text || sub), done: !!sub?.done })).filter(sub => sub.text)
                         : []
                 }))
                 .filter(item => item.text);
@@ -1436,11 +1447,18 @@
                 subtitle: '选择一条灵感，把它变成一个小实验或下一步行动。',
                 inputLabel: '转化要求',
                 placeholder: '例如：先做最小验证，不要设计太大的项目。'
+            },
+            diaryReview: {
+                title: 'AI 日记分析',
+                subtitle: '从一篇日记里提炼复盘、明日重点和可确认的行动建议。',
+                inputLabel: '分析偏好',
+                placeholder: '例如：复盘要直白一点；明日重点只保留一件最关键的事。'
             }
         };
 
-        function openAiAssistant(mode = 'todayPlan') {
+        function openAiAssistant(mode = 'todayPlan', sourceRecordId = '') {
             currentAiMode = AI_MODE_META[mode] ? mode : 'todayPlan';
+            currentAiSourceRecordId = sourceRecordId || '';
             aiLastResult = null;
             document.getElementById('ai-assistant-modal').classList.add('active');
             renderAiAssistant();
@@ -1449,11 +1467,13 @@
         function closeAiAssistant() {
             document.getElementById('ai-assistant-modal').classList.remove('active');
             aiLastResult = null;
+            currentAiSourceRecordId = '';
         }
 
         function setAiMode(mode) {
             if (!AI_MODE_META[mode]) return;
             currentAiMode = mode;
+            if (mode !== 'diaryReview') currentAiSourceRecordId = '';
             aiLastResult = null;
             renderAiAssistant();
         }
@@ -1490,6 +1510,13 @@
                 .slice(0, 40);
         }
 
+        function getAiDiaryOptions() {
+            return [...data.records]
+                .filter(record => record.type === '日记' && String(record.content || '').trim())
+                .sort((a, b) => getRecordSortValue(b).localeCompare(getRecordSortValue(a)))
+                .slice(0, 40);
+        }
+
         function getSelectedAiTodo() {
             const options = getAiTodoOptions();
             const selectedId = document.getElementById('ai-context-todo')?.value || currentTodoId || options[0]?.id || '';
@@ -1502,10 +1529,30 @@
             return data.records.find(record => record.id === selectedId) || options[0] || null;
         }
 
+        function getSelectedAiDiary() {
+            const options = getAiDiaryOptions();
+            const selectedId = document.getElementById('ai-context-diary')?.value || currentAiSourceRecordId || options[0]?.id || '';
+            return data.records.find(record => record.id === selectedId && record.type === '日记') || options[0] || null;
+        }
+
         function renderAiContextPanel() {
             const container = document.getElementById('ai-context-panel');
             if (!container) return;
             const today = getTodayStr();
+            if (currentAiMode === 'diaryReview') {
+                const options = getAiDiaryOptions();
+                const selected = getSelectedAiDiary();
+                container.innerHTML = `
+                    <div class="ai-context-title">选择日记</div>
+                    ${options.length ? `
+                        <select id="ai-context-diary" onchange="currentAiSourceRecordId = this.value; renderAiContextPanel()">
+                            ${options.map(record => `<option value="${escapeHtml(record.id)}" ${selected?.id === record.id ? 'selected' : ''}>${escapeHtml(record.title || record.startDate || '未命名日记')}</option>`).join('')}
+                        </select>
+                        <div class="ai-context-summary">${renderAiDiaryContext(selected)}</div>
+                    ` : '<div class="empty-state compact-empty">暂无可分析的日记，先写一篇日记再试试。</div>'}
+                `;
+                return;
+            }
             if (currentAiMode === 'todoBreakdown') {
                 const options = getAiTodoOptions();
                 const selected = getSelectedAiTodo();
@@ -1580,6 +1627,20 @@
             return lines.map(line => escapeHtml(line)).join('<br>');
         }
 
+        function renderAiDiaryContext(record) {
+            if (!record) return '';
+            const values = getDiaryTemplateValues(record);
+            const lines = [
+                `日期：${getRecordDateRangeLabel(record)}`,
+                record.title ? `标题：${record.title}` : '',
+                values.oneLine ? `一句话：${values.oneLine}` : '',
+                values.review ? `已有复盘：${values.review}` : '',
+                values.tomorrow ? `已有明日重点：${values.tomorrow}` : '',
+                record.content ? `正文预览：${String(record.content).replace(/\s+/g, ' ').slice(0, 180)}` : ''
+            ].filter(Boolean);
+            return lines.map(line => escapeHtml(line)).join('<br>');
+        }
+
         function compactAiTodo(todo) {
             return {
                 id: todo.id,
@@ -1606,6 +1667,21 @@
                 nextAction: record.ideaNextAction || '',
                 conclusion: record.ideaConclusion || '',
                 startDate: record.startDate || ''
+            };
+        }
+
+        function compactAiRecord(record) {
+            if (!record) return {};
+            return {
+                id: record.id || '',
+                type: record.type || '',
+                title: record.title || '',
+                startDate: record.startDate || '',
+                endDate: record.endDate || '',
+                recordTime: record.recordTime || '',
+                content: record.content || '',
+                templateId: record.templateId || '',
+                fields: record.type === '日记' ? getDiaryTemplateValues(record) : {}
             };
         }
 
@@ -1638,6 +1714,16 @@
             } else if (currentAiMode === 'ideaNext') {
                 base.context.selectedIdea = compactAiIdea(getSelectedAiIdea() || {});
                 base.instruction = '把 selectedIdea 转成 1-3 个最小验证行动，第一项应适合创建为关联待办。';
+            } else if (currentAiMode === 'diaryReview') {
+                const diary = getSelectedAiDiary();
+                base.context.selectedDiary = compactAiRecord(diary);
+                base.instruction = [
+                    '分析 selectedDiary，不要自动替用户下结论太满。',
+                    '返回 diary.review：适合写入日记“复盘”的 2-5 句中文。',
+                    '返回 diary.tomorrow：适合写入“明日重点”的 1-3 条短句。',
+                    '可选 diary.oneLine/improve/thinking/smallJoy；items 返回 0-3 个需要用户确认创建的待办。',
+                    '所有写入都需要用户点击确认，所以建议要可编辑、短、具体。'
+                ].join('\n');
             } else if (currentAiMode === 'backlogTriage') {
                 base.instruction = '从 overdueTodos、floatingTodos 和 todayTodos 里挑 3-5 个最值得今天推进的小行动。';
             } else {
@@ -1648,6 +1734,52 @@
 
         function generateLocalAiResult(payload) {
             const today = payload.today || getTodayStr();
+            if (payload.mode === 'diaryReview') {
+                const diary = payload.context.selectedDiary;
+                if (!diary?.content) {
+                    return normalizeAiResult({
+                        title: '暂无可分析日记',
+                        summary: '先写一点日记内容，再让 AI 做复盘和明日重点。',
+                        diary: {},
+                        items: []
+                    });
+                }
+                const tomorrow = addDays(diary.startDate || today, 1);
+                const fields = diary.fields || {};
+                const plain = String(diary.content || '')
+                    .replace(/^#\s+/gm, '')
+                    .replace(/\n{2,}/g, '\n')
+                    .trim();
+                const firstLine = fields.oneLine || plain.split('\n').map(line => line.trim()).find(Boolean) || diary.title || '今天值得被认真复盘';
+                const review = [
+                    fields.review || `今天的核心线索是：${firstLine}`,
+                    fields.improve ? `可改进处：${fields.improve}` : '可以把今天最卡的一点拆小，明天先做一个能完成的版本。',
+                    payload.userInput ? `你的补充要求：${payload.userInput}` : ''
+                ].filter(Boolean).join('\n');
+                const tomorrowFocus = fields.tomorrow || `明天先推进：${firstLine.slice(0, 42)}`;
+                return normalizeAiResult({
+                    title: `日记分析：${diary.title || diary.startDate || '未命名日记'}`,
+                    summary: '本地规则已整理出可确认写入的复盘、明日重点和一个行动建议。',
+                    diary: {
+                        oneLine: fields.oneLine || firstLine.slice(0, 60),
+                        review,
+                        tomorrow: tomorrowFocus,
+                        improve: fields.improve || '把最重要的动作缩小到明天可以直接开始。',
+                        thinking: fields.thinking || ''
+                    },
+                    items: [
+                        {
+                            text: tomorrowFocus.replace(/^明天先推进[:：]\s*/, '').slice(0, 60) || '推进明日重点',
+                            note: `来自日记「${diary.title || diary.startDate || ''}」的 AI 分析`,
+                            group: '其他',
+                            urgency: 'medium',
+                            dueDate: tomorrow,
+                            planStartDate: tomorrow,
+                            planEndDate: tomorrow
+                        }
+                    ]
+                });
+            }
             if (payload.mode === 'todoBreakdown') {
                 const todo = payload.context.selectedTodo;
                 if (!todo?.text) return { title: '暂无可拆解待办', summary: '先创建一个待办，再让 AI 拆解。', items: [] };
@@ -1751,6 +1883,10 @@
                 panel.innerHTML = '';
                 return;
             }
+            if (currentAiMode === 'diaryReview') {
+                panel.innerHTML = renderDiaryAiResultPanel();
+                return;
+            }
             const actionLabel = currentAiMode === 'todoBreakdown'
                 ? '写入子任务'
                 : currentAiMode === 'ideaNext'
@@ -1779,6 +1915,60 @@
                         `).join('')}
                     </div>
                 ` : '<div class="empty-state compact-empty">这次没有生成可落地的行动项</div>'}
+            `;
+        }
+
+        function renderDiaryAiResultPanel() {
+            const diary = aiLastResult?.diary || {};
+            const sections = [
+                { key: 'review', label: '复盘', value: diary.review, action: '写入复盘' },
+                { key: 'tomorrow', label: '明日重点', value: diary.tomorrow, action: '写入明日重点' },
+                { key: 'oneLine', label: '今日一句话', value: diary.oneLine, action: '写入一句话' },
+                { key: 'improve', label: '待改进', value: diary.improve, action: '写入待改进' },
+                { key: 'thinking', label: '思考', value: diary.thinking, action: '写入思考' },
+                { key: 'smallJoy', label: '小确幸', value: diary.smallJoy, action: '写入小确幸' }
+            ].filter(section => section.value);
+            const todoCount = aiLastResult.items?.length || 0;
+            return `
+                <div class="ai-result-head">
+                    <div>
+                        <div class="ai-result-title">${escapeHtml(aiLastResult.title)}</div>
+                        ${aiLastResult.summary ? `<div class="ai-result-summary">${escapeHtml(aiLastResult.summary)}</div>` : ''}
+                    </div>
+                </div>
+                ${sections.length ? `
+                    <div class="diary-ai-section-list">
+                        ${sections.map(section => `
+                            <div class="diary-ai-section">
+                                <div>
+                                    <strong>${escapeHtml(section.label)}</strong>
+                                    <p>${escapeHtml(section.value).replace(/\n/g, '<br>')}</p>
+                                </div>
+                                <button class="btn btn-secondary todo-mini-btn" onclick="applyDiaryAiSections(['${section.key}'])">${escapeHtml(section.action)}</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="diary-ai-actions">
+                        <button class="btn btn-primary" onclick="applyDiaryAiSections(['review','tomorrow'])">写入复盘 + 明日重点</button>
+                    </div>
+                ` : '<div class="empty-state compact-empty">这次没有生成可写入日记的内容</div>'}
+                ${todoCount ? `
+                    <div class="ai-result-list">
+                        <div class="record-preview-heading">建议待办（需确认创建）</div>
+                        ${aiLastResult.items.map((item, index) => `
+                            <div class="ai-result-item">
+                                <strong>${index + 1}. ${escapeHtml(item.text)}</strong>
+                                ${item.note ? `<span>${escapeHtml(item.note)}</span>` : ''}
+                                <div class="todo-detail-meta">
+                                    ${renderTodoUrgencyBadge(item)}
+                                    ${item.group ? `<span>${escapeHtml(item.group)}</span>` : ''}
+                                    ${item.dueDate ? `<span>截止 ${escapeHtml(item.dueDate)}</span>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                        <button class="btn btn-primary" onclick="applyDiaryAiTodos()">创建这些待办</button>
+                    </div>
+                ` : ''}
             `;
         }
 
@@ -1877,6 +2067,100 @@
             renderAllRecords();
             refreshKnowledgeViews();
             alert('已转成关联待办，并把灵感状态更新为待实践');
+        }
+
+        function getDiaryTemplate() {
+            return getBuiltInTemplate('builtin-diary-daily-review');
+        }
+
+        function getDiaryTemplateValues(record) {
+            const template = getDiaryTemplate();
+            if (!template) return {};
+            return parseTemplateContent(template, record?.content || '');
+        }
+
+        function getDiaryAiTargetRecord() {
+            const record = getSelectedAiDiary();
+            return record && record.type === '日记' ? record : null;
+        }
+
+        function refreshDiaryRecordAfterAi(record) {
+            renderDashboard();
+            renderAllRecords();
+            refreshKnowledgeViews();
+            if (currentPreviewRecordId === record.id) {
+                const todos = data.todos.filter(todo => record.todoIds?.includes(todo.id));
+                document.getElementById('record-preview-body').innerHTML = renderRecordPreview(record, todos, false);
+            }
+            if (currentRecordId === record.id && document.getElementById('record-modal')?.classList.contains('active')) {
+                document.getElementById('record-content').value = record.content || '';
+                currentStructuredTemplateId = record.templateId || '';
+                const template = getBuiltInTemplate(currentStructuredTemplateId);
+                if (template) {
+                    currentTemplateFields = parseTemplateContent(template, record.content || '');
+                    document.getElementById('template-select').value = `builtin:${template.id}`;
+                    renderStructuredTemplateEditor(template, currentTemplateFields);
+                }
+            }
+        }
+
+        function applyDiaryAiSections(keys = []) {
+            const record = getDiaryAiTargetRecord();
+            if (!record) {
+                alert('没有选中的日记');
+                return;
+            }
+            const template = getDiaryTemplate();
+            if (!template) {
+                alert('日记模板不存在，无法写入分块字段');
+                return;
+            }
+            const diary = aiLastResult?.diary || {};
+            const fieldKeys = keys.filter(key => diary[key]);
+            if (!fieldKeys.length) {
+                alert('没有可写入的 AI 内容');
+                return;
+            }
+            const values = getDiaryTemplateValues(record);
+            const existingKeys = fieldKeys.filter(key => String(values[key] || '').trim());
+            if (existingKeys.length && !confirm(`这些字段已有内容：${existingKeys.join('、')}。确定用 AI 建议覆盖吗？`)) return;
+            fieldKeys.forEach(key => {
+                values[key] = diary[key];
+            });
+            record.templateId = template.id;
+            record.content = composeTemplateContent(template, values);
+            record.updatedAt = getLocalDateTimeStr();
+            saveData();
+            refreshDiaryRecordAfterAi(record);
+            alert(`已写入：${fieldKeys.join('、')}`);
+        }
+
+        function applyDiaryAiTodos() {
+            const record = getDiaryAiTargetRecord();
+            if (!record) {
+                alert('没有选中的日记');
+                return;
+            }
+            if (!aiLastResult?.items?.length) {
+                alert('没有可创建的待办建议');
+                return;
+            }
+            const todos = aiLastResult.items.map(item => {
+                const todo = createTodoFromAiItem(item);
+                todo.sourceType = 'diary-ai';
+                todo.note = [todo.note, `来源日记：${record.title || record.startDate || '未命名日记'}`].filter(Boolean).join('\n\n');
+                return todo;
+            });
+            data.todos.push(...todos);
+            record.todoIds = Array.isArray(record.todoIds) ? record.todoIds : [];
+            todos.forEach(todo => {
+                if (!record.todoIds.includes(todo.id)) record.todoIds.push(todo.id);
+            });
+            record.updatedAt = getLocalDateTimeStr();
+            saveData();
+            refreshDiaryRecordAfterAi(record);
+            renderTodoTable();
+            alert(`已创建待办 ${todos.length} 项`);
         }
 
         async function webdavRequestWithConfig(config, path, method, body = null) {
@@ -3860,7 +4144,10 @@
                     <div class="record-preview-actions">
                         ${fromEditor
                             ? '<button class="btn btn-secondary" onclick="backToEditFromPreview()">返回继续编辑</button>'
-                            : `<button class="btn btn-secondary" onclick="editRecordFromPreview()">编辑</button>`}
+                            : `
+                                ${record.type === '日记' ? `<button class="btn btn-secondary" onclick="openAiAssistant('diaryReview','${record.id}')">AI 分析日记</button>` : ''}
+                                <button class="btn btn-secondary" onclick="editRecordFromPreview()">编辑</button>
+                            `}
                     </div>
                 </div>
             `;

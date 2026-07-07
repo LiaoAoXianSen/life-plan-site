@@ -291,6 +291,40 @@
         line-height: 1.6;
         overflow-wrap: anywhere;
     }
+    .diary-ai-section-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .diary-ai-section {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: start;
+        padding: 12px;
+        border: 1px solid #dfe8e2;
+        border-radius: var(--radius);
+        background: rgba(255,255,255,.88);
+    }
+    .diary-ai-section strong {
+        display: block;
+        color: var(--accent);
+        font-size: 13px;
+        margin-bottom: 6px;
+    }
+    .diary-ai-section p {
+        margin: 0;
+        color: #425247;
+        font-size: 13px;
+        line-height: 1.75;
+    }
+    .diary-ai-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 12px;
+        flex-wrap: wrap;
+    }
     .btn {
         padding: 8px 13px;
         border: 1px solid transparent;

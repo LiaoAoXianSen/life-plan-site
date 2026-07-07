@@ -364,6 +364,91 @@ test('AI local breakdown writes subtodos to the selected todo', async ({ page })
     expect(todo.note).toContain('AI 拆解');
 });
 
+test('AI diary analysis writes review and todos only after confirmation', async ({ page }) => {
+    const data = createEmptyData({
+        records: [
+            {
+                id: 'diary-ai-record',
+                type: '日记',
+                title: '日记 AI 试水',
+                content: [
+                    '# 正文',
+                    '今天日记里写了项目节奏有点乱，但晚上终于把关键问题想明白了。',
+                    '',
+                    '# 今日一句话',
+                    '把复杂事情收回到一条线',
+                    '',
+                    '# 高兴',
+                    '下午把卡住的地方讲清楚了。',
+                    '',
+                    '# 思考',
+                    '先做能落地的一小步。',
+                    '',
+                    '# 小确幸',
+                    '',
+                    '',
+                    '# 待改进',
+                    '',
+                    '',
+                    '# 复盘',
+                    '',
+                    '',
+                    '# 明日重点',
+                    ''
+                ].join('\n'),
+                startDate: '2026-07-07',
+                endDate: '2026-07-07',
+                recordTime: '21:30',
+                templateId: 'builtin-diary-daily-review',
+                todoIds: [],
+                createdAt: '2026-07-07 21:30',
+                updatedAt: '2026-07-07 21:30'
+            }
+        ]
+    });
+
+    await page.goto('/');
+    await page.evaluate(value => {
+        localStorage.removeItem('lifePlanAiConfig');
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, data);
+    await page.reload();
+    await page.getByRole('button', { name: 'AI 今日计划' }).click();
+    await page.getByRole('button', { name: '日记分析' }).click();
+    await expect(page.locator('#ai-context-panel')).toContainText('日记 AI 试水');
+    await page.getByRole('button', { name: '生成建议' }).click();
+    await expect(page.locator('#ai-result-panel')).toContainText('写入复盘 + 明日重点');
+
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records[0].content).not.toContain('今天的核心线索');
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已写入');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '写入复盘 + 明日重点' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const diary = stored.records.find(record => record.id === 'diary-ai-record');
+    expect(diary.content).toContain('# 复盘');
+    expect(diary.content).toContain('今天的核心线索');
+    expect(diary.content).toContain('# 明日重点');
+    expect(diary.content).toContain('明天先推进');
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已创建待办');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '创建这些待办' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const todo = stored.todos.find(item => item.sourceType === 'diary-ai');
+    const updatedDiary = stored.records.find(record => record.id === 'diary-ai-record');
+    expect(todo.text).toContain('把复杂事情收回到一条线');
+    expect(todo.note).toContain('来源日记');
+    expect(updatedDiary.todoIds).toContain(todo.id);
+});
+
 test('idea can be converted to an editable linked todo', async ({ page }) => {
     const sample = require('../test-data/sample-data.json');
     const data = JSON.parse(JSON.stringify(sample));
