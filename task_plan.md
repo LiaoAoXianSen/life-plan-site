@@ -1,25 +1,38 @@
 # Task Plan
 
 ## Goal
-Fix the life-plan-site habit reward system so new habits do not grant coins by default, add configurable cyclic milestone rewards with currency support, clean up package retention, create a project-specific skill if useful, validate, and produce a lean runtime zip.
+Add configurable AI support to `D:\project\life-plan-site` after saving the current version, using URL + key + model settings and a small first set of AI-assisted planning actions.
 
 ## Phases
 
-1. Status: in_progress - Inspect existing habit reward data flow, packaging scripts, and project structure.
-2. Status: pending - Create or update project-specific Codex skill for packaging and workflow rules.
-3. Status: pending - Implement habit defaults, currencies, rewards, and milestone cycle data model/UI/logic.
-4. Status: pending - Add/adjust packaging cleanup so only lean current runtime zips remain.
-5. Status: pending - Validate with syntax checks and browser/logic tests.
-6. Status: pending - Create final lean runtime package and append memory.
+1. Status: complete - Save the current workspace version and create a working branch without reverting existing user changes.
+2. Status: complete - Inspect storage, settings, UI structure, and choose minimal AI insertion points.
+3. Status: complete - Implement AI configuration storage/UI and OpenAI-compatible request helper.
+4. Status: complete - Add first AI-assisted actions for planning workflows.
+5. Status: complete - Validate with syntax checks and targeted Playwright tests.
+6. Status: complete - Package clean runtime zip and append memory.
+7. Status: complete - Fix todo detail completion/subtask interaction and idea-to-todo editing/sorting issues.
+8. Status: complete - Add targeted smoke coverage for todo detail completion, subtask checking, editable idea conversion, and verified idea ordering.
+9. Status: complete - Validate, package, and record memory for the todo/idea fixes.
+10. Status: complete - Investigate repeated auto-sync "local update uploaded" reports after refresh.
+11. Status: complete - Fix unchanged-data sync detection, habit currency normalization idempotence, and sync URL joining.
+12. Status: complete - Add sync regression smoke coverage and validate the full suite.
+13. Status: complete - Add diary-focused AI analysis with user-confirmed write-back to review, tomorrow focus, and todos.
+14. Status: complete - Fix wheel right-top management menu click behavior without restoring the deprecated bottom management panel.
 
 ## Decisions
 
-- Preserve append-only memory rules.
-- Use multi-agent/subagent work for independent investigation or validation when available.
-- Do not keep many stale zip artifacts in project root; package should contain only runtime files.
+- Preserve all existing dirty work; do not revert or overwrite unrelated changes.
+- Use browser-local `localStorage` configuration for personal direct URL + key mode, with visible warnings that browser-stored keys are not safe for public deployment.
+- Keep AI optional and fail closed: no AI calls unless configured by the user.
+- Prefer a small, embedded assistant panel/action buttons over turning the app into a chat-first product.
+- Use multi-agent work for independent read-only investigation while main implementation proceeds.
+- Keep this thread scoped to AI integration and closeout only; defer non-AI UX follow-ups unless the user explicitly reopens that scope.
+- A later attempt to continue non-AI work was a scope misunderstanding and was reverted back to the AI-only state.
+- User explicitly reopened non-AI scope for todo detail and idea pool fixes on 2026-07-07.
 
 ## Errors Encountered
 
 | Error | Attempt | Resolution |
 |---|---|---|
-| `skill-creator` read from non-system path failed | Tried `D:/codex-home/skills/skill-creator/SKILL.md` | Re-read from `D:/codex-home/skills/.system/skill-creator/SKILL.md` |
+| Subagent spawn failed through local proxy on inherited `gpt-5.5` | First read-only explorer used inherited model | Restarted parallel explorers with `gpt-5.4-mini` and continued main-thread work |
