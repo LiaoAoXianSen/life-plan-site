@@ -1389,6 +1389,7 @@
             <div id="todo-detail-view-actions" class="modal-action-row">
                 <button class="btn btn-danger" onclick="deleteCurrentTodo()">删除待办</button>
                 <div class="modal-action-right">
+                    <button class="btn btn-secondary" id="todo-detail-done-toggle" onclick="toggleCurrentTodoDoneFromDetail()">标记完成</button>
                     <button class="btn btn-secondary" onclick="addQuickTodoSession(currentTodoId)">执行一次</button>
                     <button class="btn btn-primary" onclick="setTodoDetailMode('edit')">编辑</button>
                 </div>

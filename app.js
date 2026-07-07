@@ -4551,7 +4551,14 @@
                         .toLowerCase()
                         .includes(keyword);
                 })
-                .sort((a, b) => getRecordSortValue(b).localeCompare(getRecordSortValue(a)));
+                .sort((a, b) => {
+                    if (statusFilter === 'all') {
+                        const aVerified = getIdeaStatus(a) === '已验证' ? 1 : 0;
+                        const bVerified = getIdeaStatus(b) === '已验证' ? 1 : 0;
+                        if (aVerified !== bVerified) return aVerified - bVerified;
+                    }
+                    return getRecordSortValue(b).localeCompare(getRecordSortValue(a));
+                });
         }
 
         function renderIdeaSummary(ideas) {
@@ -4604,10 +4611,18 @@
         }
 
         function getIdeaTodoText(record) {
-            return (record.ideaNextAction || record.title || record.content || '实践一条灵感')
+            return (record.ideaNextAction || record.title || '实践一条灵感')
                 .replace(/\s+/g, ' ')
                 .trim()
-                .slice(0, 120) || '实践一条灵感';
+                .slice(0, 60) || '实践一条灵感';
+        }
+
+        function getIdeaTodoNote(record) {
+            return [
+                record.title ? `来源灵感：${record.title}` : '来源灵感',
+                record.content ? `内容：${record.content}` : '',
+                record.ideaConclusion ? `结论：${record.ideaConclusion}` : ''
+            ].filter(Boolean).join('\n\n');
         }
 
         function convertIdeaToTodo(recordId) {
@@ -4619,33 +4634,7 @@
                 return;
             }
 
-            const now = getLocalDateTimeStr();
-            const todo = {
-                id: genId(),
-                text: getIdeaTodoText(record),
-                planStartDate: '',
-                planEndDate: '',
-                dueDate: '',
-                urgency: 'medium',
-                group: '学习',
-                done: false,
-                subTodos: [],
-                sessions: [],
-                isExclusive: false,
-                createdAt: now,
-                updatedAt: now,
-                completedAt: ''
-            };
-            data.todos.push(todo);
-            record.ideaTodoId = todo.id;
-            if (getIdeaStatus(record) === '待整理') record.ideaStatus = '待实践';
-            record.updatedAt = now;
-            saveData();
-            renderIdeaPool();
-            renderAllRecords();
-            renderDashboard();
-            renderGlobalSearch();
-            openTodoDetail(todo.id);
+            openIdeaTodoDraft(record);
         }
 
         function jumpToIdeas(status = 'all', tag = '') {
@@ -5264,6 +5253,7 @@
 
         function openTodoModal() {
             currentTodoId = null;
+            pendingIdeaTodoRecordId = '';
             document.getElementById('todo-detail-text').value = '';
             document.getElementById('todo-detail-note').value = '';
             document.getElementById('todo-detail-plan-start').value = '';
@@ -5283,6 +5273,7 @@
 
         function openTodoDetail(todoId) {
             currentTodoId = todoId;
+            pendingIdeaTodoRecordId = '';
             const todo = data.todos.find(t => t.id === todoId);
             if (!todo) return;
 
@@ -5298,11 +5289,32 @@
             tempSubTodos = [];
             tempTodoSessions = [];
             currentTodoDetailMode = 'view';
+            pendingIdeaTodoRecordId = '';
         }
 
         let tempSubTodos = [];
         let tempTodoSessions = [];
         let currentTodoDetailMode = 'view';
+        let pendingIdeaTodoRecordId = '';
+
+        function openIdeaTodoDraft(record) {
+            currentTodoId = null;
+            pendingIdeaTodoRecordId = record.id;
+            document.getElementById('todo-detail-text').value = getIdeaTodoText(record);
+            document.getElementById('todo-detail-note').value = getIdeaTodoNote(record);
+            document.getElementById('todo-detail-plan-start').value = '';
+            document.getElementById('todo-detail-plan-end').value = '';
+            document.getElementById('todo-detail-date').value = '';
+            document.getElementById('todo-detail-urgency').value = 'medium';
+            document.getElementById('todo-detail-group').value = '学习';
+            tempSubTodos = record.ideaNextAction && record.ideaNextAction !== getIdeaTodoText(record)
+                ? [{ text: record.ideaNextAction, done: false }]
+                : [];
+            tempTodoSessions = [];
+            resetTodoSessionInputs();
+            setTodoDetailMode('edit');
+            document.getElementById('todo-detail-modal').classList.add('active');
+        }
 
         function loadTodoDetailForm(todo) {
             document.getElementById('todo-detail-text').value = todo.text || '';
@@ -5360,7 +5372,7 @@
             const isEdit = currentTodoDetailMode === 'edit';
             const isExisting = !!currentTodoId;
             document.getElementById('todo-detail-title').textContent = isEdit
-                ? (isExisting ? '编辑待办' : '新建待办')
+                ? (isExisting ? '编辑待办' : (pendingIdeaTodoRecordId ? '灵感转待办' : '新建待办'))
                 : '待办详情';
             document.getElementById('todo-detail-view').style.display = isEdit ? 'none' : '';
             document.getElementById('todo-detail-edit-panel').style.display = isEdit ? '' : 'none';
@@ -5370,6 +5382,8 @@
             document.getElementById('todo-detail-edit-actions').style.display = isEdit ? '' : 'none';
             document.querySelectorAll('#todo-detail-edit-actions .btn-danger, #todo-detail-view-actions .btn-danger')
                 .forEach(btn => { btn.style.display = isExisting ? '' : 'none'; });
+            const doneToggle = document.getElementById('todo-detail-done-toggle');
+            if (doneToggle) doneToggle.textContent = todo?.done ? '恢复未完成' : '标记完成';
 
             renderTodoDetailView();
             renderSubTodos();
@@ -5552,6 +5566,18 @@
             renderAllRecords();
         }
 
+        function toggleCurrentTodoDoneFromDetail() {
+            if (!currentTodoId) return;
+            toggleTodo(currentTodoId);
+            const todo = data.todos.find(t => t.id === currentTodoId);
+            if (!todo) {
+                closeTodoDetail();
+                return;
+            }
+            loadTodoDetailForm(todo);
+            setTodoDetailMode('view');
+        }
+
         function addSubTodo() {
             const input = document.getElementById('new-subtodo-input');
             const text = input.value.trim();
@@ -5628,9 +5654,21 @@
                 : data.todos[data.todos.length - 1];
             syncTodoDoneFromSubTodos(target, getLocalDateTimeStr());
 
+            if (pendingIdeaTodoRecordId && target) {
+                const sourceIdea = data.records.find(record => record.id === pendingIdeaTodoRecordId && record.type === '灵感碎片');
+                if (sourceIdea) {
+                    sourceIdea.ideaTodoId = target.id;
+                    sourceIdea.ideaNextAction = sourceIdea.ideaNextAction || target.text;
+                    if (getIdeaStatus(sourceIdea) === '待整理') sourceIdea.ideaStatus = '待实践';
+                    sourceIdea.updatedAt = getLocalDateTimeStr();
+                }
+            }
+
             saveData();
+            const wasIdeaTodoDraft = !!pendingIdeaTodoRecordId;
             closeTodoDetail();
             renderTodoTable();
+            if (wasIdeaTodoDraft) renderIdeaPool();
             renderDashboard();
             renderAllRecords();
             renderGlobalSearch();

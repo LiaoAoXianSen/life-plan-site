@@ -226,31 +226,54 @@ test('AI local breakdown writes subtodos to the selected todo', async ({ page })
     expect(todo.note).toContain('AI 拆解');
 });
 
-test('idea can be converted to a linked todo', async ({ page }) => {
+test('idea can be converted to an editable linked todo', async ({ page }) => {
     const sample = require('../test-data/sample-data.json');
     const data = JSON.parse(JSON.stringify(sample));
     data.todos = data.todos.filter(todo => todo.id !== 'sample-todo-idea');
     const idea = data.records.find(record => record.id === 'sample-record-idea');
     idea.ideaTodoId = '';
     idea.ideaStatus = '待整理';
+    idea.content = '这是一个很长很长的灵感正文，里面有很多背景、限制、上下文和暂时还没有整理过的句子，不应该直接塞进待办标题里。'.repeat(3);
+    idea.title = '';
+    idea.ideaNextAction = '';
 
     await page.goto('/');
     await page.evaluate(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), data);
     await page.reload();
     await page.locator('.nav-item', { hasText: '灵感池' }).click();
-    await page.locator('.idea-card', { hasText: '把灵感转成小实验' }).getByRole('button', { name: '转成待办' }).click();
+    await page.locator('.idea-card', { hasText: '这是一个很长很长的灵感正文' }).getByRole('button', { name: '转成待办' }).click();
 
-    await expect(page.locator('#todo-detail-modal')).toHaveClass(/active/);
-    await expect(page.locator('#todo-detail-title')).toHaveText('待办详情');
+    const modal = page.locator('#todo-detail-modal');
+    await expect(modal).toHaveClass(/active/);
+    await expect(page.locator('#todo-detail-title')).toHaveText('灵感转待办');
+    await expect(modal.locator('#todo-detail-edit-panel')).toBeVisible();
+    await expect(modal.locator('#todo-detail-text')).toHaveValue('实践一条灵感');
 
-    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.find(record => record.id === 'sample-record-idea').ideaTodoId).toBe('');
+    const todoCountBeforeCancel = stored.todos.length;
+
+    await modal.getByRole('button', { name: '取消' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.todos).toHaveLength(todoCountBeforeCancel);
+    expect(stored.records.find(record => record.id === 'sample-record-idea').ideaTodoId).toBe('');
+
+    await page.locator('.idea-card', { hasText: '这是一个很长很长的灵感正文' }).getByRole('button', { name: '转成待办' }).click();
+    await expect(modal).toHaveClass(/active/);
+
+    await modal.locator('#todo-detail-text').fill('验证灵感的最小实验');
+    await modal.locator('#todo-detail-note').fill('先做 15 分钟版本，保留原始正文在灵感里');
+    await modal.getByRole('button', { name: '保存' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     const updatedIdea = stored.records.find(record => record.id === 'sample-record-idea');
     const linkedTodo = stored.todos.find(todo => todo.id === updatedIdea.ideaTodoId);
     expect(updatedIdea.ideaStatus).toBe('待实践');
-    expect(linkedTodo.text).toContain('选一个灵感转成待办');
+    expect(linkedTodo.text).toBe('验证灵感的最小实验');
+    expect(linkedTodo.note).toContain('15 分钟');
 });
 
-test('todo detail supports notes and checkable subtodos in view mode', async ({ page }) => {
+test('todo detail supports completion, notes and checkable subtodos in view mode', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('lifePlanData'));
     await page.reload();
@@ -267,6 +290,10 @@ test('todo detail supports notes and checkable subtodos in view mode', async ({ 
     await page.locator('.todo-title-cell', { hasText: '整理项目上下文' }).click();
     await expect(modal.locator('.todo-detail-note')).toContainText('后续补充参考链接');
     await expect(modal.locator('#todo-detail-edit-panel')).toBeHidden();
+    await modal.getByRole('button', { name: '标记完成' }).click();
+    await expect(modal.getByRole('button', { name: '恢复未完成' })).toBeVisible();
+    await modal.getByRole('button', { name: '恢复未完成' }).click();
+    await expect(modal.getByRole('button', { name: '标记完成' })).toBeVisible();
     const subTodo = modal.locator('.todo-subtodo-item', { hasText: '列出下一步' });
     await expect(subTodo.locator('input[type="checkbox"]')).toBeEnabled();
     await subTodo.locator('input[type="checkbox"]').check();
@@ -274,7 +301,54 @@ test('todo detail supports notes and checkable subtodos in view mode', async ({ 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     const todo = stored.todos.find(item => item.text === '整理项目上下文');
     expect(todo.note).toContain('参考链接');
+    expect(todo.done).toBe(true);
     expect(todo.subTodos[0].done).toBe(true);
+});
+
+test('verified ideas are listed after active ideas by default', async ({ page }) => {
+    const data = createEmptyData({
+        records: [
+            {
+                id: 'idea-verified-newer',
+                type: '灵感碎片',
+                title: '已经验证的较新灵感',
+                content: '已经完成验证，不应该压在最前面。',
+                startDate: '2026-07-07',
+                endDate: '2026-07-07',
+                todoIds: [],
+                ideaStatus: '已验证',
+                ideaTags: [],
+                ideaNextAction: '',
+                ideaTodoId: '',
+                ideaConclusion: '验证完成'
+            },
+            {
+                id: 'idea-active-older',
+                type: '灵感碎片',
+                title: '仍需推进的较旧灵感',
+                content: '还需要处理。',
+                startDate: '2026-07-01',
+                endDate: '2026-07-01',
+                todoIds: [],
+                ideaStatus: '待实践',
+                ideaTags: [],
+                ideaNextAction: '',
+                ideaTodoId: '',
+                ideaConclusion: ''
+            }
+        ]
+    });
+
+    await page.goto('/');
+    await page.evaluate(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), data);
+    await page.reload();
+    await page.locator('.nav-item', { hasText: '灵感池' }).click();
+
+    await expect(page.locator('.idea-card h3')).toHaveText(['仍需推进的较旧灵感', '已经验证的较新灵感']);
+    await page.locator('#idea-status-filter').selectOption('已验证');
+    await expect(page.locator('.idea-card h3')).toHaveText(['已经验证的较新灵感']);
+    await page.locator('#idea-status-filter').selectOption('待实践');
+    await expect(page.locator('.idea-card h3')).toHaveText(['仍需推进的较旧灵感']);
 });
 
 test('habit checkins only award configured currencies', async ({ page }) => {
