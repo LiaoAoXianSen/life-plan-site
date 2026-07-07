@@ -29,6 +29,7 @@
 - Full project check after diary AI revealed the next separate wheel issue: right-top management menu tests time out when clicking menu items in `#wheel-action-menu`; this should be fixed in the wheel phase, not bundled into the diary AI commit.
 - Wheel management regression root cause: the right-top `管理` menu HTML existed, but menu open/close handlers and modal rendering flow were missing, and the stage summary layer could intercept menu clicks without a higher `.wheel-mode-bar` stacking layer.
 - Wheel management should remain right-top modal-based; the deprecated bottom management panel was not restored.
+- Wheel page screenshot feedback: the `管理` button felt wrong because the 1080px breakpoint forced the top controls into one column too early; pre-spin summary also over-emphasized low-value stats, so the summary and empty result state were compacted.
 
 ## 2026-07-06
 

@@ -646,45 +646,32 @@
     function renderStageSummary(wheel) {
         const container = document.getElementById('wheel-stage-summary');
         if (!container) return;
-        const historyCount = countWheelHistory(wheel?.id || '');
         const headline = safeHtml(getWheelHeadline(wheel));
         if (isTagItemsStage(wheel)) {
             const tag = getTagById(wheelStageState.tagId);
             const tagColor = wheelStageState.tagColor || tag?.color || '#216e4e';
             container.innerHTML = `
-                <div class="wheel-stage-card hero active">
+                <div class="wheel-stage-card hero compact active">
                     <div class="wheel-stage-card-top">
                         <span class="wheel-stage-badge">第二段</span>
                         <span class="wheel-stage-badge muted">标签已锁定</span>
                     </div>
-                    <div class="wheel-stage-pill">${headline}</div>
                     <div class="wheel-stage-title">已锁定 ${getTagChipMarkup(wheelStageState.tagName, tagColor)}</div>
-                    <div class="wheel-stage-copy">继续转一次，就会从这个标签的 ${Number(wheelStageState.itemCount) || 0} 个候选里抽出最终答案。</div>
-                    <div class="wheel-stage-stats compact">
-                        <div class="wheel-stage-stat"><strong>${Number(wheelStageState.itemCount) || 0}</strong><span>标签内候选</span></div>
-                        <div class="wheel-stage-stat"><strong>${historyCount}</strong><span>本转盘记录</span></div>
-                    </div>
+                    <div class="wheel-stage-copy">${headline} · 再转一次抽具体内容。</div>
                 </div>
             `;
             return;
         }
         if (wheel?.mode === 'tag') {
             const tagCandidates = getTagCandidatesForWheel(wheel).slice(0, 6);
-            const totalPool = getTagCandidatesForWheel(wheel).reduce((sum, entry) => sum + entry.items.length, 0);
             container.innerHTML = `
-                <div class="wheel-stage-card hero">
+                <div class="wheel-stage-card hero compact">
                     <div class="wheel-stage-card-top">
                         <span class="wheel-stage-badge">标签转盘</span>
                         <span class="wheel-stage-badge muted">两段抽取</span>
                     </div>
-                    <div class="wheel-stage-pill">${headline}</div>
-                    <div class="wheel-stage-title">先抽一个方向，再抽一个具体答案</div>
-                    <div class="wheel-stage-copy">适合先定方向、再定具体答案的场景，主舞台会比原来更聚焦。</div>
-                    <div class="wheel-stage-stats compact">
-                        <div class="wheel-stage-stat"><strong>${tagCandidates.length}</strong><span>当前标签</span></div>
-                        <div class="wheel-stage-stat"><strong>${totalPool}</strong><span>候选内容</span></div>
-                        <div class="wheel-stage-stat"><strong>${historyCount}</strong><span>本转盘记录</span></div>
-                    </div>
+                    <div class="wheel-stage-title">${headline}</div>
+                    <div class="wheel-stage-copy">先抽方向，再抽具体答案。</div>
                     ${tagCandidates.length ? `
                         <div class="wheel-stage-quick-tags">
                             ${tagCandidates.map(entry => `
@@ -699,21 +686,14 @@
             `;
             return;
         }
-        const enabledCount = getEnabledEntries(wheel).length;
         container.innerHTML = `
-            <div class="wheel-stage-card hero">
+            <div class="wheel-stage-card hero compact">
                 <div class="wheel-stage-card-top">
                     <span class="wheel-stage-badge">普通转盘</span>
                     <span class="wheel-stage-badge muted">一步出结果</span>
                 </div>
-                <div class="wheel-stage-pill">${headline}</div>
-                <div class="wheel-stage-title">把选择交给转盘，先转出一个明确答案</div>
-                <div class="wheel-stage-copy">先抽出一个明确答案，别让选择继续占脑子。</div>
-                <div class="wheel-stage-stats compact">
-                    <div class="wheel-stage-stat"><strong>${enabledCount}</strong><span>当前选项</span></div>
-                    <div class="wheel-stage-stat"><strong>${historyCount}</strong><span>本转盘记录</span></div>
-                    <div class="wheel-stage-stat"><strong>直接</strong><span>一步出结果</span></div>
-                </div>
+                <div class="wheel-stage-title">${headline}</div>
+                <div class="wheel-stage-copy">先转出一个明确答案。</div>
             </div>
         `;
     }
@@ -726,10 +706,10 @@
         if (!history) {
             const itemCount = isTagItemsStage(wheel) ? Number(wheelStageState.itemCount) || 0 : getStageEntries(wheel).length;
             container.innerHTML = `
-                <div class="wheel-result-card pending">
-                    <div class="wheel-result-kicker">${isTagItemsStage(wheel) ? '第二段已就绪' : '准备开始'}</div>
-                    <div class="wheel-result-title">${isTagItemsStage(wheel) ? '再转一次' : '转一转'}</div>
-                    <div class="wheel-result-note">${isTagItemsStage(wheel) ? `当前标签下还有 ${itemCount} 个候选内容，下一次就会给出最终结果。` : `当前转盘有 ${itemCount} 个可抽选项，点击轮盘或下方按钮都可以直接开始。`}</div>
+                <div class="wheel-result-card pending compact">
+                    <span class="wheel-result-kicker">${isTagItemsStage(wheel) ? '第二段' : '准备开始'}</span>
+                    <strong class="wheel-result-title">${isTagItemsStage(wheel) ? '再转一次' : '转一转'}</strong>
+                    <span class="wheel-result-note">${itemCount} 个候选</span>
                 </div>
             `;
             return;

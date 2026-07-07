@@ -19,6 +19,7 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 12. Status: complete - Add sync regression smoke coverage and validate the full suite.
 13. Status: complete - Add diary-focused AI analysis with user-confirmed write-back to review, tomorrow focus, and todos.
 14. Status: complete - Fix wheel right-top management menu click behavior without restoring the deprecated bottom management panel.
+15. Status: complete - Polish wheel top controls placement and reduce pre-spin summary information density.
 
 ## Decisions
 

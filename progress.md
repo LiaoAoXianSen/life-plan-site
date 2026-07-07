@@ -41,6 +41,8 @@
 - Ran full `.\scripts\check.ps1` after the wheel fix; all 19 smoke tests passed.
 - Ran `.\scripts\package-clean.ps1` and produced `D:\project\life-plan-site\life-plan-site-runtime-20260707-192646.zip`.
 - Uploaded the diary AI and wheel management fixes to online `master` via GitHub API after normal `git push origin master` failed to connect to GitHub 443; verified remote `master` at `bf2b9496beccfb10829fec55da95738d244fcab5` with matching blobs for the six changed runtime/test files.
+- Polished the wheel page after screenshot feedback: kept the right-top `管理` control in the same top row on desktop/tablet widths, reduced pre-spin stage summary copy/stats, and compacted the empty result placeholder.
+- Re-verified with `node --check .\wheel-tool.js`, `npx playwright test tests/smoke.spec.js --grep "wheel"` (6/6), and full `.\scripts\check.ps1` (19/19).
 
 ## 2026-07-06
 
