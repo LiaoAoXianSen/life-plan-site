@@ -657,7 +657,10 @@
                 wheels: Array.isArray(source.wheels) ? source.wheels : [],
                 wheelTags: Array.isArray(source.wheelTags) ? source.wheelTags : [],
                 wheelLibraryItems: Array.isArray(source.wheelLibraryItems) ? source.wheelLibraryItems : [],
-                wheelHistory: Array.isArray(source.wheelHistory) ? source.wheelHistory : []
+                wheelHistory: Array.isArray(source.wheelHistory) ? source.wheelHistory : [],
+                deletedItems: Array.isArray(source.deletedItems)
+                    ? source.deletedItems.filter(item => isWheelDeletionCollection(item?.collection))
+                    : []
             };
         }
 
@@ -671,6 +674,9 @@
             data.wheelTags = Array.isArray(next.wheelTags) ? next.wheelTags : [];
             data.wheelLibraryItems = Array.isArray(next.wheelLibraryItems) ? next.wheelLibraryItems : [];
             data.wheelHistory = Array.isArray(next.wheelHistory) ? next.wheelHistory : [];
+            const nextWheelDeletedItems = Array.isArray(next.deletedItems) ? next.deletedItems.filter(item => isWheelDeletionCollection(item?.collection)) : [];
+            const preservedDeletedItems = Array.isArray(data.deletedItems) ? data.deletedItems.filter(item => !isWheelDeletionCollection(item?.collection)) : [];
+            data.deletedItems = [...preservedDeletedItems, ...nextWheelDeletedItems];
             normalizeDataShape();
             saveDataFromWheelSync();
             if (shouldRender) renderAfterDataChange();
@@ -681,7 +687,11 @@
             return getItemUpdatedTime(item);
         }
 
-        function mergeWheelEntities(localItems = [], remoteItems = []) {
+        function isWheelDeletionCollection(collection = '') {
+            return ['wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory', 'wheelItems'].includes(collection);
+        }
+
+        function mergeWheelEntities(localItems = [], remoteItems = [], collection = '', deletionMap = new Map()) {
             const merged = new Map();
             [...localItems, ...remoteItems].forEach((item, index) => {
                 if (!item || typeof item !== 'object') return;
@@ -691,27 +701,31 @@
                     merged.set(key, item);
                 }
             });
-            return Array.from(merged.values()).filter(item => !item?.deletedAt);
+            return Array.from(merged.values())
+                .filter(item => !item?.deletedAt)
+                .filter(item => !collection || shouldKeepMergedItem(collection, item, deletionMap));
         }
 
         function mergeWheelSnapshots(localSnapshot, remoteSnapshot) {
             const local = getWheelSnapshot(localSnapshot || {});
             const remote = getWheelSnapshot(remoteSnapshot || {});
+            const deletionMap = buildDeletionMap(local, remote);
             const remoteWheelMap = new Map(remote.wheels.map(item => [item.id, item]));
             return {
-                wheels: mergeWheelEntities(local.wheels, remote.wheels).map(wheel => {
+                wheels: mergeWheelEntities(local.wheels, remote.wheels, 'wheels', deletionMap).map(wheel => {
                     const localWheel = local.wheels.find(item => item.id === wheel.id);
                     const remoteWheel = remoteWheelMap.get(wheel.id);
                     const baseWheel = !localWheel ? remoteWheel : !remoteWheel ? localWheel
                         : getWheelEntityUpdatedTime(remoteWheel) >= getWheelEntityUpdatedTime(localWheel) ? remoteWheel : localWheel;
                     return {
                         ...baseWheel,
-                        items: mergeWheelEntities(localWheel?.items || [], remoteWheel?.items || [])
+                        items: mergeWheelEntities(localWheel?.items || [], remoteWheel?.items || [], 'wheelItems', deletionMap)
                     };
                 }),
-                wheelTags: mergeWheelEntities(local.wheelTags, remote.wheelTags),
-                wheelLibraryItems: mergeWheelEntities(local.wheelLibraryItems, remote.wheelLibraryItems),
-                wheelHistory: mergeWheelEntities(local.wheelHistory, remote.wheelHistory)
+                wheelTags: mergeWheelEntities(local.wheelTags, remote.wheelTags, 'wheelTags', deletionMap),
+                wheelLibraryItems: mergeWheelEntities(local.wheelLibraryItems, remote.wheelLibraryItems, 'wheelLibraryItems', deletionMap),
+                wheelHistory: mergeWheelEntities(local.wheelHistory, remote.wheelHistory, 'wheelHistory', deletionMap),
+                deletedItems: Array.from(deletionMap.values()).filter(item => isWheelDeletionCollection(item.collection))
             };
         }
 
@@ -2728,8 +2742,13 @@
             const merged = { ...localData, ...remoteData };
             const deletionMap = buildDeletionMap(localData, remoteData);
             merged.records = mergeRecordsByIdentity(localData.records || [], remoteData.records || [], deletionMap);
+            const wheelSnapshot = mergeWheelSnapshots(localData, remoteData);
+            merged.wheels = wheelSnapshot.wheels;
+            merged.wheelTags = wheelSnapshot.wheelTags;
+            merged.wheelLibraryItems = wheelSnapshot.wheelLibraryItems;
+            merged.wheelHistory = wheelSnapshot.wheelHistory;
             ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].forEach(key => {
-                if (key === 'records') return;
+                if (['records', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].includes(key)) return;
                 merged[key] = mergeArrayByIdentity(key, localData[key] || [], remoteData[key] || [], deletionMap);
             });
             merged.deletedItems = Array.from(deletionMap.values());
@@ -5917,6 +5936,8 @@
 
         function deleteTemplate(id) {
             if (!confirm('确定删除这个模板吗？')) return;
+            const template = data.templates.find(t => t.id === id);
+            markDeletedItem('templates', id, { reason: 'manual-delete', name: template?.name || '' });
             data.templates = data.templates.filter(t => t.id !== id);
             saveData();
             openTemplateManage();
@@ -6430,6 +6451,8 @@
         function deleteCurrentTodo() {
             if (!currentTodoId) return;
             if (!confirm('确定删除这个待办吗？')) return;
+            const deletedTodo = data.todos.find(t => t.id === currentTodoId);
+            markDeletedItem('todos', currentTodoId, { reason: 'manual-delete', text: deletedTodo?.text || '' });
             
             data.todos = data.todos.filter(t => t.id !== currentTodoId);
             // 从所有记录中移除引用
@@ -7780,6 +7803,11 @@
         function deleteCurrentHabit() {
             if (!currentHabitId) return;
             if (!confirm('确定删除这个习惯吗？所有历史打卡记录和时间轴条目都会一起删除')) return;
+            const deletedHabit = data.habits.find(h => h.id === currentHabitId);
+            markDeletedItem('habits', currentHabitId, { reason: 'manual-delete', name: deletedHabit?.name || '' });
+            data.checkins
+                .filter(c => c.habitId === currentHabitId)
+                .forEach(c => markDeletedItem('checkins', c.id, { reason: 'habit-delete', habitId: currentHabitId }));
             
             // 清理时间轴里的打卡记录
             data.records = data.records.filter(r => !(r.isHabitRecord && r.habitId === currentHabitId));
@@ -7888,6 +7916,8 @@
 
         function deleteGoal(goalId) {
             if (!confirm('确定删除这个目标吗？')) return;
+            const goal = data.goals.find(g => g.id === goalId);
+            markDeletedItem('goals', goalId, { reason: 'manual-delete', name: goal?.name || '' });
             data.goals = data.goals.filter(g => g.id !== goalId);
             saveData();
             renderGoalList();
@@ -7896,6 +7926,8 @@
         function deleteCurrentGoal() {
             if (!currentGoalId) return;
             if (!confirm('确定删除这个目标吗？')) return;
+            const goal = data.goals.find(g => g.id === currentGoalId);
+            markDeletedItem('goals', currentGoalId, { reason: 'manual-delete', name: goal?.name || '' });
             data.goals = data.goals.filter(g => g.id !== currentGoalId);
             saveData();
             closeGoalModal();

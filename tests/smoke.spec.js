@@ -249,6 +249,89 @@ test('record merge creates a conflict copy when diary text diverges', async ({ p
     expect(conflict.title).toContain('冲突副本');
 });
 
+test('merge keeps tombstoned entities deleted instead of reviving stale remote data', async ({ page }) => {
+    const deletedAt = '2026-07-08T10:00:00';
+    const staleStamp = '2026-07-07T10:00:00';
+    const remoteData = createEmptyData({
+        todos: [{ id: 'deleted-todo', text: '旧待办', updatedAt: staleStamp, done: false, subTodos: [], sessions: [] }],
+        habits: [{ id: 'deleted-habit', name: '旧习惯', updatedAt: staleStamp }],
+        templates: [{ id: 'deleted-template', name: '旧模板', updatedAt: staleStamp }],
+        goals: [{ id: 'deleted-goal', name: '旧目标', updatedAt: staleStamp }],
+        wheels: [
+            {
+                id: 'wheel-main',
+                name: '普通转盘',
+                mode: 'normal',
+                updatedAt: staleStamp,
+                items: [{ id: 'deleted-wheel-item', name: '旧选项', updatedAt: staleStamp, weight: 1, enabled: true }]
+            }
+        ]
+    });
+    const localData = createEmptyData({
+        wheels: [{ id: 'wheel-main', name: '普通转盘', mode: 'normal', updatedAt: deletedAt, items: [] }],
+        deletedItems: [
+            { collection: 'todos', id: 'deleted-todo', deletedAt },
+            { collection: 'habits', id: 'deleted-habit', deletedAt },
+            { collection: 'templates', id: 'deleted-template', deletedAt },
+            { collection: 'goals', id: 'deleted-goal', deletedAt },
+            { collection: 'wheelItems', id: 'deleted-wheel-item', deletedAt, wheelId: 'wheel-main' }
+        ]
+    });
+
+    await page.goto('/');
+    const merged = await page.evaluate(({ localData, remoteData }) => {
+        return mergeCloudData(localData, remoteData);
+    }, { localData, remoteData });
+
+    expect(merged.todos).toHaveLength(0);
+    expect(merged.habits).toHaveLength(0);
+    expect(merged.templates).toHaveLength(0);
+    expect(merged.goals).toHaveLength(0);
+    expect(merged.wheels[0].items).toHaveLength(0);
+    expect(merged.deletedItems.map(item => `${item.collection}:${item.id}`)).toEqual(expect.arrayContaining([
+        'todos:deleted-todo',
+        'habits:deleted-habit',
+        'templates:deleted-template',
+        'goals:deleted-goal',
+        'wheelItems:deleted-wheel-item'
+    ]));
+});
+
+test('wheel snapshot merge keeps deleted wheel items from returning', async ({ page }) => {
+    const deletedAt = '2026-07-08T10:00:00';
+    const localSnapshot = {
+        wheels: [{ id: 'wheel-main', name: '普通转盘', mode: 'normal', updatedAt: deletedAt, items: [] }],
+        wheelTags: [],
+        wheelLibraryItems: [],
+        wheelHistory: [],
+        deletedItems: [{ collection: 'wheelItems', id: 'deleted-wheel-item', deletedAt, wheelId: 'wheel-main' }]
+    };
+    const remoteSnapshot = {
+        wheels: [
+            {
+                id: 'wheel-main',
+                name: '普通转盘',
+                mode: 'normal',
+                updatedAt: '2026-07-07T10:00:00',
+                items: [{ id: 'deleted-wheel-item', name: '旧选项', updatedAt: '2026-07-07T10:00:00', weight: 1, enabled: true }]
+            }
+        ],
+        wheelTags: [],
+        wheelLibraryItems: [],
+        wheelHistory: []
+    };
+
+    await page.goto('/');
+    const merged = await page.evaluate(({ localSnapshot, remoteSnapshot }) => {
+        return mergeWheelSnapshots(localSnapshot, remoteSnapshot);
+    }, { localSnapshot, remoteSnapshot });
+
+    expect(merged.wheels[0].items).toHaveLength(0);
+    expect(merged.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'wheelItems', id: 'deleted-wheel-item' })
+    ]));
+});
+
 test('global search page accepts a keyword', async ({ page }) => {
     await page.goto('/');
     await page.locator('.nav-item', { hasText: '全局搜索' }).click();

@@ -1287,7 +1287,11 @@
         if (!confirm('删除这个转盘项吗？')) return;
         const wheel = data.wheels.find(item => item.id === wheelId);
         if (!wheel) return;
+        const item = (wheel.items || []).find(entry => entry.id === itemId);
         wheel.items = (wheel.items || []).filter(item => item.id !== itemId);
+        if (typeof markDeletedItem === 'function') {
+            markDeletedItem('wheelItems', itemId, { reason: 'manual-delete', wheelId, name: item?.name || '' });
+        }
         wheel.updatedAt = now();
         persist();
         renderWheelPage();
