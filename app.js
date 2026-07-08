@@ -930,8 +930,33 @@
             URL.revokeObjectURL(url);
         }
 
+        function getSnapshotStorageStats(snapshots = getLocalSnapshots()) {
+            const raw = localStorage.getItem(SNAPSHOT_KEY) || '[]';
+            const totalBytes = new TextEncoder().encode(raw).length;
+            const latestBytes = snapshots[0]?.bytes || 0;
+            return {
+                count: snapshots.length,
+                totalBytes,
+                latestBytes,
+                isRisky: totalBytes > 3 * 1024 * 1024 || latestBytes > 350 * 1024 || snapshots.length >= MAX_LOCAL_SNAPSHOTS
+            };
+        }
+
+        function renderSnapshotStorageNotice(snapshots = getLocalSnapshots()) {
+            const container = document.getElementById('snapshot-storage-notice');
+            if (!container) return;
+            const stats = getSnapshotStorageStats(snapshots);
+            container.className = `snapshot-storage-notice ${stats.isRisky ? 'is-warning' : ''}`;
+            container.innerHTML = `
+                <strong>快照占用 ${formatBytes(stats.totalBytes)}</strong>
+                <span>已保留 ${stats.count}/${MAX_LOCAL_SNAPSHOTS} 份，最近一份 ${formatBytes(stats.latestBytes)}。${stats.isRisky ? '数据变大时建议先导出备份，避免浏览器本地存储写满。' : '数据继续变大后，可定期手动导出一份离线备份。'}</span>
+            `;
+        }
+
         function openSnapshotModal() {
-            renderSnapshotList();
+            const snapshots = getLocalSnapshots();
+            renderSnapshotStorageNotice(snapshots);
+            renderSnapshotList(snapshots);
             document.getElementById('snapshot-modal').classList.add('active');
         }
 
@@ -1017,10 +1042,11 @@
             `;
         }
 
-        function renderSnapshotList() {
+        function renderSnapshotList(snapshotSource = null) {
             const container = document.getElementById('snapshot-list');
             if (!container) return;
-            const snapshots = getLocalSnapshots();
+            const snapshots = snapshotSource || getLocalSnapshots();
+            renderSnapshotStorageNotice(snapshots);
             if (snapshots.length === 0) {
                 const preview = document.getElementById('snapshot-preview');
                 if (preview) preview.innerHTML = '';
@@ -2110,17 +2136,65 @@
             `;
         }
 
-        function renderAiCaptureSection(label, value, actionLabel, action) {
+        function getAiCaptureDraftId(key) {
+            return `ai-capture-draft-${key}`;
+        }
+
+        function getAiCaptureDraftText(key, fallback = '') {
+            const input = document.getElementById(getAiCaptureDraftId(key));
+            return String(input?.value ?? fallback ?? '').trim();
+        }
+
+        function renderAiCaptureSection(label, key, value, actionLabel, action) {
             if (!value) return '';
             return `
                 <div class="ai-capture-section">
                     <div>
                         <strong>${escapeHtml(label)}</strong>
-                        <p>${escapeHtml(value).replace(/\n/g, '<br>')}</p>
+                        <textarea id="${getAiCaptureDraftId(key)}" class="ai-capture-draft" rows="4">${escapeHtml(value)}</textarea>
                     </div>
                     <button class="btn btn-secondary todo-mini-btn" onclick="${action}">${escapeHtml(actionLabel)}</button>
                 </div>
             `;
+        }
+
+        function renderAiCaptureTodoDraft(item, index) {
+            return `
+                <div class="ai-result-item ai-capture-todo-draft" data-index="${index}">
+                    <label>
+                        <span>待办标题</span>
+                        <input id="${getAiCaptureDraftId(`todo-text-${index}`)}" value="${escapeHtml(item.text || '')}">
+                    </label>
+                    <label>
+                        <span>备注</span>
+                        <textarea id="${getAiCaptureDraftId(`todo-note-${index}`)}" rows="2">${escapeHtml(item.note || '')}</textarea>
+                    </label>
+                    <div class="ai-capture-todo-meta">
+                        <label>
+                            <span>分组</span>
+                            <input id="${getAiCaptureDraftId(`todo-group-${index}`)}" value="${escapeHtml(item.group || '其他')}">
+                        </label>
+                        <label>
+                            <span>截止</span>
+                            <input id="${getAiCaptureDraftId(`todo-due-${index}`)}" type="date" value="${escapeHtml(item.dueDate || getTodayStr())}">
+                        </label>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getAiCaptureTodoDrafts() {
+            return (aiLastResult?.items || []).map((item, index) => {
+                const text = getAiCaptureDraftText(`todo-text-${index}`, item.text);
+                if (!text) return null;
+                return {
+                    ...item,
+                    text,
+                    note: getAiCaptureDraftText(`todo-note-${index}`, item.note || ''),
+                    group: getAiCaptureDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
+                    dueDate: getAiCaptureDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
+                };
+            }).filter(Boolean);
         }
 
         function renderAiCaptureResultPanel() {
@@ -2128,10 +2202,10 @@
             const targets = capture.suggestedTargets || [];
             const todoCount = aiLastResult.items?.length || 0;
             const sections = [
-                renderAiCaptureSection('纠错整理', capture.cleanText, '追加到日记', "applyAiCaptureToDiary()"),
-                renderAiCaptureSection('工作记录草稿', capture.workText, '创建工作记录', "applyAiCaptureRecord('工作记录')"),
-                renderAiCaptureSection('计划草稿', capture.planText, '写入日计划', "applyAiCaptureRecord('日计划')"),
-                renderAiCaptureSection('灵感草稿', capture.ideaText, '存为灵感', "applyAiCaptureRecord('灵感碎片')")
+                renderAiCaptureSection('日记草稿', 'diaryText', capture.diaryText || capture.cleanText, '追加到日记', "applyAiCaptureToDiary()"),
+                renderAiCaptureSection('工作记录草稿', 'workText', capture.workText, '创建工作记录', "applyAiCaptureRecord('工作记录')"),
+                renderAiCaptureSection('计划草稿', 'planText', capture.planText, '写入日计划', "applyAiCaptureRecord('日计划')"),
+                renderAiCaptureSection('灵感草稿', 'ideaText', capture.ideaText, '存为灵感', "applyAiCaptureRecord('灵感碎片')")
             ].filter(Boolean).join('');
             return `
                 <div class="ai-result-head">
@@ -2145,17 +2219,7 @@
                 ${todoCount ? `
                     <div class="ai-result-list ai-capture-todos">
                         <div class="record-preview-heading">建议待办（需确认创建）</div>
-                        ${aiLastResult.items.map((item, index) => `
-                            <div class="ai-result-item">
-                                <strong>${index + 1}. ${escapeHtml(item.text)}</strong>
-                                ${item.note ? `<span>${escapeHtml(item.note)}</span>` : ''}
-                                <div class="todo-detail-meta">
-                                    ${renderTodoUrgencyBadge(item)}
-                                    ${item.group ? `<span>${escapeHtml(item.group)}</span>` : ''}
-                                    ${item.dueDate ? `<span>截止 ${escapeHtml(item.dueDate)}</span>` : ''}
-                                </div>
-                            </div>
-                        `).join('')}
+                        ${aiLastResult.items.map((item, index) => renderAiCaptureTodoDraft(item, index)).join('')}
                         <button class="btn btn-primary" onclick="applyAiCaptureTodos()">创建这些待办</button>
                     </div>
                 ` : ''}
@@ -2315,9 +2379,9 @@
 
         function getAiCaptureContentForType(type) {
             const capture = aiLastResult?.capture || {};
-            if (type === '工作记录') return capture.workText || capture.cleanText || '';
-            if (type === '日计划') return capture.planText || capture.cleanText || '';
-            if (type === '灵感碎片') return capture.ideaText || capture.cleanText || '';
+            if (type === '工作记录') return getAiCaptureDraftText('workText', capture.workText || capture.cleanText || '');
+            if (type === '日计划') return getAiCaptureDraftText('planText', capture.planText || capture.cleanText || '');
+            if (type === '灵感碎片') return getAiCaptureDraftText('ideaText', capture.ideaText || capture.cleanText || '');
             return capture.cleanText || '';
         }
 
@@ -2337,6 +2401,10 @@
         function createAiCaptureRecord(type, content) {
             const range = getSuggestedRangeForType(type);
             const now = getLocalDateTimeStr();
+            const diaryTemplate = type === '日记' ? getDiaryTemplate() : null;
+            const initialContent = diaryTemplate
+                ? composeTemplateContent(diaryTemplate, { body: `AI 对话整理\n${content}` })
+                : content;
             const record = {
                 id: genId(),
                 type,
@@ -2345,8 +2413,8 @@
                 endDate: range.end,
                 recordTime: new Date().toTimeString().slice(0, 5),
                 recordEndTime: '',
-                content,
-                templateId: '',
+                content: initialContent,
+                templateId: diaryTemplate?.id || '',
                 todoIds: [],
                 ideaStatus: '',
                 ideaTags: [],
@@ -2381,7 +2449,12 @@
                 alert('没有可创建的待办建议');
                 return;
             }
-            const todos = aiLastResult.items.map(item => {
+            const draftItems = getAiCaptureTodoDrafts();
+            if (!draftItems.length) {
+                alert('请至少保留一条待办标题');
+                return;
+            }
+            const todos = draftItems.map(item => {
                 const todo = createTodoFromAiItem(item);
                 todo.sourceType = 'ai-capture';
                 return todo;
@@ -2392,16 +2465,18 @@
         }
 
         function applyAiCaptureToDiary() {
-            const content = aiLastResult?.capture?.diaryText || aiLastResult?.capture?.cleanText || '';
+            const capture = aiLastResult?.capture || {};
+            const content = getAiCaptureDraftText('diaryText', capture.diaryText || capture.cleanText || '');
             if (!content) {
                 alert('没有可写入日记的整理内容');
                 return;
             }
-            const record = getTodayDiaryRecord() || createAiCaptureRecord('日记', '');
+            const existingRecord = getTodayDiaryRecord();
+            const record = existingRecord || createAiCaptureRecord('日记', content);
             if (!record.title) record.title = `${formatDate(record.startDate || getTodayStr())} 日记`;
-            appendAiCaptureSection(record, content);
+            if (existingRecord) appendAiCaptureSection(record, content);
             refreshAfterAiCapture(record);
-            alert(getTodayDiaryRecord()?.id === record.id ? '已追加到今天的日记' : '已写入日记');
+            alert(existingRecord ? '已追加到今天的日记' : '已新建今天的日记');
         }
 
         function applyAiCaptureRecord(type) {
