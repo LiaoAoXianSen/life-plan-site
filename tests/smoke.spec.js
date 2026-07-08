@@ -300,6 +300,7 @@ test('AI remote calls accept an OpenAI-compatible base URL', async ({ page }) =>
     const requests = [];
     await page.route('https://ai2.hhhl.cc/v1/chat/completions', async route => {
         requests.push(route.request().postDataJSON());
+        await new Promise(resolve => setTimeout(resolve, 150));
         await route.fulfill({
             contentType: 'application/json',
             body: JSON.stringify({
@@ -331,9 +332,13 @@ test('AI remote calls accept an OpenAI-compatible base URL', async ({ page }) =>
     }, data);
     await page.reload();
     await page.getByRole('button', { name: 'AI 今日计划' }).click();
+    await expect(page.locator('#ai-assistant-modal')).not.toContainText('AI 设置');
     await page.getByRole('button', { name: '生成建议' }).click();
+    await expect(page.locator('#ai-run-button')).toHaveClass(/is-loading/);
+    await expect(page.locator('#ai-run-button')).toContainText('生成中');
 
     await expect(page.locator('#ai-result-panel')).toContainText('用 CCS 模型生成行动项');
+    await expect(page.locator('#ai-run-button')).not.toHaveClass(/is-loading/);
     expect(requests).toHaveLength(1);
     expect(requests[0].model).toBe('ccs-test-model');
 });

@@ -72,6 +72,7 @@
         let currentAiMode = 'todayPlan';
         let aiLastResult = null;
         let currentAiSourceRecordId = '';
+        let isAiAssistantRunning = false;
         let syncState = {
             dirty: false,
             lastLocalHash: '',
@@ -1267,6 +1268,27 @@
             });
         }
 
+        function updateAiRunButton() {
+            const button = document.getElementById('ai-run-button');
+            if (!button) return;
+            const label = button.querySelector('.ai-run-label');
+            button.disabled = isAiAssistantRunning;
+            button.classList.toggle('is-loading', isAiAssistantRunning);
+            button.setAttribute('aria-busy', isAiAssistantRunning ? 'true' : 'false');
+            if (label) label.textContent = isAiAssistantRunning ? '生成中...' : '生成建议';
+        }
+
+        function setAiAssistantRunning(running) {
+            isAiAssistantRunning = !!running;
+            updateAiRunButton();
+        }
+
+        function getAiAssistantReadyMessage() {
+            return isRemoteAiReady()
+                ? '远程 AI 已配置，点击生成建议开始分析。'
+                : '远程 AI 未配置或配置不完整，点击生成建议会使用本地规则。';
+        }
+
         function openAiSettings() {
             applyAiSettingsToForm();
             updateAiSettingsStatus(aiConfig.remoteEnabled && aiConfig.endpointUrl ? '已加载 AI 接口配置' : '未启用远程 AI，将使用本地规则');
@@ -1493,7 +1515,8 @@
             });
             renderAiContextPanel();
             renderAiResultPanel();
-            updateAiSettingsStatus(isRemoteAiReady() ? '远程 AI 已配置。' : '准备好了。未配置远程接口时会使用本地规则。');
+            updateAiRunButton();
+            updateAiSettingsStatus(getAiAssistantReadyMessage(), !isRemoteAiReady() && aiConfig.remoteEnabled);
         }
 
         function getAiTodoOptions() {
@@ -1860,19 +1883,28 @@
         }
 
         async function runAiAssistant() {
-            const payload = buildAiPayload();
-            updateAiSettingsStatus(isRemoteAiReady() ? '正在请求远程 AI...' : '正在使用本地规则生成建议...');
+            if (isAiAssistantRunning) return;
+            setAiAssistantRunning(true);
             try {
-                aiLastResult = isRemoteAiReady()
+                const payload = buildAiPayload();
+                const useRemote = isRemoteAiReady();
+                updateAiSettingsStatus(useRemote ? '正在请求远程 AI...' : '远程 AI 未配置或配置不完整，正在使用本地规则生成建议...');
+                aiLastResult = useRemote
                     ? await requestRemoteAi(payload)
                     : generateLocalAiResult(payload);
                 renderAiResultPanel();
-                updateAiSettingsStatus(isRemoteAiReady() ? 'AI 建议已生成。' : '本地规则建议已生成。');
+                updateAiSettingsStatus(useRemote ? 'AI 建议已生成。' : '本地规则建议已生成。需要远程 AI 时，请从页面侧栏的 AI 设置完成配置。');
             } catch (err) {
-                const localResult = generateLocalAiResult(payload);
-                aiLastResult = localResult;
-                renderAiResultPanel();
-                updateAiSettingsStatus(`${err.message || '远程 AI 失败'}\n已改用本地规则生成建议。`, true);
+                try {
+                    const localResult = generateLocalAiResult(buildAiPayload());
+                    aiLastResult = localResult;
+                    renderAiResultPanel();
+                    updateAiSettingsStatus(`远程 AI 报错：${err.message || '请求失败'}\n已改用本地规则生成建议。`, true);
+                } catch (fallbackErr) {
+                    updateAiSettingsStatus(`AI 生成失败：${fallbackErr.message || err.message || '请检查上下文后重试。'}`, true);
+                }
+            } finally {
+                setAiAssistantRunning(false);
             }
         }
 

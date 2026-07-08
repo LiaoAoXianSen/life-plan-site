@@ -849,8 +849,10 @@
                 <textarea id="ai-user-input" rows="4" placeholder="可以补充今天的精力、限制、想优先推进的事。"></textarea>
             </div>
             <div class="ai-action-row">
-                <button class="btn btn-secondary" onclick="openAiSettings()">AI 设置</button>
-                <button class="btn btn-primary" onclick="runAiAssistant()">生成建议</button>
+                <button id="ai-run-button" class="btn btn-primary ai-run-button" onclick="runAiAssistant()">
+                    <span class="ai-run-spinner" aria-hidden="true"></span>
+                    <span class="ai-run-label">生成建议</span>
+                </button>
             </div>
             <div id="ai-assistant-status" class="sync-modal-status">准备好了。未配置远程接口时会使用本地规则。</div>
             <div id="ai-result-panel" class="ai-result-panel"></div>

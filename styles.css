@@ -242,6 +242,33 @@
         gap: 8px;
         flex-wrap: wrap;
     }
+    .ai-run-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-width: 110px;
+    }
+    .ai-run-button:disabled {
+        cursor: wait;
+        opacity: .88;
+        transform: none;
+    }
+    .ai-run-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,.42);
+        border-top-color: #fff;
+        border-radius: 999px;
+        display: none;
+    }
+    .ai-run-button.is-loading .ai-run-spinner {
+        display: inline-block;
+        animation: aiSpin .72s linear infinite;
+    }
+    @keyframes aiSpin {
+        to { transform: rotate(360deg); }
+    }
     .ai-result-panel {
         margin-top: 14px;
     }
