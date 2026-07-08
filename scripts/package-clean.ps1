@@ -18,6 +18,8 @@ $runtimeFiles = @(
     'habit-ui.js',
     'habit-style.css',
     'vendor/app-sync-kit.browser.global.js',
+    'sync-service.js',
+    'snapshot-service.js',
     'wheel-tool.js',
     'wheel-tool.css'
 )

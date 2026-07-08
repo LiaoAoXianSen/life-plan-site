@@ -44,6 +44,18 @@
 - Polished the wheel page after screenshot feedback: kept the right-top `管理` control in the same top row on desktop/tablet widths, reduced pre-spin stage summary copy/stats, and compacted the empty result placeholder.
 - Re-verified with `node --check .\wheel-tool.js`, `npx playwright test tests/smoke.spec.js --grep "wheel"` (6/6), and full `.\scripts\check.ps1` (19/19).
 
+## 2026-07-08
+
+- Reconfirmed that P3 means actual code extraction, not just using `app-sync-kit`.
+- Added `sync-service.js` and moved sync hashing, WebDAV/AppSyncKit remote I/O, deletion tombstones, main-data merge, record conflict-copy merge, and wheel snapshot merge logic behind `window.LifePlanSyncService`.
+- Added `snapshot-service.js` and moved local snapshot cloning, normalization, versioning, parent tracking, storage stats, timestamped file naming, and JSON download helpers behind `window.LifePlanSnapshotService`.
+- Kept `app.js` responsible for UI state, render calls, sync status messages, and existing public function names so inline handlers and smoke tests continue working.
+- Loaded the new services from `index.html` before `app.js` and added them to `scripts/package-clean.ps1`.
+- Verified syntax with `node --check .\app.js`, `node --check .\sync-service.js`, and `node --check .\snapshot-service.js`.
+- Ran targeted sync/merge smoke coverage with `npx playwright test tests/smoke.spec.js -g "auto sync|record merge|tombstoned|wheel snapshot|snapshot"`; 6 tests passed.
+- Ran full `.\scripts\check.ps1`; 24 smoke tests passed.
+- Regenerated clean runtime package at `D:\project\life-plan-site\life-plan-site-runtime-20260708-151559.zip`.
+
 ## 2026-07-06
 
 - Started multi-agent-enabled work for habit reward changes and package retention.

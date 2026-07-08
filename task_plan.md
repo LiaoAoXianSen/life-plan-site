@@ -20,6 +20,9 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 13. Status: complete - Add diary-focused AI analysis with user-confirmed write-back to review, tomorrow focus, and todos.
 14. Status: complete - Fix wheel right-top management menu click behavior without restoring the deprecated bottom management panel.
 15. Status: complete - Polish wheel top controls placement and reduce pre-spin summary information density.
+16. Status: complete - Start P3 maintainability split by extracting sync service logic from `app.js`.
+17. Status: complete - Extract local snapshot storage/version/download helpers from `app.js`.
+18. Status: complete - Validate, package, commit, and push the P3 split to `master`.
 
 ## Decisions
 
@@ -31,6 +34,7 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 - Keep this thread scoped to AI integration and closeout only; defer non-AI UX follow-ups unless the user explicitly reopens that scope.
 - A later attempt to continue non-AI work was a scope misunderstanding and was reverted back to the AI-only state.
 - User explicitly reopened non-AI scope for todo detail and idea pool fixes on 2026-07-07.
+- P3 means real module extraction, not only adding the shared sync foundation; keep UI refactors conservative and move pure logic first.
 
 ## Errors Encountered
 

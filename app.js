@@ -98,6 +98,22 @@
         let wheelSyncIntervalTimer = null;
         let isCloudSyncing = false;
         let isWheelCloudSyncing = false;
+        const syncService = window.LifePlanSyncService.create({
+            appSyncKit: () => window.AppSyncKit,
+            fetchImpl: (...args) => fetch(...args),
+            getNowLocal: () => getLocalDateTimeStr(),
+            normalizeHabitCurrency: value => normalizeHabitCurrency(value),
+            defaultCurrency: HABIT_DEFAULT_CURRENCY
+        });
+        const snapshotService = window.LifePlanSnapshotService.create({
+            storage: localStorage,
+            key: 'lifePlanSnapshots',
+            maxSnapshots: 20,
+            schemaVersion: 2,
+            genId: () => genId(),
+            getHash: value => getDataHash(value),
+            getNowLocal: () => getLocalDateTimeStr()
+        });
         const builtInTemplates = [
             {
                 id: 'builtin-diary-daily-review',
@@ -640,58 +656,19 @@
         }
 
         function hashString(str) {
-            let hash = 2166136261;
-            for (let i = 0; i < str.length; i++) {
-                hash ^= str.charCodeAt(i);
-                hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-            }
-            return (hash >>> 0).toString(36);
-        }
-
-        function getLifePlanSyncAdapter() {
-            return window.AppSyncKit?.adapters?.lifePlan || null;
-        }
-
-        function getAppSyncProvider() {
-            if (!window.AppSyncKit?.createWebdavProvider) return null;
-            return window.AppSyncKit.createWebdavProvider();
-        }
-
-        function getAppSyncProviderConfig(path = syncConfig.remotePath) {
-            return {
-                endpoint: syncConfig.webdavUrl || '',
-                remotePath: path || '/life-plan.json',
-                writeMode: 'legacy-raw-data'
-            };
-        }
-
-        function createAppSyncDocument(payload, appId = 'life-plan') {
-            return {
-                appId,
-                schemaVersion: 1,
-                updatedAt: new Date().toISOString(),
-                data: payload
-            };
+            return syncService.hashString(str);
         }
 
         function getDataHash(value = data) {
-            return hashString(JSON.stringify(value || {}));
+            return syncService.getDataHash(value);
         }
 
         function getWheelSnapshot(source = data) {
-            return {
-                wheels: Array.isArray(source.wheels) ? source.wheels : [],
-                wheelTags: Array.isArray(source.wheelTags) ? source.wheelTags : [],
-                wheelLibraryItems: Array.isArray(source.wheelLibraryItems) ? source.wheelLibraryItems : [],
-                wheelHistory: Array.isArray(source.wheelHistory) ? source.wheelHistory : [],
-                deletedItems: Array.isArray(source.deletedItems)
-                    ? source.deletedItems.filter(item => isWheelDeletionCollection(item?.collection))
-                    : []
-            };
+            return syncService.getWheelSnapshot(source);
         }
 
         function getWheelDataHash(value = getWheelSnapshot()) {
-            return hashString(JSON.stringify(value || {}));
+            return syncService.getWheelDataHash(value);
         }
 
         function applyWheelSnapshot(snapshot, shouldRender = true) {
@@ -708,51 +685,12 @@
             if (shouldRender) renderAfterDataChange();
         }
 
-        function getWheelEntityUpdatedTime(item) {
-            if (!item || typeof item !== 'object') return 0;
-            return getItemUpdatedTime(item);
-        }
-
         function isWheelDeletionCollection(collection = '') {
-            return ['wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory', 'wheelItems'].includes(collection);
-        }
-
-        function mergeWheelEntities(localItems = [], remoteItems = [], collection = '', deletionMap = new Map()) {
-            const merged = new Map();
-            [...localItems, ...remoteItems].forEach((item, index) => {
-                if (!item || typeof item !== 'object') return;
-                const key = item.id ? `id:${item.id}` : `json:${index}:${JSON.stringify(item)}`;
-                const current = merged.get(key);
-                if (!current || getWheelEntityUpdatedTime(item) >= getWheelEntityUpdatedTime(current)) {
-                    merged.set(key, item);
-                }
-            });
-            return Array.from(merged.values())
-                .filter(item => !item?.deletedAt)
-                .filter(item => !collection || shouldKeepMergedItem(collection, item, deletionMap));
+            return syncService.isWheelDeletionCollection(collection);
         }
 
         function mergeWheelSnapshots(localSnapshot, remoteSnapshot) {
-            const local = getWheelSnapshot(localSnapshot || {});
-            const remote = getWheelSnapshot(remoteSnapshot || {});
-            const deletionMap = buildDeletionMap(local, remote);
-            const remoteWheelMap = new Map(remote.wheels.map(item => [item.id, item]));
-            return {
-                wheels: mergeWheelEntities(local.wheels, remote.wheels, 'wheels', deletionMap).map(wheel => {
-                    const localWheel = local.wheels.find(item => item.id === wheel.id);
-                    const remoteWheel = remoteWheelMap.get(wheel.id);
-                    const baseWheel = !localWheel ? remoteWheel : !remoteWheel ? localWheel
-                        : getWheelEntityUpdatedTime(remoteWheel) >= getWheelEntityUpdatedTime(localWheel) ? remoteWheel : localWheel;
-                    return {
-                        ...baseWheel,
-                        items: mergeWheelEntities(localWheel?.items || [], remoteWheel?.items || [], 'wheelItems', deletionMap)
-                    };
-                }),
-                wheelTags: mergeWheelEntities(local.wheelTags, remote.wheelTags, 'wheelTags', deletionMap),
-                wheelLibraryItems: mergeWheelEntities(local.wheelLibraryItems, remote.wheelLibraryItems, 'wheelLibraryItems', deletionMap),
-                wheelHistory: mergeWheelEntities(local.wheelHistory, remote.wheelHistory, 'wheelHistory', deletionMap),
-                deletedItems: Array.from(deletionMap.values()).filter(item => isWheelDeletionCollection(item.collection))
-            };
+            return syncService.mergeWheelSnapshots(localSnapshot, remoteSnapshot);
         }
 
         // 保存数据
@@ -822,117 +760,44 @@
             }
         }
 
-        const SNAPSHOT_KEY = 'lifePlanSnapshots';
         const MAX_LOCAL_SNAPSHOTS = 20;
-        const SNAPSHOT_SCHEMA_VERSION = 2;
 
         function cloneDataSnapshot(value = data) {
-            return JSON.parse(JSON.stringify(value || {}));
+            return snapshotService.cloneDataSnapshot(value);
         }
 
         function getTimestampForFile(date = new Date()) {
-            const pad = n => n.toString().padStart(2, '0');
-            return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+            return snapshotService.getTimestampForFile(date);
         }
 
         function getLocalSnapshots() {
-            try {
-                const saved = localStorage.getItem(SNAPSHOT_KEY);
-                const snapshots = saved ? JSON.parse(saved) : [];
-                return Array.isArray(snapshots) ? normalizeLocalSnapshots(snapshots) : [];
-            } catch (err) {
-                console.warn('本地快照读取失败', err);
-                return [];
-            }
+            return snapshotService.getAll();
         }
 
         function normalizeLocalSnapshots(snapshots = []) {
-            const sortedOldestFirst = [...snapshots].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-            const fallbackVersions = new Map();
-            sortedOldestFirst.forEach((snapshot, index) => {
-                fallbackVersions.set(snapshot.id || `${snapshot.createdAt || ''}-${index}`, index + 1);
-            });
-
-            return snapshots.map((snapshot, index) => {
-                const key = snapshot.id || `${snapshot.createdAt || ''}-${index}`;
-                const version = Number(snapshot.version || fallbackVersions.get(key) || 1);
-                return {
-                    schemaVersion: snapshot.schemaVersion || 1,
-                    id: snapshot.id || genId(),
-                    version,
-                    reason: snapshot.reason || '本地快照',
-                    createdAt: snapshot.createdAt || getLocalDateTimeStr(),
-                    hash: snapshot.hash || getDataHash(snapshot.data || {}),
-                    bytes: snapshot.bytes || new TextEncoder().encode(JSON.stringify(snapshot.data || {})).length,
-                    parent: snapshot.parent || null,
-                    mergedWith: snapshot.mergedWith || null,
-                    source: snapshot.source || 'legacy',
-                    action: snapshot.action || '',
-                    data: snapshot.data || {}
-                };
-            });
+            return snapshotService.normalize(snapshots);
         }
 
         function saveLocalSnapshots(snapshots) {
-            const limited = normalizeLocalSnapshots(snapshots)
-                .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-                .slice(0, MAX_LOCAL_SNAPSHOTS);
-            localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(limited));
-            return limited;
+            return snapshotService.saveAll(snapshots);
         }
 
         function getNextSnapshotVersion(snapshots = getLocalSnapshots()) {
-            return snapshots.reduce((max, snapshot) => Math.max(max, Number(snapshot.version || 0)), 0) + 1;
+            return snapshotService.getNextVersion(snapshots);
         }
 
         function getSnapshotParent(snapshots = getLocalSnapshots(), meta = {}) {
-            if (meta.parentSnapshotId || meta.parentVersion || meta.parentHash) {
-                return {
-                    id: meta.parentSnapshotId || '',
-                    version: meta.parentVersion || '',
-                    hash: meta.parentHash || ''
-                };
-            }
-            const latest = [...snapshots].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
-            if (!latest) return null;
-            return {
-                id: latest.id,
-                version: latest.version,
-                hash: latest.hash
-            };
+            return snapshotService.getParent(snapshots, meta);
         }
 
         function createLocalSnapshot(reason = '自动快照', sourceData = data, meta = {}) {
-            let snapshot;
-
+            let snapshot = null;
             try {
-                const existingSnapshots = getLocalSnapshots();
-                const snapshotData = cloneDataSnapshot(sourceData);
-                snapshot = {
-                    schemaVersion: SNAPSHOT_SCHEMA_VERSION,
-                    id: genId(),
-                    version: getNextSnapshotVersion(existingSnapshots),
-                    reason,
-                    createdAt: getLocalDateTimeStr(),
-                    hash: getDataHash(snapshotData),
-                    bytes: new TextEncoder().encode(JSON.stringify(snapshotData)).length,
-                    parent: getSnapshotParent(existingSnapshots, meta),
-                    mergedWith: meta.mergedWith || null,
-                    source: meta.source || 'local',
-                    action: meta.action || '',
-                    data: snapshotData
-                };
-                const snapshots = [snapshot, ...existingSnapshots];
-                saveLocalSnapshots(snapshots);
+                snapshot = snapshotService.createSnapshot(reason, sourceData, meta);
             } catch (err) {
-                try {
-                    const snapshots = [snapshot, ...getLocalSnapshots()].filter(Boolean);
-                    saveLocalSnapshots(snapshots.slice(0, 5));
-                } catch (fallbackErr) {
-                    console.warn('本地快照写入失败', fallbackErr);
-                    updateSyncStatus('本地快照写入失败，可能是浏览器存储空间不足', true);
-                    return null;
-                }
+                console.warn('本地快照写入失败', err);
+                updateSyncStatus('本地快照写入失败，可能是浏览器存储空间不足', true);
+                return null;
             }
 
             renderSnapshotList();
@@ -941,31 +806,15 @@
         }
 
         function formatBytes(bytes = 0) {
-            if (bytes < 1024) return `${bytes} B`;
-            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-            return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+            return snapshotService.formatBytes(bytes);
         }
 
         function downloadJsonFile(filename, payload) {
-            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
+            snapshotService.downloadJsonFile(filename, payload);
         }
 
         function getSnapshotStorageStats(snapshots = getLocalSnapshots()) {
-            const raw = localStorage.getItem(SNAPSHOT_KEY) || '[]';
-            const totalBytes = new TextEncoder().encode(raw).length;
-            const latestBytes = snapshots[0]?.bytes || 0;
-            return {
-                count: snapshots.length,
-                totalBytes,
-                latestBytes,
-                isRisky: totalBytes > 3 * 1024 * 1024 || latestBytes > 350 * 1024 || snapshots.length >= MAX_LOCAL_SNAPSHOTS
-            };
+            return snapshotService.getStorageStats(snapshots);
         }
 
         function renderSnapshotStorageNotice(snapshots = getLocalSnapshots()) {
@@ -2620,289 +2469,28 @@
             alert(`已创建待办 ${todos.length} 项`);
         }
 
-        async function webdavRequestWithConfig(config, path, method, body = null) {
-            if (!config.webdavUrl) throw new Error('请先填写 Cloudflare Worker 同步中转地址');
-            const base = `${config.webdavUrl.replace(/\/+$/, '')}/`;
-            const target = String(path || '').replace(/^\/+/, '');
-            const url = base + target;
-            const headers = {};
-            if (body !== null) headers['Content-Type'] = 'application/json; charset=utf-8';
-            if (method === 'PROPFIND') headers.Depth = '0';
-            const response = await fetch(url, { method, headers, body, mode: 'cors' });
-            if (!response.ok && response.status !== 207) {
-                const detail = await response.clone().text().catch(() => '');
-                const err = new Error(`WebDAV ${method} 失败：${response.status}${detail ? ` ${detail.slice(0, 120)}` : ''}`);
-                err.status = response.status;
-                err.method = method;
-                throw err;
-            }
-            return response;
-        }
-
-        async function webdavRequest(path, method, body = null) {
-            return webdavRequestWithConfig(syncConfig, path, method, body);
-        }
-
-        async function pullRemoteDataWithSyncKit(path = syncConfig.remotePath, normalizePayload = value => value, hashPayload = getDataHash) {
-            const provider = getAppSyncProvider();
-            if (!provider) return undefined;
-            const envelope = await provider.pull(getAppSyncProviderConfig(path));
-            if (!envelope?.document) return null;
-            const remoteData = normalizePayload(envelope.document.data);
-            return { data: remoteData, hash: hashPayload(remoteData) };
-        }
-
-        async function pushRemoteDataWithSyncKit(path, payload, appId = 'life-plan') {
-            const provider = getAppSyncProvider();
-            if (!provider) return false;
-            await provider.push(getAppSyncProviderConfig(path), createAppSyncDocument(payload, appId));
-            return true;
-        }
-
-        async function testRemoteFolderWithSyncKit(path = syncConfig.remotePath) {
-            const provider = getAppSyncProvider();
-            if (!provider?.healthCheck) return undefined;
-            try {
-                await provider.healthCheck(getAppSyncProviderConfig(path));
-                return true;
-            } catch (err) {
-                if (String(err?.message || '').includes('404')) return null;
-                throw err;
-            }
-        }
-
-        function getHabitLedgerMergeKey(entry) {
-            if (!entry || typeof entry !== 'object') return '';
-            if (entry.sourceId && ['checkin', 'milestone', 'reverse', 'miss', 'break', 'reverse-penalty'].includes(entry.type)) {
-                return `ledger:${entry.type}:${entry.sourceId}:${normalizeHabitCurrency(entry.currency)}`;
-            }
-            return '';
-        }
-
-        function getItemMergeKey(item, fallbackIndex, collection = '') {
-            if (!item || typeof item !== 'object') return `value-${fallbackIndex}`;
-            if (collection === 'habitPointLedger') return getHabitLedgerMergeKey(item) || (item.id ? `id:${item.id}` : `value-${fallbackIndex}`);
-            if (item.id) return `id:${item.id}`;
-            if (item.habitId && item.date) return `habit:${item.habitId}:${item.date}`;
-            if (item.type && item.period) return `period:${item.type}:${item.period}`;
-            if (item.title && item.date) return `title:${item.title}:${item.date}`;
-            return `json:${JSON.stringify(item)}`;
-        }
-
         function getItemUpdatedTime(item) {
-            if (!item || typeof item !== 'object') return 0;
-            const raw = item.updatedAt || item.completedAt || item.createdAt || item.date || item.recordTime || '';
-            const time = new Date(raw).getTime();
-            return Number.isFinite(time) ? time : 0;
+            return syncService.getItemUpdatedTime(item);
         }
 
         function getDeletedItemKey(collection, id) {
-            return `${collection}:${id}`;
+            return syncService.getDeletedItemKey(collection, id);
         }
 
         function markDeletedItem(collection, id, extra = {}) {
-            if (!id) return;
-            if (!Array.isArray(data.deletedItems)) data.deletedItems = [];
-            const key = getDeletedItemKey(collection, id);
-            data.deletedItems = data.deletedItems.filter(item => getDeletedItemKey(item.collection, item.id) !== key);
-            data.deletedItems.push({
-                collection,
-                id,
-                deletedAt: getLocalDateTimeStr(),
-                ...extra
-            });
-            pruneDeletedItems();
+            syncService.markDeletedItem(data, collection, id, extra);
         }
 
         function pruneDeletedItems(target = data) {
-            if (!Array.isArray(target.deletedItems)) target.deletedItems = [];
-            const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
-            target.deletedItems = target.deletedItems.filter(item => {
-                const time = new Date(item.deletedAt || 0).getTime();
-                return !Number.isFinite(time) || time >= cutoff;
-            });
-        }
-
-        function buildDeletionMap(localData = data, remoteData = {}) {
-            const map = new Map();
-            [...(localData.deletedItems || []), ...(remoteData.deletedItems || [])].forEach(item => {
-                if (!item?.collection || !item?.id) return;
-                const key = getDeletedItemKey(item.collection, item.id);
-                const existing = map.get(key);
-                if (!existing || new Date(item.deletedAt || 0) > new Date(existing.deletedAt || 0)) {
-                    map.set(key, item);
-                }
-            });
-            return map;
-        }
-
-        function shouldKeepMergedItem(collection, item, deletionMap) {
-            if (!item?.id) return true;
-            const deleted = deletionMap.get(getDeletedItemKey(collection, item.id));
-            if (!deleted) return true;
-            return getItemUpdatedTime(item) > new Date(deleted.deletedAt || 0).getTime();
-        }
-
-        function mergeArrayByIdentity(collection, localItems = [], remoteItems = [], deletionMap = new Map()) {
-            const merged = new Map();
-            localItems.forEach((item, index) => merged.set(getItemMergeKey(item, index, collection), item));
-            remoteItems.forEach((remoteItem, index) => {
-                const key = getItemMergeKey(remoteItem, index, collection);
-                const localItem = merged.get(key);
-                if (!localItem || getItemUpdatedTime(remoteItem) >= getItemUpdatedTime(localItem)) {
-                    merged.set(key, remoteItem);
-                }
-            });
-            return Array.from(merged.values()).filter(item => shouldKeepMergedItem(collection, item, deletionMap));
-        }
-
-        function normalizeRecordMergeText(text = '') {
-            return String(text || '').replace(/\r\n/g, '\n');
-        }
-
-        function normalizeRecordCompareText(text = '') {
-            return normalizeRecordMergeText(text).replace(/[\s，。！？、；：,.!?;:"'“”‘’（）()【】[\]《》<>#\-_*`~]+/g, '');
-        }
-
-        function isTextSubsequence(needle, haystack) {
-            if (!needle) return true;
-            if (!haystack) return false;
-            let index = 0;
-            for (let i = 0; i < haystack.length && index < needle.length; i++) {
-                if (haystack[i] === needle[index]) index += 1;
-            }
-            return index === needle.length;
-        }
-
-        function isRecordTextSuperset(candidateText, otherText) {
-            if (!otherText) return !!candidateText;
-            if (!candidateText) return false;
-            if (candidateText.includes(otherText)) return true;
-            return isTextSubsequence(
-                normalizeRecordCompareText(otherText),
-                normalizeRecordCompareText(candidateText)
-            );
-        }
-
-        function getRecordMergeStamp(...items) {
-            const winner = items
-                .filter(Boolean)
-                .sort((a, b) => getItemUpdatedTime(b) - getItemUpdatedTime(a))[0];
-            return winner?.updatedAt || winner?.createdAt || getLocalDateTimeStr();
-        }
-
-        function hasRecordConflictCopy(records, originalId, contentHash) {
-            return records.some(record => record?.conflictOf === originalId && record.conflictContentHash === contentHash);
-        }
-
-        function createRecordConflictCopy(record, originalId, sourceLabel, existingRecords = []) {
-            const contentHash = hashString(normalizeRecordMergeText(record?.content || ''));
-            if (!contentHash || hasRecordConflictCopy(existingRecords, originalId, contentHash)) return null;
-            const stamp = getLocalDateTimeStr();
-            const baseTitle = record.title || record.startDate || record.createdAt || '未命名记录';
-            return {
-                ...record,
-                id: `${originalId}-conflict-${contentHash}`,
-                title: `${baseTitle}（冲突副本-${sourceLabel}）`,
-                conflictOf: originalId,
-                conflictSource: sourceLabel,
-                conflictContentHash: contentHash,
-                conflictCreatedAt: stamp,
-                createdAt: record.createdAt || stamp,
-                updatedAt: record.updatedAt || record.createdAt || stamp
-            };
-        }
-
-        function mergeRecordPair(localRecord, remoteRecord, existingRecords = []) {
-            const localText = normalizeRecordMergeText(localRecord.content || '');
-            const remoteText = normalizeRecordMergeText(remoteRecord.content || '');
-            const localTime = getItemUpdatedTime(localRecord);
-            const remoteTime = getItemUpdatedTime(remoteRecord);
-            const latest = remoteTime >= localTime ? remoteRecord : localRecord;
-            const older = latest === remoteRecord ? localRecord : remoteRecord;
-            const olderSource = older === localRecord ? '本地' : '云端';
-
-            if (localText === remoteText) {
-                return { primary: latest, conflict: null };
-            }
-
-            const localIsSuperset = isRecordTextSuperset(localText, remoteText);
-            const remoteIsSuperset = isRecordTextSuperset(remoteText, localText);
-            if (localIsSuperset || remoteIsSuperset) {
-                const supersetRecord = remoteIsSuperset && !localIsSuperset ? remoteRecord : localRecord;
-                return {
-                    primary: {
-                        ...supersetRecord,
-                        ...latest,
-                        content: supersetRecord.content || '',
-                        updatedAt: getRecordMergeStamp(localRecord, remoteRecord)
-                    },
-                    conflict: null
-                };
-            }
-
-            return {
-                primary: latest,
-                conflict: createRecordConflictCopy(older, latest.id || older.id, olderSource, existingRecords)
-            };
-        }
-
-        function mergeRecordsByIdentity(localItems = [], remoteItems = [], deletionMap = new Map()) {
-            const merged = new Map();
-            const conflictCopies = [];
-            localItems.forEach((item, index) => merged.set(getItemMergeKey(item, index, 'records'), item));
-            remoteItems.forEach((remoteItem, index) => {
-                const key = getItemMergeKey(remoteItem, index, 'records');
-                const localItem = merged.get(key);
-                if (!localItem) {
-                    merged.set(key, remoteItem);
-                    return;
-                }
-                const existingRecords = [...localItems, ...remoteItems, ...Array.from(merged.values()), ...conflictCopies];
-                const { primary, conflict } = mergeRecordPair(localItem, remoteItem, existingRecords);
-                merged.set(key, primary);
-                if (conflict) conflictCopies.push(conflict);
-            });
-            return [...Array.from(merged.values()), ...conflictCopies]
-                .filter(item => shouldKeepMergedItem('records', item, deletionMap));
+            return syncService.pruneDeletedItems(target);
         }
 
         function mergeCloudData(localData, remoteData) {
-            const adapter = getLifePlanSyncAdapter();
-            if (adapter?.merge) {
-                return adapter.merge(localData || {}, remoteData || {});
-            }
-            const merged = { ...localData, ...remoteData };
-            const deletionMap = buildDeletionMap(localData, remoteData);
-            merged.records = mergeRecordsByIdentity(localData.records || [], remoteData.records || [], deletionMap);
-            const wheelSnapshot = mergeWheelSnapshots(localData, remoteData);
-            merged.wheels = wheelSnapshot.wheels;
-            merged.wheelTags = wheelSnapshot.wheelTags;
-            merged.wheelLibraryItems = wheelSnapshot.wheelLibraryItems;
-            merged.wheelHistory = wheelSnapshot.wheelHistory;
-            ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].forEach(key => {
-                if (['records', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].includes(key)) return;
-                merged[key] = mergeArrayByIdentity(key, localData[key] || [], remoteData[key] || [], deletionMap);
-            });
-            merged.deletedItems = Array.from(deletionMap.values());
-            pruneDeletedItems(merged);
-            return merged;
+            return syncService.mergeCloudData(localData, remoteData);
         }
 
         async function fetchRemoteData() {
-            const kitRemote = await pullRemoteDataWithSyncKit(syncConfig.remotePath, value => value, getDataHash);
-            if (kitRemote !== undefined) return kitRemote;
-            let response;
-            try {
-                response = await webdavRequest(syncConfig.remotePath, 'GET');
-            } catch (err) {
-                if (err.status === 404) return null;
-                throw err;
-            }
-            const text = await response.text();
-            if (!text.trim()) return null;
-            const remoteData = JSON.parse(text);
-            return { data: remoteData, hash: getDataHash(remoteData) };
+            return syncService.pullJson(syncConfig, syncConfig.remotePath, value => value, getDataHash);
         }
 
         async function syncDownFromCloud() {
@@ -2948,14 +2536,7 @@
                 mergedWith: syncState.lastRemoteHash ? { label: '上次云端', hash: syncState.lastRemoteHash } : null
             });
             const remotePath = syncConfig.remotePath.startsWith('/') ? syncConfig.remotePath : `/${syncConfig.remotePath}`;
-            const pushedWithKit = await pushRemoteDataWithSyncKit(remotePath, data, 'life-plan');
-            if (!pushedWithKit) {
-                const folderPath = remotePath.split('/').slice(0, -1).join('/');
-                if (folderPath) {
-                    try { await webdavRequest(folderPath, 'MKCOL'); } catch (err) {}
-                }
-                await webdavRequest(remotePath, 'PUT', JSON.stringify(data, null, 2));
-            }
+            await syncService.pushJson(syncConfig, remotePath, data, 'life-plan');
             syncState.dirty = false;
             syncState.lastRemoteHash = localHash;
             syncState.lastPushAt = new Date().toISOString();
@@ -3140,21 +2721,13 @@
                 readSyncForm();
                 updateSyncStatus('正在测试连接...');
                 const remotePath = syncConfig.remotePath.startsWith('/') ? syncConfig.remotePath : `/${syncConfig.remotePath}`;
-                const folderPath = remotePath.split('/').slice(0, -1).join('/') || '/';
-                const kitHealth = await testRemoteFolderWithSyncKit(remotePath);
-                if (kitHealth === true) {
+                const health = await syncService.healthCheck(syncConfig, remotePath);
+                if (health === true) {
                     updateSyncStatus('连接成功');
                     return;
                 }
-                if (kitHealth === null) {
+                if (health === null) {
                     updateSyncStatus('连接成功，云端目录还不存在，首次上传会自动创建');
-                    return;
-                }
-                try {
-                    await webdavRequest(folderPath, 'PROPFIND');
-                } catch (err) {
-                    if (err.status === 404) updateSyncStatus('连接成功，云端目录还不存在，首次上传会自动创建');
-                    else throw err;
                     return;
                 }
                 updateSyncStatus('连接成功');
@@ -3174,23 +2747,12 @@
         }
 
         async function fetchRemoteWheelData() {
-            const kitRemote = await pullRemoteDataWithSyncKit(
+            return syncService.pullJson(
+                syncConfig,
                 wheelSyncConfig.remotePath,
                 value => getWheelSnapshot(value),
                 value => getWheelDataHash(getWheelSnapshot(value))
             );
-            if (kitRemote !== undefined) return kitRemote;
-            let response;
-            try {
-                response = await webdavRequestWithConfig(syncConfig, wheelSyncConfig.remotePath, 'GET');
-            } catch (err) {
-                if (err.status === 404) return null;
-                throw err;
-            }
-            const text = await response.text();
-            if (!text.trim()) return null;
-            const remoteData = JSON.parse(text);
-            return { data: getWheelSnapshot(remoteData), hash: getWheelDataHash(getWheelSnapshot(remoteData)) };
         }
 
         async function syncWheelDownFromCloud() {
@@ -3215,14 +2777,7 @@
             const localHash = getWheelDataHash(localSnapshot);
             if (!force && !wheelSyncState.dirty && wheelSyncState.lastRemoteHash === localHash) return false;
             const remotePath = wheelSyncConfig.remotePath.startsWith('/') ? wheelSyncConfig.remotePath : `/${wheelSyncConfig.remotePath}`;
-            const pushedWithKit = await pushRemoteDataWithSyncKit(remotePath, localSnapshot, 'wheel-app');
-            if (!pushedWithKit) {
-                const folderPath = remotePath.split('/').slice(0, -1).join('/');
-                if (folderPath) {
-                    try { await webdavRequestWithConfig(syncConfig, folderPath, 'MKCOL'); } catch (err) {}
-                }
-                await webdavRequestWithConfig(syncConfig, remotePath, 'PUT', JSON.stringify(localSnapshot, null, 2));
-            }
+            await syncService.pushJson(syncConfig, remotePath, localSnapshot, 'wheel-app');
             wheelSyncState.dirty = false;
             wheelSyncState.lastRemoteHash = localHash;
             wheelSyncState.lastPushAt = new Date().toISOString();
@@ -3360,24 +2915,14 @@
                 if (!syncConfig.webdavUrl) throw new Error('请先填写统一同步中转地址');
                 updateWheelSyncStatus('正在测试大转盘连接...');
                 const remotePath = wheelSyncConfig.remotePath.startsWith('/') ? wheelSyncConfig.remotePath : `/${wheelSyncConfig.remotePath}`;
-                const folderPath = remotePath.split('/').slice(0, -1).join('/') || '/';
-                const kitHealth = await testRemoteFolderWithSyncKit(remotePath);
-                if (kitHealth === true) {
+                const health = await syncService.healthCheck(syncConfig, remotePath);
+                if (health === true) {
                     updateWheelSyncStatus('大转盘连接成功');
                     return;
                 }
-                if (kitHealth === null) {
+                if (health === null) {
                     updateWheelSyncStatus('连接成功，大转盘云端目录还不存在，首次上传会自动创建');
                     return;
-                }
-                try {
-                    await webdavRequestWithConfig(syncConfig, folderPath, 'PROPFIND');
-                } catch (err) {
-                    if (err.status === 404) {
-                        updateWheelSyncStatus('连接成功，大转盘云端目录还不存在，首次上传会自动创建');
-                        return;
-                    }
-                    throw err;
                 }
                 updateWheelSyncStatus('大转盘连接成功');
             } catch (err) {

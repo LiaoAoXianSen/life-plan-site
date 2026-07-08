@@ -31,6 +31,12 @@
 - Wheel management should remain right-top modal-based; the deprecated bottom management panel was not restored.
 - Wheel page screenshot feedback: the `管理` button felt wrong because the 1080px breakpoint forced the top controls into one column too early; pre-spin summary also over-emphasized low-value stats, so the summary and empty result state were compacted.
 
+## 2026-07-08
+
+- P3 was clarified as a maintainability split: `app.js` should stop accumulating sync, records, todos, AI, snapshots logic.
+- Safe first split is sync plus snapshots because these areas contain mostly pure service/storage logic and already have smoke coverage around merge, tombstones, auto sync, and wheel snapshots.
+- Records/todos/AI remain good candidates for later extraction, but they are currently more tightly coupled to DOM state, modal forms, and inline handlers; they should be split in smaller future passes rather than forced into this sync/snapshot change.
+
 ## 2026-07-06
 
 - Project root is `D:\project\life-plan-site`.
