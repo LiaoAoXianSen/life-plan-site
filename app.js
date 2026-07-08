@@ -1721,6 +1721,15 @@
             return String(input?.value ?? fallback ?? '').trim();
         }
 
+        function getDiaryAiDraftId(key) {
+            return getAiCaptureDraftId(`diary-${key}`);
+        }
+
+        function getDiaryAiDraftText(key, fallback = '') {
+            const input = document.getElementById(getDiaryAiDraftId(key));
+            return String(input?.value ?? fallback ?? '').trim();
+        }
+
         function renderAiCaptureSection(label, key, value, actionLabel, action) {
             if (!value) return '';
             return `
@@ -1730,6 +1739,18 @@
                         <textarea id="${getAiCaptureDraftId(key)}" class="ai-capture-draft" rows="4">${escapeHtml(value)}</textarea>
                     </div>
                     <button class="btn btn-secondary todo-mini-btn" onclick="${action}">${escapeHtml(actionLabel)}</button>
+                </div>
+            `;
+        }
+
+        function renderDiaryAiSection(section) {
+            return `
+                <div class="diary-ai-section">
+                    <div>
+                        <strong>${escapeHtml(section.label)}</strong>
+                        <textarea id="${getDiaryAiDraftId(section.key)}" class="ai-capture-draft diary-ai-draft" rows="4">${escapeHtml(section.value || '')}</textarea>
+                    </div>
+                    <button class="btn btn-secondary todo-mini-btn" onclick="applyDiaryAiSections(['${section.key}'])">${escapeHtml(section.action)}</button>
                 </div>
             `;
         }
@@ -1759,6 +1780,31 @@
             `;
         }
 
+        function renderDiaryAiTodoDraft(item, index) {
+            return `
+                <div class="ai-result-item ai-capture-todo-draft" data-index="${index}">
+                    <label>
+                        <span>待办标题</span>
+                        <input id="${getDiaryAiDraftId(`todo-text-${index}`)}" value="${escapeHtml(item.text || '')}">
+                    </label>
+                    <label>
+                        <span>备注</span>
+                        <textarea id="${getDiaryAiDraftId(`todo-note-${index}`)}" rows="2">${escapeHtml(item.note || '')}</textarea>
+                    </label>
+                    <div class="ai-capture-todo-meta">
+                        <label>
+                            <span>分组</span>
+                            <input id="${getDiaryAiDraftId(`todo-group-${index}`)}" value="${escapeHtml(item.group || '其他')}">
+                        </label>
+                        <label>
+                            <span>截止</span>
+                            <input id="${getDiaryAiDraftId(`todo-due-${index}`)}" type="date" value="${escapeHtml(item.dueDate || getTodayStr())}">
+                        </label>
+                    </div>
+                </div>
+            `;
+        }
+
         function getAiCaptureTodoDrafts() {
             return (aiLastResult?.items || []).map((item, index) => {
                 const text = getAiCaptureDraftText(`todo-text-${index}`, item.text);
@@ -1769,6 +1815,20 @@
                     note: getAiCaptureDraftText(`todo-note-${index}`, item.note || ''),
                     group: getAiCaptureDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
                     dueDate: getAiCaptureDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
+                };
+            }).filter(Boolean);
+        }
+
+        function getDiaryAiTodoDrafts() {
+            return (aiLastResult?.items || []).map((item, index) => {
+                const text = getDiaryAiDraftText(`todo-text-${index}`, item.text);
+                if (!text) return null;
+                return {
+                    ...item,
+                    text,
+                    note: getDiaryAiDraftText(`todo-note-${index}`, item.note || ''),
+                    group: getDiaryAiDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
+                    dueDate: getDiaryAiDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
                 };
             }).filter(Boolean);
         }
@@ -1822,15 +1882,7 @@
                 </div>
                 ${sections.length ? `
                     <div class="diary-ai-section-list">
-                        ${sections.map(section => `
-                            <div class="diary-ai-section">
-                                <div>
-                                    <strong>${escapeHtml(section.label)}</strong>
-                                    <p>${escapeHtml(section.value).replace(/\n/g, '<br>')}</p>
-                                </div>
-                                <button class="btn btn-secondary todo-mini-btn" onclick="applyDiaryAiSections(['${section.key}'])">${escapeHtml(section.action)}</button>
-                            </div>
-                        `).join('')}
+                        ${sections.map(section => renderDiaryAiSection(section)).join('')}
                     </div>
                     <div class="diary-ai-actions">
                         <button class="btn btn-primary" onclick="applyDiaryAiSections(['review','tomorrow'])">写入复盘 + 明日重点</button>
@@ -1839,17 +1891,7 @@
                 ${todoCount ? `
                     <div class="ai-result-list">
                         <div class="record-preview-heading">建议待办（需确认创建）</div>
-                        ${aiLastResult.items.map((item, index) => `
-                            <div class="ai-result-item">
-                                <strong>${index + 1}. ${escapeHtml(item.text)}</strong>
-                                ${item.note ? `<span>${escapeHtml(item.note)}</span>` : ''}
-                                <div class="todo-detail-meta">
-                                    ${renderTodoUrgencyBadge(item)}
-                                    ${item.group ? `<span>${escapeHtml(item.group)}</span>` : ''}
-                                    ${item.dueDate ? `<span>截止 ${escapeHtml(item.dueDate)}</span>` : ''}
-                                </div>
-                            </div>
-                        `).join('')}
+                        ${aiLastResult.items.map((item, index) => renderDiaryAiTodoDraft(item, index)).join('')}
                         <button class="btn btn-primary" onclick="applyDiaryAiTodos()">创建这些待办</button>
                     </div>
                 ` : ''}
@@ -2103,7 +2145,10 @@
                 return;
             }
             const diary = aiLastResult?.diary || {};
-            const fieldKeys = keys.filter(key => diary[key]);
+            const fieldValues = keys
+                .map(key => [key, getDiaryAiDraftText(key, diary[key] || '')])
+                .filter(([, value]) => value);
+            const fieldKeys = fieldValues.map(([key]) => key);
             if (!fieldKeys.length) {
                 alert('没有可写入的 AI 内容');
                 return;
@@ -2111,8 +2156,8 @@
             const values = getDiaryTemplateValues(record);
             const existingKeys = fieldKeys.filter(key => String(values[key] || '').trim());
             if (existingKeys.length && !confirm(`这些字段已有内容：${existingKeys.join('、')}。确定用 AI 建议覆盖吗？`)) return;
-            fieldKeys.forEach(key => {
-                values[key] = diary[key];
+            fieldValues.forEach(([key, value]) => {
+                values[key] = value;
             });
             record.templateId = template.id;
             record.content = composeTemplateContent(template, values);
@@ -2132,7 +2177,12 @@
                 alert('没有可创建的待办建议');
                 return;
             }
-            const todos = aiLastResult.items.map(item => {
+            const draftItems = getDiaryAiTodoDrafts();
+            if (!draftItems.length) {
+                alert('请至少保留一条待办标题');
+                return;
+            }
+            const todos = draftItems.map(item => {
                 const todo = createTodoFromAiItem(item);
                 todo.sourceType = 'diary-ai';
                 todo.note = [todo.note, `来源日记：${record.title || record.startDate || '未命名日记'}`].filter(Boolean).join('\n\n');

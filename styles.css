@@ -423,11 +423,8 @@
         font-size: 13px;
         margin-bottom: 6px;
     }
-    .diary-ai-section p {
-        margin: 0;
-        color: #425247;
-        font-size: 13px;
-        line-height: 1.75;
+    .diary-ai-draft {
+        min-height: 92px;
     }
     .diary-ai-actions {
         display: flex;

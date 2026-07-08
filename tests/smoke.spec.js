@@ -566,6 +566,11 @@ test('AI diary analysis writes review and todos only after confirmation', async 
     await expect(page.locator('#ai-context-panel')).toContainText('日记 AI 试水');
     await page.getByRole('button', { name: '生成建议' }).click();
     await expect(page.locator('#ai-result-panel')).toContainText('写入复盘 + 明日重点');
+    await expect(page.locator('#ai-capture-draft-diary-review')).toHaveValue(/今天的核心线索/);
+    await page.locator('#ai-capture-draft-diary-review').fill('编辑后的复盘：今天先把 AI 日记分析写入链路做稳。');
+    await page.locator('#ai-capture-draft-diary-tomorrow').fill('编辑后的明日重点：先验证写入后的内容可回读。');
+    await page.locator('#ai-capture-draft-diary-todo-text-0').fill('编辑后的待办：确认日记 AI 可写前编辑');
+    await page.locator('#ai-capture-draft-diary-todo-note-0').fill('先改草稿再落库，避免直接写入原文');
 
     let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.records[0].content).not.toContain('今天的核心线索');
@@ -579,9 +584,9 @@ test('AI diary analysis writes review and todos only after confirmation', async 
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     const diary = stored.records.find(record => record.id === 'diary-ai-record');
     expect(diary.content).toContain('# 复盘');
-    expect(diary.content).toContain('今天的核心线索');
+    expect(diary.content).toContain('编辑后的复盘');
     expect(diary.content).toContain('# 明日重点');
-    expect(diary.content).toContain('明天先推进');
+    expect(diary.content).toContain('编辑后的明日重点');
 
     page.once('dialog', dialog => {
         expect(dialog.message()).toContain('已创建待办');
@@ -592,8 +597,8 @@ test('AI diary analysis writes review and todos only after confirmation', async 
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     const todo = stored.todos.find(item => item.sourceType === 'diary-ai');
     const updatedDiary = stored.records.find(record => record.id === 'diary-ai-record');
-    expect(todo.text).toContain('把复杂事情收回到一条线');
-    expect(todo.note).toContain('来源日记');
+    expect(todo.text).toContain('编辑后的待办');
+    expect(todo.note).toContain('先改草稿再落库');
     expect(updatedDiary.todoIds).toContain(todo.id);
 });
 
