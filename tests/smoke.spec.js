@@ -514,6 +514,62 @@ test('AI diary analysis writes review and todos only after confirmation', async 
     expect(updatedDiary.todoIds).toContain(todo.id);
 });
 
+test('AI chat capture organizes free text and writes only after confirmation', async ({ page }) => {
+    const data = createEmptyData();
+
+    await page.goto('/');
+    await page.evaluate(value => {
+        localStorage.removeItem('lifePlanAiConfig');
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, data);
+    await page.reload();
+
+    await page.getByRole('button', { name: 'AI 今日计划' }).click();
+    await page.getByRole('button', { name: '对话整理', exact: true }).click();
+    await page.locator('#ai-user-input').fill('明天项把 AI 对话整理接到日记里，待办：检查页面加载效果。这个想法先放灵感池。');
+    await page.getByRole('button', { name: '生成建议' }).click();
+
+    await expect(page.locator('#ai-result-panel')).toContainText('纠错整理');
+    await expect(page.locator('#ai-result-panel')).toContainText('想把 AI 对话整理');
+    await expect(page.locator('#ai-result-panel')).toContainText('建议待办');
+
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.todos).toHaveLength(0);
+    expect(stored.records).toHaveLength(0);
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已创建待办');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '创建这些待办' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.todos.some(todo => todo.sourceType === 'ai-capture' && todo.text.includes('检查页面加载效果'))).toBeTruthy();
+    expect(stored.records).toHaveLength(0);
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已创建灵感碎片');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '存为灵感' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const idea = stored.records.find(record => record.type === '灵感碎片');
+    expect(idea.content).toContain('灵感池');
+    expect(idea.ideaTags).toContain('AI整理');
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('日记');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '追加到日记' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const diary = stored.records.find(record => record.type === '日记');
+    expect(diary.content).toContain('# AI 对话整理');
+    expect(diary.content).toContain('检查页面加载效果');
+});
+
 test('idea can be converted to an editable linked todo', async ({ page }) => {
     const sample = require('../test-data/sample-data.json');
     const data = JSON.parse(JSON.stringify(sample));

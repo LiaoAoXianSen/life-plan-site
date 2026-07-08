@@ -75,6 +75,7 @@
                         <button class="btn" onclick="createRecord('灵感碎片')">记灵感</button>
                         <button class="btn" onclick="openTodoModal()">加待办</button>
                         <button class="btn" onclick="openAiAssistant('todayPlan')">AI 今日计划</button>
+                        <button class="btn" onclick="openAiAssistant('chatCapture')">AI 对话整理</button>
                     </div>
                 </div>
                 <div class="summary-grid">
@@ -842,6 +843,7 @@
                 <button type="button" data-ai-mode="todoBreakdown" onclick="setAiMode('todoBreakdown')">拆解待办</button>
                 <button type="button" data-ai-mode="ideaNext" onclick="setAiMode('ideaNext')">灵感下一步</button>
                 <button type="button" data-ai-mode="diaryReview" onclick="setAiMode('diaryReview')">日记分析</button>
+                <button type="button" data-ai-mode="chatCapture" onclick="setAiMode('chatCapture')">对话整理</button>
             </div>
             <div class="ai-context-panel" id="ai-context-panel"></div>
             <div class="form-group">
