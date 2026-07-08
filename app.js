@@ -648,6 +648,32 @@
             return (hash >>> 0).toString(36);
         }
 
+        function getLifePlanSyncAdapter() {
+            return window.AppSyncKit?.adapters?.lifePlan || null;
+        }
+
+        function getAppSyncProvider() {
+            if (!window.AppSyncKit?.createWebdavProvider) return null;
+            return window.AppSyncKit.createWebdavProvider();
+        }
+
+        function getAppSyncProviderConfig(path = syncConfig.remotePath) {
+            return {
+                endpoint: syncConfig.webdavUrl || '',
+                remotePath: path || '/life-plan.json',
+                writeMode: 'legacy-raw-data'
+            };
+        }
+
+        function createAppSyncDocument(payload, appId = 'life-plan') {
+            return {
+                appId,
+                schemaVersion: 1,
+                updatedAt: new Date().toISOString(),
+                data: payload
+            };
+        }
+
         function getDataHash(value = data) {
             return hashString(JSON.stringify(value || {}));
         }
@@ -2617,6 +2643,34 @@
             return webdavRequestWithConfig(syncConfig, path, method, body);
         }
 
+        async function pullRemoteDataWithSyncKit(path = syncConfig.remotePath, normalizePayload = value => value, hashPayload = getDataHash) {
+            const provider = getAppSyncProvider();
+            if (!provider) return undefined;
+            const envelope = await provider.pull(getAppSyncProviderConfig(path));
+            if (!envelope?.document) return null;
+            const remoteData = normalizePayload(envelope.document.data);
+            return { data: remoteData, hash: hashPayload(remoteData) };
+        }
+
+        async function pushRemoteDataWithSyncKit(path, payload, appId = 'life-plan') {
+            const provider = getAppSyncProvider();
+            if (!provider) return false;
+            await provider.push(getAppSyncProviderConfig(path), createAppSyncDocument(payload, appId));
+            return true;
+        }
+
+        async function testRemoteFolderWithSyncKit(path = syncConfig.remotePath) {
+            const provider = getAppSyncProvider();
+            if (!provider?.healthCheck) return undefined;
+            try {
+                await provider.healthCheck(getAppSyncProviderConfig(path));
+                return true;
+            } catch (err) {
+                if (String(err?.message || '').includes('404')) return null;
+                throw err;
+            }
+        }
+
         function getHabitLedgerMergeKey(entry) {
             if (!entry || typeof entry !== 'object') return '';
             if (entry.sourceId && ['checkin', 'milestone', 'reverse', 'miss', 'break', 'reverse-penalty'].includes(entry.type)) {
@@ -2814,6 +2868,10 @@
         }
 
         function mergeCloudData(localData, remoteData) {
+            const adapter = getLifePlanSyncAdapter();
+            if (adapter?.merge) {
+                return adapter.merge(localData || {}, remoteData || {});
+            }
             const merged = { ...localData, ...remoteData };
             const deletionMap = buildDeletionMap(localData, remoteData);
             merged.records = mergeRecordsByIdentity(localData.records || [], remoteData.records || [], deletionMap);
@@ -2832,6 +2890,8 @@
         }
 
         async function fetchRemoteData() {
+            const kitRemote = await pullRemoteDataWithSyncKit(syncConfig.remotePath, value => value, getDataHash);
+            if (kitRemote !== undefined) return kitRemote;
             let response;
             try {
                 response = await webdavRequest(syncConfig.remotePath, 'GET');
@@ -2888,11 +2948,14 @@
                 mergedWith: syncState.lastRemoteHash ? { label: '上次云端', hash: syncState.lastRemoteHash } : null
             });
             const remotePath = syncConfig.remotePath.startsWith('/') ? syncConfig.remotePath : `/${syncConfig.remotePath}`;
-            const folderPath = remotePath.split('/').slice(0, -1).join('/');
-            if (folderPath) {
-                try { await webdavRequest(folderPath, 'MKCOL'); } catch (err) {}
+            const pushedWithKit = await pushRemoteDataWithSyncKit(remotePath, data, 'life-plan');
+            if (!pushedWithKit) {
+                const folderPath = remotePath.split('/').slice(0, -1).join('/');
+                if (folderPath) {
+                    try { await webdavRequest(folderPath, 'MKCOL'); } catch (err) {}
+                }
+                await webdavRequest(remotePath, 'PUT', JSON.stringify(data, null, 2));
             }
-            await webdavRequest(remotePath, 'PUT', JSON.stringify(data, null, 2));
             syncState.dirty = false;
             syncState.lastRemoteHash = localHash;
             syncState.lastPushAt = new Date().toISOString();
@@ -3078,6 +3141,15 @@
                 updateSyncStatus('正在测试连接...');
                 const remotePath = syncConfig.remotePath.startsWith('/') ? syncConfig.remotePath : `/${syncConfig.remotePath}`;
                 const folderPath = remotePath.split('/').slice(0, -1).join('/') || '/';
+                const kitHealth = await testRemoteFolderWithSyncKit(remotePath);
+                if (kitHealth === true) {
+                    updateSyncStatus('连接成功');
+                    return;
+                }
+                if (kitHealth === null) {
+                    updateSyncStatus('连接成功，云端目录还不存在，首次上传会自动创建');
+                    return;
+                }
                 try {
                     await webdavRequest(folderPath, 'PROPFIND');
                 } catch (err) {
@@ -3102,6 +3174,12 @@
         }
 
         async function fetchRemoteWheelData() {
+            const kitRemote = await pullRemoteDataWithSyncKit(
+                wheelSyncConfig.remotePath,
+                value => getWheelSnapshot(value),
+                value => getWheelDataHash(getWheelSnapshot(value))
+            );
+            if (kitRemote !== undefined) return kitRemote;
             let response;
             try {
                 response = await webdavRequestWithConfig(syncConfig, wheelSyncConfig.remotePath, 'GET');
@@ -3137,11 +3215,14 @@
             const localHash = getWheelDataHash(localSnapshot);
             if (!force && !wheelSyncState.dirty && wheelSyncState.lastRemoteHash === localHash) return false;
             const remotePath = wheelSyncConfig.remotePath.startsWith('/') ? wheelSyncConfig.remotePath : `/${wheelSyncConfig.remotePath}`;
-            const folderPath = remotePath.split('/').slice(0, -1).join('/');
-            if (folderPath) {
-                try { await webdavRequestWithConfig(syncConfig, folderPath, 'MKCOL'); } catch (err) {}
+            const pushedWithKit = await pushRemoteDataWithSyncKit(remotePath, localSnapshot, 'wheel-app');
+            if (!pushedWithKit) {
+                const folderPath = remotePath.split('/').slice(0, -1).join('/');
+                if (folderPath) {
+                    try { await webdavRequestWithConfig(syncConfig, folderPath, 'MKCOL'); } catch (err) {}
+                }
+                await webdavRequestWithConfig(syncConfig, remotePath, 'PUT', JSON.stringify(localSnapshot, null, 2));
             }
-            await webdavRequestWithConfig(syncConfig, remotePath, 'PUT', JSON.stringify(localSnapshot, null, 2));
             wheelSyncState.dirty = false;
             wheelSyncState.lastRemoteHash = localHash;
             wheelSyncState.lastPushAt = new Date().toISOString();
@@ -3280,6 +3361,15 @@
                 updateWheelSyncStatus('正在测试大转盘连接...');
                 const remotePath = wheelSyncConfig.remotePath.startsWith('/') ? wheelSyncConfig.remotePath : `/${wheelSyncConfig.remotePath}`;
                 const folderPath = remotePath.split('/').slice(0, -1).join('/') || '/';
+                const kitHealth = await testRemoteFolderWithSyncKit(remotePath);
+                if (kitHealth === true) {
+                    updateWheelSyncStatus('大转盘连接成功');
+                    return;
+                }
+                if (kitHealth === null) {
+                    updateWheelSyncStatus('连接成功，大转盘云端目录还不存在，首次上传会自动创建');
+                    return;
+                }
                 try {
                     await webdavRequestWithConfig(syncConfig, folderPath, 'PROPFIND');
                 } catch (err) {
