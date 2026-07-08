@@ -2271,10 +2271,123 @@
             return Array.from(merged.values()).filter(item => shouldKeepMergedItem(collection, item, deletionMap));
         }
 
+        function normalizeRecordMergeText(text = '') {
+            return String(text || '').replace(/\r\n/g, '\n');
+        }
+
+        function normalizeRecordCompareText(text = '') {
+            return normalizeRecordMergeText(text).replace(/[\s，。！？、；：,.!?;:"'“”‘’（）()【】[\]《》<>#\-_*`~]+/g, '');
+        }
+
+        function isTextSubsequence(needle, haystack) {
+            if (!needle) return true;
+            if (!haystack) return false;
+            let index = 0;
+            for (let i = 0; i < haystack.length && index < needle.length; i++) {
+                if (haystack[i] === needle[index]) index += 1;
+            }
+            return index === needle.length;
+        }
+
+        function isRecordTextSuperset(candidateText, otherText) {
+            if (!otherText) return !!candidateText;
+            if (!candidateText) return false;
+            if (candidateText.includes(otherText)) return true;
+            return isTextSubsequence(
+                normalizeRecordCompareText(otherText),
+                normalizeRecordCompareText(candidateText)
+            );
+        }
+
+        function getRecordMergeStamp(...items) {
+            const winner = items
+                .filter(Boolean)
+                .sort((a, b) => getItemUpdatedTime(b) - getItemUpdatedTime(a))[0];
+            return winner?.updatedAt || winner?.createdAt || getLocalDateTimeStr();
+        }
+
+        function hasRecordConflictCopy(records, originalId, contentHash) {
+            return records.some(record => record?.conflictOf === originalId && record.conflictContentHash === contentHash);
+        }
+
+        function createRecordConflictCopy(record, originalId, sourceLabel, existingRecords = []) {
+            const contentHash = hashString(normalizeRecordMergeText(record?.content || ''));
+            if (!contentHash || hasRecordConflictCopy(existingRecords, originalId, contentHash)) return null;
+            const stamp = getLocalDateTimeStr();
+            const baseTitle = record.title || record.startDate || record.createdAt || '未命名记录';
+            return {
+                ...record,
+                id: `${originalId}-conflict-${contentHash}`,
+                title: `${baseTitle}（冲突副本-${sourceLabel}）`,
+                conflictOf: originalId,
+                conflictSource: sourceLabel,
+                conflictContentHash: contentHash,
+                conflictCreatedAt: stamp,
+                createdAt: record.createdAt || stamp,
+                updatedAt: record.updatedAt || record.createdAt || stamp
+            };
+        }
+
+        function mergeRecordPair(localRecord, remoteRecord, existingRecords = []) {
+            const localText = normalizeRecordMergeText(localRecord.content || '');
+            const remoteText = normalizeRecordMergeText(remoteRecord.content || '');
+            const localTime = getItemUpdatedTime(localRecord);
+            const remoteTime = getItemUpdatedTime(remoteRecord);
+            const latest = remoteTime >= localTime ? remoteRecord : localRecord;
+            const older = latest === remoteRecord ? localRecord : remoteRecord;
+            const olderSource = older === localRecord ? '本地' : '云端';
+
+            if (localText === remoteText) {
+                return { primary: latest, conflict: null };
+            }
+
+            const localIsSuperset = isRecordTextSuperset(localText, remoteText);
+            const remoteIsSuperset = isRecordTextSuperset(remoteText, localText);
+            if (localIsSuperset || remoteIsSuperset) {
+                const supersetRecord = remoteIsSuperset && !localIsSuperset ? remoteRecord : localRecord;
+                return {
+                    primary: {
+                        ...supersetRecord,
+                        ...latest,
+                        content: supersetRecord.content || '',
+                        updatedAt: getRecordMergeStamp(localRecord, remoteRecord)
+                    },
+                    conflict: null
+                };
+            }
+
+            return {
+                primary: latest,
+                conflict: createRecordConflictCopy(older, latest.id || older.id, olderSource, existingRecords)
+            };
+        }
+
+        function mergeRecordsByIdentity(localItems = [], remoteItems = [], deletionMap = new Map()) {
+            const merged = new Map();
+            const conflictCopies = [];
+            localItems.forEach((item, index) => merged.set(getItemMergeKey(item, index, 'records'), item));
+            remoteItems.forEach((remoteItem, index) => {
+                const key = getItemMergeKey(remoteItem, index, 'records');
+                const localItem = merged.get(key);
+                if (!localItem) {
+                    merged.set(key, remoteItem);
+                    return;
+                }
+                const existingRecords = [...localItems, ...remoteItems, ...Array.from(merged.values()), ...conflictCopies];
+                const { primary, conflict } = mergeRecordPair(localItem, remoteItem, existingRecords);
+                merged.set(key, primary);
+                if (conflict) conflictCopies.push(conflict);
+            });
+            return [...Array.from(merged.values()), ...conflictCopies]
+                .filter(item => shouldKeepMergedItem('records', item, deletionMap));
+        }
+
         function mergeCloudData(localData, remoteData) {
             const merged = { ...localData, ...remoteData };
             const deletionMap = buildDeletionMap(localData, remoteData);
+            merged.records = mergeRecordsByIdentity(localData.records || [], remoteData.records || [], deletionMap);
             ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].forEach(key => {
+                if (key === 'records') return;
                 merged[key] = mergeArrayByIdentity(key, localData[key] || [], remoteData[key] || [], deletionMap);
             });
             merged.deletedItems = Array.from(deletionMap.values());
@@ -2301,24 +2414,18 @@
             if (!remote) return false;
             const localHash = getDataHash();
             const localChanged = syncState.dirty || (!!syncState.lastRemoteHash && localHash !== syncState.lastRemoteHash) || (!syncState.lastRemoteHash && localHash !== remote.hash);
-            const shouldMerge = localChanged && localHash !== remote.hash;
+            const shouldMerge = localHash !== remote.hash;
             let beforeSnapshot = null;
             if (shouldMerge) {
-                beforeSnapshot = createLocalSnapshot('手动拉取合并前', data, {
+                beforeSnapshot = createLocalSnapshot('手动拉取安全合并前', data, {
                     source: 'cloud-pull',
                     action: 'before-merge',
-                    mergedWith: { label: '云端', hash: remote.hash }
-                });
-            } else if (localHash !== remote.hash) {
-                beforeSnapshot = createLocalSnapshot('手动拉取覆盖前', data, {
-                    source: 'cloud-pull',
-                    action: 'before-overwrite',
                     mergedWith: { label: '云端', hash: remote.hash }
                 });
             }
             data = shouldMerge ? mergeCloudData(data, remote.data) : remote.data;
             if (shouldMerge) {
-                createLocalSnapshot('手动拉取合并结果', data, {
+                createLocalSnapshot('手动拉取安全合并结果', data, {
                     source: 'cloud-pull',
                     action: 'merge-result',
                     parentSnapshotId: beforeSnapshot?.id,
@@ -2328,12 +2435,12 @@
                 });
             }
             saveDataFromSync();
-            syncState.dirty = shouldMerge;
+            syncState.dirty = shouldMerge && getDataHash() !== remote.hash;
             syncState.lastRemoteHash = remote.hash;
             syncState.lastPullAt = new Date().toISOString();
-            if (!shouldMerge) syncState.lastSyncAt = syncState.lastPullAt;
+            if (!syncState.dirty) syncState.lastSyncAt = syncState.lastPullAt;
             saveSyncState();
-            return shouldMerge ? 'merged' : 'pulled';
+            return syncState.dirty ? 'merged' : 'pulled';
         }
 
         async function syncUpToCloud(force = false) {
@@ -2439,20 +2546,32 @@
                 }
 
                 if (!localChanged && remoteHash !== localHash) {
-                    createLocalSnapshot('拉取云端覆盖前', data, {
+                    const beforeSnapshot = createLocalSnapshot('拉取云端安全合并前', data, {
                         source: 'auto-sync',
-                        action: 'before-overwrite',
+                        action: 'before-merge',
                         mergedWith: { label: '云端', hash: remoteHash }
                     });
-                    data = remote.data;
+                    data = mergeCloudData(data, remote.data);
+                    createLocalSnapshot('拉取云端安全合并结果', data, {
+                        source: 'auto-sync',
+                        action: 'merge-result',
+                        parentSnapshotId: beforeSnapshot?.id,
+                        parentVersion: beforeSnapshot?.version,
+                        parentHash: beforeSnapshot?.hash,
+                        mergedWith: { label: '云端', hash: remoteHash }
+                    });
                     saveDataFromSync();
-                    syncState.dirty = false;
+                    syncState.dirty = getDataHash() !== remoteHash;
+                    const shouldUploadMergedData = syncState.dirty;
                     syncState.lastRemoteHash = remoteHash;
                     syncState.lastPullAt = new Date().toISOString();
-                    syncState.lastSyncAt = syncState.lastPullAt;
+                    if (!syncState.dirty) syncState.lastSyncAt = syncState.lastPullAt;
                     saveSyncState();
+                    if (shouldUploadMergedData) {
+                        await syncUpToCloud(true);
+                    }
                     renderAfterDataChange();
-                    updateSyncStatus(`发现云端更新，已拉取 ${formatClockTime(new Date(), true)}`);
+                    updateSyncStatus(`${shouldUploadMergedData ? '发现云端更新，已安全合并并回传' : '发现云端更新，已安全合并'} ${formatClockTime(new Date(), true)}`);
                     return;
                 }
 
@@ -7448,6 +7567,13 @@
             downloadJsonFile(`人生规划备份_${getTimestampForFile()}.json`, data);
         }
 
+        function getImportSummary(imported) {
+            const collections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
+            return collections
+                .map(key => `${key}:${Array.isArray(imported?.[key]) ? imported[key].length : 0}`)
+                .join(' · ');
+        }
+
         function importData() {
             const input = document.createElement('input');
             input.type = 'file';
@@ -7458,12 +7584,26 @@
                 reader.onload = event => {
                     try {
                         const imported = JSON.parse(event.target.result);
-                        if (confirm('导入会覆盖当前所有数据，确定继续吗？')) {
-                            createLocalSnapshot('导入覆盖前');
-                            data = imported;
+                        normalizeDataShape(imported);
+                        const summary = getImportSummary(imported);
+                        if (confirm(`导入会安全合并，不会用旧内容静默覆盖当前较新的日记。\n\n如果同一篇日记两边都改过，会保留主版本并创建冲突副本。\n\n备份内容：${summary}\n\n继续导入吗？`)) {
+                            const beforeSnapshot = createLocalSnapshot('导入安全合并前', data, {
+                                source: 'manual-import',
+                                action: 'before-merge',
+                                mergedWith: { label: file?.name || '导入文件', hash: getDataHash(imported) }
+                            });
+                            data = mergeCloudData(data, imported);
+                            createLocalSnapshot('导入安全合并结果', data, {
+                                source: 'manual-import',
+                                action: 'merge-result',
+                                parentSnapshotId: beforeSnapshot?.id,
+                                parentVersion: beforeSnapshot?.version,
+                                parentHash: beforeSnapshot?.hash,
+                                mergedWith: { label: file?.name || '导入文件', hash: getDataHash(imported) }
+                            });
                             saveData();
                             init();
-                            alert('导入成功');
+                            alert('导入成功：已安全合并，冲突内容会以副本保留。');
                         }
                     } catch(err) {
                         alert('文件格式错误，导入失败');

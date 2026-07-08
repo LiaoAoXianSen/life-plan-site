@@ -189,6 +189,66 @@ test('auto sync records matching remote hash instead of uploading first seen ide
     expect(putCount).toBe(0);
 });
 
+test('record merge keeps the longer diary when an old backup is a prefix', async ({ page }) => {
+    const oldDiary = {
+        id: 'diary-2026-07-07',
+        type: '日记',
+        title: '2026年7月7日 星期二',
+        content: '# 正文\n早上记录\n\n# 复盘\n',
+        createdAt: '2026-07-07T10:06:57',
+        updatedAt: '2026-07-07T14:50:01'
+    };
+    const newDiary = {
+        ...oldDiary,
+        content: '# 正文\n早上记录。晚上追加了一段重要内容。\n\n# 复盘\n',
+        updatedAt: '2026-07-07T18:49:59'
+    };
+
+    await page.goto('/');
+    const merged = await page.evaluate(({ localData, remoteData }) => {
+        return mergeCloudData(localData, remoteData);
+    }, {
+        localData: createEmptyData({ records: [newDiary] }),
+        remoteData: createEmptyData({ records: [oldDiary] })
+    });
+
+    expect(merged.records).toHaveLength(1);
+    expect(merged.records[0].id).toBe('diary-2026-07-07');
+    expect(merged.records[0].content).toBe(newDiary.content);
+    expect(merged.records[0].updatedAt).toBe('2026-07-07T18:49:59');
+});
+
+test('record merge creates a conflict copy when diary text diverges', async ({ page }) => {
+    const localDiary = {
+        id: 'diary-diverged',
+        type: '日记',
+        title: '2026年7月7日 星期二',
+        content: '# 正文\n共同开头。本地补了一句。\n\n# 复盘\n',
+        createdAt: '2026-07-07T10:06:57',
+        updatedAt: '2026-07-07T18:40:00'
+    };
+    const remoteDiary = {
+        ...localDiary,
+        content: '# 正文\n共同开头。云端补了另一句。\n\n# 复盘\n',
+        updatedAt: '2026-07-07T18:45:00'
+    };
+
+    await page.goto('/');
+    const merged = await page.evaluate(({ localData, remoteData }) => {
+        return mergeCloudData(localData, remoteData);
+    }, {
+        localData: createEmptyData({ records: [localDiary] }),
+        remoteData: createEmptyData({ records: [remoteDiary] })
+    });
+
+    const primary = merged.records.find(record => record.id === 'diary-diverged');
+    const conflict = merged.records.find(record => record.conflictOf === 'diary-diverged');
+    expect(primary.content).toBe(remoteDiary.content);
+    expect(conflict).toBeTruthy();
+    expect(conflict.content).toBe(localDiary.content);
+    expect(conflict.title).toContain('冲突副本');
+});
+
 test('global search page accepts a keyword', async ({ page }) => {
     await page.goto('/');
     await page.locator('.nav-item', { hasText: '全局搜索' }).click();
