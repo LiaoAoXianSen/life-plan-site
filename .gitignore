@@ -4,6 +4,9 @@ ai-memory/
 # Packaged deliveries
 *.zip
 
+# Local design previews and generated mockups
+design-previews/
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
