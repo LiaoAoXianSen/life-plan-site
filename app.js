@@ -51,6 +51,9 @@
             180: '半年',
             365: '一年'
         };
+        let recordsService = null;
+        let todosService = null;
+        let aiService = null;
         let syncConfig = {
             webdavUrl: '',
             username: '',
@@ -373,11 +376,11 @@
         }
 
         function getIdeaStatus(record) {
-            return IDEA_STATUS_OPTIONS.includes(record?.ideaStatus) ? record.ideaStatus : '待整理';
+            return recordsService.getIdeaStatus(record);
         }
 
         function getIdeaTags(record) {
-            return normalizeTagList(record?.ideaTags);
+            return recordsService.getIdeaTags(record);
         }
 
         function getIdeaTodo(record) {
@@ -385,11 +388,11 @@
         }
 
         function isIdeaUnprocessed(record) {
-            return IDEA_UNPROCESSED_STATUSES.has(getIdeaStatus(record));
+            return recordsService.isIdeaUnprocessed(record);
         }
 
         function ideaNeedsConclusion(record) {
-            return ['实践中', '已验证'].includes(getIdeaStatus(record)) && !String(record?.ideaConclusion || '').trim();
+            return recordsService.ideaNeedsConclusion(record);
         }
 
         // 初始化
@@ -1146,11 +1149,7 @@
             } catch (err) {
                 console.warn('AI 配置读取失败', err);
             }
-            aiConfig.endpointUrl = String(aiConfig.endpointUrl || '').trim();
-            aiConfig.apiKey = String(aiConfig.apiKey || '');
-            aiConfig.model = String(aiConfig.model || 'gpt-4.1-mini').trim() || 'gpt-4.1-mini';
-            aiConfig.remoteEnabled = !!aiConfig.remoteEnabled;
-            aiConfig.userStyle = String(aiConfig.userStyle || '');
+            aiConfig = aiService.normalizeConfig(aiConfig);
             applyAiSettingsToForm();
             updateAiSettingsStatus(aiConfig.remoteEnabled && aiConfig.endpointUrl ? '已加载 AI 接口配置' : '未启用远程 AI，将使用本地规则');
         }
@@ -1229,15 +1228,11 @@
         }
 
         function isRemoteAiReady() {
-            return !!(aiConfig.remoteEnabled && aiConfig.endpointUrl && aiConfig.apiKey && aiConfig.model);
+            return aiService.isRemoteReady(aiConfig);
         }
 
         function getAiChatCompletionsUrl(endpointUrl = aiConfig.endpointUrl) {
-            const clean = String(endpointUrl || '').trim().replace(/\/+$/, '');
-            if (!clean) return '';
-            if (/\/chat\/completions$/i.test(clean)) return clean;
-            if (/\/v\d+$/i.test(clean)) return `${clean}/chat/completions`;
-            return `${clean}/v1/chat/completions`;
+            return aiService.getChatCompletionsUrl(endpointUrl);
         }
 
         async function testAiSettings() {
@@ -1262,116 +1257,15 @@
         }
 
         async function requestRemoteAi(payload) {
-            if (!isRemoteAiReady()) throw new Error('AI 接口未配置完整');
-            const targetUrl = getAiChatCompletionsUrl();
-            const headers = {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${aiConfig.apiKey}`
-            };
-            const body = {
-                model: aiConfig.model,
-                temperature: 0.2,
-                messages: [
-                    {
-                        role: 'system',
-                        content: [
-                            '你是一个个人规划应用里的 AI 助手。',
-                            '请只返回严格 JSON，不要 Markdown。',
-                            'JSON 字段：title 字符串，summary 字符串，items 数组，可选 diary 对象，可选 capture 对象。',
-                            'items 每项字段：text 字符串，note 字符串，可选 urgency/group/dueDate/planStartDate/planEndDate/subTodos/reason。',
-                            'diary 可选字段：oneLine/review/tomorrow/improve/thinking/smallJoy，均为字符串。',
-                            'capture 可选字段：cleanText、diaryText、workText、planText、ideaText、suggestedTargets。',
-                            '建议必须具体、短、可执行。'
-                        ].join('\n')
-                    },
-                    {
-                        role: 'user',
-                        content: JSON.stringify({
-                            ...payload,
-                            userStyle: aiConfig.userStyle || ''
-                        })
-                    }
-                ]
-            };
-            const response = await fetch(targetUrl, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(body)
-            });
-            const raw = await response.text();
-            if (!response.ok) {
-                throw new Error(`AI 请求失败：${response.status}${raw ? ` ${raw.slice(0, 160)}` : ''}`);
-            }
-            let data;
-            try {
-                data = JSON.parse(raw);
-            } catch (err) {
-                throw new Error('AI 返回不是合法 JSON');
-            }
-            const content = data?.choices?.[0]?.message?.content
-                || data?.output_text
-                || data?.content
-                || '';
-            if (!content) throw new Error('AI 返回为空');
-            return parseAiJson(content);
+            return aiService.requestRemoteAi(aiConfig, payload);
         }
 
         function parseAiJson(content) {
-            if (typeof content === 'object' && content) return normalizeAiResult(content);
-            const text = String(content || '').trim();
-            try {
-                return normalizeAiResult(JSON.parse(text));
-            } catch (err) {
-                const match = text.match(/\{[\s\S]*\}/);
-                if (!match) throw new Error('AI 返回内容无法解析为 JSON');
-                return normalizeAiResult(JSON.parse(match[0]));
-            }
+            return aiService.parseAiJson(content);
         }
 
         function normalizeAiResult(result) {
-            const normalizeText = value => String(value || '').trim();
-            const normalized = {
-                title: normalizeText(result?.title || 'AI 建议') || 'AI 建议',
-                summary: normalizeText(result?.summary),
-                items: Array.isArray(result?.items) ? result.items : []
-            };
-            const captureSource = result?.capture || result?.placement || result?.placements || {};
-            normalized.capture = {
-                cleanText: normalizeText(captureSource.cleanText || captureSource.cleanedText || result?.cleanText || result?.correctedText),
-                diaryText: normalizeText(captureSource.diaryText || captureSource.diary || result?.diaryText),
-                workText: normalizeText(captureSource.workText || captureSource.work || result?.workText),
-                planText: normalizeText(captureSource.planText || captureSource.plan || result?.planText),
-                ideaText: normalizeText(captureSource.ideaText || captureSource.idea || result?.ideaText),
-                suggestedTargets: Array.isArray(captureSource.suggestedTargets || captureSource.targets || result?.suggestedTargets)
-                    ? (captureSource.suggestedTargets || captureSource.targets || result?.suggestedTargets)
-                        .map(target => normalizeText(target))
-                        .filter(Boolean)
-                    : []
-            };
-            normalized.diary = {
-                oneLine: normalizeText(result?.diary?.oneLine || result?.oneLine),
-                review: normalizeText(result?.diary?.review || result?.review),
-                tomorrow: normalizeText(result?.diary?.tomorrow || result?.tomorrow || result?.tomorrowFocus),
-                improve: normalizeText(result?.diary?.improve || result?.improve),
-                thinking: normalizeText(result?.diary?.thinking || result?.thinking),
-                smallJoy: normalizeText(result?.diary?.smallJoy || result?.smallJoy)
-            };
-            normalized.items = normalized.items
-                .map(item => ({
-                    text: normalizeText(item?.text || item?.title),
-                    note: normalizeText(item?.note || item?.reason),
-                    urgency: TODO_URGENCY_META[item?.urgency] ? item.urgency : 'medium',
-                    group: normalizeText(item?.group || '其他') || '其他',
-                    dueDate: normalizeText(item?.dueDate),
-                    planStartDate: normalizeText(item?.planStartDate),
-                    planEndDate: normalizeText(item?.planEndDate),
-                    reason: normalizeText(item?.reason),
-                    subTodos: Array.isArray(item?.subTodos)
-                        ? item.subTodos.map(sub => ({ text: normalizeText(sub?.text || sub), done: !!sub?.done })).filter(sub => sub.text)
-                        : []
-                }))
-                .filter(item => item.text);
-            return normalized;
+            return aiService.normalizeAiResult(result);
         }
 
         const AI_MODE_META = {
@@ -1727,216 +1621,23 @@
         }
 
         function cleanAiCaptureText(text = '') {
-            return String(text || '')
-                .replace(/\r\n/g, '\n')
-                .replace(/[ \t]+/g, ' ')
-                .replace(/项把/g, '想把')
-                .replace(/错别子/g, '错别字')
-                .replace(/在AI/g, '再 AI')
-                .replace(/AI在/g, 'AI 再')
-                .replace(/\s+([，。；：！？])/g, '$1')
-                .trim();
+            return aiService.cleanCaptureText(text);
         }
 
         function getAiCaptureSentences(text = '') {
-            return cleanAiCaptureText(text)
-                .split(/[。；;！!？?\n]+/)
-                .map(part => part.trim())
-                .filter(Boolean);
+            return aiService.getCaptureSentences(text);
         }
 
         function extractAiCaptureTodoItems(cleanText, today) {
-            const items = [];
-            const addItem = text => {
-                const clean = cleanAiCaptureText(text).replace(/^[:：,，、\s]+/, '').slice(0, 80);
-                if (clean && !items.some(item => item.text === clean)) {
-                    items.push({
-                        text: clean,
-                        note: `来自 AI 对话整理：${cleanText.slice(0, 160)}`,
-                        group: '其他',
-                        urgency: 'medium',
-                        dueDate: today,
-                        planStartDate: today,
-                        planEndDate: today
-                    });
-                }
-            };
-            const todoPattern = /(?:待办|任务|todo)[：:\s]+([^。；;！!？?\n]+)/ig;
-            let match;
-            while ((match = todoPattern.exec(cleanText))) addItem(match[1]);
-            getAiCaptureSentences(cleanText)
-                .filter(sentence => /(检查|处理|完成|推进|整理|修复|提交|上传|复盘)/.test(sentence) && sentence.length <= 90)
-                .slice(0, 3)
-                .forEach(sentence => addItem(sentence.replace(/^(还要|需要|记一个|顺手记个|明天|今天)/, '').trim()));
-            return items.slice(0, 5);
+            return aiService.extractCaptureTodoItems(cleanText, today);
         }
 
         function generateLocalAiCaptureResult(payload) {
-            const today = payload.today || getTodayStr();
-            const cleanText = cleanAiCaptureText(payload.userInput);
-            if (!cleanText) {
-                return normalizeAiResult({
-                    title: '先说一点内容',
-                    summary: '输入一段话后，我会帮你纠错、整理，并给出可确认的写入位置。',
-                    capture: { cleanText: '', suggestedTargets: [] },
-                    items: []
-                });
-            }
-            const sentences = getAiCaptureSentences(cleanText);
-            const items = extractAiCaptureTodoItems(cleanText, today);
-            const hasWork = /(工作|项目|会议|客户|上线|提交|需求|代码|页面|AI)/i.test(cleanText);
-            const hasPlan = /(今天|明天|计划|重点|安排|接下来|下周|下午|上午)/.test(cleanText);
-            const hasIdea = /(想法|灵感|试试|可以|也许|可能|先放灵感|脑洞)/.test(cleanText);
-            const targets = [
-                items.length ? '待办' : '',
-                hasWork ? '工作记录' : '',
-                hasPlan ? '日计划' : '',
-                '日记',
-                hasIdea ? '灵感碎片' : ''
-            ].filter(Boolean);
-            return normalizeAiResult({
-                title: '对话整理建议',
-                summary: `已整理为 ${targets.join('、') || '日记'} 的候选内容，写入前仍需你确认。`,
-                capture: {
-                    cleanText,
-                    diaryText: cleanText,
-                    workText: hasWork ? cleanText : '',
-                    planText: hasPlan ? sentences.filter(sentence => /(今天|明天|计划|重点|安排|接下来|下周|下午|上午)/.test(sentence)).join('\n') || cleanText : '',
-                    ideaText: hasIdea ? sentences.filter(sentence => /(想法|灵感|试试|可以|也许|可能|先放灵感|脑洞)/.test(sentence)).join('\n') || cleanText : '',
-                    suggestedTargets: targets
-                },
-                items
-            });
+            return aiService.generateLocalCaptureResult(payload);
         }
 
         function generateLocalAiResult(payload) {
-            const today = payload.today || getTodayStr();
-            if (payload.mode === 'chatCapture') {
-                return generateLocalAiCaptureResult(payload);
-            }
-            if (payload.mode === 'diaryReview') {
-                const diary = payload.context.selectedDiary;
-                if (!diary?.content) {
-                    return normalizeAiResult({
-                        title: '暂无可分析日记',
-                        summary: '先写一点日记内容，再让 AI 做复盘和明日重点。',
-                        diary: {},
-                        items: []
-                    });
-                }
-                const tomorrow = addDays(diary.startDate || today, 1);
-                const fields = diary.fields || {};
-                const plain = String(diary.content || '')
-                    .replace(/^#\s+/gm, '')
-                    .replace(/\n{2,}/g, '\n')
-                    .trim();
-                const firstLine = fields.oneLine || plain.split('\n').map(line => line.trim()).find(Boolean) || diary.title || '今天值得被认真复盘';
-                const review = [
-                    fields.review || `今天的核心线索是：${firstLine}`,
-                    fields.improve ? `可改进处：${fields.improve}` : '可以把今天最卡的一点拆小，明天先做一个能完成的版本。',
-                    payload.userInput ? `你的补充要求：${payload.userInput}` : ''
-                ].filter(Boolean).join('\n');
-                const tomorrowFocus = fields.tomorrow || `明天先推进：${firstLine.slice(0, 42)}`;
-                return normalizeAiResult({
-                    title: `日记分析：${diary.title || diary.startDate || '未命名日记'}`,
-                    summary: '本地规则已整理出可确认写入的复盘、明日重点和一个行动建议。',
-                    diary: {
-                        oneLine: fields.oneLine || firstLine.slice(0, 60),
-                        review,
-                        tomorrow: tomorrowFocus,
-                        improve: fields.improve || '把最重要的动作缩小到明天可以直接开始。',
-                        thinking: fields.thinking || ''
-                    },
-                    items: [
-                        {
-                            text: tomorrowFocus.replace(/^明天先推进[:：]\s*/, '').slice(0, 60) || '推进明日重点',
-                            note: `来自日记「${diary.title || diary.startDate || ''}」的 AI 分析`,
-                            group: '其他',
-                            urgency: 'medium',
-                            dueDate: tomorrow,
-                            planStartDate: tomorrow,
-                            planEndDate: tomorrow
-                        }
-                    ]
-                });
-            }
-            if (payload.mode === 'todoBreakdown') {
-                const todo = payload.context.selectedTodo;
-                if (!todo?.text) return { title: '暂无可拆解待办', summary: '先创建一个待办，再让 AI 拆解。', items: [] };
-                const existing = (todo.subTodos || []).filter(sub => sub.text && !sub.done).map(sub => sub.text);
-                const seeds = existing.length ? existing : [
-                    `明确 ${todo.text} 的完成标准`,
-                    `准备 ${todo.text} 需要的材料或入口`,
-                    `推进 ${todo.text} 的第一步`,
-                    `检查结果并记录下一步`
-                ];
-                return normalizeAiResult({
-                    title: `拆解：${todo.text}`,
-                    summary: '本地规则已把这个待办拆成可以勾选的小步。',
-                    items: seeds.slice(0, 6).map(text => ({
-                        text,
-                        note: todo.note || '来自 AI 本地规则拆解',
-                        group: todo.group || '其他',
-                        urgency: todo.urgency || 'medium'
-                    }))
-                });
-            }
-            if (payload.mode === 'ideaNext') {
-                const idea = payload.context.selectedIdea;
-                if (!idea?.title && !idea?.content) return { title: '暂无可转化灵感', summary: '先记录一条灵感，再让 AI 转成行动。', items: [] };
-                const name = idea.title || String(idea.content || '').slice(0, 24);
-                return normalizeAiResult({
-                    title: `灵感下一步：${name}`,
-                    summary: '建议先做一个最小验证，避免灵感停在收藏状态。',
-                    items: [
-                        {
-                            text: `验证灵感：${name}`,
-                            note: [idea.content, payload.userInput].filter(Boolean).join('\n\n'),
-                            group: '学习',
-                            urgency: 'medium',
-                            dueDate: today,
-                            planStartDate: today,
-                            planEndDate: today,
-                            subTodos: [
-                                { text: '写下要验证的问题' },
-                                { text: '找一个最小场景试一次' },
-                                { text: '记录结果和是否继续' }
-                            ]
-                        }
-                    ]
-                });
-            }
-            const sourceTodos = [
-                ...(payload.context.overdueTodos || []),
-                ...(payload.context.todayTodos || []),
-                ...(payload.context.floatingTodos || [])
-            ];
-            const seen = new Set();
-            const picked = sourceTodos.filter(todo => {
-                if (!todo?.text || seen.has(todo.id || todo.text)) return false;
-                seen.add(todo.id || todo.text);
-                return true;
-            }).slice(0, payload.mode === 'backlogTriage' ? 5 : 4);
-            if (!picked.length) {
-                return normalizeAiResult({
-                    title: '今日轻量计划',
-                    summary: '当前没有明显待办压力，可以创建一个很小的推进动作。',
-                    items: [{ text: '写下今天最重要的一件小事', note: payload.userInput || '来自 AI 本地规则建议', group: '其他', urgency: 'medium', dueDate: today, planStartDate: today, planEndDate: today }]
-                });
-            }
-            return normalizeAiResult({
-                title: payload.mode === 'backlogTriage' ? '待办整理建议' : '今日计划建议',
-                summary: '本地规则按超期、紧急度和今日相关性挑选了下一步。',
-                items: picked.map(todo => ({
-                    text: todo.dueDate && todo.dueDate < today ? `补上：${todo.text}` : `推进：${todo.text}`,
-                    note: [todo.note, payload.userInput, todo.overdueDays ? `已超期 ${todo.overdueDays} 天` : ''].filter(Boolean).join('\n'),
-                    group: todo.group || '其他',
-                    urgency: todo.urgency || 'medium',
-                    dueDate: todo.dueDate || today,
-                    planStartDate: today,
-                    planEndDate: today
-                }))
-            });
+            return aiService.generateLocalAiResult(payload);
         }
 
         async function runAiAssistant() {
@@ -2156,27 +1857,7 @@
         }
 
         function createTodoFromAiItem(item, overrides = {}) {
-            const today = getTodayStr();
-            const planStartDate = overrides.planStartDate ?? item.planStartDate ?? today;
-            const planEndDate = overrides.planEndDate ?? item.planEndDate ?? planStartDate;
-            return {
-                id: genId(),
-                text: item.text,
-                note: item.note || item.reason || '',
-                done: false,
-                dueDate: overrides.dueDate ?? item.dueDate ?? today,
-                planStartDate,
-                planEndDate,
-                urgency: TODO_URGENCY_META[item.urgency] ? item.urgency : 'medium',
-                group: item.group || '其他',
-                subTodos: (item.subTodos || []).map(sub => ({ text: sub.text, done: false })),
-                sessions: [],
-                isExclusive: false,
-                createdAt: getLocalDateTimeStr(),
-                updatedAt: getLocalDateTimeStr(),
-                completedAt: '',
-                sourceType: 'ai'
-            };
+            return todosService.createTodoFromAiItem(item, overrides);
         }
 
         function applyAiResult() {
@@ -3433,45 +3114,51 @@
             medium: { label: '中', rank: 2 },
             low: { label: '低', rank: 1 }
         };
+        todosService = window.LifePlanTodosService.create({
+            urgencyMeta: TODO_URGENCY_META,
+            formatDate: value => formatDate(value),
+            getTodayStr: () => getTodayStr(),
+            getNowLocal: date => getLocalDateTimeStr(date),
+            formatClockTime: date => formatClockTime(date),
+            genId: () => genId()
+        });
+        recordsService = window.LifePlanRecordsService.create({
+            ideaStatusOptions: IDEA_STATUS_OPTIONS,
+            ideaUnprocessedStatuses: IDEA_UNPROCESSED_STATUSES,
+            normalizeTagList: tags => normalizeTagList(tags),
+            formatDate: value => formatDate(value),
+            formatLocalDateKey: date => formatLocalDateKey(date)
+        });
+        aiService = window.LifePlanAiService.create({
+            todoUrgencyMeta: TODO_URGENCY_META,
+            getTodayStr: () => getTodayStr(),
+            addDays: (date, days) => addDays(date, days),
+            getNowLocal: date => getLocalDateTimeStr(date),
+            fetchImpl: (...args) => fetch(...args)
+        });
 
         function getTodoUrgencyMeta(todoOrUrgency) {
-            const urgency = typeof todoOrUrgency === 'string'
-                ? todoOrUrgency
-                : todoOrUrgency?.urgency;
-            return TODO_URGENCY_META[urgency] || TODO_URGENCY_META.medium;
+            return todosService.getTodoUrgencyMeta(todoOrUrgency);
         }
 
         function getTodoSortDate(todo) {
-            return todo?.dueDate || '9999-12-31';
+            return todosService.getTodoSortDate(todo);
         }
 
         function compareTodosForFocus(a, b) {
-            if (!!a.done !== !!b.done) return a.done ? 1 : -1;
-            const urgencyDiff = getTodoUrgencyMeta(b).rank - getTodoUrgencyMeta(a).rank;
-            if (urgencyDiff) return urgencyDiff;
-            return getTodoSortDate(a).localeCompare(getTodoSortDate(b));
+            return todosService.compareTodosForFocus(a, b);
         }
 
         function formatTodoDueDate(todo) {
-            return todo?.dueDate || '无截止';
+            return todosService.formatTodoDueDate(todo);
         }
 
         function getTodoPlanLabel(todo) {
-            if (todo?.planStartDate && todo?.planEndDate) {
-                return todo.planStartDate === todo.planEndDate
-                    ? `计划 ${formatDate(todo.planStartDate)}`
-                    : `计划 ${formatDate(todo.planStartDate)} ~ ${formatDate(todo.planEndDate)}`;
-            }
-            return '未设置计划周期';
+            return todosService.getTodoPlanLabel(todo);
         }
 
         function isTodoInDateRange(todo, start, end) {
-            if (!start && !end) return true;
-            const rangeStart = start || '0000-00-00';
-            const rangeEnd = end || '9999-12-31';
-            if (todo.dueDate && todo.dueDate >= rangeStart && todo.dueDate <= rangeEnd) return true;
-            if (todo.planStartDate && todo.planEndDate && todo.planStartDate <= rangeEnd && todo.planEndDate >= rangeStart) return true;
-            return (todo.sessions || []).some(session => session.date && session.date >= rangeStart && session.date <= rangeEnd);
+            return todosService.isTodoInDateRange(todo, start, end);
         }
 
         function renderTodoUrgencyBadge(todo) {
@@ -3481,31 +3168,11 @@
         }
 
         function getRecordDateRangeLabel(record) {
-            const start = record.startDate ? formatDate(record.startDate) : '';
-            const end = record.endDate ? formatDate(record.endDate) : '';
-            if (start && end && start !== end) return `${start} ~ ${end}`;
-            return start || end || '未设置日期';
+            return recordsService.getRecordDateRangeLabel(record);
         }
 
         function parseRecordContentSections(content = '') {
-            const lines = String(content || '').replace(/\r/g, '').split('\n');
-            const sections = [];
-            let current = null;
-
-            lines.forEach(line => {
-                const trimmed = line.trim();
-                if (/^#\s+/.test(trimmed)) {
-                    if (current) sections.push(current);
-                    current = { title: trimmed.replace(/^#\s+/, ''), body: [] };
-                    return;
-                }
-
-                if (!current) current = { title: '内容', body: [] };
-                current.body.push(line);
-            });
-
-            if (current) sections.push(current);
-            return sections.filter(section => section.title || section.body.join('').trim());
+            return recordsService.parseRecordContentSections(content);
         }
 
         function renderPreviewText(text = '') {
@@ -3532,58 +3199,7 @@
         const uniqueScopedRecordTypes = new Set(['日记', '日计划', '工作记录', '周复盘', '周计划', '月复盘', '月计划', '年复盘', '年度计划', '3年计划', '终身愿景']);
 
         function getSuggestedRangeForType(type, baseDate = new Date()) {
-            const today = new Date(baseDate);
-            const todayStr = formatLocalDateKey(today);
-
-            switch(type) {
-                case '日记':
-                case '日计划':
-                case '工作记录':
-                case '灵感碎片':
-                    return { start: todayStr, end: todayStr };
-                case '周复盘':
-                case '周计划': {
-                    const day = today.getDay() || 7;
-                    const monday = new Date(today);
-                    monday.setDate(today.getDate() - day + 1);
-                    const sunday = new Date(monday);
-                    sunday.setDate(monday.getDate() + 6);
-                    return {
-                        start: formatLocalDateKey(monday),
-                        end: formatLocalDateKey(sunday)
-                    };
-                }
-                case '月复盘':
-                case '月计划': {
-                    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-                    return {
-                        start: formatLocalDateKey(monthStart),
-                        end: formatLocalDateKey(monthEnd)
-                    };
-                }
-                case '年复盘':
-                case '年度计划': {
-                    const yearStart = new Date(today.getFullYear(), 0, 1);
-                    const yearEnd = new Date(today.getFullYear(), 11, 31);
-                    return {
-                        start: formatLocalDateKey(yearStart),
-                        end: formatLocalDateKey(yearEnd)
-                    };
-                }
-                case '3年计划': {
-                    const yearStart3 = new Date(today.getFullYear(), 0, 1);
-                    const yearEnd3 = new Date(today.getFullYear() + 2, 11, 31);
-                    return {
-                        start: formatLocalDateKey(yearStart3),
-                        end: formatLocalDateKey(yearEnd3)
-                    };
-                }
-                case '终身愿景':
-                    return { start: todayStr, end: '' };
-                default:
-                    return { start: todayStr, end: todayStr };
-            }
+            return recordsService.getSuggestedRangeForType(type, baseDate);
         }
 
         function findExistingScopedRecord(type, startDate, endDate, excludeId = '') {
@@ -3798,7 +3414,7 @@
         }
 
         function hasTodoSessionOnDate(todo, dateStr) {
-            return (todo.sessions || []).some(session => session.date === dateStr);
+            return todosService.hasTodoSessionOnDate(todo, dateStr);
         }
 
         function isTodoRelevantToday(todo) {
@@ -5015,31 +4631,13 @@
             const keyword = (document.getElementById('idea-search')?.value || '').trim().toLowerCase();
             const statusFilter = document.getElementById('idea-status-filter')?.value || 'all';
             const tagFilter = document.getElementById('idea-tag-filter')?.value || '';
-            return data.records
-                .filter(record => record.type === '灵感碎片')
-                .filter(record => {
-                    if (statusFilter === 'unprocessed') return isIdeaUnprocessed(record);
-                    if (statusFilter === 'needsConclusion') return ideaNeedsConclusion(record);
-                    if (statusFilter !== 'all') return getIdeaStatus(record) === statusFilter;
-                    return true;
-                })
-                .filter(record => hasMatchingTag(getIdeaTags(record), tagFilter))
-                .filter(record => {
-                    if (!keyword) return true;
-                    return [record.title, record.content, record.ideaNextAction, record.ideaConclusion, getIdeaStatus(record), ...getIdeaTags(record)]
-                        .filter(Boolean)
-                        .join(' ')
-                        .toLowerCase()
-                        .includes(keyword);
-                })
-                .sort((a, b) => {
-                    if (statusFilter === 'all') {
-                        const aVerified = getIdeaStatus(a) === '已验证' ? 1 : 0;
-                        const bVerified = getIdeaStatus(b) === '已验证' ? 1 : 0;
-                        if (aVerified !== bVerified) return aVerified - bVerified;
-                    }
-                    return getRecordSortValue(b).localeCompare(getRecordSortValue(a));
-                });
+            return recordsService.filterIdeas(data.records, {
+                keyword,
+                statusFilter,
+                tagFilter,
+                hasMatchingTag: (tags, query) => hasMatchingTag(tags, query),
+                getRecordSortValue: record => getRecordSortValue(record)
+            });
         }
 
         function renderIdeaSummary(ideas) {
@@ -5092,18 +4690,11 @@
         }
 
         function getIdeaTodoText(record) {
-            return (record.ideaNextAction || record.title || '实践一条灵感')
-                .replace(/\s+/g, ' ')
-                .trim()
-                .slice(0, 60) || '实践一条灵感';
+            return recordsService.getIdeaTodoText(record);
         }
 
         function getIdeaTodoNote(record) {
-            return [
-                record.title ? `来源灵感：${record.title}` : '来源灵感',
-                record.content ? `内容：${record.content}` : '',
-                record.ideaConclusion ? `结论：${record.ideaConclusion}` : ''
-            ].filter(Boolean).join('\n\n');
+            return recordsService.getIdeaTodoNote(record);
         }
 
         function convertIdeaToTodo(recordId) {
@@ -5657,22 +5248,7 @@
         function toggleTodo(todoId) {
             const todo = data.todos.find(t => t.id === todoId);
             if (todo) {
-                const now = new Date();
-                const today = getTodayStr();
-                todo.sessions = Array.isArray(todo.sessions) ? todo.sessions : [];
-                todo.done = !todo.done;
-                todo.completedAt = todo.done ? getLocalDateTimeStr(now) : '';
-                if (todo.done && !hasTodoSessionOnDate(todo, today)) {
-                    todo.sessions.push({
-                        id: genId(),
-                        date: today,
-                        startTime: formatClockTime(now),
-                        endTime: '',
-                        note: '勾选完成',
-                        createdAt: getLocalDateTimeStr(now)
-                    });
-                }
-                todo.updatedAt = getLocalDateTimeStr(now);
+                todosService.toggleTodoDone(todo, new Date());
                 saveData();
                 renderDashboard();
                 renderTodoTable();
@@ -6026,10 +5602,7 @@
         }
 
         function syncTodoDoneFromSubTodos(todo, stamp = getLocalDateTimeStr()) {
-            if (!todo || !Array.isArray(todo.subTodos) || !todo.subTodos.length) return;
-            const allDone = todo.subTodos.every(s => s.done);
-            todo.done = allDone;
-            todo.completedAt = allDone ? (todo.completedAt || stamp) : '';
+            return todosService.syncDoneFromSubTodos(todo, stamp);
         }
 
         function toggleSubTodoFromDetail(index, checked) {
@@ -6097,11 +5670,11 @@
                 return;
             }
 
-            let planStartDate = document.getElementById('todo-detail-plan-start').value;
-            let planEndDate = document.getElementById('todo-detail-plan-end').value;
-            if (planStartDate && !planEndDate) planEndDate = planStartDate;
-            if (!planStartDate && planEndDate) planStartDate = planEndDate;
-            if (planStartDate && planEndDate && planStartDate > planEndDate) {
+            const normalizedRange = todosService.normalizeTodoDateRange(
+                document.getElementById('todo-detail-plan-start').value,
+                document.getElementById('todo-detail-plan-end').value
+            );
+            if (!normalizedRange.isValid) {
                 alert('计划结束日期不能早于计划开始日期');
                 return;
             }
@@ -6109,8 +5682,8 @@
             const todoData = {
                 text: text,
                 note: document.getElementById('todo-detail-note')?.value.trim() || '',
-                planStartDate,
-                planEndDate,
+                planStartDate: normalizedRange.planStartDate,
+                planEndDate: normalizedRange.planEndDate,
                 dueDate: document.getElementById('todo-detail-date').value,
                 urgency: document.getElementById('todo-detail-urgency').value || 'medium',
                 group: document.getElementById('todo-detail-group').value,

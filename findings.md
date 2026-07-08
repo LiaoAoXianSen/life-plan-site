@@ -36,6 +36,8 @@
 - P3 was clarified as a maintainability split: `app.js` should stop accumulating sync, records, todos, AI, snapshots logic.
 - Safe first split is sync plus snapshots because these areas contain mostly pure service/storage logic and already have smoke coverage around merge, tombstones, auto sync, and wheel snapshots.
 - Records/todos/AI remain good candidates for later extraction, but they are currently more tightly coupled to DOM state, modal forms, and inline handlers; they should be split in smaller future passes rather than forced into this sync/snapshot change.
+- User clarified that P3 should not be considered complete until all five named areas have files: `sync-service.js`, `snapshot-service.js`, `records-service.js`, `todos-service.js`, and `ai-service.js`.
+- The safe boundary for this P3 pass is service/business-rule extraction while keeping DOM rendering, modal state, and inline onclick compatibility in `app.js`; full UI event-system extraction remains a separate future refactor.
 
 ## 2026-07-06
 

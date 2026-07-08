@@ -20,6 +20,9 @@ $runtimeFiles = @(
     'vendor/app-sync-kit.browser.global.js',
     'sync-service.js',
     'snapshot-service.js',
+    'records-service.js',
+    'todos-service.js',
+    'ai-service.js',
     'wheel-tool.js',
     'wheel-tool.css'
 )

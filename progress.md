@@ -55,6 +55,16 @@
 - Ran targeted sync/merge smoke coverage with `npx playwright test tests/smoke.spec.js -g "auto sync|record merge|tombstoned|wheel snapshot|snapshot"`; 6 tests passed.
 - Ran full `.\scripts\check.ps1`; 24 smoke tests passed.
 - Regenerated clean runtime package at `D:\project\life-plan-site\life-plan-site-runtime-20260708-151559.zip`.
+- User corrected that P3 was supposed to split all five modules, not only `sync` and `snapshots`; accepted that the previous delivery was incomplete.
+- Added `records-service.js` for idea status/tag helpers, idea-to-todo default text/note, record content section parsing, suggested record date ranges, and idea filtering/sorting.
+- Added `todos-service.js` for urgency metadata helpers, todo focus sorting, date range matching, session-on-date checks, done toggling, subtask completion sync, date-range normalization, and AI todo construction.
+- Added `ai-service.js` for AI config normalization, OpenAI-compatible Chat Completions URL construction, remote AI requests, JSON result parsing/normalization, capture text cleanup, and local AI fallback generation.
+- Updated `app.js` to keep UI rendering and existing public function names while delegating records/todos/AI logic to the new services.
+- Loaded `records-service.js`, `todos-service.js`, and `ai-service.js` from `index.html` before `app.js`, and added them to `scripts/package-clean.ps1`.
+- Verified syntax with `node --check` for `app.js`, `records-service.js`, `todos-service.js`, and `ai-service.js`.
+- Ran targeted smoke coverage with `npx playwright test tests/smoke.spec.js -g "AI|todo detail|idea can be converted|verified ideas|global search|loads the app"`; 11 tests passed.
+- Ran full `.\scripts\check.ps1`; 24 smoke tests passed.
+- Regenerated clean runtime package at `D:\project\life-plan-site\life-plan-site-runtime-20260708-154544.zip`.
 
 ## 2026-07-06
 

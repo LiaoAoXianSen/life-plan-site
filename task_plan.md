@@ -23,6 +23,9 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 16. Status: complete - Start P3 maintainability split by extracting sync service logic from `app.js`.
 17. Status: complete - Extract local snapshot storage/version/download helpers from `app.js`.
 18. Status: complete - Validate, package, commit, and push the P3 split to `master`.
+19. Status: complete - Correct P3 scope to include all requested modules: sync, records, todos, ai, snapshots.
+20. Status: complete - Extract records, todos, and AI business rules into service modules.
+21. Status: complete - Validate, package, commit, and push the completed five-module P3 split.
 
 ## Decisions
 
@@ -35,6 +38,7 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 - A later attempt to continue non-AI work was a scope misunderstanding and was reverted back to the AI-only state.
 - User explicitly reopened non-AI scope for todo detail and idea pool fixes on 2026-07-07.
 - P3 means real module extraction, not only adding the shared sync foundation; keep UI refactors conservative and move pure logic first.
+- P3 module split must include `sync`, `records`, `todos`, `ai`, and `snapshots`; if only part is delivered, state that clearly before calling it done.
 
 ## Errors Encountered
 
