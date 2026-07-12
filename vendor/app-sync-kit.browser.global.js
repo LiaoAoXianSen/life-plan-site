@@ -549,11 +549,7 @@ var AppSyncKit = (() => {
     };
   }
   function pruneDeletedItems(target) {
-    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1e3;
-    target.deletedItems = target.deletedItems.filter((item) => {
-      const time = new Date(item.deletedAt || 0).getTime();
-      return !Number.isFinite(time) || time >= cutoff;
-    });
+    target.deletedItems = target.deletedItems.filter((item) => item && item.collection && item.id && item.deletedAt);
     return target;
   }
   function normalizeLifePlanData(input) {

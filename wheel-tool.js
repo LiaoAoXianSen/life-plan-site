@@ -39,6 +39,11 @@
         return typeof genId === 'function' ? genId() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
     }
 
+    function safeJsArg(value) {
+        const stringify = window.escapeInlineJsArg;
+        return stringify ? stringify(value) : JSON.stringify(String(value || '')).replace(/"/g, '&quot;');
+    }
+
     function persist() {
         if (typeof saveData === 'function') saveData();
     }
@@ -639,7 +644,7 @@
             currentWheelId = fallbackWheel?.id || null;
             if (fallbackWheel) currentWheelMode = fallbackWheel.mode || 'normal';
         }
-        selector.innerHTML = modeWheels.map(wheel => `<option value="${wheel.id}" ${wheel.id === currentWheelId ? 'selected' : ''}>${safeHtml(wheel.name)} · ${wheel.mode === 'tag' ? '标签' : '普通'}</option>`).join('');
+        selector.innerHTML = modeWheels.map(wheel => `<option value="${safeHtml(wheel.id)}" ${wheel.id === currentWheelId ? 'selected' : ''}>${safeHtml(wheel.name)} · ${wheel.mode === 'tag' ? '标签' : '普通'}</option>`).join('');
         selector.disabled = modeWheels.length === 0;
     }
 
@@ -675,7 +680,7 @@
                     ${tagCandidates.length ? `
                         <div class="wheel-stage-quick-tags">
                             ${tagCandidates.map(entry => `
-                                <button type="button" class="wheel-stage-quick-tag" onclick="spinDirectTag('${entry.tag.id}')">
+                                <button type="button" class="wheel-stage-quick-tag" onclick="spinDirectTag(${safeJsArg(entry.tag.id)})">
                                     ${getTagChipMarkup(entry.tag.name, entry.tag.color || '#216e4e')}
                                     <span>${entry.items.length} 项</span>
                                 </button>
@@ -725,7 +730,7 @@
                 <div class="wheel-result-title">${safeHtml(history.resultName || '未命名结果')}</div>
                 <div class="wheel-result-note">${history.note ? safeHtml(history.note) : '如果这个答案正好对味，就直接把它转成待办，省掉继续纠结的那一步。'}</div>
                 <div class="wheel-result-actions">
-                    <button class="btn btn-primary" ${converted ? 'disabled' : ''} onclick="convertWheelResultToTodo('${history.id}')">${converted ? '已转入待办' : '转入待办'}</button>
+                    <button class="btn btn-primary" ${converted ? 'disabled' : ''} onclick="convertWheelResultToTodo(${safeJsArg(history.id)})">${converted ? '已转入待办' : '转入待办'}</button>
                     <button class="btn btn-secondary" onclick="clearWheelCurrentResult()">只保留记录</button>
                 </div>
             </div>
@@ -862,7 +867,7 @@
                 return `
                     <article class="wheel-tag-card ${selectedClass}">
                         <label class="wheel-tag-toggle">
-                            <input type="checkbox" ${selected.has(tag.id) ? 'checked' : ''} onchange="toggleWheelTag('${wheel.id}','${tag.id}',this.checked)">
+                            <input type="checkbox" ${selected.has(tag.id) ? 'checked' : ''} onchange="toggleWheelTag(${safeJsArg(wheel.id)},${safeJsArg(tag.id)},this.checked)">
                             <span class="wheel-color-dot" style="background:${safeHtml(tag.color)}"></span>
                             <span class="wheel-tag-title">${safeHtml(tag.name)}</span>
                         </label>
@@ -871,8 +876,8 @@
                             <span>${items.length} 个可抽公共项</span>
                         </div>
                         <div class="wheel-tag-actions">
-                            <button type="button" class="wheel-mini-btn primary" ${items.length ? '' : 'disabled'} onclick="spinDirectTag('${tag.id}')">只转这个标签</button>
-                            <button type="button" class="wheel-mini-btn" ${items.length ? '' : 'disabled'} onclick="previewTagStage('${tag.id}')">先看这个标签池</button>
+                            <button type="button" class="wheel-mini-btn primary" ${items.length ? '' : 'disabled'} onclick="spinDirectTag(${safeJsArg(tag.id)})">只转这个标签</button>
+                            <button type="button" class="wheel-mini-btn" ${items.length ? '' : 'disabled'} onclick="previewTagStage(${safeJsArg(tag.id)})">先看这个标签池</button>
                         </div>
                     </article>
                 `;
@@ -884,8 +889,8 @@
                         <div class="wheel-hint">勾选标签后可以走正常两段抽取；如果你已经想好了标签，也可以直接点“只转这个标签”。</div>
                     </div>
                     <div class="wheel-head-actions">
-                        <button class="btn btn-secondary" onclick="renameWheel('${wheel.id}')">改名</button>
-                        <button class="btn btn-danger" onclick="deleteWheel('${wheel.id}')">删除转盘</button>
+                        <button class="btn btn-secondary" onclick="renameWheel(${safeJsArg(wheel.id)})">改名</button>
+                        <button class="btn btn-danger" onclick="deleteWheel(${safeJsArg(wheel.id)})">删除转盘</button>
                     </div>
                 </div>
                 <div class="wheel-tag-grid">
@@ -902,19 +907,19 @@
                 </div>
                 <div class="wheel-head-actions">
                     <button class="btn btn-secondary" onclick="openWheelBatchImport()">批量导入</button>
-                    <button class="btn btn-secondary" onclick="renameWheel('${wheel.id}')">改名</button>
-                    <button class="btn btn-danger" onclick="deleteWheel('${wheel.id}')">删除转盘</button>
+                    <button class="btn btn-secondary" onclick="renameWheel(${safeJsArg(wheel.id)})">改名</button>
+                    <button class="btn btn-danger" onclick="deleteWheel(${safeJsArg(wheel.id)})">删除转盘</button>
                 </div>
             </div>
             <div class="wheel-inline-form">
                 <input id="wheel-item-name" placeholder="新增选项，例如：散步">
                 <input id="wheel-item-weight" type="number" min="1" value="1" title="权重">
-                <button class="btn btn-primary" onclick="addWheelItem('${wheel.id}')">添加</button>
+                <button class="btn btn-primary" onclick="addWheelItem(${safeJsArg(wheel.id)})">添加</button>
             </div>
             <div class="tag-filter-strip inline wheel-copy-filter">
                 <button type="button" class="${!wheelLibraryCopyTagFilter ? 'active' : ''}" onclick="setWheelLibraryCopyFilter('')">全部公共项</button>
                 ${data.wheelTags.map(tag => `
-                    <button type="button" class="${wheelLibraryCopyTagFilter === tag.id ? 'active' : ''}" onclick="setWheelLibraryCopyFilter('${tag.id}')">
+                    <button type="button" class="${wheelLibraryCopyTagFilter === tag.id ? 'active' : ''}" onclick="setWheelLibraryCopyFilter(${safeJsArg(tag.id)})">
                         <span class="wheel-color-dot" style="background:${safeHtml(tag.color)}"></span>${safeHtml(tag.name)}
                     </button>
                 `).join('')}
@@ -922,16 +927,16 @@
             <div class="wheel-inline-form wide">
                 <select id="wheel-library-copy-select">
                     <option value="">从公共项复制到当前转盘</option>
-                    ${filteredLibraryItems.map(item => `<option value="${item.id}">${safeHtml(item.name)}</option>`).join('')}
+                    ${filteredLibraryItems.map(item => `<option value="${safeHtml(item.id)}">${safeHtml(item.name)}</option>`).join('')}
                 </select>
-                <button class="btn btn-secondary" onclick="copyLibraryItemToWheel('${wheel.id}')">复制</button>
+                <button class="btn btn-secondary" onclick="copyLibraryItemToWheel(${safeJsArg(wheel.id)})">复制</button>
             </div>
             <div class="wheel-list">
                 ${(wheel.items || []).map(item => `
                     <div class="wheel-row">
                         <span class="wheel-row-main"><strong>${safeHtml(item.name)}</strong><small>权重 ${item.weight}${item.note ? ` · ${safeHtml(item.note)}` : ''}</small></span>
-                        <button class="wheel-mini-btn" onclick="editWheelItem('${wheel.id}','${item.id}')">修改</button>
-                        <button class="wheel-mini-btn danger" onclick="deleteWheelItem('${wheel.id}','${item.id}')">删除</button>
+                        <button class="wheel-mini-btn" onclick="editWheelItem(${safeJsArg(wheel.id)},${safeJsArg(item.id)})">修改</button>
+                        <button class="wheel-mini-btn danger" onclick="deleteWheelItem(${safeJsArg(wheel.id)},${safeJsArg(item.id)})">删除</button>
                     </div>
                 `).join('') || '<div class="empty-state">暂无转盘项，可以添加或从公共项复制。</div>'}
             </div>
@@ -944,7 +949,7 @@
         const selectedVisibleCount = filteredItems.filter(item => selectedIds.has(item.id)).length;
         const selectedTotalCount = selectedIds.size;
         const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
-        const tagOptions = data.wheelTags.map(tag => `<option value="${tag.id}">${safeHtml(tag.name)}</option>`).join('');
+        const tagOptions = data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}">${safeHtml(tag.name)}</option>`).join('');
         return `
             <div class="wheel-panel-head">
                 <div>
@@ -968,7 +973,7 @@
                     <span>标签筛选</span>
                     <select id="wheel-library-tag-filter" onchange="setWheelLibraryTagFilter(this.value)">
                         <option value="">全部标签</option>
-                        ${data.wheelTags.map(tag => `<option value="${tag.id}" ${wheelLibraryTagFilter === tag.id ? 'selected' : ''}>${safeHtml(tag.name)}</option>`).join('')}
+                        ${data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}" ${wheelLibraryTagFilter === tag.id ? 'selected' : ''}>${safeHtml(tag.name)}</option>`).join('')}
                     </select>
                 </label>
                 <div class="wheel-library-bulk-actions">
@@ -988,12 +993,12 @@
                 ${filteredItems.map(item => `
                     <div class="wheel-row library ${selectedIds.has(item.id) ? 'selected' : ''}">
                         <label class="wheel-library-select">
-                            <input type="checkbox" aria-label="选择${safeHtml(item.name)}" ${selectedIds.has(item.id) ? 'checked' : ''} onchange="toggleWheelLibrarySelection('${item.id}', this.checked)">
+                            <input type="checkbox" aria-label="选择${safeHtml(item.name)}" ${selectedIds.has(item.id) ? 'checked' : ''} onchange="toggleWheelLibrarySelection(${safeJsArg(item.id)}, this.checked)">
                         </label>
                         <span class="wheel-row-main"><strong>${safeHtml(item.name)}</strong><small>权重 ${item.weight} · ${item.enabled === false ? '已停用' : '启用中'}</small><span class="wheel-chip-row">${tagChips(item.tagIds)}</span></span>
-                        <button class="wheel-mini-btn" onclick="editWheelLibraryItem('${item.id}')">修改</button>
-                        <button class="wheel-mini-btn" onclick="toggleWheelLibraryItem('${item.id}')">${item.enabled === false ? '启用' : '停用'}</button>
-                        <button class="wheel-mini-btn danger" onclick="deleteWheelLibraryItem('${item.id}')">删除</button>
+                        <button class="wheel-mini-btn" onclick="editWheelLibraryItem(${safeJsArg(item.id)})">修改</button>
+                        <button class="wheel-mini-btn" onclick="toggleWheelLibraryItem(${safeJsArg(item.id)})">${item.enabled === false ? '启用' : '停用'}</button>
+                        <button class="wheel-mini-btn danger" onclick="deleteWheelLibraryItem(${safeJsArg(item.id)})">删除</button>
                     </div>
                 `).join('') || '<div class="empty-state">当前筛选下没有公共项。</div>'}
             </div>
@@ -1019,9 +1024,9 @@
                     <div class="wheel-row" data-wheel-tag-id="${safeHtml(tag.id)}">
                         <span class="wheel-color-dot" style="background:${safeHtml(tag.color)}"></span>
                         <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
-                        <button class="wheel-mini-btn" onclick="editWheelTag('${tag.id}')">修改</button>
-                        <button class="wheel-mini-btn" onclick="toggleWheelTagEnabled('${tag.id}')">${tag.enabled === false ? '启用' : '停用'}</button>
-                        <button class="wheel-mini-btn danger" onclick="deleteWheelTag('${tag.id}')">删除</button>
+                        <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">修改</button>
+                        <button class="wheel-mini-btn" onclick="toggleWheelTagEnabled(${safeJsArg(tag.id)})">${tag.enabled === false ? '启用' : '停用'}</button>
+                        <button class="wheel-mini-btn danger" onclick="deleteWheelTag(${safeJsArg(tag.id)})">删除</button>
                     </div>
                 `).join('') || '<div class="empty-state">暂无标签。</div>'}
             </div>
@@ -1047,8 +1052,8 @@
                 ${history.map(item => `
                     <div class="wheel-row">
                         <span class="wheel-row-main"><strong>${safeHtml(item.resultName)}</strong><small>${formatStoredDateTime(item.createdAt)} · ${item.mode === 'tag' ? `标签 ${safeHtml(item.tagName || '-')}` : '普通转盘'}${item.convertedTodoId ? ' · 已转待办' : ''}</small></span>
-                        ${item.convertedTodoId ? '' : `<button class="wheel-mini-btn" onclick="convertWheelResultToTodo('${item.id}')">转待办</button>`}
-                        <button class="wheel-mini-btn danger" onclick="deleteWheelHistory('${item.id}')">删除</button>
+                        ${item.convertedTodoId ? '' : `<button class="wheel-mini-btn" onclick="convertWheelResultToTodo(${safeJsArg(item.id)})">转待办</button>`}
+                        <button class="wheel-mini-btn danger" onclick="deleteWheelHistory(${safeJsArg(item.id)})">删除</button>
                     </div>
                 `).join('') || '<div class="empty-state">暂无抽取记录。</div>'}
             </div>

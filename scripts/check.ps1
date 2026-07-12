@@ -9,6 +9,11 @@ try {
     node --check .\habit-engine.js
     node --check .\habit-ui.js
     node --check .\wheel-tool.js
+    node --check .\sync-service.js
+    node --check .\snapshot-service.js
+    node --check .\records-service.js
+    node --check .\todos-service.js
+    node --check .\ai-service.js
     if (Test-Path .\playwright.config.js) {
         node --check .\playwright.config.js
     }

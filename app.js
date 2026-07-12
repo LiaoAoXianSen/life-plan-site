@@ -302,7 +302,7 @@
                         <summary>${field.label}</summary>
                         <textarea
                             rows="${field.rows || 3}"
-                            data-template-field="${field.id}"
+                            data-template-field="${escapeHtml(field.id)}"
                             placeholder="${field.placeholder || ''}"
                             oninput="updateStructuredTemplateField('${field.id}', this.value)"
                         >${escapeHtml(values[field.id] || '')}</textarea>
@@ -699,7 +699,18 @@
         // 保存数据
         function saveData() {
             normalizeDataShape();
-            localStorage.setItem('lifePlanData', JSON.stringify(data));
+            try {
+                localStorage.setItem('lifePlanData', JSON.stringify(data));
+            } catch (err) {
+                const quotaExceeded = err?.name === 'QuotaExceededError' || err?.code === 22;
+                const message = quotaExceeded
+                    ? '浏览器存储空间不足，本次修改尚未可靠保存。请立刻导出完整备份并清理旧快照。'
+                    : '浏览器本地数据写入失败，本次修改尚未可靠保存。请立刻导出完整备份。';
+                console.error('主数据写入失败', err);
+                updateSyncStatus(message, true);
+                alert(message);
+                return false;
+            }
             if (!suppressDirtyMark) {
                 syncState.dirty = true;
                 syncState.lastLocalHash = getDataHash();
@@ -713,6 +724,7 @@
                     scheduleAutoWheelCloudSync('大转盘数据已修改，稍后自动同步');
                 }
             }
+            return true;
         }
 
         function loadSyncState() {
@@ -942,10 +954,10 @@
                         <div class="snapshot-relation">${escapeHtml(getSnapshotRelationText(snapshot))}</div>
                     </div>
                     <div class="snapshot-actions">
-                        <button class="btn btn-secondary" onclick="renderSnapshotPreview('${snapshot.id}')">预览</button>
-                        <button class="btn btn-secondary" onclick="restoreLocalSnapshot('${snapshot.id}')">恢复</button>
-                        <button class="btn btn-secondary" onclick="downloadLocalSnapshot('${snapshot.id}')">下载</button>
-                        <button class="btn btn-danger" onclick="deleteLocalSnapshot('${snapshot.id}')">删除</button>
+                        <button class="btn btn-secondary" onclick="renderSnapshotPreview(${escapeJsArg(snapshot.id)})">预览</button>
+                        <button class="btn btn-secondary" onclick="restoreLocalSnapshot(${escapeJsArg(snapshot.id)})">恢复</button>
+                        <button class="btn btn-secondary" onclick="downloadLocalSnapshot(${escapeJsArg(snapshot.id)})">下载</button>
+                        <button class="btn btn-danger" onclick="deleteLocalSnapshot(${escapeJsArg(snapshot.id)})">删除</button>
                     </div>
                 </div>
             `).join('');
@@ -3158,6 +3170,9 @@
             return escapeHtml(JSON.stringify(String(value || '')));
         }
 
+        // Dynamic IDs can arrive from imported or synced JSON. Keep them as data, never executable code.
+        window.escapeInlineJsArg = escapeJsArg;
+
         const TODO_URGENCY_META = {
             urgent: { label: '紧急', rank: 4 },
             high: { label: '高', rank: 3 },
@@ -3379,7 +3394,7 @@
                 .slice(0, 3);
             if (!goals.length) return '<div class="empty-state compact-empty">暂无进行中的目标</div>';
             return goals.map(goal => `
-                <div class="command-row" onclick="openGoalDetail('${goal.id}')">
+                <div class="command-row" onclick="openGoalDetail(${escapeJsArg(goal.id)})">
                     <span>${escapeHtml(goal.name || '未命名目标')}</span>
                     <strong>${Number(goal.progress || 0)}%</strong>
                 </div>
@@ -3425,7 +3440,7 @@
                     ${urgentTodos.length ? `
                         <div class="command-list">
                             ${urgentTodos.map(todo => `
-                                <div class="command-row" onclick="openTodoDetail('${todo.id}')">
+                                <div class="command-row" onclick="openTodoDetail(${escapeJsArg(todo.id)})">
                                     <span>${escapeHtml(todo.text || '未命名待办')}</span>
                                     ${renderTodoUrgencyBadge(todo)}
                                 </div>
@@ -3508,14 +3523,14 @@
                 <ul class="todo-list">
                     ${todayTodos.map(t => `
                         <li class="todo-item">
-                            <input type="checkbox" onchange="toggleTodo('${t.id}'); renderDashboard();">
-                            <span class="todo-text" onclick="openTodoDetail('${t.id}')">
+                            <input type="checkbox" onchange="toggleTodo(${escapeJsArg(t.id)}); renderDashboard();">
+                            <span class="todo-text" onclick="openTodoDetail(${escapeJsArg(t.id)})">
                                 ${escapeHtml(t.text)}
                                 <small>${escapeHtml(getTodayTodoReason(t))}</small>
                             </span>
                             ${renderTodoUrgencyBadge(t)}
                             <span class="todo-actions">
-                                <button class="btn btn-secondary todo-mini-btn" onclick="addQuickTodoSession('${t.id}')">执行一次</button>
+                                <button class="btn btn-secondary todo-mini-btn" onclick="addQuickTodoSession(${escapeJsArg(t.id)})">执行一次</button>
                             </span>
                         </li>
                     `).join('')}
@@ -3563,15 +3578,15 @@
                 <ul class="todo-list">
                     ${picked.map(t => `
                         <li class="todo-item">
-                            <input type="checkbox" onchange="toggleTodo('${t.id}'); renderDashboard();">
-                            <span class="todo-text" onclick="openTodoDetail('${t.id}')">
+                            <input type="checkbox" onchange="toggleTodo(${escapeJsArg(t.id)}); renderDashboard();">
+                            <span class="todo-text" onclick="openTodoDetail(${escapeJsArg(t.id)})">
                                 ${escapeHtml(t.text)}
                                 <small>无截止 · 可转入今天</small>
                             </span>
                             ${renderTodoUrgencyBadge(t)}
                             <span class="todo-actions">
-                                <button class="btn btn-secondary todo-mini-btn" onclick="planTodoForToday('${t.id}')">今天做</button>
-                                <button class="btn btn-secondary todo-mini-btn" onclick="addQuickTodoSession('${t.id}')">执行一次</button>
+                                <button class="btn btn-secondary todo-mini-btn" onclick="planTodoForToday(${escapeJsArg(t.id)})">今天做</button>
+                                <button class="btn btn-secondary todo-mini-btn" onclick="addQuickTodoSession(${escapeJsArg(t.id)})">执行一次</button>
                             </span>
                         </li>
                     `).join('')}
@@ -3674,18 +3689,18 @@
                 const primaryActionText = targetCount > 1 && doneCount > 0 ? '再记一次' : '打卡';
                 const actionButtons = doneCount === 0
                     ? `
-                        <button class="habit-quick-btn primary" onclick="quickHabitCheckin('${habit.id}')">${primaryActionText}</button>
-                        <button class="habit-quick-btn secondary" onclick="quickHabitCheckinWithNote('${habit.id}')">备注</button>
+                        <button class="habit-quick-btn primary" onclick="quickHabitCheckin(${escapeJsArg(habit.id)})">${primaryActionText}</button>
+                        <button class="habit-quick-btn secondary" onclick="quickHabitCheckinWithNote(${escapeJsArg(habit.id)})">备注</button>
                     `
                     : targetCount === 1
                         ? `
-                            <button class="habit-quick-btn secondary" onclick="quickHabitCheckin('${habit.id}')">备注</button>
-                            <button class="habit-quick-btn ghost" onclick="quickUndoHabitCheckin('${habit.id}')">撤销</button>
+                            <button class="habit-quick-btn secondary" onclick="quickHabitCheckin(${escapeJsArg(habit.id)})">备注</button>
+                            <button class="habit-quick-btn ghost" onclick="quickUndoHabitCheckin(${escapeJsArg(habit.id)})">撤销</button>
                         `
                         : `
-                            <button class="habit-quick-btn primary" onclick="quickHabitCheckin('${habit.id}')">打卡</button>
-                            <button class="habit-quick-btn secondary" onclick="${latestCheckin ? `editLatestHabitNote('${habit.id}')` : `quickHabitCheckinWithNote('${habit.id}')`}">备注</button>
-                            <button class="habit-quick-btn ghost" onclick="quickDecreaseHabitCheckin('${habit.id}')">-1</button>
+                            <button class="habit-quick-btn primary" onclick="quickHabitCheckin(${escapeJsArg(habit.id)})">打卡</button>
+                            <button class="habit-quick-btn secondary" onclick="${latestCheckin ? `editLatestHabitNote(${escapeJsArg(habit.id)})` : `quickHabitCheckinWithNote(${escapeJsArg(habit.id)})`}">备注</button>
+                            <button class="habit-quick-btn ghost" onclick="quickDecreaseHabitCheckin(${escapeJsArg(habit.id)})">-1</button>
                         `;
 
                 return `
@@ -3735,7 +3750,7 @@
                 const doneCount = data.todos.filter(t => r.todoIds?.includes(t.id) && t.done).length;
                 const progress = todoCount > 0 ? Math.round(doneCount / todoCount * 100) : 0;
                 return `
-                    <div class="period-item" onclick="openRecordPreview('${r.id}')">
+                    <div class="period-item" onclick="openRecordPreview(${escapeJsArg(r.id)})">
                         <div class="period-info">
                             <h4><span class="item-type type-${r.type}" style="margin-right:8px;">${r.type}</span>${r.title || '无标题'}</h4>
                             <p>${formatDate(r.startDate)} ~ ${formatDate(r.endDate)} · 待办 ${doneCount}/${todoCount}</p>
@@ -3791,7 +3806,7 @@
             return `
                 <div class="record-row">
                     <div class="record-time">${getRecordTime(record)}</div>
-                    <div class="timeline-item type-${record.type}" onclick="openRecordPreview('${record.id}')">
+                    <div class="timeline-item type-${escapeHtml(record.type)}" onclick="openRecordPreview(${escapeJsArg(record.id)})">
                         <span class="item-type type-${record.type}">${record.type}</span>
                         <span class="item-title">${escapeHtml(record.title || '无标题')}</span>
                         ${renderIdeaBadges(record)}
@@ -3981,7 +3996,7 @@
                             </div>
                             ${fromEditor ? '' : `
                                 <div class="idea-card-actions">
-                                    <button class="btn btn-secondary todo-mini-btn" onclick="convertIdeaToTodo('${record.id}')">${getIdeaTodo(record) ? '打开关联待办' : '转成待办'}</button>
+                                    <button class="btn btn-secondary todo-mini-btn" onclick="convertIdeaToTodo(${escapeJsArg(record.id)})">${getIdeaTodo(record) ? '打开关联待办' : '转成待办'}</button>
                                 </div>
                             `}
                         </div>
@@ -4001,7 +4016,7 @@
                         ${fromEditor
                             ? '<button class="btn btn-secondary" onclick="backToEditFromPreview()">返回继续编辑</button>'
                             : `
-                                ${record.type === '日记' ? `<button class="btn btn-secondary" onclick="openAiAssistant('diaryReview','${record.id}')">AI 分析日记</button>` : ''}
+                                ${record.type === '日记' ? `<button class="btn btn-secondary" onclick="openAiAssistant('diaryReview',${escapeJsArg(record.id)})">AI 分析日记</button>` : ''}
                                 <button class="btn btn-secondary" onclick="editRecordFromPreview()">编辑</button>
                             `}
                     </div>
@@ -4145,7 +4160,7 @@
                 .filter(todo => !todo.done || todo.id === selectedId)
                 .sort(compareTodosForFocus);
             select.innerHTML = '<option value="">不关联</option>' + openTodos.map(todo => `
-                <option value="${todo.id}" ${todo.id === selectedId ? 'selected' : ''}>${escapeHtml(todo.text || '未命名待办')}</option>
+                <option value="${escapeHtml(todo.id)}" ${todo.id === selectedId ? 'selected' : ''}>${escapeHtml(todo.text || '未命名待办')}</option>
             `).join('');
         }
 
@@ -4730,9 +4745,9 @@
                             <div class="wide"><strong>结论</strong><span>${escapeHtml(record.ideaConclusion || '还没有结论')}</span></div>
                         </div>
                         <div class="idea-card-actions">
-                            <button class="btn btn-secondary todo-mini-btn" onclick="openRecordPreview('${record.id}')">查看</button>
-                            <button class="btn btn-secondary todo-mini-btn" onclick="convertIdeaToTodo('${record.id}')">${todo ? '打开待办' : '转成待办'}</button>
-                            <button class="btn btn-primary todo-mini-btn" onclick="openRecordModal('${record.id}')">编辑推进</button>
+                            <button class="btn btn-secondary todo-mini-btn" onclick="openRecordPreview(${escapeJsArg(record.id)})">查看</button>
+                            <button class="btn btn-secondary todo-mini-btn" onclick="convertIdeaToTodo(${escapeJsArg(record.id)})">${todo ? '打开待办' : '转成待办'}</button>
+                            <button class="btn btn-primary todo-mini-btn" onclick="openRecordModal(${escapeJsArg(record.id)})">编辑推进</button>
                         </div>
                     </article>
                 `;
@@ -4940,7 +4955,7 @@
                     ${material.note ? `<div class="material-meta">备注：${escapeHtml(material.note)}</div>` : ''}
                     ${compact ? '' : `
                         <div class="idea-card-actions">
-                            <button class="btn btn-secondary todo-mini-btn" onclick="openMaterialModal('${material.id}')">编辑</button>
+                            <button class="btn btn-secondary todo-mini-btn" onclick="openMaterialModal(${escapeJsArg(material.id)})">编辑</button>
                         </div>
                     `}
                 </article>
@@ -5201,7 +5216,7 @@
                 ? `<optgroup label="内置模板">${builtIns.map(t => `<option value="builtin:${t.id}">${t.name}</option>`).join('')}</optgroup>`
                 : '';
             const customOptions = typeTemplates.length
-                ? `<optgroup label="我的模板">${typeTemplates.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}</optgroup>`
+                ? `<optgroup label="我的模板">${typeTemplates.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('')}</optgroup>`
                 : '';
 
             select.innerHTML = '<option value="">空白</option>' + builtInOptions + customOptions;
@@ -5273,7 +5288,7 @@
                             <div style="font-size:14px; font-weight:500;">${t.name}</div>
                             <div style="font-size:12px; color:#999;">${t.type}</div>
                         </div>
-                        <button class="btn btn-danger" style="padding:4px 10px; font-size:12px;" onclick="deleteTemplate('${t.id}')">删除</button>
+                        <button class="btn btn-danger" style="padding:4px 10px; font-size:12px;" onclick="deleteTemplate(${escapeJsArg(t.id)})">删除</button>
                     </div>
                 `).join('');
             }
@@ -5344,8 +5359,8 @@
                 return `
                     <tr>
                         <td><input type="checkbox" ${t.done ? 'checked' : ''} 
-                            onchange="toggleTodo('${t.id}'); renderTodoTable();"></td>
-                        <td class="todo-title-cell ${t.done ? 'is-done' : ''}" onclick="openTodoDetail('${t.id}')">
+                            onchange="toggleTodo(${escapeJsArg(t.id)}); renderTodoTable();"></td>
+                        <td class="todo-title-cell ${t.done ? 'is-done' : ''}" onclick="openTodoDetail(${escapeJsArg(t.id)})">
                             ${escapeHtml(t.text)}
                             ${t.subTodos && t.subTodos.length > 0 ? `<span style="color:#999; font-size:12px;">(${t.subTodos.filter(s=>s.done).length}/${t.subTodos.length})</span>` : ''}
                             <div class="todo-title-meta">${escapeHtml(getTodoPlanLabel(t))} · 执行 ${sessionCount} 次</div>
@@ -5574,7 +5589,7 @@
                         <strong>${escapeHtml(session.date || '未设日期')} ${escapeHtml(session.startTime || '')}${session.endTime ? ` - ${escapeHtml(session.endTime)}` : ''}</strong>
                         ${session.note ? `<span>${escapeHtml(session.note)}</span>` : '<span>执行了一次</span>'}
                     </div>
-                    <button class="btn btn-secondary" onclick="deleteTodoSession('${session.id}')">删本次</button>
+                    <button class="btn btn-secondary" onclick="deleteTodoSession(${escapeJsArg(session.id)})">删本次</button>
                 </div>
             `).join('');
         }
@@ -5858,7 +5873,7 @@
 
             container.innerHTML = data.habits.map(h => `
                 <div class="habit-tab tag-${h.tag} ${currentHabitId === h.id ? 'active' : ''}" 
-                    onclick="currentHabitId='${h.id}'; renderHeatmap(); renderHabitTabs(); if(currentHabitView === 'matrix') renderHabitMatrix();">
+                    onclick="currentHabitId=${escapeJsArg(h.id)}; renderHeatmap(); renderHabitTabs(); if(currentHabitView === 'matrix') renderHabitMatrix();">
                     ${h.name}
                 </div>
             `).join('');
@@ -5925,7 +5940,7 @@
                         <span>${reward.stock > 0 ? `剩余 ${stockLeft}` : '不限次数'} · 已兑 ${reward.redeemedCount || 0} · ${escapeHtml(currency)}</span>
                         ${reward.note ? `<p>${escapeHtml(getCheckinNoteSummary(reward.note, 34))}</p>` : ''}
                     </div>
-                    <button class="habit-redeem-btn" ${disabled ? 'disabled' : ''} onclick="redeemHabitReward('${reward.id}')">${escapeHtml(formatHabitCurrencyAmount(reward.cost, currency))}</button>
+                    <button class="habit-redeem-btn" ${disabled ? 'disabled' : ''} onclick="redeemHabitReward(${escapeJsArg(reward.id)})">${escapeHtml(formatHabitCurrencyAmount(reward.cost, currency))}</button>
                 </article>
             `;
         }
@@ -7233,7 +7248,7 @@
             container.innerHTML = data.goals.map(g => {
                 const progress = typeof g.progress === 'number' ? g.progress : (g.status === '已完成' ? 100 : 0);
                 return `
-                <div class="goal-card" onclick="openGoalDetail('${g.id}')">
+                <div class="goal-card" onclick="openGoalDetail(${escapeJsArg(g.id)})">
                     <div class="goal-info">
                         <h4>${g.name} <span style="font-size:12px; color:#97a29b; font-weight:700;">(${g.status})</span></h4>
                         <p>${g.period} · ${g.target}</p>

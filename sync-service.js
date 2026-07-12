@@ -187,11 +187,8 @@
 
         function pruneDeletedItems(target = {}) {
             if (!Array.isArray(target.deletedItems)) target.deletedItems = [];
-            const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
-            target.deletedItems = target.deletedItems.filter(item => {
-                const time = new Date(item.deletedAt || 0).getTime();
-                return !Number.isFinite(time) || time >= cutoff;
-            });
+            // Keep tombstones indefinitely: an offline device must not resurrect an old deletion.
+            target.deletedItems = target.deletedItems.filter(item => item?.collection && item?.id && item?.deletedAt);
             return target.deletedItems;
         }
 
