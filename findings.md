@@ -1,5 +1,14 @@
 # Findings
 
+## 2026-07-13
+
+- Current continuation is on `master` and focuses on data safety/sync reliability, not new AI feature expansion.
+- Save failures now need to be treated as a visible reliability state, not a transient alert; the UI keeps recovery actions visible until a successful retry.
+- Snapshot creation should not attempt a second write inside the failure handler because quota failures can repeat; returning `null` and showing failure is the safer behavior.
+- Sync requests can hang under poor Cloudflare/network conditions, so both the local sync service and vendored AppSyncKit request path need the same 20-second abort behavior.
+- A save or sync request during an active sync can otherwise be lost when the first sync clears `dirty`; a pending follow-up sync is required for both main data and wheel data.
+- The current batch closes the save/snapshot/timeout/queue risks, while data size stats, IndexedDB snapshot migration, persistent sync error history, and ETag-based conflict prevention remain future work.
+
 ## 2026-07-07
 
 - Current AI integration goal is project-bound to `D:\project\life-plan-site`.

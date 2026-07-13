@@ -48,6 +48,14 @@
                 <button class="btn btn-secondary sync-btn" onclick="openAiAssistant('todayPlan')">AI 助手</button>
                 <button class="btn btn-secondary sync-btn" onclick="openAiSettings()">AI 设置</button>
             </div>
+            <div id="local-save-warning" class="local-save-warning" role="alert">
+                <span class="local-save-warning-text"></span>
+                <div class="local-save-warning-actions">
+                    <button class="btn btn-secondary" onclick="exportData()">立即导出</button>
+                    <button class="btn btn-secondary" onclick="openSnapshotRecovery()">管理快照</button>
+                    <button class="btn btn-primary" onclick="retryLocalSave()">重试保存</button>
+                </div>
+            </div>
             <div id="sync-status" class="sync-status"></div>
         </details>
     </div>

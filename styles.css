@@ -160,6 +160,21 @@
         overflow-wrap: anywhere;
     }
     .sync-status.is-error { color: #c24c34; }
+    .local-save-warning {
+        display: none;
+        gap: 8px;
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid #e7b9ad;
+        border-radius: 12px;
+        background: #fff5f1;
+        color: #9c3826;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+    .local-save-warning.active { display: grid; }
+    .local-save-warning-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .local-save-warning-actions .btn { min-height: 30px; padding: 4px 8px; font-size: 12px; }
     .sync-modal-status {
         margin: 12px 0 14px;
         padding: 11px 12px;

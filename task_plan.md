@@ -26,6 +26,11 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 19. Status: complete - Correct P3 scope to include all requested modules: sync, records, todos, ai, snapshots.
 20. Status: complete - Extract records, todos, and AI business rules into service modules.
 21. Status: complete - Validate, package, commit, and push the completed five-module P3 split.
+22. Status: complete - Add local save failure recovery UI and unified localStorage write failure handling.
+23. Status: complete - Make snapshot write failures explicit instead of reporting fake success.
+24. Status: complete - Add 20-second sync request timeouts and queued follow-up sync for edits during active sync.
+25. Status: complete - Validate the data safety/sync reliability batch and package runtime files.
+26. Status: in_progress - Commit and push the data safety/sync reliability batch to `master`.
 
 ## Decisions
 
@@ -39,6 +44,7 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 - User explicitly reopened non-AI scope for todo detail and idea pool fixes on 2026-07-07.
 - P3 means real module extraction, not only adding the shared sync foundation; keep UI refactors conservative and move pure logic first.
 - P3 module split must include `sync`, `records`, `todos`, `ai`, and `snapshots`; if only part is delivered, state that clearly before calling it done.
+- Data safety work should clearly distinguish completed reliability fixes from larger storage roadmap items like IndexedDB migration, data-volume dashboards, and ETag conflict prevention.
 
 ## Errors Encountered
 

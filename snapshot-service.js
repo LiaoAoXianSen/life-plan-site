@@ -104,11 +104,10 @@
         }
 
         function createSnapshot(reason = '自动快照', sourceData = {}, meta = {}) {
-            let snapshot;
             try {
                 const existingSnapshots = getAll();
                 const snapshotData = cloneDataSnapshot(sourceData);
-                snapshot = {
+                const snapshot = {
                     schemaVersion,
                     id: genId(),
                     version: getNextVersion(existingSnapshots),
@@ -125,9 +124,8 @@
                 saveAll([snapshot, ...existingSnapshots]);
                 return snapshot;
             } catch (err) {
-                const snapshots = [snapshot, ...getAll()].filter(Boolean);
-                saveAll(snapshots.slice(0, 5));
-                return snapshot || null;
+                console.warn('本地快照写入失败', err);
+                return null;
             }
         }
 

@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-07-13
+
+- Rechecked the current `master` worktree and confirmed the active fix set was about local save failure recovery, snapshot write failure handling, sync timeout, and queued follow-up uploads.
+- Added a persistent local-save warning block in the sidebar with `立即导出`, `管理快照`, and `重试保存` actions, and made the warning auto-open the backup panel.
+- Routed main data, sync state, sync config, wheel sync config, and AI config writes through a shared safe localStorage wrapper so failures now surface consistently.
+- Changed snapshot creation to return `null` on write failure and show a failure status instead of pretending the snapshot succeeded.
+- Added 20-second abort-based timeout handling to both the project sync service and the vendored AppSyncKit WebDAV request path.
+- Added pending sync follow-up behavior for both main cloud sync and wheel cloud sync so edits made during an active sync are not dropped.
+- Added Playwright smoke coverage for local save recovery, snapshot write rejection, sync timeout messaging, and queued follow-up uploads.
+- Ran syntax checks for `app.js`, `sync-service.js`, `snapshot-service.js`, `vendor/app-sync-kit.browser.global.js`, and `tests/smoke.spec.js`.
+- Ran targeted Playwright smoke tests for the new failure/timeout/queue cases; all 6 passed.
+- Ran full `.\scripts\check.ps1`; all 28 Playwright smoke tests passed.
+- Ran `git diff --check`; no whitespace errors were reported.
+- Ran `.\scripts\package-clean.ps1` and produced `D:\project\life-plan-site\life-plan-site-runtime-20260713-163719.zip`.
+- Updated `docs/project-issue-tracker.md` to mark the completed items and keep the remaining data-volume and sync-diagnostics work visible.
+
 ## 2026-07-07
 
 - Created Codex goal for adding configurable AI support to the life planning app.

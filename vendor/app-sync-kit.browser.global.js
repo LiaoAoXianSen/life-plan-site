@@ -843,12 +843,23 @@ var AppSyncKit = (() => {
   async function request(fetchImpl, endpoint, remotePath, method, body, acceptedStatuses = [200, 201, 204, 207]) {
     const base = `${endpoint.replace(/\/+$/, "")}/`;
     const target = remotePath.replace(/^\/+/, "");
-    const response = await fetchImpl(base + target, {
-      method,
-      mode: "cors",
-      headers: body ? { "Content-Type": "application/json; charset=utf-8" } : void 0,
-      body
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2e4);
+    let response;
+    try {
+      response = await fetchImpl(base + target, {
+        method,
+        mode: "cors",
+        headers: body ? { "Content-Type": "application/json; charset=utf-8" } : void 0,
+        body,
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") throw new Error("同步请求超时（20 秒），请稍后重试");
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok && !acceptedStatuses.includes(response.status)) {
       const detail = await response.clone().text().catch(() => "");
       throw new Error(`WebDAV ${method} failed: ${response.status}${detail ? ` ${detail.slice(0, 120)}` : ""}`);

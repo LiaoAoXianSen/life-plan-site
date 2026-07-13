@@ -83,7 +83,17 @@
             const headers = {};
             if (body !== null) headers['Content-Type'] = 'application/json; charset=utf-8';
             if (method === 'PROPFIND') headers.Depth = '0';
-            const response = await fetchImpl(url, { method, headers, body, mode: 'cors' });
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 20000);
+            let response;
+            try {
+                response = await fetchImpl(url, { method, headers, body, mode: 'cors', signal: controller.signal });
+            } catch (err) {
+                if (err?.name === 'AbortError') throw new Error('同步请求超时（20 秒），请稍后重试');
+                throw err;
+            } finally {
+                clearTimeout(timeout);
+            }
             if (!response.ok && response.status !== 207) {
                 const detail = await response.clone().text().catch(() => '');
                 const err = new Error(`WebDAV ${method} 失败：${response.status}${detail ? ` ${detail.slice(0, 120)}` : ''}`);

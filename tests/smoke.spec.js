@@ -64,6 +64,216 @@ test('loads the app and opens core pages', async ({ page }) => {
     expect(errors).toEqual([]);
 });
 
+test('local save failure keeps recovery actions visible until retry succeeds', async ({ page }) => {
+    const data = createEmptyData();
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        const originalSetItem = Storage.prototype.setItem;
+        let failMainData = true;
+        window.__allowLifePlanDataWrites = () => {
+            failMainData = false;
+        };
+        Storage.prototype.setItem = function setItem(key, itemValue) {
+            if (key === 'lifePlanData' && failMainData) {
+                throw new DOMException('quota exceeded', 'QuotaExceededError');
+            }
+            return originalSetItem.call(this, key, itemValue);
+        };
+    }, data);
+
+    await page.goto('/');
+
+    const saved = await page.evaluate(() => saveData());
+    expect(saved).toBe(false);
+    await expect(page.locator('.sidebar-bottom')).toHaveAttribute('open', '');
+    await expect(page.locator('#local-save-warning')).toBeVisible();
+    await expect(page.locator('#local-save-warning')).toContainText('主数据未可靠保存');
+    await expect(page.getByRole('button', { name: '立即导出' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '管理快照' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '重试保存' })).toBeVisible();
+
+    await page.evaluate(() => window.__allowLifePlanDataWrites());
+    await page.getByRole('button', { name: '重试保存' }).click();
+
+    await expect(page.locator('#local-save-warning')).toBeHidden();
+    await expect(page.locator('#sync-status')).toContainText('本地数据已重新保存');
+});
+
+test('snapshot write failure reports failure instead of a fake success', async ({ page }) => {
+    const data = createEmptyData();
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        const originalSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function setItem(key, itemValue) {
+            if (key === 'lifePlanSnapshots') {
+                throw new DOMException('quota exceeded', 'QuotaExceededError');
+            }
+            return originalSetItem.call(this, key, itemValue);
+        };
+    }, data);
+
+    await page.goto('/');
+    await page.evaluate(() => openSnapshotModal());
+    await expect(page.locator('#snapshot-modal')).toHaveClass(/active/);
+
+    await page.getByRole('button', { name: '立即创建快照' }).click();
+
+    await expect(page.locator('#sync-status')).toContainText('本地快照写入失败');
+    await expect(page.locator('#sync-status-inline')).toContainText('同步：失败');
+    const rawSnapshots = await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'));
+    expect(rawSnapshots).toBeNull();
+});
+
+test('cloud sync requests fail with a 20 second timeout message', async ({ page }) => {
+    await page.goto('/');
+
+    const message = await page.evaluate(async () => {
+        const originalSetTimeout = window.setTimeout;
+        const originalClearTimeout = window.clearTimeout;
+        window.setTimeout = (callback, delay, ...args) => {
+            if (delay === 20000) {
+                callback(...args);
+                return 1;
+            }
+            return originalSetTimeout(callback, delay, ...args);
+        };
+        window.clearTimeout = timer => {
+            if (timer !== 1) originalClearTimeout(timer);
+        };
+
+        try {
+            const service = LifePlanSyncService.create({
+                appSyncKit: () => null,
+                fetchImpl: (_url, options = {}) => new Promise((_resolve, reject) => {
+                    if (options.signal?.aborted) {
+                        reject(new DOMException('aborted', 'AbortError'));
+                        return;
+                    }
+                    options.signal?.addEventListener('abort', () => {
+                        reject(new DOMException('aborted', 'AbortError'));
+                    }, { once: true });
+                })
+            });
+            await service.pullJson({ webdavUrl: 'https://sync.example.test' }, '/life-plan.json');
+            return 'no-error';
+        } catch (err) {
+            return err.message || String(err);
+        } finally {
+            window.setTimeout = originalSetTimeout;
+            window.clearTimeout = originalClearTimeout;
+        }
+    });
+
+    expect(message).toContain('同步请求超时');
+});
+
+test('edits during an active cloud sync trigger one follow-up upload', async ({ page }) => {
+    const initialData = createEmptyData({
+        todos: [
+            {
+                id: 'initial-todo',
+                text: '同步前待办',
+                note: '',
+                done: false,
+                dueDate: '',
+                planStartDate: '',
+                planEndDate: '',
+                urgency: 'medium',
+                group: '工作',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-13T10:00:00',
+                updatedAt: '2026-07-13T10:00:00'
+            }
+        ]
+    });
+    let remoteData = createEmptyData();
+    let putCount = 0;
+    let activePuts = 0;
+    let maxActivePuts = 0;
+    let firstPutStarted = false;
+    let releaseFirstPut;
+
+    await page.route('https://sync.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (url.pathname === '/life-plan.json' && request.method() === 'GET') {
+            await route.fulfill({ contentType: 'application/json', body: JSON.stringify(remoteData) });
+            return;
+        }
+        if (url.pathname === '/life-plan.json' && request.method() === 'PUT') {
+            putCount += 1;
+            activePuts += 1;
+            maxActivePuts = Math.max(maxActivePuts, activePuts);
+            const nextRemoteData = JSON.parse(request.postData() || '{}');
+            if (putCount === 1) {
+                firstPutStarted = true;
+                await new Promise(resolve => {
+                    releaseFirstPut = resolve;
+                });
+            }
+            remoteData = nextRemoteData;
+            activePuts -= 1;
+            await route.fulfill({ status: 204, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 404, body: '' });
+    });
+
+    await page.addInitScript(({ value, valueHash }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://sync.example.test',
+            username: '',
+            password: '',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({
+            dirty: true,
+            lastLocalHash: valueHash,
+            lastRemoteHash: '',
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: ''
+        }));
+    }, { value: initialData, valueHash: hashData(initialData) });
+
+    await page.goto('/');
+    const firstSync = page.evaluate(() => runCloudSync('up').catch(err => err.message));
+    await expect.poll(() => firstPutStarted).toBe(true);
+
+    await page.evaluate(() => {
+        const stamp = getLocalDateTimeStr();
+        data.todos.push({
+            id: 'queued-edit-todo',
+            text: '同步期间新增的待办',
+            note: '',
+            done: false,
+            dueDate: '',
+            planStartDate: '',
+            planEndDate: '',
+            urgency: 'medium',
+            group: '工作',
+            subTodos: [],
+            sessions: [],
+            createdAt: stamp,
+            updatedAt: stamp
+        });
+        saveData();
+        runCloudSync('up');
+    });
+
+    releaseFirstPut();
+    await firstSync;
+
+    await expect.poll(() => putCount).toBe(2);
+    expect(maxActivePuts).toBe(1);
+    expect(remoteData.todos.map(todo => todo.id)).toContain('queued-edit-todo');
+});
+
 test('auto sync does not upload unchanged data on reload', async ({ page }) => {
     const data = createEmptyData({
         habitCurrencies: [

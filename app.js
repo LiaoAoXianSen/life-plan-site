@@ -101,6 +101,10 @@
         let wheelSyncIntervalTimer = null;
         let isCloudSyncing = false;
         let isWheelCloudSyncing = false;
+        let pendingCloudSync = false;
+        let pendingWheelCloudSync = false;
+        let hasUnreliableLocalSave = false;
+        let localSaveWarning = '';
         const syncService = window.LifePlanSyncService.create({
             appSyncKit: () => window.AppSyncKit,
             fetchImpl: (...args) => fetch(...args),
@@ -434,11 +438,50 @@
             normalizeDataShape();
             const normalized = JSON.stringify(data);
             if (saved !== normalized) {
-                localStorage.setItem('lifePlanData', normalized);
+                persistLocalValue('lifePlanData', normalized, '初始化数据规范化');
             }
             loadSyncConfig();
             loadWheelSyncConfig();
             loadAiConfig();
+        }
+
+        function renderLocalSaveWarning() {
+            const container = document.getElementById('local-save-warning');
+            if (!container) return;
+            container.classList.toggle('active', hasUnreliableLocalSave);
+            container.querySelector('.local-save-warning-text').textContent = localSaveWarning || '';
+            if (hasUnreliableLocalSave) {
+                container.closest('details')?.setAttribute('open', '');
+            }
+        }
+
+        function persistLocalValue(key, value, label = '本地数据') {
+            try {
+                localStorage.setItem(key, value);
+                return true;
+            } catch (err) {
+                const quotaExceeded = err?.name === 'QuotaExceededError' || err?.code === 22;
+                localSaveWarning = quotaExceeded
+                    ? `${label}未可靠保存：浏览器存储空间不足。请先导出备份或清理旧快照。`
+                    : `${label}未可靠保存：浏览器本地存储写入失败。请先导出备份。`;
+                hasUnreliableLocalSave = true;
+                console.error(`${label}写入失败`, err);
+                renderLocalSaveWarning();
+                updateSyncStatus(localSaveWarning, true);
+                return false;
+            }
+        }
+
+        function retryLocalSave() {
+            if (!saveData()) return;
+            hasUnreliableLocalSave = false;
+            localSaveWarning = '';
+            renderLocalSaveWarning();
+            updateSyncStatus('本地数据已重新保存');
+        }
+
+        function openSnapshotRecovery() {
+            openSnapshotModal();
         }
 
         function normalizeDataShape(target = data) {
@@ -699,18 +742,10 @@
         // 保存数据
         function saveData() {
             normalizeDataShape();
-            try {
-                localStorage.setItem('lifePlanData', JSON.stringify(data));
-            } catch (err) {
-                const quotaExceeded = err?.name === 'QuotaExceededError' || err?.code === 22;
-                const message = quotaExceeded
-                    ? '浏览器存储空间不足，本次修改尚未可靠保存。请立刻导出完整备份并清理旧快照。'
-                    : '浏览器本地数据写入失败，本次修改尚未可靠保存。请立刻导出完整备份。';
-                console.error('主数据写入失败', err);
-                updateSyncStatus(message, true);
-                alert(message);
-                return false;
-            }
+            if (!persistLocalValue('lifePlanData', JSON.stringify(data), '主数据')) return false;
+            hasUnreliableLocalSave = false;
+            localSaveWarning = '';
+            renderLocalSaveWarning();
             if (!suppressDirtyMark) {
                 syncState.dirty = true;
                 syncState.lastLocalHash = getDataHash();
@@ -739,7 +774,7 @@
 
         function saveSyncState() {
             syncState.lastLocalHash = getDataHash();
-            localStorage.setItem('lifePlanSyncState', JSON.stringify(syncState));
+            persistLocalValue('lifePlanSyncState', JSON.stringify(syncState), '同步状态');
         }
 
         function loadWheelSyncState() {
@@ -754,7 +789,7 @@
 
         function saveWheelSyncState() {
             wheelSyncState.lastLocalHash = getWheelDataHash();
-            localStorage.setItem('lifePlanWheelSyncState', JSON.stringify(wheelSyncState));
+            persistLocalValue('lifePlanWheelSyncState', JSON.stringify(wheelSyncState), '大转盘同步状态');
         }
 
         function saveDataFromSync() {
@@ -812,6 +847,11 @@
             } catch (err) {
                 console.warn('本地快照写入失败', err);
                 updateSyncStatus('本地快照写入失败，可能是浏览器存储空间不足', true);
+                return null;
+            }
+
+            if (!snapshot) {
+                updateSyncStatus('本地快照写入失败，当前数据未受影响。请导出备份或清理旧快照后重试。', true);
                 return null;
             }
 
@@ -1041,12 +1081,12 @@
         }
 
         function saveSyncConfigToLocal() {
-            localStorage.setItem('lifePlanSyncConfig', JSON.stringify(syncConfig));
+            persistLocalValue('lifePlanSyncConfig', JSON.stringify(syncConfig), '同步配置');
             applySyncSettingsToForm();
         }
 
         function saveWheelSyncConfigToLocal() {
-            localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify(wheelSyncConfig));
+            persistLocalValue('lifePlanWheelSyncConfig', JSON.stringify(wheelSyncConfig), '大转盘同步配置');
             applyWheelSyncSettingsToForm();
         }
 
@@ -1167,7 +1207,7 @@
         }
 
         function saveAiConfigToLocal() {
-            localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(aiConfig));
+            persistLocalValue(AI_CONFIG_KEY, JSON.stringify(aiConfig), 'AI 配置');
             applyAiSettingsToForm();
         }
 
@@ -2290,6 +2330,7 @@
 
         async function runCloudSync(direction = 'both') {
             if (isCloudSyncing) {
+                pendingCloudSync = true;
                 updateSyncStatus('已有同步任务进行中，稍等一下。');
                 return;
             }
@@ -2429,6 +2470,10 @@
                 throw err;
             } finally {
                 isCloudSyncing = false;
+                if (pendingCloudSync) {
+                    pendingCloudSync = false;
+                    queueMicrotask(() => runCloudSync('both').catch(err => updateSyncStatus(err.message || '补传同步失败', true)));
+                }
             }
         }
 
@@ -2531,6 +2576,7 @@
 
         async function runWheelCloudSync(direction = 'both', silent = false) {
             if (isWheelCloudSyncing) {
+                pendingWheelCloudSync = true;
                 if (!silent) updateWheelSyncStatus('已有大转盘同步任务进行中。');
                 return;
             }
@@ -2631,6 +2677,10 @@
                 throw err;
             } finally {
                 isWheelCloudSyncing = false;
+                if (pendingWheelCloudSync) {
+                    pendingWheelCloudSync = false;
+                    queueMicrotask(() => runWheelCloudSync('both', true).catch(err => updateWheelSyncStatus(err.message || '大转盘补传失败', true)));
+                }
             }
         }
 
