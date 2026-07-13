@@ -1254,6 +1254,28 @@
         background: #fff9e8;
         color: #735b22;
     }
+    .critical-failure-log {
+        display: grid;
+        gap: 8px;
+        margin: 0 0 12px;
+    }
+    .critical-failure-log:empty {
+        display: none;
+    }
+    .critical-failure-item {
+        padding: 10px 12px;
+        border: 1px solid #e9b9ad;
+        border-radius: 12px;
+        background: #fff4f1;
+        color: #7d2f1e;
+        font-size: 12px;
+        line-height: 1.55;
+    }
+    .critical-failure-item strong {
+        display: block;
+        color: #5f2115;
+        font-size: 13px;
+    }
     .snapshot-list {
         display: grid;
         gap: 10px;

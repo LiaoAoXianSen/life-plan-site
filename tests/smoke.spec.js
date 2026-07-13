@@ -91,6 +91,23 @@ test('local save failure keeps recovery actions visible until retry succeeds', a
     await expect(page.getByRole('button', { name: '立即导出' })).toBeVisible();
     await expect(page.getByRole('button', { name: '管理快照' })).toBeVisible();
     await expect(page.getByRole('button', { name: '重试保存' })).toBeVisible();
+    const failures = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanCriticalFailures') || '[]'));
+    expect(failures.some(item => item.label === '主数据写入失败' && item.message.includes('quota exceeded'))).toBe(true);
+
+    await page.evaluate(() => openSnapshotModal());
+    await expect(page.locator('#critical-failure-log')).toContainText('主数据写入失败');
+    await expect(page.locator('#critical-failure-log')).toContainText('quota exceeded');
+    await page.evaluate(() => closeSnapshotModal());
+
+    await page.evaluate(() => {
+        for (let i = 1; i <= 6; i += 1) {
+            recordCriticalFailure(`测试失败 ${i}`, null, { message: `错误 ${i}` });
+        }
+    });
+    const cappedFailures = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanCriticalFailures') || '[]'));
+    expect(cappedFailures).toHaveLength(5);
+    expect(cappedFailures[0].label).toBe('测试失败 6');
+    expect(cappedFailures.some(item => item.label === '主数据写入失败')).toBe(false);
 
     await page.evaluate(() => window.__allowLifePlanDataWrites());
     await page.getByRole('button', { name: '重试保存' }).click();
@@ -122,6 +139,117 @@ test('snapshot write failure reports failure instead of a fake success', async (
     await expect(page.locator('#sync-status-inline')).toContainText('同步：失败');
     const rawSnapshots = await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'));
     expect(rawSnapshots).toBeNull();
+});
+
+test('record todo text is rendered as text, not executable HTML', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+        localStorage.removeItem('lifePlanData');
+        window.__xssFired = false;
+    });
+    await page.reload();
+
+    await page.evaluate(() => {
+        window.__xssFired = false;
+        createRecord('日记');
+    });
+    const payload = '<img src=x onerror="window.__xssFired = true"> 记录待办';
+    await page.locator('#new-todo-input').fill(payload);
+    await page.getByRole('button', { name: '添加' }).click();
+
+    const todoText = page.locator('#record-todos .todo-text');
+    await expect(todoText).toHaveText(payload);
+    await expect(page.locator('#record-todos img')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.__xssFired)).toBe(false);
+});
+
+test('imported labels cannot inject classes, handlers, or goal markup', async ({ page }) => {
+    const data = createEmptyData({
+        records: [
+            {
+                id: 'record-malicious-class',
+                type: '日记" onclick="window.__xssFired = true" bad="',
+                title: '带恶意类型的记录',
+                content: '类型应该只作为文本显示。',
+                startDate: '2026-07-13',
+                endDate: '2026-07-13',
+                time: '09:00',
+                todoIds: []
+            },
+            {
+                id: 'record-malicious-period',
+                type: '周计划',
+                title: '<img src=x onerror="window.__xssFired = true"> 安全周期',
+                content: '周期记录标题应该只作为文本显示。',
+                startDate: '2026-07-13',
+                endDate: '2099-12-31',
+                time: '10:00',
+                todoIds: []
+            }
+        ],
+        todos: [
+            {
+                id: 'todo-malicious-group',
+                text: '带恶意分组的待办',
+                done: false,
+                group: '工作" onclick="window.__xssFired = true" bad="',
+                dueDate: '2026-07-13',
+                urgency: 'urgent" onclick="window.__xssFired = true" bad="',
+                createdAt: '2026-07-13T09:00'
+            }
+        ],
+        habits: [
+            {
+                id: 'habit-malicious',
+                name: '<img src=x onerror="window.__xssFired = true"> 安全习惯',
+                tag: '运动" onclick="window.__xssFired = true" bad="',
+                targetCount: 1,
+                noteMode: 'never',
+                rewardPoints: 0,
+                penaltyPoints: 0,
+                createdAt: '2026-07-13T09:00'
+            }
+        ],
+        goals: [
+            {
+                id: 'goal-malicious',
+                name: '<img src=x onerror="window.__xssFired = true"> 安全目标',
+                period: '<svg onload="window.__xssFired = true"></svg> 7月',
+                target: '<img src=x onerror="window.__xssFired = true"> 完成一件事',
+                status: '进行中',
+                progress: 40
+            }
+        ]
+    });
+
+    await page.addInitScript(value => {
+        window.__xssFired = false;
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, data);
+    await page.goto('/');
+
+    await expect(page.locator('#active-periods')).toContainText('<img src=x onerror="window.__xssFired = true"> 安全周期');
+    await expect(page.locator('#active-periods img')).toHaveCount(0);
+
+    await page.locator('[data-page-target="records"]').click();
+    await expect(page.locator('#all-records')).toContainText('日记" onclick="window.__xssFired = true" bad="');
+    await expect(page.locator('[onclick*="__xssFired"]')).toHaveCount(0);
+
+    await page.locator('[data-page-target="todos"]').click();
+    await expect(page.locator('#todo-table-body')).toContainText('工作" onclick="window.__xssFired = true" bad="');
+    const urgencyClass = await page.locator('#todo-table-body .todo-urgency').evaluate(el => el.className);
+    expect(urgencyClass).not.toContain('onclick');
+    expect(urgencyClass).not.toContain('bad');
+    await expect(page.locator('[onclick*="__xssFired"]')).toHaveCount(0);
+
+    await page.locator('[data-page-target="habits"]').click();
+    await expect(page.locator('#habit-tabs')).toContainText('<img src=x onerror="window.__xssFired = true"> 安全习惯');
+    await expect(page.locator('#habit-tabs img')).toHaveCount(0);
+
+    await page.locator('[data-page-target="goals"]').click();
+    await expect(page.locator('#goal-list')).toContainText('<img src=x onerror="window.__xssFired = true"> 安全目标');
+    await expect(page.locator('#goal-list img')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.__xssFired)).toBe(false);
 });
 
 test('cloud sync requests fail with a 20 second timeout message', async ({ page }) => {
@@ -165,6 +293,36 @@ test('cloud sync requests fail with a 20 second timeout message', async ({ page 
     });
 
     expect(message).toContain('同步请求超时');
+});
+
+test('sync failures are recorded in the critical failure log', async ({ page }) => {
+    await page.route('https://sync-fail.example.test/**', async route => {
+        await route.fulfill({ status: 500, body: 'sync unavailable' });
+    });
+    await page.goto('/');
+
+    await page.evaluate(() => {
+        document.getElementById('sync-webdav-url').value = 'https://sync-fail.example.test';
+        document.getElementById('sync-remote-path').value = '/life-plan.json';
+        document.getElementById('sync-auto').checked = false;
+        document.getElementById('wheel-sync-remote-path').value = '/apps/wheel-app/data.json';
+        document.getElementById('wheel-sync-auto').checked = false;
+    });
+
+    const mainMessage = await page.evaluate(() => runCloudSync('both').catch(err => err.message));
+    const wheelMessage = await page.evaluate(() => runWheelCloudSync('both', true).catch(err => err.message));
+    expect(mainMessage).toContain('WebDAV GET');
+    expect(wheelMessage).toContain('WebDAV GET');
+
+    const failures = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanCriticalFailures') || '[]'));
+    expect(failures).toEqual(expect.arrayContaining([
+        expect.objectContaining({ label: '云同步失败', action: 'cloud-sync-both' }),
+        expect.objectContaining({ label: '大转盘同步失败', action: 'wheel-cloud-sync-both' })
+    ]));
+
+    await page.evaluate(() => openSnapshotModal());
+    await expect(page.locator('#critical-failure-log')).toContainText('云同步失败');
+    await expect(page.locator('#critical-failure-log')).toContainText('大转盘同步失败');
 });
 
 test('edits during an active cloud sync trigger one follow-up upload', async ({ page }) => {

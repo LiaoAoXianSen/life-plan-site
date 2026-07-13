@@ -105,6 +105,8 @@
         let pendingWheelCloudSync = false;
         let hasUnreliableLocalSave = false;
         let localSaveWarning = '';
+        const CRITICAL_FAILURE_LOG_KEY = 'lifePlanCriticalFailures';
+        const MAX_CRITICAL_FAILURES = 5;
         const syncService = window.LifePlanSyncService.create({
             appSyncKit: () => window.AppSyncKit,
             fetchImpl: (...args) => fetch(...args),
@@ -292,8 +294,8 @@
             container.innerHTML = `
                 <div class="template-editor-head">
                     <div>
-                        <div class="template-editor-title">${template.name} · 分块填写</div>
-                        <div class="template-editor-meta">${template.description || '每一块默认折叠，展开后填写，正文会自动同步生成。'}</div>
+                        <div class="template-editor-title">${escapeHtml(template.name)} · 分块填写</div>
+                        <div class="template-editor-meta">${escapeHtml(template.description || '每一块默认折叠，展开后填写，正文会自动同步生成。')}</div>
                     </div>
                     <div class="template-editor-actions">
                         <button type="button" onclick="toggleTemplateFields(true)">全部展开</button>
@@ -303,12 +305,12 @@
                 </div>
                 ${template.fields.map(field => `
                     <details class="template-field">
-                        <summary>${field.label}</summary>
+                        <summary>${escapeHtml(field.label)}</summary>
                         <textarea
                             rows="${field.rows || 3}"
                             data-template-field="${escapeHtml(field.id)}"
-                            placeholder="${field.placeholder || ''}"
-                            oninput="updateStructuredTemplateField('${field.id}', this.value)"
+                            placeholder="${escapeHtml(field.placeholder || '')}"
+                            oninput="updateStructuredTemplateField(${escapeJsArg(field.id)}, this.value)"
                         >${escapeHtml(values[field.id] || '')}</textarea>
                     </details>
                 `).join('')}
@@ -455,6 +457,47 @@
             }
         }
 
+        function getCriticalFailures() {
+            try {
+                const saved = localStorage.getItem(CRITICAL_FAILURE_LOG_KEY);
+                const parsed = saved ? JSON.parse(saved) : [];
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (err) {
+                console.warn('关键故障记录读取失败', err);
+                return [];
+            }
+        }
+
+        function renderCriticalFailureLog() {
+            const container = document.getElementById('critical-failure-log');
+            if (!container) return;
+            const failures = getCriticalFailures();
+            container.innerHTML = failures.map(item => `
+                <div class="critical-failure-item">
+                    <strong>${escapeHtml(item.label || '关键操作失败')}</strong>
+                    <span>${escapeHtml(formatStoredDateTime(item.createdAt))} · ${escapeHtml(item.message || '未记录详细原因')}</span>
+                </div>
+            `).join('');
+        }
+
+        function recordCriticalFailure(label, err = null, extra = {}) {
+            const entry = {
+                id: genId(),
+                label,
+                message: err?.message || extra.message || '操作失败',
+                createdAt: getLocalDateTimeStr(),
+                action: extra.action || ''
+            };
+            try {
+                const failures = [entry, ...getCriticalFailures()].slice(0, MAX_CRITICAL_FAILURES);
+                localStorage.setItem(CRITICAL_FAILURE_LOG_KEY, JSON.stringify(failures));
+            } catch (logErr) {
+                console.warn('关键故障记录写入失败', logErr);
+            }
+            console.error(label, err || entry.message);
+            renderCriticalFailureLog();
+        }
+
         function persistLocalValue(key, value, label = '本地数据') {
             try {
                 localStorage.setItem(key, value);
@@ -465,11 +508,16 @@
                     ? `${label}未可靠保存：浏览器存储空间不足。请先导出备份或清理旧快照。`
                     : `${label}未可靠保存：浏览器本地存储写入失败。请先导出备份。`;
                 hasUnreliableLocalSave = true;
-                console.error(`${label}写入失败`, err);
+                recordCriticalFailure(`${label}写入失败`, err, { action: 'local-storage-write' });
                 renderLocalSaveWarning();
                 updateSyncStatus(localSaveWarning, true);
                 return false;
             }
+        }
+
+        function normalizeWheelColor(value, fallback = '#216e4e') {
+            const color = String(value || '').trim();
+            return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
         }
 
         function retryLocalSave() {
@@ -660,7 +708,7 @@
             target.wheelTags.forEach(tag => {
                 if (!tag.id) tag.id = genId();
                 if (!tag.name) tag.name = '未命名标签';
-                if (!tag.color) tag.color = '#216e4e';
+                tag.color = normalizeWheelColor(tag.color);
                 tag.weight = Math.max(1, Number(tag.weight) || 1);
                 if (tag.enabled === undefined) tag.enabled = true;
                 if (!tag.createdAt) tag.createdAt = getLocalDateTimeStr();
@@ -719,6 +767,7 @@
 
         function applyWheelSnapshot(snapshot, shouldRender = true) {
             const next = snapshot && typeof snapshot === 'object' ? snapshot : {};
+            const previousData = cloneDataSnapshot(data);
             data.wheels = Array.isArray(next.wheels) ? next.wheels : [];
             data.wheelTags = Array.isArray(next.wheelTags) ? next.wheelTags : [];
             data.wheelLibraryItems = Array.isArray(next.wheelLibraryItems) ? next.wheelLibraryItems : [];
@@ -727,7 +776,10 @@
             const preservedDeletedItems = Array.isArray(data.deletedItems) ? data.deletedItems.filter(item => !isWheelDeletionCollection(item?.collection)) : [];
             data.deletedItems = [...preservedDeletedItems, ...nextWheelDeletedItems];
             normalizeDataShape();
-            saveDataFromWheelSync();
+            if (!saveDataFromWheelSync()) {
+                data = previousData;
+                throw new Error('大转盘同步数据未能写入本地存储');
+            }
             if (shouldRender) renderAfterDataChange();
         }
 
@@ -795,7 +847,7 @@
         function saveDataFromSync() {
             suppressDirtyMark = true;
             try {
-                saveData();
+                return saveData();
             } finally {
                 suppressDirtyMark = false;
             }
@@ -804,7 +856,7 @@
         function saveDataFromWheelSync() {
             suppressDirtyMark = true;
             try {
-                saveData();
+                return saveData();
             } finally {
                 suppressDirtyMark = false;
             }
@@ -829,7 +881,13 @@
         }
 
         function saveLocalSnapshots(snapshots) {
-            return snapshotService.saveAll(snapshots);
+            try {
+                return snapshotService.saveAll(snapshots);
+            } catch (err) {
+                recordCriticalFailure('本地快照列表写入失败', err, { action: 'snapshot-save-all' });
+                updateSyncStatus('本地快照列表写入失败，请先导出备份或清理浏览器存储。', true);
+                return null;
+            }
         }
 
         function getNextSnapshotVersion(snapshots = getLocalSnapshots()) {
@@ -846,11 +904,13 @@
                 snapshot = snapshotService.createSnapshot(reason, sourceData, meta);
             } catch (err) {
                 console.warn('本地快照写入失败', err);
+                recordCriticalFailure('本地快照写入失败', err, { action: meta.action || 'snapshot-create' });
                 updateSyncStatus('本地快照写入失败，可能是浏览器存储空间不足', true);
                 return null;
             }
 
             if (!snapshot) {
+                recordCriticalFailure('本地快照写入失败', null, { action: meta.action || 'snapshot-create', message: '快照服务返回空结果' });
                 updateSyncStatus('本地快照写入失败，当前数据未受影响。请导出备份或清理旧快照后重试。', true);
                 return null;
             }
@@ -885,6 +945,7 @@
 
         function openSnapshotModal() {
             const snapshots = getLocalSnapshots();
+            renderCriticalFailureLog();
             renderSnapshotStorageNotice(snapshots);
             renderSnapshotList(snapshots);
             document.getElementById('snapshot-modal').classList.add('active');
@@ -1013,13 +1074,20 @@
             const snapshot = getLocalSnapshots().find(item => item.id === snapshotId);
             if (!snapshot) return;
             if (!confirm(`确定恢复到「${snapshot.reason || '本地快照'}」吗？当前数据会先自动保存一份恢复前快照。`)) return;
-            createLocalSnapshot('恢复前自动快照', data, {
+            const beforeSnapshot = createLocalSnapshot('恢复前自动快照', data, {
                 source: 'restore',
                 action: 'before-restore',
                 mergedWith: { label: `恢复目标 v${snapshot.version || '?'}`, hash: snapshot.hash || '' }
             });
+            if (!beforeSnapshot && !confirm('恢复前快照创建失败。继续恢复会缺少回滚点，确定继续吗？')) return;
+            const previousData = data;
             data = cloneDataSnapshot(snapshot.data);
-            saveData();
+            if (!saveData()) {
+                data = previousData;
+                recordCriticalFailure('恢复本地快照失败', null, { action: 'restore-snapshot', message: '恢复后的数据未能写入本地存储' });
+                alert('恢复失败：本地存储写入失败，当前数据已保持不变。请先导出备份或清理存储空间。');
+                return;
+            }
             renderAfterDataChange();
             closeSnapshotModal();
             updateSyncStatus(`已恢复本地快照：${formatStoredDateTime(snapshot.createdAt)}`);
@@ -1027,7 +1095,7 @@
 
         function deleteLocalSnapshot(snapshotId) {
             if (!confirm('确定删除这份本地快照吗？')) return;
-            saveLocalSnapshots(getLocalSnapshots().filter(item => item.id !== snapshotId));
+            if (!saveLocalSnapshots(getLocalSnapshots().filter(item => item.id !== snapshotId))) return;
             renderSnapshotList();
         }
 
@@ -2290,6 +2358,7 @@
                     mergedWith: { label: '云端', hash: remote.hash }
                 });
             }
+            const previousData = data;
             data = shouldMerge ? mergeCloudData(data, remote.data) : remote.data;
             if (shouldMerge) {
                 createLocalSnapshot('手动拉取安全合并结果', data, {
@@ -2301,7 +2370,10 @@
                     mergedWith: { label: '云端', hash: remote.hash }
                 });
             }
-            saveDataFromSync();
+            if (!saveDataFromSync()) {
+                data = previousData;
+                throw new Error('云端拉取数据未能写入本地存储');
+            }
             syncState.dirty = shouldMerge && getDataHash() !== remote.hash;
             syncState.lastRemoteHash = remote.hash;
             syncState.lastPullAt = new Date().toISOString();
@@ -2349,6 +2421,7 @@
                             action: 'before-merge',
                             mergedWith: { label: '云端', hash: remote.hash }
                         });
+                        const previousData = data;
                         data = mergeCloudData(data, remote.data);
                         createLocalSnapshot('手动上传合并结果', data, {
                             source: 'cloud-push',
@@ -2358,7 +2431,10 @@
                             parentHash: beforeSnapshot?.hash,
                             mergedWith: { label: '云端', hash: remote.hash }
                         });
-                        saveDataFromSync();
+                        if (!saveDataFromSync()) {
+                            data = previousData;
+                            throw new Error('云端合并数据未能写入本地存储');
+                        }
                         syncState.dirty = true;
                         syncState.lastConflictAt = new Date().toISOString();
                         await syncUpToCloud(true);
@@ -2415,6 +2491,7 @@
                         action: 'before-merge',
                         mergedWith: { label: '云端', hash: remoteHash }
                     });
+                    const previousData = data;
                     data = mergeCloudData(data, remote.data);
                     createLocalSnapshot('拉取云端安全合并结果', data, {
                         source: 'auto-sync',
@@ -2424,7 +2501,10 @@
                         parentHash: beforeSnapshot?.hash,
                         mergedWith: { label: '云端', hash: remoteHash }
                     });
-                    saveDataFromSync();
+                    if (!saveDataFromSync()) {
+                        data = previousData;
+                        throw new Error('云端拉取合并数据未能写入本地存储');
+                    }
                     syncState.dirty = getDataHash() !== remoteHash;
                     const shouldUploadMergedData = syncState.dirty;
                     syncState.lastRemoteHash = remoteHash;
@@ -2450,6 +2530,7 @@
                     action: 'before-merge',
                     mergedWith: { label: '云端', hash: remote.hash }
                 });
+                const previousData = data;
                 data = mergeCloudData(data, remote.data);
                 createLocalSnapshot('自动合并结果', data, {
                     source: 'auto-sync',
@@ -2459,13 +2540,17 @@
                     parentHash: beforeSnapshot?.hash,
                     mergedWith: { label: '云端', hash: remote.hash }
                 });
-                saveDataFromSync();
+                if (!saveDataFromSync()) {
+                    data = previousData;
+                    throw new Error('云端冲突合并数据未能写入本地存储');
+                }
                 syncState.dirty = true;
                 syncState.lastConflictAt = new Date().toISOString();
                 await syncUpToCloud(true);
                 renderAfterDataChange();
                 updateSyncStatus(`本地和云端都有变化，已按条目时间保守合并 ${formatClockTime(new Date(), true)}`);
             } catch (err) {
+                recordCriticalFailure('云同步失败', err, { action: `cloud-sync-${direction}` });
                 updateSyncStatus(err.message || '同步失败', true);
                 throw err;
             } finally {
@@ -2673,6 +2758,7 @@
                 renderAfterDataChange();
                 updateWheelSyncStatus(`大转盘两端都有变化，已保守合并 ${formatClockTime(new Date(), true)}`);
             } catch (err) {
+                recordCriticalFailure('大转盘同步失败', err, { action: `wheel-cloud-sync-${direction}` });
                 updateWheelSyncStatus(err.message || '大转盘同步失败', true);
                 throw err;
             } finally {
@@ -3220,6 +3306,13 @@
             return escapeHtml(JSON.stringify(String(value || '')));
         }
 
+        function toSafeClassName(value = '', fallback = 'unknown') {
+            const text = String(value || '').trim();
+            if (/^[\p{L}\p{N}_-]+$/u.test(text)) return text;
+            const fallbackText = String(fallback || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '') || 'unknown';
+            return `${fallbackText}-${hashString(text || fallbackText)}`;
+        }
+
         // Dynamic IDs can arrive from imported or synced JSON. Keep them as data, never executable code.
         window.escapeInlineJsArg = escapeJsArg;
 
@@ -3279,7 +3372,7 @@
         function renderTodoUrgencyBadge(todo) {
             const meta = getTodoUrgencyMeta(todo);
             const urgency = todo?.urgency || 'medium';
-            return `<span class="todo-urgency todo-urgency-${urgency}">${meta.label}</span>`;
+            return `<span class="todo-urgency todo-urgency-${toSafeClassName(urgency, 'todo-urgency')}">${escapeHtml(meta.label)}</span>`;
         }
 
         function getRecordDateRangeLabel(record) {
@@ -3799,10 +3892,11 @@
                 const todoCount = data.todos.filter(t => r.todoIds?.includes(t.id)).length;
                 const doneCount = data.todos.filter(t => r.todoIds?.includes(t.id) && t.done).length;
                 const progress = todoCount > 0 ? Math.round(doneCount / todoCount * 100) : 0;
+                const typeClass = toSafeClassName(r.type, 'record-type');
                 return `
                     <div class="period-item" onclick="openRecordPreview(${escapeJsArg(r.id)})">
                         <div class="period-info">
-                            <h4><span class="item-type type-${r.type}" style="margin-right:8px;">${r.type}</span>${r.title || '无标题'}</h4>
+                            <h4><span class="item-type type-${typeClass}" style="margin-right:8px;">${escapeHtml(r.type)}</span>${escapeHtml(r.title || '无标题')}</h4>
                             <p>${formatDate(r.startDate)} ~ ${formatDate(r.endDate)} · 待办 ${doneCount}/${todoCount}</p>
                         </div>
                         <div class="progress-bar" style="width:120px;">
@@ -3829,9 +3923,10 @@
         function renderIdeaBadges(record) {
             if (record?.type !== '灵感碎片') return '';
             const tags = getIdeaTags(record);
+            const status = getIdeaStatus(record);
             return `
                 <div class="idea-badge-row">
-                    <span class="idea-status-badge status-${getIdeaStatus(record)}">${escapeHtml(getIdeaStatus(record))}</span>
+                    <span class="idea-status-badge status-${toSafeClassName(status, 'idea-status')}">${escapeHtml(status)}</span>
                     ${tags.map(tag => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join('')}
                 </div>
             `;
@@ -3853,11 +3948,12 @@
             const doneCount = data.todos.filter(t => record.todoIds?.includes(t.id) && t.done).length;
             const isPeriod = !dayTypes.includes(record.type);
             const ideaMeta = getIdeaMetaParts(record);
+            const typeClass = toSafeClassName(record.type, 'record-type');
             return `
                 <div class="record-row">
                     <div class="record-time">${getRecordTime(record)}</div>
-                    <div class="timeline-item type-${escapeHtml(record.type)}" onclick="openRecordPreview(${escapeJsArg(record.id)})">
-                        <span class="item-type type-${record.type}">${record.type}</span>
+                    <div class="timeline-item type-${typeClass}" onclick="openRecordPreview(${escapeJsArg(record.id)})">
+                        <span class="item-type type-${typeClass}">${escapeHtml(record.type)}</span>
                         <span class="item-title">${escapeHtml(record.title || '无标题')}</span>
                         ${renderIdeaBadges(record)}
                         <div class="item-meta">
@@ -3876,11 +3972,12 @@
             const preview = item.preview ? `<div class="item-preview">${escapeHtml(item.preview)}</div>` : '';
             const metaParts = [item.meta, item.filterType === '待办' && item.done ? '已完成' : '', item.sourceType === 'habit' ? item.timeLabel : ''].filter(Boolean);
             const toneStyle = `--event-bg:${item.tone.bg}; --event-border:${item.tone.border}; --event-ink:${item.tone.ink};`;
+            const labelClass = toSafeClassName(label, 'schedule-type');
             return `
                 <div class="record-row">
                     <div class="record-time">${item.allDay ? item.timeLabel : formatMinutesLabel(item.startMinutes)}</div>
-                    <div class="timeline-item type-${label}" style="${toneStyle}" onclick="${item.click}">
-                        <span class="item-type type-${label}">${label}</span>
+                    <div class="timeline-item type-${labelClass}" style="${toneStyle}" onclick="${item.click}">
+                        <span class="item-type type-${labelClass}">${escapeHtml(label)}</span>
                         <span class="item-title">${escapeHtml(item.title || '未命名')}</span>
                         ${metaParts.length ? `<div class="item-meta">${metaParts.map(part => `<span>${escapeHtml(part)}</span>`).join('')}</div>` : ''}
                         ${preview}
@@ -4024,7 +4121,7 @@
             return `
                 <div class="record-preview-shell">
                     <div class="record-preview-top">
-                        <span class="item-type type-${record.type}">${record.type}</span>
+                        <span class="item-type type-${toSafeClassName(record.type, 'record-type')}">${escapeHtml(record.type)}</span>
                         <div class="record-preview-title">${escapeHtml(title)}</div>
                         <div class="record-preview-meta">
                             ${meta.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
@@ -4176,7 +4273,7 @@
                 <li class="todo-item ${t.done ? 'done' : ''}">
                     <input type="checkbox" ${t.done ? 'checked' : ''} 
                         onchange="tempTodos[${i}].done = !tempTodos[${i}].done; renderRecordTodos(); scheduleRecordAutoSave();">
-                    <span class="todo-text">${t.text}</span>
+                    <span class="todo-text">${escapeHtml(t.text)}</span>
                     <button class="btn btn-secondary" style="padding:2px 8px; font-size:12px;" 
                         onclick="tempTodos.splice(${i},1); renderRecordTodos(); scheduleRecordAutoSave();">删除</button>
                 </li>
@@ -5263,7 +5360,7 @@
             const builtIns = builtInTemplates.filter(t => t.type === type);
             
             const builtInOptions = builtIns.length
-                ? `<optgroup label="内置模板">${builtIns.map(t => `<option value="builtin:${t.id}">${t.name}</option>`).join('')}</optgroup>`
+                ? `<optgroup label="内置模板">${builtIns.map(t => `<option value="${escapeHtml(`builtin:${t.id}`)}">${escapeHtml(t.name)}</option>`).join('')}</optgroup>`
                 : '';
             const customOptions = typeTemplates.length
                 ? `<optgroup label="我的模板">${typeTemplates.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('')}</optgroup>`
@@ -5335,8 +5432,8 @@
                 container.innerHTML = '<div style="font-size:12px; color:#647269; margin-bottom:10px;">这里只管理你自己保存的模板，内置模板会自动显示。</div>' + data.templates.map(t => `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #f0f0f0;">
                         <div>
-                            <div style="font-size:14px; font-weight:500;">${t.name}</div>
-                            <div style="font-size:12px; color:#999;">${t.type}</div>
+                            <div style="font-size:14px; font-weight:500;">${escapeHtml(t.name)}</div>
+                            <div style="font-size:12px; color:#999;">${escapeHtml(t.type)}</div>
                         </div>
                         <button class="btn btn-danger" style="padding:4px 10px; font-size:12px;" onclick="deleteTemplate(${escapeJsArg(t.id)})">删除</button>
                     </div>
@@ -5417,7 +5514,7 @@
                         </td>
                         <td><span class="${dueClass}">${escapeHtml(formatTodoDueDate(t))}</span></td>
                         <td>${renderTodoUrgencyBadge(t)}</td>
-                        <td><span class="tag tag-${t.group}">${escapeHtml(t.group)}</span></td>
+                        <td><span class="tag tag-${toSafeClassName(t.group, 'todo-group')}">${escapeHtml(t.group)}</span></td>
                         <td>${t.isExclusive ? '专属' : '通用'}</td>
                         <td style="font-size:12px; color:#666;">${escapeHtml(recordNames || '无归属')}</td>
                     </tr>
@@ -5922,9 +6019,9 @@
             }
 
             container.innerHTML = data.habits.map(h => `
-                <div class="habit-tab tag-${h.tag} ${currentHabitId === h.id ? 'active' : ''}" 
+                <div class="habit-tab tag-${toSafeClassName(h.tag, 'habit-tag')} ${currentHabitId === h.id ? 'active' : ''}"
                     onclick="currentHabitId=${escapeJsArg(h.id)}; renderHeatmap(); renderHabitTabs(); if(currentHabitView === 'matrix') renderHabitMatrix();">
-                    ${h.name}
+                    ${escapeHtml(h.name)}
                 </div>
             `).join('');
             container.style.display = currentHabitView === 'year' ? 'flex' : 'none';
@@ -7300,8 +7397,8 @@
                 return `
                 <div class="goal-card" onclick="openGoalDetail(${escapeJsArg(g.id)})">
                     <div class="goal-info">
-                        <h4>${g.name} <span style="font-size:12px; color:#97a29b; font-weight:700;">(${g.status})</span></h4>
-                        <p>${g.period} · ${g.target}</p>
+                        <h4>${escapeHtml(g.name)} <span style="font-size:12px; color:#97a29b; font-weight:700;">(${escapeHtml(g.status)})</span></h4>
+                        <p>${escapeHtml(g.period)} · ${escapeHtml(g.target)}</p>
                         <div class="progress-bar">
                             <div class="progress-fill" style="width:${progress}%"></div>
                         </div>
@@ -7364,6 +7461,7 @@
                                 action: 'before-merge',
                                 mergedWith: { label: file?.name || '导入文件', hash: getDataHash(imported) }
                             });
+                            const previousData = data;
                             data = mergeCloudData(data, imported);
                             createLocalSnapshot('导入安全合并结果', data, {
                                 source: 'manual-import',
@@ -7373,11 +7471,18 @@
                                 parentHash: beforeSnapshot?.hash,
                                 mergedWith: { label: file?.name || '导入文件', hash: getDataHash(imported) }
                             });
-                            saveData();
+                            if (!saveData()) {
+                                data = previousData;
+                                recordCriticalFailure('导入数据失败', null, { action: 'manual-import', message: '合并后的数据未能写入本地存储' });
+                                renderAfterDataChange();
+                                alert('导入失败：本地存储写入失败，当前数据已保持不变。请先导出备份或清理存储空间。');
+                                return;
+                            }
                             init();
                             alert('导入成功：已安全合并，冲突内容会以副本保留。');
                         }
                     } catch(err) {
+                        recordCriticalFailure('导入数据失败', err, { action: 'manual-import' });
                         alert('文件格式错误，导入失败');
                     }
                 };

@@ -27,6 +27,11 @@
         return String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[ch]));
     }
 
+    function safeColor(value, fallback = '#216e4e') {
+        const color = String(value || '').trim();
+        return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
+    }
+
     function now() {
         return typeof getLocalDateTimeStr === 'function' ? getLocalDateTimeStr() : new Date().toISOString();
     }
@@ -80,7 +85,7 @@
     }
 
     function getTagChipMarkup(name, color = '#216e4e') {
-        return `<span class="wheel-chip" style="--chip-color:${safeHtml(color)}">${safeHtml(name || '未命名标签')}</span>`;
+        return `<span class="wheel-chip" style="--chip-color:${safeColor(color)}">${safeHtml(name || '未命名标签')}</span>`;
     }
 
     function splitWheelLabel(value, maxCharsPerLine = 4, maxLines = 2) {
@@ -143,7 +148,7 @@
             return {
                 id: tag?.id || id(),
                 name: String(tag?.name || '未命名标签').trim() || '未命名标签',
-                color: tag?.color || palette[data.wheelTags.length % palette.length],
+                color: safeColor(tag?.color, palette[data.wheelTags.length % palette.length]),
                 weight: ensureWheelWeight(tag?.weight),
                 enabled: tag?.enabled !== false,
                 createdAt,
@@ -355,7 +360,7 @@
     function tagChips(tagIds = []) {
         const tags = tagIds.map(tagId => data.wheelTags.find(tag => tag.id === tagId)).filter(Boolean);
         if (!tags.length) return '<span class="wheel-chip muted">无标签</span>';
-        return tags.map(tag => `<span class="wheel-chip" style="--chip-color:${safeHtml(tag.color || '#216e4e')}">${safeHtml(tag.name)}</span>`).join('');
+        return tags.map(tag => `<span class="wheel-chip" style="--chip-color:${safeColor(tag.color)}">${safeHtml(tag.name)}</span>`).join('');
     }
 
     function weightedPick(items) {
@@ -868,7 +873,7 @@
                     <article class="wheel-tag-card ${selectedClass}">
                         <label class="wheel-tag-toggle">
                             <input type="checkbox" ${selected.has(tag.id) ? 'checked' : ''} onchange="toggleWheelTag(${safeJsArg(wheel.id)},${safeJsArg(tag.id)},this.checked)">
-                            <span class="wheel-color-dot" style="background:${safeHtml(tag.color)}"></span>
+                            <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
                             <span class="wheel-tag-title">${safeHtml(tag.name)}</span>
                         </label>
                         <div class="wheel-tag-meta">
@@ -920,7 +925,7 @@
                 <button type="button" class="${!wheelLibraryCopyTagFilter ? 'active' : ''}" onclick="setWheelLibraryCopyFilter('')">全部公共项</button>
                 ${data.wheelTags.map(tag => `
                     <button type="button" class="${wheelLibraryCopyTagFilter === tag.id ? 'active' : ''}" onclick="setWheelLibraryCopyFilter(${safeJsArg(tag.id)})">
-                        <span class="wheel-color-dot" style="background:${safeHtml(tag.color)}"></span>${safeHtml(tag.name)}
+                        <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>${safeHtml(tag.name)}
                     </button>
                 `).join('')}
             </div>
@@ -1022,7 +1027,7 @@
             <div class="wheel-list">
                 ${data.wheelTags.map(tag => `
                     <div class="wheel-row" data-wheel-tag-id="${safeHtml(tag.id)}">
-                        <span class="wheel-color-dot" style="background:${safeHtml(tag.color)}"></span>
+                        <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
                         <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
                         <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">修改</button>
                         <button class="wheel-mini-btn" onclick="toggleWheelTagEnabled(${safeJsArg(tag.id)})">${tag.enabled === false ? '启用' : '停用'}</button>
@@ -1158,7 +1163,7 @@
             tagOptions.innerHTML = data.wheelTags.map(tag => `
                 <label class="wheel-create-tag-option">
                     <input type="checkbox" value="${safeHtml(tag.id)}" checked>
-                    <span class="wheel-color-dot" style="background:${safeHtml(tag.color || '#216e4e')}"></span>
+                    <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
                     <span>${safeHtml(tag.name)}</span>
                 </label>
             `).join('') || '<div class="empty-state">还没有标签，请先在“标签”菜单里新增。</div>';
