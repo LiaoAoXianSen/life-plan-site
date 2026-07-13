@@ -15,6 +15,7 @@
 - Ran `git diff --check`; no whitespace errors were reported.
 - Ran `.\scripts\package-clean.ps1` and produced `D:\project\life-plan-site\life-plan-site-runtime-20260713-163719.zip`.
 - Updated `docs/project-issue-tracker.md` to mark the completed items and keep the remaining data-volume and sync-diagnostics work visible.
+- Committed and pushed the data safety/sync reliability batch to online `master`.
 
 ## 2026-07-07
 

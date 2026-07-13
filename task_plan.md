@@ -30,7 +30,7 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 23. Status: complete - Make snapshot write failures explicit instead of reporting fake success.
 24. Status: complete - Add 20-second sync request timeouts and queued follow-up sync for edits during active sync.
 25. Status: complete - Validate the data safety/sync reliability batch and package runtime files.
-26. Status: in_progress - Commit and push the data safety/sync reliability batch to `master`.
+26. Status: complete - Commit and push the data safety/sync reliability batch to `master`.
 
 ## Decisions
 
