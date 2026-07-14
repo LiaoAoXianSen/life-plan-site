@@ -2840,6 +2840,16 @@
             return Date.now().toString(36) + Math.random().toString(36).slice(2);
         }
 
+        function sampleRandomItems(items = [], count = 0) {
+            const pool = Array.isArray(items) ? [...items] : [];
+            const limit = Math.max(0, Math.min(Number(count) || 0, pool.length));
+            for (let i = 0; i < limit; i++) {
+                const swapIndex = i + Math.floor(Math.random() * (pool.length - i));
+                [pool[i], pool[swapIndex]] = [pool[swapIndex], pool[i]];
+            }
+            return pool.slice(0, limit);
+        }
+
         function padDateNumber(value) {
             return String(value).padStart(2, '0');
         }
@@ -3541,9 +3551,7 @@
         }
 
         function getDashboardMaterialPicks() {
-            return [...data.materials]
-                .sort(() => Math.random() - 0.5)
-                .slice(0, 2);
+            return sampleRandomItems(data.materials, 2);
         }
 
         function renderGoalFocusList() {
@@ -3729,9 +3737,9 @@
             } else if (currentFloatingTodoMode === 'oldest') {
                 picked.sort((a, b) => getTodoCreatedValue(a).localeCompare(getTodoCreatedValue(b)));
             } else {
-                picked.sort(() => Math.random() - 0.5);
+                picked = sampleRandomItems(picked, 5);
             }
-            picked = picked.slice(0, 5);
+            if (currentFloatingTodoMode !== 'random') picked = picked.slice(0, 5);
 
             container.innerHTML = `
                 <ul class="todo-list">
@@ -5147,7 +5155,7 @@
                 const tags = normalizeTagList(material.tags);
                 return selectedMaterialRandomTags.length === 0 || tags.some(tag => selectedMaterialRandomTags.includes(tag));
             });
-            return [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
+            return sampleRandomItems(pool, 3);
         }
 
         function renderMaterialRandom() {
