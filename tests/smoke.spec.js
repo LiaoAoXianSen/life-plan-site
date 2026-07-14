@@ -698,6 +698,102 @@ test('record merge keeps local primary and creates conflict copy when both times
     expect(conflict.title).toContain('冲突副本');
 });
 
+test('manual import keeps newer local data when importing an old backup', async ({ page }) => {
+    const oldDiary = {
+        id: 'manual-import-diary',
+        type: '日记',
+        title: '手动导入日记',
+        content: '# 正文\n旧备份内容\n',
+        createdAt: '2026-07-07T10:00:00',
+        updatedAt: '2026-07-07T11:00:00'
+    };
+    const newDiary = {
+        ...oldDiary,
+        content: '# 正文\n当前浏览器里的新内容\n',
+        updatedAt: '2026-07-07T18:00:00'
+    };
+    const localTodo = {
+        id: 'manual-import-unstamped-todo',
+        text: '当前浏览器里的无时间戳待办',
+        done: false,
+        subTodos: [],
+        sessions: []
+    };
+    const backupTodo = {
+        ...localTodo,
+        text: '旧备份里的无时间戳待办'
+    };
+    const localData = createEmptyData({ records: [newDiary], todos: [localTodo] });
+    const backupData = createEmptyData({ records: [oldDiary], todos: [backupTodo] });
+
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), localData);
+    await page.goto('/');
+
+    const chooserPromise = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: '导入恢复' }).click();
+    const chooser = await chooserPromise;
+    const confirmDialog = page.waitForEvent('dialog');
+    await chooser.setFiles({
+        name: 'old-main-backup.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(backupData), 'utf-8')
+    });
+    const confirm = await confirmDialog;
+    expect(confirm.message()).toContain('导入会安全合并');
+    await confirm.accept();
+    const successDialog = await page.waitForEvent('dialog');
+    expect(successDialog.message()).toContain('导入成功');
+    await successDialog.accept();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.find(record => record.id === 'manual-import-diary').content).toBe(newDiary.content);
+    expect(stored.todos.find(todo => todo.id === 'manual-import-unstamped-todo').text).toBe(localTodo.text);
+    const snapshots = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
+    expect(snapshots.some(snapshot => snapshot.reason === '导入安全合并前')).toBe(true);
+    expect(snapshots.some(snapshot => snapshot.reason === '导入安全合并结果')).toBe(true);
+});
+
+test('manual import creates a conflict copy for divergent diary content', async ({ page }) => {
+    const localDiary = {
+        id: 'manual-import-diverged-diary',
+        type: '日记',
+        title: '手动导入冲突日记',
+        content: '# 正文\n当前浏览器补了一句。\n',
+        createdAt: '2026-07-07T10:00:00',
+        updatedAt: '2026-07-07T18:30:00'
+    };
+    const backupDiary = {
+        ...localDiary,
+        content: '# 正文\n备份文件补了另一句。\n',
+        updatedAt: '2026-07-07T18:35:00'
+    };
+
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), createEmptyData({ records: [localDiary] }));
+    await page.goto('/');
+
+    const chooserPromise = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: '导入恢复' }).click();
+    const chooser = await chooserPromise;
+    const confirmDialog = page.waitForEvent('dialog');
+    await chooser.setFiles({
+        name: 'diverged-main-backup.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(createEmptyData({ records: [backupDiary] })), 'utf-8')
+    });
+    const confirm = await confirmDialog;
+    await confirm.accept();
+    const successDialog = await page.waitForEvent('dialog');
+    await successDialog.accept();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const primary = stored.records.find(record => record.id === 'manual-import-diverged-diary');
+    const conflict = stored.records.find(record => record.conflictOf === 'manual-import-diverged-diary');
+    expect(primary.content).toBe(backupDiary.content);
+    expect(conflict).toBeTruthy();
+    expect(conflict.content).toBe(localDiary.content);
+    expect(conflict.title).toContain('冲突副本');
+});
+
 test('merge keeps tombstoned entities deleted instead of reviving stale remote data', async ({ page }) => {
     const deletedAt = '2026-07-08T10:00:00';
     const staleStamp = '2026-07-07T10:00:00';
