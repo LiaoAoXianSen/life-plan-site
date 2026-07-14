@@ -1277,6 +1277,14 @@
             applyAiSettingsToForm();
         }
 
+        function updateAiKeyStorageStatus() {
+            const statusEl = document.getElementById('ai-key-storage-status');
+            if (!statusEl) return;
+            const hasKey = !!String(aiConfig.apiKey || '').trim();
+            statusEl.textContent = hasKey ? 'API Key 已保存在本浏览器本地' : '未保存 API Key';
+            statusEl.classList.toggle('is-warning', hasKey);
+        }
+
         function applyAiSettingsToForm() {
             const enabledEl = document.getElementById('ai-remote-enabled');
             const endpointEl = document.getElementById('ai-endpoint-url');
@@ -1288,6 +1296,7 @@
             if (keyEl) keyEl.value = aiConfig.apiKey || '';
             if (modelEl) modelEl.value = aiConfig.model || 'gpt-4.1-mini';
             if (styleEl) styleEl.value = aiConfig.userStyle || '';
+            updateAiKeyStorageStatus();
         }
 
         function updateAiSettingsStatus(message, isError = false) {
@@ -1342,7 +1351,16 @@
         function saveAiSettings() {
             readAiSettingsForm();
             saveAiConfigToLocal();
-            updateAiSettingsStatus(aiConfig.remoteEnabled ? 'AI 设置已保存' : 'AI 设置已保存。远程接口未启用，将使用本地规则。');
+            const keyNote = aiConfig.apiKey ? 'API Key 已保存在本浏览器本地，使用共用设备后请清除。' : '未保存 API Key。';
+            updateAiSettingsStatus(aiConfig.remoteEnabled ? `AI 设置已保存。${keyNote}` : `AI 设置已保存。远程接口未启用，将使用本地规则。${keyNote}`);
+        }
+
+        function clearAiApiKey() {
+            aiConfig.apiKey = '';
+            const keyEl = document.getElementById('ai-api-key');
+            if (keyEl) keyEl.value = '';
+            saveAiConfigToLocal();
+            updateAiSettingsStatus('API Key 已从本浏览器本地配置中清除。');
         }
 
         function isRemoteAiReady() {

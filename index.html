@@ -799,7 +799,7 @@
                 <button class="close-btn" onclick="closeAiSettings()">×</button>
             </div>
             <div class="ai-settings-note">
-                AI 配置只保存在当前浏览器本地，不会写入主数据或云同步。接口地址可填写 OpenAI-compatible Base URL，例如 https://ai2.hhhl.cc/v1。
+                AI 配置只保存在当前浏览器本地，不会写入主数据或云同步。API Key 会以浏览器本地明文保存；共用设备或临时设备请用完后清除。接口地址可填写 OpenAI-compatible Base URL，例如 https://ai2.hhhl.cc/v1。
             </div>
             <div class="form-group">
                 <label><input type="checkbox" id="ai-remote-enabled"> 使用远程 AI 接口</label>
@@ -811,6 +811,10 @@
             <div class="form-group">
                 <label>API Key</label>
                 <input type="password" id="ai-api-key" placeholder="sk-...">
+                <div class="ai-key-row">
+                    <span id="ai-key-storage-status" class="ai-key-storage-status">未保存 API Key</span>
+                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="clearAiApiKey()">清除 Key</button>
+                </div>
             </div>
             <div class="form-group">
                 <label>模型</label>

@@ -74,7 +74,7 @@
 | SEC-003 | 已完成 | 目标列表中的目标名、周期、目标内容未转义 | `app.js:7399` / `tests/smoke.spec.js` | `g.name`、`g.status`、`g.period`、`g.target` 已使用 `escapeHtml`，并覆盖导入恶意目标文本 |
 | SEC-004 | 已完成 | 进行中的周期记录标题/类型存在未转义拼接 | `app.js:3894` / `app.js:3898` | 展示文本已使用 `escapeHtml`，动态类型 class 已通过 `toSafeClassName` 映射 |
 | SEC-005 | 已完成 | 动态 class 直接拼用户或导入数据，例如 `type-${record.type}`、`tag-${t.group}` | `app.js:3308` / `app.js:3894` / `app.js:5516` / `app.js:6021` | 已增加 `toSafeClassName`，记录类型、待办分组、习惯标签等动态 class 均使用安全映射，并补充导入恶意 label 回归测试 |
-| SEC-006 | 未做 | AI API Key 明文存储在 `localStorage` | `app.js` / `ai-service.js` | 增加风险提示、一键清除；长期改为 Worker 代理 |
+| SEC-006 | 已完成 | AI API Key 明文存储在 `localStorage` | `app.js` / `index.html` / `styles.css` / `tests/smoke.spec.js` | 已增加本地存储风险提示、Key 本地状态提示和一键清除；AI 其余配置仍保留本地 |
 | SEC-007 | 已完成 | 同步密码明文存储在 `localStorage` | `app.js` | 同步密码字段未被底层请求使用，已从 UI、默认配置和持久化配置中移除；旧配置加载后会清理遗留 `username/password` |
 | SEC-008 | 未做 | 大量内联 `onclick` 使安全审计成本高 | 多处 | 新代码优先事件委托；旧代码逐步替换 |
 | SEC-009 | 未做 | 远程 AI 分析会发送日记、待办等上下文，但执行前没有逐次展示本次发送范围 | 用户可能无意把不想上传的私人内容发送给第三方接口 | AI 执行前显示“将发送哪些记录/字段”，支持取消、裁剪上下文与一键清空本地 Key |

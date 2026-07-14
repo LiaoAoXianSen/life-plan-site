@@ -202,6 +202,30 @@
         line-height: 1.65;
         margin-bottom: 14px;
     }
+    .ai-key-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+    }
+    .ai-key-storage-status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: #f2f7f4;
+        border: 1px solid #d8e4dc;
+        color: #61756b;
+        font-size: 12px;
+        font-weight: 750;
+    }
+    .ai-key-storage-status.is-warning {
+        background: #fff7e7;
+        border-color: #e8d18d;
+        color: #8c6821;
+    }
     .ai-assistant-subtitle {
         margin-top: 4px;
         color: var(--muted);

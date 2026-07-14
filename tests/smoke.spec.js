@@ -809,6 +809,37 @@ test('AI settings are saved outside main life plan data', async ({ page }) => {
         userStyle: '短句，偏行动'
     });
     expect(JSON.stringify(mainData)).not.toContain('test-key');
+    await expect(page.locator('#ai-key-storage-status')).toContainText('API Key 已保存在本浏览器本地');
+    await expect(page.locator('#ai-settings-status')).toContainText('API Key 已保存在本浏览器本地');
+});
+
+test('AI API key can be cleared without resetting the rest of the configuration', async ({ page }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({
+            endpointUrl: 'https://ai2.hhhl.cc/v1',
+            apiKey: 'test-key',
+            model: 'test-model',
+            remoteEnabled: true,
+            userStyle: '短句，偏行动'
+        }));
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'AI 设置' }).click();
+    await expect(page.locator('#ai-api-key')).toHaveValue('test-key');
+    await page.getByRole('button', { name: '清除 Key' }).click();
+
+    const savedConfig = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanAiConfig')));
+    expect(savedConfig).toMatchObject({
+        endpointUrl: 'https://ai2.hhhl.cc/v1',
+        model: 'test-model',
+        remoteEnabled: true,
+        userStyle: '短句，偏行动'
+    });
+    expect(savedConfig.apiKey).toBe('');
+    await expect(page.locator('#ai-api-key')).toHaveValue('');
+    await expect(page.locator('#ai-key-storage-status')).toContainText('未保存 API Key');
+    await expect(page.locator('#ai-settings-status')).toContainText('API Key 已从本浏览器本地配置中清除');
 });
 
 test('AI remote calls accept an OpenAI-compatible base URL', async ({ page }) => {
