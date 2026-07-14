@@ -1,5 +1,13 @@
 # Findings
 
+## 2026-07-14
+
+- `sync-service.js` only uses the configured endpoint and remote path; sync username/password were UI/config leftovers and did not affect requests.
+- Removing unused sync credentials is safer than implementing Basic Auth because the current app-specific sync path is a Cloudflare Worker JSON endpoint, not a general WebDAV credential flow.
+- Main data import already used safe merge plus pre/post import snapshots, but it continued when the pre-import snapshot failed; this now requires an explicit user confirmation.
+- Wheel JSON restore was the remaining high-risk import path: it overwrote wheel collections directly and only saved afterward. It now asks before overwriting, snapshots first, and rolls back if saving the restored data fails.
+- Wheel restore is still intentionally an overwrite restore rather than a merge import; a future merge mode would need a separate design for wheel item identity, tag conflicts, and history deduplication.
+
 ## 2026-07-13
 
 - Current continuation is on `master` and focuses on data safety/sync reliability, not new AI feature expansion.

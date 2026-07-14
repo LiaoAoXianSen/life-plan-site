@@ -31,6 +31,7 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 24. Status: complete - Add 20-second sync request timeouts and queued follow-up sync for edits during active sync.
 25. Status: complete - Validate the data safety/sync reliability batch and package runtime files.
 26. Status: complete - Commit and push the data safety/sync reliability batch to `master`.
+27. Status: complete - Remove unused sync credentials, harden import/restore confirmations, validate, package, and commit the follow-up data safety batch.
 
 ## Decisions
 
@@ -45,6 +46,8 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 - P3 means real module extraction, not only adding the shared sync foundation; keep UI refactors conservative and move pure logic first.
 - P3 module split must include `sync`, `records`, `todos`, `ai`, and `snapshots`; if only part is delivered, state that clearly before calling it done.
 - Data safety work should clearly distinguish completed reliability fixes from larger storage roadmap items like IndexedDB migration, data-volume dashboards, and ETag conflict prevention.
+- Sync settings should only expose fields that are actually used by the Cloudflare Worker sync path; unused WebDAV username/password fields should be removed and cleaned from old local config.
+- Wheel JSON restore remains an explicit overwrite action for now, but it must confirm the overwrite, create a restore-before snapshot, and leave current data untouched when canceled or when saving fails.
 
 ## Errors Encountered
 

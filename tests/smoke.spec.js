@@ -141,6 +141,31 @@ test('snapshot write failure reports failure instead of a fake success', async (
     expect(rawSnapshots).toBeNull();
 });
 
+test('legacy sync credentials are removed from cloud sync settings', async ({ page }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://sync.example.test',
+            username: 'legacy-user',
+            password: 'legacy-password',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+    });
+
+    await page.goto('/');
+    await page.evaluate(() => openSyncSettings());
+
+    await expect(page.locator('#sync-username')).toHaveCount(0);
+    await expect(page.locator('#sync-password')).toHaveCount(0);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
+    expect(stored).toEqual({
+        webdavUrl: 'https://sync.example.test',
+        remotePath: '/life-plan.json',
+        autoSync: false
+    });
+});
+
 test('record todo text is rendered as text, not executable HTML', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => {
@@ -1594,12 +1619,16 @@ test('wheel backup restore normalizes duplicate tags and copied data boundaries'
     const chooserPromise = page.waitForEvent('filechooser');
     await historyModal.getByRole('button', { name: '恢复JSON' }).click();
     const chooser = await chooserPromise;
-    const restoredDialog = page.waitForEvent('dialog');
+    const restoreConfirmDialog = page.waitForEvent('dialog');
     await chooser.setFiles({
         name: 'dirty-wheel-backup.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(dirtyBackup), 'utf-8')
     });
+    const confirmDialog = await restoreConfirmDialog;
+    expect(confirmDialog.message()).toContain('会覆盖当前转盘');
+    await confirmDialog.accept();
+    const restoredDialog = page.waitForEvent('dialog');
     const dialog = await restoredDialog;
     expect(dialog.message()).toContain('已恢复');
     await dialog.accept();
@@ -1622,4 +1651,63 @@ test('wheel backup restore normalizes duplicate tags and copied data boundaries'
     const orphan = stored.wheelLibraryItems.find(item => item.name === '无标签项');
     expect(orphan.tagIds).toEqual([uncategorizedTag.id]);
     expect(stored.wheels.map(wheel => wheel.name)).toEqual(['重复名字', '重复名字']);
+    const snapshots = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
+    expect(snapshots.some(snapshot => snapshot.reason === '大转盘恢复前自动快照')).toBe(true);
+});
+
+test('wheel backup restore can be cancelled before overwriting local wheel data', async ({ page }) => {
+    const existingData = createEmptyData({
+        wheels: [
+            {
+                id: 'existing-wheel',
+                name: '保留的转盘',
+                mode: 'normal',
+                items: [{ id: 'existing-item', name: '原来的选项', weight: 1, enabled: true }]
+            }
+        ],
+        wheelTags: [],
+        wheelLibraryItems: [],
+        wheelHistory: []
+    });
+    const backup = {
+        wheels: [
+            {
+                id: 'incoming-wheel',
+                name: '导入转盘',
+                mode: 'normal',
+                items: [{ id: 'incoming-item', name: '导入选项', weight: 1, enabled: true }]
+            }
+        ],
+        wheelTags: [],
+        wheelLibraryItems: [],
+        wheelHistory: []
+    };
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, existingData);
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '工具转盘' }).click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '记录/备份' }).click();
+    const historyModal = page.locator('#wheel-history-modal');
+
+    const chooserPromise = page.waitForEvent('filechooser');
+    await historyModal.getByRole('button', { name: '恢复JSON' }).click();
+    const chooser = await chooserPromise;
+    const restoreConfirmDialog = page.waitForEvent('dialog');
+    await chooser.setFiles({
+        name: 'incoming-wheel-backup.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(backup), 'utf-8')
+    });
+    const confirmDialog = await restoreConfirmDialog;
+    expect(confirmDialog.message()).toContain('会覆盖当前转盘');
+    await confirmDialog.dismiss();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheels.map(wheel => wheel.id)).toEqual(['existing-wheel']);
+    expect(stored.wheels[0].items.map(item => item.name)).toEqual(['原来的选项']);
+    const snapshots = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
+    expect(snapshots.some(snapshot => snapshot.reason === '大转盘恢复前自动快照')).toBe(false);
 });

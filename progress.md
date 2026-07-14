@@ -1,5 +1,18 @@
 # Progress
 
+## 2026-07-14
+
+- Continued the data safety follow-up on a clean `master` worktree after the interrupted subagent attempt; true sidecar spawning was not used because the spawn calls failed parameter validation, so local parallel file reads were used instead.
+- Removed unused cloud sync `username` and `password` fields from default sync config, the sync settings form, form apply/read logic, and persisted config saves.
+- Added cleanup for old `lifePlanSyncConfig` values so legacy `username/password` are deleted when sync config is loaded or saved.
+- Tightened main data import by asking for explicit confirmation if the pre-import safety snapshot cannot be created.
+- Hardened wheel full JSON restore with an overwrite confirmation, restore-before local snapshot, cancellation path that leaves current wheel data untouched, and save-failure rollback to the previous wheel data.
+- Added Playwright smoke coverage for legacy sync credential cleanup, wheel restore overwrite confirmation plus snapshot creation, and cancel-before-overwrite behavior.
+- Ran syntax checks for `app.js`, `wheel-tool.js`, and `tests/smoke.spec.js`; all passed.
+- Ran targeted Playwright coverage with `npx playwright test tests/smoke.spec.js --grep "legacy sync credentials|wheel backup restore"`; 3 tests passed.
+- Ran full `./scripts/check.ps1`; all 33 Playwright smoke tests passed.
+- Ran `./scripts/package-clean.ps1` and produced `D:\project\life-plan-site\life-plan-site-runtime-20260714-150356.zip`.
+
 ## 2026-07-13
 
 - Rechecked the current `master` worktree and confirmed the active fix set was about local save failure recovery, snapshot write failure handling, sync timeout, and queued follow-up uploads.

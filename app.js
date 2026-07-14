@@ -56,8 +56,6 @@
         let aiService = null;
         let syncConfig = {
             webdavUrl: '',
-            username: '',
-            password: '',
             remotePath: '/life-plan.json',
             autoSync: true
         };
@@ -1123,6 +1121,8 @@
                 console.warn('同步配置读取失败', err);
             }
             syncConfig.webdavUrl = syncConfig.webdavUrl || '';
+            delete syncConfig.username;
+            delete syncConfig.password;
             syncConfig.remotePath = syncConfig.remotePath || '/life-plan.json';
             syncConfig.autoSync = syncConfig.autoSync !== false;
             applySyncSettingsToForm();
@@ -1149,6 +1149,8 @@
         }
 
         function saveSyncConfigToLocal() {
+            delete syncConfig.username;
+            delete syncConfig.password;
             persistLocalValue('lifePlanSyncConfig', JSON.stringify(syncConfig), '同步配置');
             applySyncSettingsToForm();
         }
@@ -1159,14 +1161,12 @@
         }
 
         function applySyncSettingsToForm() {
-            const ids = ['sync-webdav-url', 'sync-username', 'sync-password', 'sync-remote-path', 'sync-auto'];
+            const ids = ['sync-webdav-url', 'sync-remote-path', 'sync-auto'];
             ids.forEach(id => {
                 const el = document.getElementById(id);
                 if (!el) return;
                 if (el.type === 'checkbox') el.checked = !!syncConfig.autoSync;
                 else if (id === 'sync-webdav-url') el.value = syncConfig.webdavUrl || '';
-                else if (id === 'sync-username') el.value = syncConfig.username || '';
-                else if (id === 'sync-password') el.value = syncConfig.password || '';
                 else if (id === 'sync-remote-path') el.value = syncConfig.remotePath || '';
             });
         }
@@ -1243,8 +1243,6 @@
 
         function readSyncForm() {
             syncConfig.webdavUrl = document.getElementById('sync-webdav-url').value.trim();
-            syncConfig.username = document.getElementById('sync-username').value.trim();
-            syncConfig.password = document.getElementById('sync-password').value;
             syncConfig.remotePath = document.getElementById('sync-remote-path').value.trim() || '/life-plan.json';
             syncConfig.autoSync = document.getElementById('sync-auto').checked;
             saveSyncConfigToLocal();
@@ -7461,6 +7459,7 @@
                                 action: 'before-merge',
                                 mergedWith: { label: file?.name || '导入文件', hash: getDataHash(imported) }
                             });
+                            if (!beforeSnapshot && !confirm('导入前快照创建失败。继续导入会缺少回滚点，确定继续吗？')) return;
                             const previousData = data;
                             data = mergeCloudData(data, imported);
                             createLocalSnapshot('导入安全合并结果', data, {

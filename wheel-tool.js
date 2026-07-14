@@ -1600,6 +1600,28 @@
                 try {
                     const imported = JSON.parse(String(reader.result || '{}'));
                     if (!imported || typeof imported !== 'object') throw new Error('invalid');
+                    const summary = [
+                        `转盘 ${Array.isArray(imported.wheels) ? imported.wheels.length : 0} 个`,
+                        `标签 ${Array.isArray(imported.wheelTags) ? imported.wheelTags.length : 0} 个`,
+                        `公共项 ${Array.isArray(imported.wheelLibraryItems) ? imported.wheelLibraryItems.length : 0} 个`,
+                        `历史 ${Array.isArray(imported.wheelHistory) ? imported.wheelHistory.length : 0} 条`
+                    ].join('，');
+                    if (!confirm(`恢复大转盘 JSON 会覆盖当前转盘、标签、公共项和抽取记录。\n\n备份内容：${summary}\n\n继续恢复吗？`)) return;
+                    const beforeSnapshot = typeof createLocalSnapshot === 'function'
+                        ? createLocalSnapshot('大转盘恢复前自动快照', data, {
+                            source: 'wheel-backup-import',
+                            action: 'before-restore',
+                            mergedWith: { label: file?.name || '大转盘备份' }
+                        })
+                        : null;
+                    if (!beforeSnapshot && !confirm('恢复前快照创建失败。继续恢复会缺少回滚点，确定继续吗？')) return;
+                    const previousWheelData = {
+                        wheels: data.wheels,
+                        wheelTags: data.wheelTags,
+                        wheelLibraryItems: data.wheelLibraryItems,
+                        wheelHistory: data.wheelHistory
+                    };
+                    const previousState = { currentWheelId, currentWheelMode, currentWheelResultId };
                     data.wheels = Array.isArray(imported.wheels) ? imported.wheels : [];
                     data.wheelTags = Array.isArray(imported.wheelTags) ? imported.wheelTags : [];
                     data.wheelLibraryItems = Array.isArray(imported.wheelLibraryItems) ? imported.wheelLibraryItems : [];
@@ -1609,7 +1631,18 @@
                     currentWheelMode = data.wheels[0]?.mode || 'normal';
                     currentWheelResultId = null;
                     resetWheelStageState();
-                    persist();
+                    if (typeof saveData === 'function' && !saveData()) {
+                        Object.assign(data, previousWheelData);
+                        currentWheelId = previousState.currentWheelId;
+                        currentWheelMode = previousState.currentWheelMode;
+                        currentWheelResultId = previousState.currentWheelResultId;
+                        if (typeof recordCriticalFailure === 'function') {
+                            recordCriticalFailure('大转盘恢复失败', null, { action: 'wheel-backup-import', message: '恢复后的数据未能写入本地存储' });
+                        }
+                        renderWheelPage();
+                        alert('恢复失败：本地存储写入失败，当前转盘数据已保持不变。请先导出备份或清理存储空间。');
+                        return;
+                    }
                     renderWheelPage();
                     alert('已恢复大转盘完整 JSON 备份');
                 } catch (err) {
