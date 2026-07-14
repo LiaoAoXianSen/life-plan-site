@@ -139,7 +139,14 @@
             </div>
 
             <div>
-                <div class="card-title" style="margin-bottom: 14px;">近期记录时间轴</div>
+                <div class="section-title-row timeline-title-row">
+                    <div class="card-title">近期记录时间轴</div>
+                    <select id="dashboard-timeline-range" class="compact-select" onchange="setDashboardTimelineRange(this.value)">
+                        <option value="7">最近7天</option>
+                        <option value="30" selected>最近30天</option>
+                        <option value="90">最近90天</option>
+                    </select>
+                </div>
                 <div id="timeline"></div>
             </div>
         </div>
@@ -187,6 +194,12 @@
                     <option value="needsConclusion">已实践未写结论</option>
                 </select>
                 <input type="search" id="record-idea-tag-filter" placeholder="灵感标签筛选" oninput="renderAllRecords()">
+                <select id="record-list-range" onchange="setRecordListRange(this.value)">
+                    <option value="7">最近7天</option>
+                    <option value="30" selected>最近30天</option>
+                    <option value="90">最近90天</option>
+                    <option value="all">全部历史</option>
+                </select>
             </div>
             <div class="calendar-toolbar">
                 <div class="segmented" id="record-view-tabs">

@@ -26,6 +26,8 @@
         let editingHabitId = null;
         let currentRecordView = 'list';
         let recordCursorDate = getTodayStr();
+        let dashboardTimelineRangeDays = 30;
+        let recordListRangeDays = 30;
         let currentHabitView = 'year';
         let currentStructuredTemplateId = '';
         let currentTemplateFields = {};
@@ -408,6 +410,7 @@
             loadSyncState();
             loadWheelSyncState();
             updateSidebarToolState(true);
+            syncTimelineRangeControls();
             renderTodayDate();
             renderDashboard();
             renderHabitTabs();
@@ -2994,6 +2997,59 @@
             return formatLocalDateKey(new Date());
         }
 
+        function getTodayBoundaryDateStr() {
+            const now = new Date();
+            return formatLocalDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+        }
+
+        function normalizeRangeDays(value, fallback = 30) {
+            if (value === 'all') return 'all';
+            const days = Number.parseInt(value, 10);
+            return Number.isFinite(days) && days > 0 ? days : fallback;
+        }
+
+        function getRecentDateRange(days = 30) {
+            const endDate = getTodayBoundaryDateStr();
+            const normalizedDays = normalizeRangeDays(days, 30);
+            return {
+                startDate: addDays(endDate, -(normalizedDays - 1)),
+                endDate
+            };
+        }
+
+        function getDashboardTimelineRange() {
+            return getRecentDateRange(dashboardTimelineRangeDays);
+        }
+
+        function getRecordListRange() {
+            if (recordListRangeDays === 'all') return { startDate: '', endDate: '' };
+            return getRecentDateRange(recordListRangeDays);
+        }
+
+        function syncTimelineRangeControls() {
+            const dashboardRangeEl = document.getElementById('dashboard-timeline-range');
+            if (dashboardRangeEl) {
+                dashboardTimelineRangeDays = normalizeRangeDays(dashboardRangeEl.value, 30);
+                dashboardRangeEl.value = String(dashboardTimelineRangeDays);
+            }
+
+            const recordRangeEl = document.getElementById('record-list-range');
+            if (recordRangeEl) {
+                recordListRangeDays = normalizeRangeDays(recordRangeEl.value, 30);
+                recordRangeEl.value = recordListRangeDays === 'all' ? 'all' : String(recordListRangeDays);
+            }
+        }
+
+        function setDashboardTimelineRange(value) {
+            dashboardTimelineRangeDays = normalizeRangeDays(value, 30);
+            renderTimeline();
+        }
+
+        function setRecordListRange(value) {
+            recordListRangeDays = normalizeRangeDays(value, 30);
+            renderAllRecords();
+        }
+
         function getLocalDateTimeStr(date = new Date()) {
             return `${formatLocalDateKey(date)}T${padDateNumber(date.getHours())}:${padDateNumber(date.getMinutes())}:${padDateNumber(date.getSeconds())}`;
         }
@@ -3244,6 +3300,16 @@
             };
         }
 
+        function getCheckedHabitDateKeysInRange(startDate, endDate) {
+            const keys = new Set();
+            data.checkins.forEach(checkin => {
+                if (!checkin.habitId || !checkin.date) return;
+                if (checkin.date < startDate || checkin.date > endDate) return;
+                keys.add(`${checkin.habitId}:${checkin.date}`);
+            });
+            return [...keys];
+        }
+
         function buildScheduleItemsForRange(startDate, endDate, options = {}) {
             const {
                 includeRecords = true,
@@ -3302,14 +3368,16 @@
             }
 
             if (includeHabits && (typeFilter === 'all' || typeFilter === '习惯')) {
-                getDateRangeArray(startDate, endDate).forEach(dateStr => {
-                    data.habits.forEach(habit => {
-                        if (!isHabitDueOnDate(habit, dateStr)) return;
-                        const item = buildHabitScheduleItem(habit, dateStr);
-                        if (!item.done) return;
-                        const haystack = [item.type, item.title, item.preview, item.meta, item.date].filter(Boolean).join(' ').toLowerCase();
-                        if (!keywordText || haystack.includes(keywordText)) items.push(item);
-                    });
+                getCheckedHabitDateKeysInRange(startDate, endDate).forEach(key => {
+                    const separatorIndex = key.lastIndexOf(':');
+                    const habitId = key.slice(0, separatorIndex);
+                    const dateStr = key.slice(separatorIndex + 1);
+                    const habit = data.habits.find(item => item.id === habitId);
+                    if (!habit || !isHabitDueOnDate(habit, dateStr)) return;
+                    const item = buildHabitScheduleItem(habit, dateStr);
+                    if (!item.done) return;
+                    const haystack = [item.type, item.title, item.preview, item.meta, item.date].filter(Boolean).join(' ').toLowerCase();
+                    if (!keywordText || haystack.includes(keywordText)) items.push(item);
                 });
             }
 
@@ -4116,9 +4184,8 @@
 
         function renderTimeline() {
             const container = document.getElementById('timeline');
-            const today = getTodayStr();
-            const start = addDays(today, -6);
-            const items = buildScheduleItemsForRange(start, today, {
+            const { startDate, endDate } = getDashboardTimelineRange();
+            const items = buildScheduleItemsForRange(startDate, endDate, {
                 includeRecords: true,
                 includeTodos: true,
                 includeHabits: true,
@@ -4132,10 +4199,10 @@
                 groups[item.date].push(item);
             });
 
-            const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a)).slice(0, 7);
+            const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
             if (sortedDates.length === 0) {
-                container.innerHTML = '<div class="empty-state">暂无记录，点击右上角新建第一条吧</div>';
+                container.innerHTML = '<div class="empty-state">当前范围暂无记录，换个范围或新建第一条吧</div>';
                 return;
             }
 
@@ -4589,6 +4656,11 @@
             renderAllRecords();
         }
 
+        function updateRecordListRangeControl() {
+            const rangeEl = document.getElementById('record-list-range');
+            if (rangeEl) rangeEl.style.display = currentRecordView === 'list' ? '' : 'none';
+        }
+
         function shiftRecordCursor(amount) {
             if (currentRecordView === 'month') {
                 const date = parseLocalDate(recordCursorDate);
@@ -4607,12 +4679,14 @@
             renderAllRecords();
         }
 
-        function getFilteredRecords() {
+        function getFilteredRecords(options = {}) {
+            const { startDate = '', endDate = '' } = options;
             const keyword = (document.getElementById('record-search')?.value || '').trim().toLowerCase();
             const typeFilter = document.getElementById('record-type-filter')?.value || 'all';
             const ideaStatusFilter = document.getElementById('record-idea-status-filter')?.value || 'all';
             const ideaTagFilter = document.getElementById('record-idea-tag-filter')?.value || '';
             return [...data.records]
+                .filter(r => !startDate || ((r.startDate || '') >= startDate && (r.startDate || '') <= endDate))
                 .filter(r => typeFilter === 'all' || r.type === typeFilter)
                 .filter(r => {
                     if (ideaStatusFilter === 'all' && !ideaTagFilter.trim()) return true;
@@ -4684,7 +4758,8 @@
 
         function getAllRecordEventItems() {
             const { keyword, typeFilter } = getRecordViewFilters();
-            const recordItems = getFilteredRecords().map(record => buildRecordScheduleItem(record));
+            const range = getRecordListRange();
+            const recordItems = getFilteredRecords(range).map(record => buildRecordScheduleItem(record));
             if (hasRecordIdeaOnlyFilter()) return recordItems;
 
             const operationItems = [];
@@ -4692,6 +4767,7 @@
                 data.todos.forEach(todo => {
                     (todo.sessions || []).forEach(session => {
                         if (!session.date) return;
+                        if (range.startDate && (session.date < range.startDate || session.date > range.endDate)) return;
                         const item = buildTodoSessionScheduleItem(todo, session);
                         if (scheduleItemMatchesKeyword(item, keyword)) operationItems.push(item);
                     });
@@ -4702,6 +4778,7 @@
                 const seenHabitDates = new Set();
                 data.checkins.forEach(checkin => {
                     if (!checkin.habitId || !checkin.date) return;
+                    if (range.startDate && (checkin.date < range.startDate || checkin.date > range.endDate)) return;
                     const key = `${checkin.habitId}:${checkin.date}`;
                     if (seenHabitDates.has(key)) return;
                     seenHabitDates.add(key);
@@ -4717,9 +4794,7 @@
 
         function getViewScheduleItems(startDate, endDate) {
             const filters = getRecordViewFilters();
-            const recordItems = getFilteredRecords()
-                .filter(record => record.startDate && record.startDate >= startDate && record.startDate <= endDate)
-                .map(record => buildRecordScheduleItem(record));
+            const recordItems = getFilteredRecords({ startDate, endDate }).map(record => buildRecordScheduleItem(record));
             const operationItems = hasRecordIdeaOnlyFilter() ? [] : buildScheduleItemsForRange(startDate, endDate, {
                 ...filters,
                 includeRecords: false,
@@ -4917,6 +4992,7 @@
         // 所有记录页渲染
         function renderAllRecords() {
             const container = document.getElementById('all-records');
+            updateRecordListRangeControl();
 
             if (currentRecordView === 'list') {
                 document.getElementById('record-view-title').textContent = '全部记录';

@@ -1599,6 +1599,18 @@
     }
     .today-grid > div { min-width: 0; }
     .section-title-row .section-title { margin-bottom: 0; min-width: 0; white-space: nowrap; }
+    .timeline-title-row { margin-bottom: 14px; }
+    .timeline-title-row .card-title { margin-bottom: 0; }
+    .compact-select {
+        min-width: 120px;
+        min-height: 36px;
+        padding: 7px 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255,255,255,.86);
+        color: var(--text);
+        font-weight: 750;
+    }
     .todo-pool-toolbar { display: flex; flex-wrap: nowrap; gap: 4px; margin-bottom: 0; flex: 0 1 auto; min-width: 0; }
     .todo-pool-toolbar .btn {
         min-height: 24px;

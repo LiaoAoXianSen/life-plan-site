@@ -166,6 +166,66 @@ test('legacy sync credentials are removed from cloud sync settings', async ({ pa
     });
 });
 
+test('dashboard and record timeline default to bounded recent ranges', async ({ page }) => {
+    const data = createEmptyData({
+        records: [
+            {
+                id: 'record-today',
+                type: '日记',
+                title: '今天范围内记录',
+                content: '今天应该默认显示。',
+                startDate: '2026-07-14',
+                endDate: '2026-07-14',
+                recordTime: '09:00',
+                todoIds: []
+            },
+            {
+                id: 'record-window-start',
+                type: '日记',
+                title: '三十天边界记录',
+                content: '今天凌晨作为截止时，近30天应包含前29天。',
+                startDate: '2026-06-15',
+                endDate: '2026-06-15',
+                recordTime: '10:00',
+                todoIds: []
+            },
+            {
+                id: 'record-old',
+                type: '日记',
+                title: '历史范围外记录',
+                content: '默认范围不应该显示。',
+                startDate: '2026-06-14',
+                endDate: '2026-06-14',
+                recordTime: '11:00',
+                todoIds: []
+            }
+        ]
+    });
+
+    await page.clock.setFixedTime(new Date('2026-07-14T17:32:00+08:00'));
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), data);
+    await page.goto('/');
+
+    await expect(page.locator('#dashboard-timeline-range')).toHaveValue('30');
+    await expect(page.locator('#timeline')).toContainText('今天范围内记录');
+    await expect(page.locator('#timeline')).toContainText('三十天边界记录');
+    await expect(page.locator('#timeline')).not.toContainText('历史范围外记录');
+
+    await page.locator('.nav-item', { hasText: '所有记录' }).click();
+    await expect(page.locator('#record-list-range')).toHaveValue('30');
+    await expect(page.locator('#all-records')).toContainText('今天范围内记录');
+    await expect(page.locator('#all-records')).toContainText('三十天边界记录');
+    await expect(page.locator('#all-records')).not.toContainText('历史范围外记录');
+
+    await page.locator('#record-list-range').selectOption('all');
+    await expect(page.locator('#all-records')).toContainText('历史范围外记录');
+
+    await page.locator('#record-view-tabs button', { hasText: '日视图' }).click();
+    await expect(page.locator('#record-list-range')).toBeHidden();
+    await expect(page.locator('#all-records')).toContainText('今天范围内记录');
+    await expect(page.locator('#all-records')).not.toContainText('三十天边界记录');
+});
+
 test('record todo text is rendered as text, not executable HTML', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => {
