@@ -58,6 +58,10 @@
             return kit.createWebdavProvider();
         }
 
+        function getEnabledProvider(config = {}) {
+            return config.useAppSyncKitProvider ? getProvider() : null;
+        }
+
         function getProviderConfig(config = {}, path) {
             return {
                 endpoint: config.webdavUrl || '',
@@ -75,7 +79,12 @@
             };
         }
 
-        async function request(config = {}, path, method, body = null) {
+        function getResponseEtag(response) {
+            const etag = response?.headers?.get?.('ETag') || response?.headers?.get?.('X-Remote-ETag') || '';
+            return String(etag || '').trim();
+        }
+
+        async function request(config = {}, path, method, body = null, options = {}) {
             if (!config.webdavUrl) throw new Error('请先填写 Cloudflare Worker 同步中转地址');
             const base = `${config.webdavUrl.replace(/\/+$/, '')}/`;
             const target = String(path || '').replace(/^\/+/, '');
@@ -83,6 +92,8 @@
             const headers = {};
             if (body !== null) headers['Content-Type'] = 'application/json; charset=utf-8';
             if (method === 'PROPFIND') headers.Depth = '0';
+            if (options.ifMatch) headers['If-Match'] = options.ifMatch;
+            if (options.ifNoneMatch) headers['If-None-Match'] = options.ifNoneMatch;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 20000);
             let response;
@@ -99,6 +110,7 @@
                 const err = new Error(`WebDAV ${method} 失败：${response.status}${detail ? ` ${detail.slice(0, 120)}` : ''}`);
                 err.status = response.status;
                 err.method = method;
+                err.etag = getResponseEtag(response);
                 throw err;
             }
             return response;
@@ -106,12 +118,12 @@
 
         async function pullJson(config = {}, path, normalizePayload = value => value, hashPayload = getDataHash) {
             const remotePath = path || config.remotePath || '/life-plan.json';
-            const provider = getProvider();
+            const provider = getEnabledProvider(config);
             if (provider) {
                 const envelope = await provider.pull(getProviderConfig(config, remotePath));
                 if (!envelope?.document) return null;
                 const remoteData = normalizePayload(envelope.document.data);
-                return { data: remoteData, hash: hashPayload(remoteData) };
+                return { data: remoteData, hash: hashPayload(remoteData), etag: '' };
             }
 
             let response;
@@ -125,28 +137,32 @@
             if (!text.trim()) return null;
             const remoteData = JSON.parse(text);
             const normalized = normalizePayload(remoteData);
-            return { data: normalized, hash: hashPayload(normalized) };
+            return { data: normalized, hash: hashPayload(normalized), etag: getResponseEtag(response) };
         }
 
-        async function pushJson(config = {}, path, payload, appId = 'life-plan') {
+        async function pushJson(config = {}, path, payload, appId = 'life-plan', options = {}) {
             const remotePath = normalizeRemotePath(path || config.remotePath);
-            const provider = getProvider();
+            const provider = getEnabledProvider(config);
             if (provider) {
                 await provider.push(getProviderConfig(config, remotePath), createAppSyncDocument(payload, appId));
-                return true;
+                return { ok: true, etag: '' };
             }
 
             const folderPath = getFolderPath(remotePath);
             if (folderPath && folderPath !== '/') {
                 try { await request(config, folderPath, 'MKCOL'); } catch (err) {}
             }
-            await request(config, remotePath, 'PUT', JSON.stringify(payload, null, 2));
-            return true;
+            const response = await request(config, remotePath, 'PUT', JSON.stringify(payload, null, 2), options);
+            let responseData = null;
+            try {
+                responseData = await response.clone().json();
+            } catch (err) {}
+            return { ok: true, etag: getResponseEtag(response) || responseData?.etag || '' };
         }
 
         async function healthCheck(config = {}, path) {
             const remotePath = normalizeRemotePath(path || config.remotePath);
-            const provider = getProvider();
+            const provider = getEnabledProvider(config);
             if (provider?.healthCheck) {
                 try {
                     await provider.healthCheck(getProviderConfig(config, remotePath));

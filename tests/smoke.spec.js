@@ -457,6 +457,154 @@ test('edits during an active cloud sync trigger one follow-up upload', async ({ 
     expect(remoteData.todos.map(todo => todo.id)).toContain('queued-edit-todo');
 });
 
+test('cloud sync retries a stale conditional upload after merging latest remote data', async ({ page }) => {
+    const remoteBase = createEmptyData({
+        todos: [
+            {
+                id: 'shared-remote-todo',
+                text: '同步基线待办',
+                note: '',
+                done: false,
+                dueDate: '',
+                planStartDate: '',
+                planEndDate: '',
+                urgency: 'medium',
+                group: '工作',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-14T09:00:00',
+                updatedAt: '2026-07-14T09:00:00'
+            }
+        ]
+    });
+    const localData = createEmptyData({
+        todos: [
+            ...remoteBase.todos,
+            {
+                id: 'local-new-todo',
+                text: '本机新增待办',
+                note: '',
+                done: false,
+                dueDate: '',
+                planStartDate: '',
+                planEndDate: '',
+                urgency: 'high',
+                group: '工作',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-14T09:05:00',
+                updatedAt: '2026-07-14T09:05:00'
+            }
+        ]
+    });
+    const remoteChanged = createEmptyData({
+        todos: [
+            ...remoteBase.todos,
+            {
+                id: 'remote-new-todo',
+                text: '另一台设备新增待办',
+                note: '',
+                done: false,
+                dueDate: '',
+                planStartDate: '',
+                planEndDate: '',
+                urgency: 'medium',
+                group: '工作',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-14T09:06:00',
+                updatedAt: '2026-07-14T09:06:00'
+            }
+        ]
+    });
+    let remoteData = remoteBase;
+    let remoteEtag = '"v1"';
+    let getCount = 0;
+    let putCount = 0;
+    const putIfMatchHeaders = [];
+    const etagHeaders = etag => ({
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag',
+        ETag: etag
+    });
+
+    await page.route('https://sync-etag.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (url.pathname === '/life-plan.json' && request.method() === 'GET') {
+            getCount += 1;
+            await route.fulfill({
+                contentType: 'application/json',
+                headers: etagHeaders(remoteEtag),
+                body: JSON.stringify(remoteData)
+            });
+            return;
+        }
+        if (url.pathname === '/life-plan.json' && request.method() === 'PUT') {
+            putCount += 1;
+            putIfMatchHeaders.push(request.headers()['if-match'] || '');
+            if (putCount === 1) {
+                remoteData = remoteChanged;
+                remoteEtag = '"v2"';
+                await route.fulfill({
+                    status: 412,
+                    contentType: 'application/json',
+                    headers: etagHeaders(remoteEtag),
+                    body: JSON.stringify({ ok: false, error: 'Precondition failed', etag: remoteEtag })
+                });
+                return;
+            }
+            remoteData = JSON.parse(request.postData() || '{}');
+            remoteEtag = '"v3"';
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: etagHeaders(remoteEtag),
+                body: JSON.stringify({ ok: true, etag: remoteEtag })
+            });
+            return;
+        }
+        await route.fulfill({ status: 404, body: '' });
+    });
+
+    await page.addInitScript(({ value, remoteHash }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://sync-etag.example.test',
+            username: '',
+            password: '',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({
+            dirty: true,
+            lastLocalHash: '',
+            lastRemoteHash: remoteHash,
+            lastRemoteEtag: '"v1"',
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: ''
+        }));
+    }, { value: localData, remoteHash: hashData(remoteBase) });
+
+    await page.goto('/');
+    await page.evaluate(() => runCloudSync('up'));
+
+    expect(getCount).toBe(2);
+    expect(putCount).toBe(2);
+    expect(putIfMatchHeaders).toEqual(['"v1"', '"v2"']);
+    expect(remoteData.todos.map(todo => todo.id).sort()).toEqual([
+        'local-new-todo',
+        'remote-new-todo',
+        'shared-remote-todo'
+    ]);
+    const syncState = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncState')));
+    expect(syncState.dirty).toBe(false);
+    expect(syncState.lastRemoteEtag).toBe('"v3"');
+});
+
 test('auto sync does not upload unchanged data on reload', async ({ page }) => {
     const data = createEmptyData({
         habitCurrencies: [

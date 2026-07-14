@@ -78,6 +78,7 @@
             dirty: false,
             lastLocalHash: '',
             lastRemoteHash: '',
+            lastRemoteEtag: '',
             lastSyncAt: '',
             lastPullAt: '',
             lastPushAt: '',
@@ -87,6 +88,7 @@
             dirty: false,
             lastLocalHash: '',
             lastRemoteHash: '',
+            lastRemoteEtag: '',
             lastSyncAt: '',
             lastPullAt: '',
             lastPushAt: '',
@@ -2360,6 +2362,46 @@
             return syncService.pullJson(syncConfig, syncConfig.remotePath, value => value, getDataHash);
         }
 
+        function rememberRemoteVersion(remote, state) {
+            if (!remote) return;
+            if (remote.etag) state.lastRemoteEtag = remote.etag;
+        }
+
+        function isConditionalWriteConflict(err) {
+            return err?.status === 412;
+        }
+
+        async function mergeAfterConditionalWriteConflict() {
+            const remote = await fetchRemoteData();
+            if (!remote) throw new Error('云端版本已变化，但重新拉取时未找到同步文件');
+            const beforeSnapshot = createLocalSnapshot('条件写入冲突合并前', data, {
+                source: 'cloud-push',
+                action: 'etag-conflict-before-merge',
+                mergedWith: { label: '云端', hash: remote.hash }
+            });
+            const previousData = data;
+            data = mergeCloudData(data, remote.data);
+            createLocalSnapshot('条件写入冲突合并结果', data, {
+                source: 'cloud-push',
+                action: 'etag-conflict-merge-result',
+                parentSnapshotId: beforeSnapshot?.id,
+                parentVersion: beforeSnapshot?.version,
+                parentHash: beforeSnapshot?.hash,
+                mergedWith: { label: '云端', hash: remote.hash }
+            });
+            if (!saveDataFromSync()) {
+                data = previousData;
+                throw new Error('云端冲突合并数据未能写入本地存储');
+            }
+            syncState.dirty = true;
+            syncState.lastRemoteHash = remote.hash;
+            rememberRemoteVersion(remote, syncState);
+            syncState.lastPullAt = new Date().toISOString();
+            syncState.lastConflictAt = syncState.lastPullAt;
+            saveSyncState();
+            return remote;
+        }
+
         async function syncDownFromCloud() {
             const remote = await fetchRemoteData();
             if (!remote) return false;
@@ -2392,13 +2434,15 @@
             }
             syncState.dirty = shouldMerge && getDataHash() !== remote.hash;
             syncState.lastRemoteHash = remote.hash;
+            rememberRemoteVersion(remote, syncState);
             syncState.lastPullAt = new Date().toISOString();
             if (!syncState.dirty) syncState.lastSyncAt = syncState.lastPullAt;
             saveSyncState();
             return syncState.dirty ? 'merged' : 'pulled';
         }
 
-        async function syncUpToCloud(force = false) {
+        async function syncUpToCloud(force = false, options = {}) {
+            const shouldRetryConditionalConflict = options.retryOnConditionalConflict !== false;
             const localHash = getDataHash();
             if (!force && !syncState.dirty && syncState.lastRemoteHash === localHash) return false;
             createLocalSnapshot('上传云端前', data, {
@@ -2407,9 +2451,21 @@
                 mergedWith: syncState.lastRemoteHash ? { label: '上次云端', hash: syncState.lastRemoteHash } : null
             });
             const remotePath = syncConfig.remotePath.startsWith('/') ? syncConfig.remotePath : `/${syncConfig.remotePath}`;
-            await syncService.pushJson(syncConfig, remotePath, data, 'life-plan');
+            let result;
+            try {
+                result = await syncService.pushJson(syncConfig, remotePath, data, 'life-plan', {
+                    ifMatch: syncState.lastRemoteEtag || ''
+                });
+            } catch (err) {
+                if (shouldRetryConditionalConflict && isConditionalWriteConflict(err)) {
+                    await mergeAfterConditionalWriteConflict();
+                    return syncUpToCloud(true, { retryOnConditionalConflict: false });
+                }
+                throw err;
+            }
             syncState.dirty = false;
-            syncState.lastRemoteHash = localHash;
+            syncState.lastRemoteHash = getDataHash();
+            if (result?.etag) syncState.lastRemoteEtag = result.etag;
             syncState.lastPushAt = new Date().toISOString();
             syncState.lastSyncAt = syncState.lastPushAt;
             saveSyncState();
@@ -2429,6 +2485,7 @@
 
                 if (direction === 'up') {
                     const remote = await fetchRemoteData();
+                    rememberRemoteVersion(remote, syncState);
                     const localHash = getDataHash();
                     const remoteChanged = remote && remote.hash !== localHash && (!syncState.lastRemoteHash || remote.hash !== syncState.lastRemoteHash);
                     if (remoteChanged) {
@@ -2452,6 +2509,8 @@
                             throw new Error('云端合并数据未能写入本地存储');
                         }
                         syncState.dirty = true;
+                        syncState.lastRemoteHash = remote.hash;
+                        rememberRemoteVersion(remote, syncState);
                         syncState.lastConflictAt = new Date().toISOString();
                         await syncUpToCloud(true);
                         renderAfterDataChange();
@@ -2481,6 +2540,7 @@
                 }
 
                 const remote = await fetchRemoteData();
+                rememberRemoteVersion(remote, syncState);
                 const localHash = getDataHash();
                 const remoteHash = remote ? remote.hash : '';
                 const localChanged = syncState.dirty || (!!syncState.lastRemoteHash && localHash !== syncState.lastRemoteHash) || (!syncState.lastRemoteHash && localHash !== remoteHash);
@@ -2495,6 +2555,7 @@
                 if (!localChanged && !remoteChanged) {
                     syncState.lastPullAt = new Date().toISOString();
                     syncState.lastRemoteHash = remoteHash;
+                    rememberRemoteVersion(remote, syncState);
                     syncState.dirty = false;
                     saveSyncState();
                     updateSyncStatus(`云端和本地一致，无需同步 ${formatClockTime(new Date(), true)}`);
@@ -2524,6 +2585,7 @@
                     syncState.dirty = getDataHash() !== remoteHash;
                     const shouldUploadMergedData = syncState.dirty;
                     syncState.lastRemoteHash = remoteHash;
+                    rememberRemoteVersion(remote, syncState);
                     syncState.lastPullAt = new Date().toISOString();
                     if (!syncState.dirty) syncState.lastSyncAt = syncState.lastPullAt;
                     saveSyncState();
@@ -2561,6 +2623,8 @@
                     throw new Error('云端冲突合并数据未能写入本地存储');
                 }
                 syncState.dirty = true;
+                syncState.lastRemoteHash = remote.hash;
+                rememberRemoteVersion(remote, syncState);
                 syncState.lastConflictAt = new Date().toISOString();
                 await syncUpToCloud(true);
                 renderAfterDataChange();
@@ -2655,20 +2719,42 @@
             applyWheelSnapshot(nextSnapshot, true);
             wheelSyncState.dirty = shouldMerge;
             wheelSyncState.lastRemoteHash = remote.hash;
+            rememberRemoteVersion(remote, wheelSyncState);
             wheelSyncState.lastPullAt = new Date().toISOString();
             if (!shouldMerge) wheelSyncState.lastSyncAt = wheelSyncState.lastPullAt;
             saveWheelSyncState();
             return shouldMerge ? 'merged' : 'pulled';
         }
 
-        async function syncWheelUpToCloud(force = false) {
+        async function syncWheelUpToCloud(force = false, options = {}) {
+            const shouldRetryConditionalConflict = options.retryOnConditionalConflict !== false;
             const localSnapshot = getWheelSnapshot();
             const localHash = getWheelDataHash(localSnapshot);
             if (!force && !wheelSyncState.dirty && wheelSyncState.lastRemoteHash === localHash) return false;
             const remotePath = wheelSyncConfig.remotePath.startsWith('/') ? wheelSyncConfig.remotePath : `/${wheelSyncConfig.remotePath}`;
-            await syncService.pushJson(syncConfig, remotePath, localSnapshot, 'wheel-app');
+            let result;
+            try {
+                result = await syncService.pushJson(syncConfig, remotePath, localSnapshot, 'wheel-app', {
+                    ifMatch: wheelSyncState.lastRemoteEtag || ''
+                });
+            } catch (err) {
+                if (shouldRetryConditionalConflict && isConditionalWriteConflict(err)) {
+                    const remote = await fetchRemoteWheelData();
+                    if (!remote) throw new Error('大转盘云端版本已变化，但重新拉取时未找到同步文件');
+                    applyWheelSnapshot(mergeWheelSnapshots(localSnapshot, remote.data), false);
+                    wheelSyncState.dirty = true;
+                    wheelSyncState.lastRemoteHash = remote.hash;
+                    rememberRemoteVersion(remote, wheelSyncState);
+                    wheelSyncState.lastPullAt = new Date().toISOString();
+                    wheelSyncState.lastConflictAt = wheelSyncState.lastPullAt;
+                    saveWheelSyncState();
+                    return syncWheelUpToCloud(true, { retryOnConditionalConflict: false });
+                }
+                throw err;
+            }
             wheelSyncState.dirty = false;
-            wheelSyncState.lastRemoteHash = localHash;
+            wheelSyncState.lastRemoteHash = getWheelDataHash();
+            if (result?.etag) wheelSyncState.lastRemoteEtag = result.etag;
             wheelSyncState.lastPushAt = new Date().toISOString();
             wheelSyncState.lastSyncAt = wheelSyncState.lastPushAt;
             saveWheelSyncState();
@@ -2692,12 +2778,15 @@
 
                 if (direction === 'up') {
                     const remote = await fetchRemoteWheelData();
+                    rememberRemoteVersion(remote, wheelSyncState);
                     const localSnapshot = getWheelSnapshot();
                     const localHash = getWheelDataHash(localSnapshot);
                     const remoteChanged = remote && remote.hash !== localHash && (!wheelSyncState.lastRemoteHash || remote.hash !== wheelSyncState.lastRemoteHash);
                     if (remoteChanged) {
                         applyWheelSnapshot(mergeWheelSnapshots(localSnapshot, remote.data), false);
                         wheelSyncState.dirty = true;
+                        wheelSyncState.lastRemoteHash = remote.hash;
+                        rememberRemoteVersion(remote, wheelSyncState);
                         wheelSyncState.lastConflictAt = new Date().toISOString();
                         saveWheelSyncState();
                         await syncWheelUpToCloud(true);
@@ -2728,6 +2817,7 @@
                 }
 
                 const remote = await fetchRemoteWheelData();
+                rememberRemoteVersion(remote, wheelSyncState);
                 const localSnapshot = getWheelSnapshot();
                 const localHash = getWheelDataHash(localSnapshot);
                 const remoteHash = remote ? remote.hash : '';
@@ -2743,6 +2833,7 @@
                 if (!localChanged && !remoteChanged) {
                     wheelSyncState.lastPullAt = new Date().toISOString();
                     wheelSyncState.lastRemoteHash = remoteHash;
+                    rememberRemoteVersion(remote, wheelSyncState);
                     wheelSyncState.dirty = false;
                     saveWheelSyncState();
                     if (!silent) updateWheelSyncStatus(`大转盘云端和本地一致 ${formatClockTime(new Date(), true)}`);
@@ -2753,6 +2844,7 @@
                     applyWheelSnapshot(remote.data, true);
                     wheelSyncState.dirty = false;
                     wheelSyncState.lastRemoteHash = remoteHash;
+                    rememberRemoteVersion(remote, wheelSyncState);
                     wheelSyncState.lastPullAt = new Date().toISOString();
                     wheelSyncState.lastSyncAt = wheelSyncState.lastPullAt;
                     saveWheelSyncState();
@@ -2768,6 +2860,8 @@
 
                 applyWheelSnapshot(mergeWheelSnapshots(localSnapshot, remote.data), false);
                 wheelSyncState.dirty = true;
+                wheelSyncState.lastRemoteHash = remote.hash;
+                rememberRemoteVersion(remote, wheelSyncState);
                 wheelSyncState.lastConflictAt = new Date().toISOString();
                 saveWheelSyncState();
                 await syncWheelUpToCloud(true);
