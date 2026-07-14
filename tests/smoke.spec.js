@@ -1032,6 +1032,38 @@ test('global search page accepts a keyword', async ({ page }) => {
     await expect(page.locator('#global-search-results')).toBeVisible();
 });
 
+test('global search input debounces repeated rendering while typing', async ({ page }) => {
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData({
+        todos: [
+            {
+                id: 'search-debounce-todo',
+                text: 'abc search target',
+                note: '',
+                done: false,
+                dueDate: '',
+                planStartDate: '',
+                planEndDate: '',
+                urgency: 'medium',
+                group: '工作',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-14T10:00:00',
+                updatedAt: '2026-07-14T10:00:00'
+            }
+        ]
+    }));
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '全局搜索' }).click();
+    await page.evaluate(() => { window.__lifePlanSearchRenderCount = 0; });
+    await page.locator('#global-search-input').focus();
+    await page.keyboard.type('abc', { delay: 20 });
+    await expect(page.locator('#global-search-results')).toContainText('abc search target');
+    const renderCount = await page.evaluate(() => window.__lifePlanSearchRenderCount);
+    expect(renderCount).toBe(1);
+});
+
 test('AI settings are saved outside main life plan data', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'AI 设置' }).click();

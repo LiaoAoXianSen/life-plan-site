@@ -294,7 +294,7 @@
                 </div>
             </div>
             <div class="global-search-panel">
-                <input type="search" id="global-search-input" placeholder="输入关键词，例如 工作 / AI / 提示词" oninput="renderGlobalSearch()">
+                <input type="search" id="global-search-input" placeholder="输入关键词，例如 工作 / AI / 提示词" oninput="scheduleGlobalSearchRender()">
                 <select id="global-search-scope" onchange="renderGlobalSearch()">
                     <option value="all">全部模块</option>
                     <option value="records">记录</option>

@@ -99,6 +99,7 @@
         let syncIntervalTimer = null;
         let wheelAutoSyncTimer = null;
         let wheelSyncIntervalTimer = null;
+        let globalSearchDebounceTimer = null;
         let isCloudSyncing = false;
         let isWheelCloudSyncing = false;
         let pendingCloudSync = false;
@@ -5431,6 +5432,13 @@
         function renderGlobalSearch() {
             const container = document.getElementById('global-search-results');
             if (!container) return;
+            if (globalSearchDebounceTimer) {
+                clearTimeout(globalSearchDebounceTimer);
+                globalSearchDebounceTimer = null;
+            }
+            if (typeof window !== 'undefined' && typeof window.__lifePlanSearchRenderCount === 'number') {
+                window.__lifePlanSearchRenderCount += 1;
+            }
             const keyword = (document.getElementById('global-search-input')?.value || '').trim().toLowerCase();
             const scope = document.getElementById('global-search-scope')?.value || 'all';
             const items = buildGlobalSearchIndex()
@@ -5469,6 +5477,14 @@
                     </div>
                 </section>
             `).join('');
+        }
+
+        function scheduleGlobalSearchRender(delay = 250) {
+            clearTimeout(globalSearchDebounceTimer);
+            globalSearchDebounceTimer = setTimeout(() => {
+                globalSearchDebounceTimer = null;
+                renderGlobalSearch();
+            }, delay);
         }
 
         // ================== 模板管理 ==================
