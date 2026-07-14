@@ -642,6 +642,62 @@ test('record merge creates a conflict copy when diary text diverges', async ({ p
     expect(conflict.title).toContain('冲突副本');
 });
 
+test('merge keeps local item when matching remote item has no reliable timestamp', async ({ page }) => {
+    const localTodo = {
+        id: 'todo-missing-stamp',
+        text: '本地较新的待办内容',
+        done: false,
+        subTodos: [],
+        sessions: []
+    };
+    const remoteTodo = {
+        id: 'todo-missing-stamp',
+        text: '旧备份里的待办内容',
+        done: false,
+        subTodos: [],
+        sessions: []
+    };
+
+    await page.goto('/');
+    const merged = await page.evaluate(({ localData, remoteData }) => {
+        return mergeCloudData(localData, remoteData);
+    }, {
+        localData: createEmptyData({ todos: [localTodo] }),
+        remoteData: createEmptyData({ todos: [remoteTodo] })
+    });
+
+    expect(merged.todos).toHaveLength(1);
+    expect(merged.todos[0].text).toBe(localTodo.text);
+});
+
+test('record merge keeps local primary and creates conflict copy when both timestamps are missing', async ({ page }) => {
+    const localDiary = {
+        id: 'diary-missing-stamp',
+        type: '日记',
+        title: '没有时间戳的日记',
+        content: '# 正文\n本地追加了新的复盘内容。\n'
+    };
+    const remoteDiary = {
+        ...localDiary,
+        content: '# 正文\n旧备份里写了另一段内容。\n'
+    };
+
+    await page.goto('/');
+    const merged = await page.evaluate(({ localData, remoteData }) => {
+        return mergeCloudData(localData, remoteData);
+    }, {
+        localData: createEmptyData({ records: [localDiary] }),
+        remoteData: createEmptyData({ records: [remoteDiary] })
+    });
+
+    const primary = merged.records.find(record => record.id === 'diary-missing-stamp');
+    const conflict = merged.records.find(record => record.conflictOf === 'diary-missing-stamp');
+    expect(primary.content).toBe(localDiary.content);
+    expect(conflict).toBeTruthy();
+    expect(conflict.content).toBe(remoteDiary.content);
+    expect(conflict.title).toContain('冲突副本');
+});
+
 test('merge keeps tombstoned entities deleted instead of reviving stale remote data', async ({ page }) => {
     const deletedAt = '2026-07-08T10:00:00';
     const staleStamp = '2026-07-07T10:00:00';

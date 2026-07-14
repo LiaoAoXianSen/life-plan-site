@@ -242,7 +242,7 @@
             remoteItems.forEach((remoteItem, index) => {
                 const key = getItemMergeKey(remoteItem, index, collection);
                 const localItem = merged.get(key);
-                if (!localItem || getItemUpdatedTime(remoteItem) >= getItemUpdatedTime(localItem)) {
+                if (!localItem || getItemUpdatedTime(remoteItem) > getItemUpdatedTime(localItem)) {
                     merged.set(key, remoteItem);
                 }
             });
@@ -311,7 +311,7 @@
             const remoteText = normalizeRecordMergeText(remoteRecord.content || '');
             const localTime = getItemUpdatedTime(localRecord);
             const remoteTime = getItemUpdatedTime(remoteRecord);
-            const latest = remoteTime >= localTime ? remoteRecord : localRecord;
+            const latest = remoteTime > localTime ? remoteRecord : localRecord;
             const older = latest === remoteRecord ? localRecord : remoteRecord;
             const olderSource = older === localRecord ? '本地' : '云端';
 
@@ -371,7 +371,7 @@
                 if (!item || typeof item !== 'object') return;
                 const key = item.id ? `id:${item.id}` : `json:${index}:${JSON.stringify(item)}`;
                 const current = merged.get(key);
-                if (!current || getWheelEntityUpdatedTime(item) >= getWheelEntityUpdatedTime(current)) {
+                if (!current || getWheelEntityUpdatedTime(item) > getWheelEntityUpdatedTime(current)) {
                     merged.set(key, item);
                 }
             });
@@ -390,7 +390,7 @@
                     const localWheel = local.wheels.find(item => item.id === wheel.id);
                     const remoteWheel = remoteWheelMap.get(wheel.id);
                     const baseWheel = !localWheel ? remoteWheel : !remoteWheel ? localWheel
-                        : getWheelEntityUpdatedTime(remoteWheel) >= getWheelEntityUpdatedTime(localWheel) ? remoteWheel : localWheel;
+                        : getWheelEntityUpdatedTime(remoteWheel) > getWheelEntityUpdatedTime(localWheel) ? remoteWheel : localWheel;
                     return {
                         ...baseWheel,
                         items: mergeWheelEntities(localWheel?.items || [], remoteWheel?.items || [], 'wheelItems', deletionMap)

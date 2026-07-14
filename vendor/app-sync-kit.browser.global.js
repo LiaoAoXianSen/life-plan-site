@@ -393,7 +393,7 @@ var AppSyncKit = (() => {
     remoteItems.forEach((remoteItem, index) => {
       const key = getItemMergeKey(remoteItem, index, collection);
       const localItem = merged.get(key);
-      if (!localItem || getItemUpdatedTime(remoteItem) >= getItemUpdatedTime(localItem)) {
+      if (!localItem || getItemUpdatedTime(remoteItem) > getItemUpdatedTime(localItem)) {
         merged.set(key, remoteItem);
       }
     });
@@ -456,7 +456,7 @@ var AppSyncKit = (() => {
     const remoteText = normalizeRecordMergeText(getString(remoteRecord, "content"));
     const localTime = getItemUpdatedTime(localRecord);
     const remoteTime = getItemUpdatedTime(remoteRecord);
-    const latest = remoteTime >= localTime ? remoteRecord : localRecord;
+    const latest = remoteTime > localTime ? remoteRecord : localRecord;
     const older = latest === remoteRecord ? localRecord : remoteRecord;
     const olderSource = older === localRecord ? "\u672C\u5730" : "\u4E91\u7AEF";
     if (localText === remoteText) {
@@ -520,7 +520,7 @@ var AppSyncKit = (() => {
     [...localItems, ...remoteItems].forEach((item, index) => {
       const key = getString(item, "id") || JSON.stringify(item) || String(index);
       const current = merged.get(key);
-      if (!current || getWheelEntityUpdatedTime(item) >= getWheelEntityUpdatedTime(current)) {
+      if (!current || getWheelEntityUpdatedTime(item) > getWheelEntityUpdatedTime(current)) {
         merged.set(key, item);
       }
     });
@@ -536,7 +536,7 @@ var AppSyncKit = (() => {
         const wheelId = getString(wheel, "id");
         const localWheel = local.wheels.find((item) => getString(item, "id") === wheelId);
         const remoteWheel = remoteWheelMap.get(wheelId);
-        const baseWheel = !localWheel ? remoteWheel : !remoteWheel ? localWheel : getWheelEntityUpdatedTime(remoteWheel) >= getWheelEntityUpdatedTime(localWheel) ? remoteWheel : localWheel;
+        const baseWheel = !localWheel ? remoteWheel : !remoteWheel ? localWheel : getWheelEntityUpdatedTime(remoteWheel) > getWheelEntityUpdatedTime(localWheel) ? remoteWheel : localWheel;
         return {
           ...baseWheel,
           items: mergeWheelEntities(normalizeArray(localWheel?.items), normalizeArray(remoteWheel?.items), "wheelItems", deletions)
