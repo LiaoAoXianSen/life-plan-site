@@ -98,11 +98,57 @@
         return chips || '<span class="fitness-chip">暂无指标</span>';
     }
 
+    function renderOverviewPanel() {
+        const service = ensureService();
+        const container = document.getElementById('fitness-overview');
+        if (!service || !container) return;
+        const overview = service.buildFitnessOverview({
+            bodyMetrics: getMetrics(),
+            fitnessPlans: getPlans(),
+            fitnessWorkouts: getWorkouts()
+        });
+        const suggestion = overview.suggestion;
+        const latestWorkout = overview.latestWorkout;
+        const actionHtml = suggestion
+            ? `<button class="btn btn-primary" onclick="startWorkoutFromPlanDay(${safeJs(suggestion.plan.id)}, ${safeJs(suggestion.day.id)})">按计划开练：${safeHtml(suggestion.plan.name)} · ${safeHtml(suggestion.day.name)}</button>`
+            : `<button class="btn btn-primary" onclick="openFitnessWorkoutModal()">记录自由训练</button>`;
+        container.innerHTML = `
+            <div class="fitness-overview-card">
+                <div class="fitness-overview-copy">
+                    <div class="fitness-overview-kicker">今日健身总览</div>
+                    <div class="fitness-overview-title">
+                        ${overview.workoutSummary.todayCount
+                            ? `今天已有 ${overview.workoutSummary.todayCount} 条训练记录`
+                            : (suggestion ? '今天还没开练，可以直接按计划开始' : '还没有训练安排，先建计划或自由开练')}
+                    </div>
+                    <div class="fitness-overview-meta">
+                        <span>近 30 天完成 ${overview.workoutSummary.doneCount} 次</span>
+                        <span>连续训练 ${overview.workoutSummary.streak} 天</span>
+                        <span>进行中计划 ${overview.activePlanCount}</span>
+                        <span>当前体重 ${safeHtml(service.formatMetricValue(overview.latestMetric?.weight, 'kg'))}</span>
+                    </div>
+                    ${latestWorkout ? `<div class="fitness-overview-note">最近训练：${safeHtml(formatDateLabel(latestWorkout.date))} · ${safeHtml(service.getWorkoutTitle(latestWorkout))}</div>` : ''}
+                </div>
+                <div class="fitness-overview-actions">
+                    ${actionHtml}
+                    <button class="btn btn-secondary" onclick="openBodyMetricModal()">记录身材</button>
+                    <button class="btn btn-secondary" onclick="openFitnessPlanModal()">管理计划</button>
+                </div>
+            </div>
+        `;
+    }
+
     function renderSummary() {
         const service = ensureService();
         const container = document.getElementById('fitness-summary');
         if (!service || !container) return;
-        const summary = service.buildBodyMetricSummary(getMetrics());
+        const overview = service.buildFitnessOverview({
+            bodyMetrics: getMetrics(),
+            fitnessPlans: getPlans(),
+            fitnessWorkouts: getWorkouts()
+        });
+        const summary = overview.metricSummary;
+        const workoutSummary = overview.workoutSummary;
         const latest = summary.latest;
         container.innerHTML = `
             <div class="fitness-summary-grid">
@@ -117,14 +163,14 @@
                     <div class="fitness-stat-sub">${summary.weightChange.previous ? `对比 ${safeHtml(summary.weightChange.previous.date)}` : '记录不足'}</div>
                 </div>
                 <div class="fitness-stat-card">
-                    <div class="fitness-stat-label">当前腰围</div>
-                    <div class="fitness-stat-value">${safeHtml(service.formatMetricValue(latest?.waist, 'cm'))}</div>
-                    <div class="fitness-stat-sub">变化 ${safeHtml(service.formatSignedChange(summary.waistChange.delta, 'cm'))}</div>
+                    <div class="fitness-stat-label">近 30 天训练</div>
+                    <div class="fitness-stat-value">${workoutSummary.doneCount}</div>
+                    <div class="fitness-stat-sub">计划中 ${workoutSummary.plannedCount} · 连续 ${workoutSummary.streak} 天</div>
                 </div>
                 <div class="fitness-stat-card">
-                    <div class="fitness-stat-label">当前体脂</div>
-                    <div class="fitness-stat-value">${safeHtml(service.formatMetricValue(latest?.bodyFat, '%'))}</div>
-                    <div class="fitness-stat-sub">变化 ${safeHtml(service.formatSignedChange(summary.bodyFatChange.delta, '%'))}</div>
+                    <div class="fitness-stat-label">进行中计划</div>
+                    <div class="fitness-stat-value">${overview.activePlanCount}</div>
+                    <div class="fitness-stat-sub">全部计划 ${overview.planCount}</div>
                 </div>
             </div>
             <div class="fitness-trend-grid">
@@ -447,10 +493,46 @@
         data.bodyMetrics = service.normalizeBodyMetrics(data.bodyMetrics);
         data.fitnessPlans = service.normalizeFitnessPlans(data.fitnessPlans);
         data.fitnessWorkouts = service.normalizeFitnessWorkouts(data.fitnessWorkouts);
+        renderOverviewPanel();
         renderSummary();
         renderBodyMetricList();
         renderPlanList();
         renderWorkoutList();
+    };
+
+    window.getFitnessDashboardSnippet = function getFitnessDashboardSnippet() {
+        const service = ensureService();
+        if (!service) {
+            return {
+                weightText: '—',
+                workoutText: '0',
+                planText: '0',
+                streakText: '0',
+                latestText: '暂无训练记录',
+                suggestion: null
+            };
+        }
+        const overview = service.buildFitnessOverview({
+            bodyMetrics: getMetrics(),
+            fitnessPlans: getPlans(),
+            fitnessWorkouts: getWorkouts()
+        });
+        return {
+            weightText: service.formatMetricValue(overview.latestMetric?.weight, 'kg'),
+            workoutText: String(overview.workoutSummary.doneCount),
+            planText: String(overview.activePlanCount),
+            streakText: String(overview.workoutSummary.streak),
+            latestText: overview.latestWorkout
+                ? `${formatDateLabel(overview.latestWorkout.date)} · ${service.getWorkoutTitle(overview.latestWorkout)}`
+                : '暂无训练记录',
+            suggestion: overview.suggestion
+                ? {
+                    planId: overview.suggestion.plan.id,
+                    dayId: overview.suggestion.day.id,
+                    label: `${overview.suggestion.plan.name} · ${overview.suggestion.day.name}`
+                }
+                : null
+        };
     };
 
     window.openFitnessWorkoutModal = function openFitnessWorkoutModal(workoutId = '') {

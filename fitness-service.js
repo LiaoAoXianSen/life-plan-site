@@ -485,12 +485,67 @@
             const recent = workouts.filter(item => item.date >= thresholdDate);
             const doneCount = recent.filter(item => item.status === 'done').length;
             const plannedCount = recent.filter(item => item.status === 'planned').length;
+            const todayWorkouts = workouts.filter(item => item.date === today);
+            const streak = (() => {
+                let count = 0;
+                const doneDates = new Set(
+                    workouts.filter(item => item.status === 'done').map(item => item.date)
+                );
+                const cursor = new Date(`${today}T00:00:00`);
+                // 若今天还没练，从昨天开始算连续
+                if (!doneDates.has(today)) cursor.setDate(cursor.getDate() - 1);
+                while (true) {
+                    const key = cursor.toISOString().slice(0, 10);
+                    if (!doneDates.has(key)) break;
+                    count += 1;
+                    cursor.setDate(cursor.getDate() - 1);
+                    if (count > 365) break;
+                }
+                return count;
+            })();
             return {
                 total: workouts.length,
                 recentCount: recent.length,
                 doneCount,
                 plannedCount,
-                latest: workouts[0] || null
+                todayCount: todayWorkouts.length,
+                todayDoneCount: todayWorkouts.filter(item => item.status === 'done').length,
+                streak,
+                latest: workouts[0] || null,
+                latestDone: workouts.find(item => item.status === 'done') || null
+            };
+        }
+
+        function suggestTodayPlanDay(plans = [], dateStr = getTodayStr()) {
+            const weekday = new Date(`${dateStr}T00:00:00`).getDay();
+            const activePlans = getActiveFitnessPlans(plans);
+            for (const plan of activePlans) {
+                if ((plan.weekdays || []).includes(weekday) && (plan.days || []).length) {
+                    const dayIndex = Math.max(0, (plan.weekdays || []).indexOf(weekday));
+                    const day = plan.days[dayIndex % plan.days.length] || plan.days[0];
+                    return { plan, day, weekday };
+                }
+            }
+            if (activePlans[0]?.days?.length) {
+                return { plan: activePlans[0], day: activePlans[0].days[0], weekday };
+            }
+            return null;
+        }
+
+        function buildFitnessOverview({ bodyMetrics = [], fitnessPlans = [], fitnessWorkouts = [] } = {}) {
+            const metricSummary = buildBodyMetricSummary(bodyMetrics);
+            const workoutSummary = buildWorkoutSummary(fitnessWorkouts, 30);
+            const plans = normalizeFitnessPlans(fitnessPlans);
+            const activePlans = plans.filter(item => item.status === 'active');
+            const suggestion = suggestTodayPlanDay(plans);
+            return {
+                metricSummary,
+                workoutSummary,
+                planCount: plans.length,
+                activePlanCount: activePlans.length,
+                suggestion,
+                latestMetric: metricSummary.latest,
+                latestWorkout: workoutSummary.latest
             };
         }
 
@@ -665,6 +720,8 @@
             getMetricChange,
             buildBodyMetricSummary,
             buildWorkoutSummary,
+            suggestTodayPlanDay,
+            buildFitnessOverview,
             createBodyMetricDraft,
             validateBodyMetricInput,
             upsertBodyMetric,

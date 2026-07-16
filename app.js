@@ -3725,6 +3725,10 @@
                 .filter(t => !t.done)
                 .sort(compareTodosForFocus)[0];
 
+            const fitnessSnippet = typeof getFitnessDashboardSnippet === 'function'
+                ? getFitnessDashboardSnippet()
+                : { workoutText: '0', streakText: '0' };
+
             document.getElementById('summary-todos').textContent = `${todayTodoDone}/${todayTodos.length}`;
             document.getElementById('summary-habits').textContent = `${doneHabits}/${dueHabits.length}`;
             document.getElementById('summary-goals').textContent = activeGoals;
@@ -3734,8 +3738,10 @@
                 `待办 ${todayTodoDone}/${todayTodos.length}`,
                 `习惯 ${doneHabits}/${dueHabits.length}`,
                 `进行中目标 ${activeGoals}`,
-                `本周记录 ${weekRecords}`
-            ].map(text => `<span>${text}</span>`).join('');
+                `本周记录 ${weekRecords}`,
+                `近30天训练 ${fitnessSnippet.workoutText}`,
+                `连续训练 ${fitnessSnippet.streakText} 天`
+            ].map(text => `<span>${escapeHtml(text)}</span>`).join('');
         }
 
         function getDashboardMaterialPicks() {
@@ -3768,6 +3774,19 @@
                 .sort(compareTodosForFocus)
                 .slice(0, 4);
             const materialPicks = getDashboardMaterialPicks();
+            const fitnessSnippet = typeof getFitnessDashboardSnippet === 'function'
+                ? getFitnessDashboardSnippet()
+                : {
+                    weightText: '—',
+                    workoutText: '0',
+                    planText: '0',
+                    streakText: '0',
+                    latestText: '暂无训练记录',
+                    suggestion: null
+                };
+            const fitnessAction = fitnessSnippet.suggestion
+                ? `<button class="btn btn-secondary todo-mini-btn" onclick="startWorkoutFromPlanDay(${escapeJsArg(fitnessSnippet.suggestion.planId)}, ${escapeJsArg(fitnessSnippet.suggestion.dayId)})">按计划开练</button>`
+                : `<button class="btn btn-secondary todo-mini-btn" onclick="navigateToPage('fitness')">去健身页</button>`;
 
             container.innerHTML = `
                 <div class="command-card command-card-ideas">
@@ -3802,6 +3821,41 @@
                             `).join('')}
                         </div>
                     ` : '<div class="empty-state compact-empty">暂时没有超期或高优先级待办</div>'}
+                </div>
+                <div class="command-card">
+                    <div class="command-card-head">
+                        <div>
+                            <div class="section-title">运动健身</div>
+                            <p>把身材变化和训练节奏放到今天的视野里。</p>
+                        </div>
+                        ${fitnessAction}
+                    </div>
+                    <div class="command-metric-grid">
+                        <button onclick="navigateToPage('fitness')" class="command-metric">
+                            <strong>${escapeHtml(fitnessSnippet.weightText)}</strong>
+                            <span>当前体重</span>
+                        </button>
+                        <button onclick="navigateToPage('fitness')" class="command-metric">
+                            <strong>${escapeHtml(fitnessSnippet.workoutText)}</strong>
+                            <span>近30天训练</span>
+                        </button>
+                        <button onclick="navigateToPage('fitness')" class="command-metric">
+                            <strong>${escapeHtml(fitnessSnippet.streakText)}</strong>
+                            <span>连续训练天</span>
+                        </button>
+                    </div>
+                    <div class="command-list">
+                        <div class="command-row" onclick="navigateToPage('fitness')">
+                            <span>${escapeHtml(fitnessSnippet.latestText)}</span>
+                            <strong>计划 ${escapeHtml(fitnessSnippet.planText)}</strong>
+                        </div>
+                        ${fitnessSnippet.suggestion ? `
+                            <div class="command-row" onclick="startWorkoutFromPlanDay(${escapeJsArg(fitnessSnippet.suggestion.planId)}, ${escapeJsArg(fitnessSnippet.suggestion.dayId)})">
+                                <span>今日建议：${escapeHtml(fitnessSnippet.suggestion.label)}</span>
+                                <strong>开练</strong>
+                            </div>
+                        ` : ''}
+                    </div>
                 </div>
                 <div class="command-card">
                     <div class="command-card-head">

@@ -193,6 +193,93 @@ test('fitness page can create workout logs from free training', async ({ page })
     expect(errors).toEqual([]);
 });
 
+test('fitness overview appears on fitness page and dashboard', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+        if (message.type() === 'error') errors.push(message.text());
+    });
+
+    const today = new Date();
+    const todayStr = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, '0'),
+        String(today.getDate()).padStart(2, '0')
+    ].join('-');
+    const weekday = today.getDay();
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData({
+        bodyMetrics: [
+            {
+                id: 'metric-1',
+                date: todayStr,
+                weight: 71.5,
+                waist: 81,
+                condition: 'fasted',
+                note: '',
+                createdAt: `${todayStr} 08:00`,
+                updatedAt: `${todayStr} 08:00`
+            }
+        ],
+        fitnessPlans: [
+            {
+                id: 'plan-1',
+                name: '全身训练',
+                goal: 'strength',
+                status: 'active',
+                weekdays: [weekday],
+                notes: '',
+                days: [
+                    {
+                        id: 'day-1',
+                        name: 'A 日',
+                        exercises: [{ id: 'ex-1', name: '深蹲', targetSets: 3, targetReps: '5' }]
+                    }
+                ],
+                createdAt: `${todayStr} 08:00`,
+                updatedAt: `${todayStr} 08:00`
+            }
+        ],
+        fitnessWorkouts: [
+            {
+                id: 'workout-1',
+                date: todayStr,
+                status: 'done',
+                title: '全身训练 · A 日',
+                planId: 'plan-1',
+                planName: '全身训练',
+                dayId: 'day-1',
+                dayName: 'A 日',
+                notes: '',
+                durationMin: 40,
+                exercises: [
+                    {
+                        id: 'wex-1',
+                        name: '深蹲',
+                        sets: [{ id: 'set-1', weight: 100, reps: 5, done: true }]
+                    }
+                ],
+                createdAt: `${todayStr} 09:00`,
+                updatedAt: `${todayStr} 09:00`
+            }
+        ]
+    }));
+
+    await page.goto('/');
+    await expect(page.locator('#dashboard-command-center')).toContainText('运动健身');
+    await expect(page.locator('#dashboard-command-center')).toContainText('71.5');
+    await expect(page.locator('#hero-meta')).toContainText('近30天训练');
+
+    await page.locator('.nav-item', { hasText: '运动健身' }).click();
+    await expect(page.locator('#fitness-overview')).toContainText('今日健身总览');
+    await expect(page.locator('#fitness-overview')).toContainText('今天已有 1 条训练记录');
+    await expect(page.locator('#fitness-summary')).toContainText('71.5');
+    await expect(page.locator('#fitness-summary')).toContainText('近 30 天训练');
+    expect(errors).toEqual([]);
+});
+
 test('local save failure keeps recovery actions visible until retry succeeds', async ({ page }) => {
     const data = createEmptyData();
     await page.addInitScript(value => {
