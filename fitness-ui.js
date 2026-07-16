@@ -760,41 +760,64 @@ const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
         body.innerHTML = (draft.exercises || []).map((exercise, exerciseIndex) => {
             const history = service.findLastExercisePerformance(getWorkouts(), exercise.name, liveWorkoutId || '');
             const restSec = service.getExerciseRestSec(exercise, getLibrary());
+            const targetText = [
+                `${exercise.targetSets || (exercise.sets || []).length} 组`,
+                exercise.targetReps ? `${exercise.targetReps} 次` : '',
+                exercise.targetWeight != null ? `${exercise.targetWeight}kg` : '',
+                restSec ? `休 ${restSec}s` : ''
+            ].filter(Boolean).join(' · ');
+            const historyText = history?.set
+                ? `上次 ${history.set.weight ?? '—'}kg × ${history.set.reps ?? '—'}`
+                : '';
             return `
                 <section class="fitness-live-exercise">
                     <div class="fitness-live-exercise-head">
-                        <div>
+                        <div class="fitness-live-exercise-copy">
                             <div class="fitness-live-exercise-name">${safeHtml(exercise.name || '未命名动作')}</div>
                             <div class="fitness-live-exercise-meta">
-                                目标 ${exercise.targetSets || (exercise.sets || []).length} 组
-                                ${exercise.targetReps ? ` · ${safeHtml(exercise.targetReps)} 次` : ''}
-                                ${exercise.targetWeight != null ? ` · ${exercise.targetWeight}kg` : ''}
-                                · 休息 ${restSec}s
+                                ${safeHtml(targetText)}
+                                ${historyText ? `<span class="fitness-live-history">${safeHtml(historyText)}</span>` : ''}
                             </div>
-                            ${history?.set ? `<div class="fitness-history-hint">上次 ${safeHtml(history.workoutDate)} · ${history.set.weight ?? '—'}kg × ${history.set.reps ?? '—'}</div>` : ''}
                         </div>
                         <button type="button" class="btn btn-secondary todo-mini-btn" onclick="copyLastPerformanceToLiveExercise(${exerciseIndex})">复制上次</button>
                     </div>
-                    <div class="fitness-live-set-list">
+                    <div class="fitness-live-set-table">
+                        <div class="fitness-live-set-head">
+                            <span>组</span>
+                            <span>重量</span>
+                            <span>次数</span>
+                            <span></span>
+                        </div>
                         ${(exercise.sets || []).map((set, setIndex) => {
                             const suggestion = !set.done ? service.suggestSetValues(exercise, setIndex, history) : null;
+                            const weightPlaceholder = suggestion?.weight != null ? String(suggestion.weight) : 'kg';
+                            const repsPlaceholder = suggestion?.reps != null ? String(suggestion.reps) : '次';
+                            const hint = suggestion?.label
+                                ? suggestion.label.replace(/^上次\s*/, '').replace(/^复制上一组\s*/, '同上 ')
+                                : '';
                             return `
                                 <div class="fitness-live-set-row ${set.done ? 'is-done' : ''}">
                                     <span class="fitness-set-index">${setIndex + 1}</span>
-                                    <input type="number" min="0" step="0.5" value="${set.weight ?? ''}" placeholder="kg"
-                                        oninput="updateLiveWorkoutSet(${exerciseIndex}, ${setIndex}, 'weight', this.value)">
-                                    <input type="number" min="0" step="1" value="${set.reps ?? ''}" placeholder="次"
-                                        oninput="updateLiveWorkoutSet(${exerciseIndex}, ${setIndex}, 'reps', this.value)">
-                                    <button type="button" class="btn ${set.done ? 'btn-secondary' : 'btn-primary'} todo-mini-btn"
+                                    <div class="fitness-live-field">
+                                        <input type="number" min="0" step="0.5" inputmode="decimal" value="${set.weight ?? ''}" placeholder="${safeHtml(weightPlaceholder)}"
+                                            oninput="updateLiveWorkoutSet(${exerciseIndex}, ${setIndex}, 'weight', this.value)">
+                                        <span class="fitness-live-unit">kg</span>
+                                    </div>
+                                    <div class="fitness-live-field">
+                                        <input type="number" min="0" step="1" inputmode="numeric" value="${set.reps ?? ''}" placeholder="${safeHtml(repsPlaceholder)}"
+                                            oninput="updateLiveWorkoutSet(${exerciseIndex}, ${setIndex}, 'reps', this.value)">
+                                        <span class="fitness-live-unit">次</span>
+                                    </div>
+                                    <button type="button" class="btn ${set.done ? 'btn-secondary' : 'btn-primary'} fitness-live-done-btn"
                                         onclick="toggleLiveWorkoutSetDone(${exerciseIndex}, ${setIndex})">
                                         ${set.done ? '撤销' : '完成'}
                                     </button>
-                                    ${suggestion ? `<div class="fitness-set-suggestion">${safeHtml(suggestion.label)}</div>` : ''}
+                                    ${hint && !set.done ? `<div class="fitness-set-suggestion">${safeHtml(hint)}</div>` : ''}
                                 </div>
                             `;
                         }).join('')}
                     </div>
-                    <div class="fitness-plan-day-actions">
+                    <div class="fitness-live-exercise-footer">
                         <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addLiveWorkoutSet(${exerciseIndex})">+ 加一组</button>
                     </div>
                 </section>
