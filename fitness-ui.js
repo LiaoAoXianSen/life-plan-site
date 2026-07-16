@@ -1,5 +1,7 @@
 (function () {
     let currentBodyMetricId = null;
+    let currentFitnessPlanId = null;
+    let fitnessPlanDraft = null;
     let fitnessService = null;
 
     function ensureService() {
@@ -39,6 +41,11 @@
     function getMetrics() {
         if (!Array.isArray(data.bodyMetrics)) data.bodyMetrics = [];
         return data.bodyMetrics;
+    }
+
+    function getPlans() {
+        if (!Array.isArray(data.fitnessPlans)) data.fitnessPlans = [];
+        return data.fitnessPlans;
     }
 
     function renderSparkline(series = []) {
@@ -158,24 +165,134 @@
     }
 
     function renderFitnessComingSoon() {
-        const planBox = document.getElementById('fitness-plan-placeholder');
         const workoutBox = document.getElementById('fitness-workout-placeholder');
-        if (planBox) {
-            planBox.innerHTML = `
-                <div class="fitness-placeholder-card">
-                    <strong>训练计划</strong>
-                    <p>下一期会支持训练计划、训练日和动作模板。这一期先把身材记录做稳。</p>
-                </div>
-            `;
-        }
         if (workoutBox) {
             workoutBox.innerHTML = `
                 <div class="fitness-placeholder-card">
                     <strong>训练日志</strong>
-                    <p>再下一期会支持从计划生成今日训练，并记录每组重量和次数。</p>
+                    <p>下一期会支持从计划生成今日训练，并记录每组重量和次数。</p>
                 </div>
             `;
         }
+    }
+
+    function renderPlanList() {
+        const service = ensureService();
+        const container = document.getElementById('fitness-plan-list');
+        if (!service || !container) return;
+        const plans = service.normalizeFitnessPlans(getPlans());
+        if (!plans.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    还没有训练计划。可以先建一个「推拉腿」或「全身训练」计划，方便后面直接开练。
+                </div>
+            `;
+            return;
+        }
+        container.innerHTML = plans.map(plan => {
+            const weekdays = service.getWeekdayLabels(plan.weekdays).join(' / ') || '未设置训练日';
+            const exerciseCount = service.countPlanExercises(plan);
+            const dayCount = (plan.days || []).length;
+            return `
+                <article class="fitness-plan-card" onclick="openFitnessPlanModal(${safeJs(plan.id)})">
+                    <div class="fitness-plan-head">
+                        <div>
+                            <div class="fitness-plan-name">${safeHtml(plan.name)}</div>
+                            <div class="fitness-plan-meta">
+                                ${safeHtml(service.getPlanGoalLabel(plan.goal))} · ${safeHtml(service.getPlanStatusLabel(plan.status))}
+                            </div>
+                        </div>
+                        <div class="fitness-plan-primary">
+                            <strong>${dayCount}</strong>
+                            <span>训练日</span>
+                        </div>
+                    </div>
+                    <div class="fitness-chip-row">
+                        <span class="fitness-chip">${safeHtml(weekdays)}</span>
+                        <span class="fitness-chip">动作 <strong>${exerciseCount}</strong></span>
+                    </div>
+                    ${plan.notes ? `<div class="fitness-metric-note">${safeHtml(plan.notes)}</div>` : ''}
+                    <div class="fitness-plan-days">
+                        ${(plan.days || []).map(day => `
+                            <div class="fitness-plan-day-chip">
+                                <strong>${safeHtml(day.name)}</strong>
+                                <span>${(day.exercises || []).map(item => safeHtml(item.name)).join('、') || '暂无动作'}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    function ensurePlanDraft() {
+        const service = ensureService();
+        if (!service) return null;
+        if (!fitnessPlanDraft) fitnessPlanDraft = service.createFitnessPlanDraft();
+        if (!Array.isArray(fitnessPlanDraft.days) || !fitnessPlanDraft.days.length) {
+            fitnessPlanDraft.days = [{ id: (typeof genId === 'function' ? genId() : `day-${Date.now()}`), name: 'A 日', exercises: [] }];
+        }
+        fitnessPlanDraft.days.forEach(day => {
+            if (!Array.isArray(day.exercises)) day.exercises = [];
+        });
+        if (!Array.isArray(fitnessPlanDraft.weekdays)) fitnessPlanDraft.weekdays = [];
+        return fitnessPlanDraft;
+    }
+
+    function renderPlanEditor() {
+        const service = ensureService();
+        const daysBox = document.getElementById('fitness-plan-days-editor');
+        if (!service || !daysBox) return;
+        const draft = ensurePlanDraft();
+        if (!draft) return;
+
+        document.getElementById('fitness-plan-modal-title').textContent = currentFitnessPlanId ? '编辑训练计划' : '新建训练计划';
+        document.getElementById('fitness-plan-name').value = draft.name || '';
+        document.getElementById('fitness-plan-goal').value = draft.goal || 'general';
+        document.getElementById('fitness-plan-status').value = draft.status || 'active';
+        document.getElementById('fitness-plan-notes').value = draft.notes || '';
+
+        const weekdayBox = document.getElementById('fitness-plan-weekdays');
+        if (weekdayBox) {
+            weekdayBox.innerHTML = service.WEEKDAY_OPTIONS.map(item => {
+                const checked = draft.weekdays.includes(item.value) ? 'checked' : '';
+                return `
+                    <label class="fitness-check-chip">
+                        <input type="checkbox" value="${item.value}" ${checked} onchange="toggleFitnessPlanWeekday(${item.value}, this.checked)">
+                        <span>${safeHtml(item.label)}</span>
+                    </label>
+                `;
+            }).join('');
+        }
+
+        daysBox.innerHTML = draft.days.map((day, dayIndex) => `
+            <div class="fitness-plan-day-editor">
+                <div class="fitness-plan-day-editor-head">
+                    <div class="form-group" style="flex:1;margin:0;">
+                        <label>训练日名称</label>
+                        <input type="text" value="${safeHtml(day.name)}" oninput="updateFitnessPlanDayName(${dayIndex}, this.value)" placeholder="例如 A 日 / 推日">
+                    </div>
+                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="removeFitnessPlanDay(${dayIndex})" ${draft.days.length <= 1 ? 'disabled' : ''}>删除训练日</button>
+                </div>
+                <div class="fitness-plan-exercise-list">
+                    ${(day.exercises || []).map((exercise, exerciseIndex) => `
+                        <div class="fitness-plan-exercise-row">
+                            <input type="text" value="${safeHtml(exercise.name)}" placeholder="动作名" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'name', this.value)">
+                            <input type="number" min="1" step="1" value="${exercise.targetSets ?? 3}" placeholder="组数" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetSets', this.value)">
+                            <input type="text" value="${safeHtml(exercise.targetReps || '')}" placeholder="次数" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetReps', this.value)">
+                            <input type="number" min="0" step="0.5" value="${exercise.targetWeight ?? ''}" placeholder="目标重量" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetWeight', this.value)">
+                            <button type="button" class="btn btn-secondary todo-mini-btn" onclick="removeFitnessPlanExercise(${dayIndex}, ${exerciseIndex})">删</button>
+                        </div>
+                    `).join('') || '<div class="fitness-empty compact">还没有动作，先加一个。</div>'}
+                </div>
+                <div class="fitness-plan-day-actions">
+                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanExercise(${dayIndex})">+ 添加动作</button>
+                </div>
+            </div>
+        `).join('');
+
+        const deleteBtn = document.getElementById('delete-fitness-plan-btn');
+        if (deleteBtn) deleteBtn.style.display = currentFitnessPlanId ? '' : 'none';
     }
 
     window.renderFitnessPage = function renderFitnessPage() {
@@ -185,9 +302,130 @@
         if (!Array.isArray(data.fitnessPlans)) data.fitnessPlans = [];
         if (!Array.isArray(data.fitnessWorkouts)) data.fitnessWorkouts = [];
         data.bodyMetrics = service.normalizeBodyMetrics(data.bodyMetrics);
+        data.fitnessPlans = service.normalizeFitnessPlans(data.fitnessPlans);
         renderSummary();
         renderBodyMetricList();
+        renderPlanList();
         renderFitnessComingSoon();
+    };
+
+    window.openFitnessPlanModal = function openFitnessPlanModal(planId = '') {
+        const service = ensureService();
+        if (!service) return;
+        currentFitnessPlanId = planId || null;
+        const existing = currentFitnessPlanId
+            ? service.findFitnessPlan(getPlans(), currentFitnessPlanId)
+            : null;
+        fitnessPlanDraft = existing
+            ? service.normalizeFitnessPlan(JSON.parse(JSON.stringify(existing)))
+            : service.createFitnessPlanDraft();
+        renderPlanEditor();
+        document.getElementById('fitness-plan-modal')?.classList.add('active');
+        document.getElementById('fitness-plan-name')?.focus();
+    };
+
+    window.closeFitnessPlanModal = function closeFitnessPlanModal() {
+        document.getElementById('fitness-plan-modal')?.classList.remove('active');
+        currentFitnessPlanId = null;
+        fitnessPlanDraft = null;
+    };
+
+    window.toggleFitnessPlanWeekday = function toggleFitnessPlanWeekday(value, checked) {
+        const draft = ensurePlanDraft();
+        if (!draft) return;
+        const day = Number(value);
+        const set = new Set(draft.weekdays || []);
+        if (checked) set.add(day);
+        else set.delete(day);
+        draft.weekdays = Array.from(set);
+    };
+
+    window.addFitnessPlanDay = function addFitnessPlanDay() {
+        const service = ensureService();
+        const draft = ensurePlanDraft();
+        if (!service || !draft) return;
+        const index = draft.days.length + 1;
+        draft.days.push(service.normalizePlanDay({
+            name: String.fromCharCode(64 + Math.min(index, 26)) + ' 日',
+            exercises: [{ name: '', targetSets: 3, targetReps: '8-12' }]
+        }, {}, draft.days.length));
+        renderPlanEditor();
+    };
+
+    window.removeFitnessPlanDay = function removeFitnessPlanDay(dayIndex) {
+        const draft = ensurePlanDraft();
+        if (!draft || draft.days.length <= 1) return;
+        draft.days.splice(dayIndex, 1);
+        renderPlanEditor();
+    };
+
+    window.updateFitnessPlanDayName = function updateFitnessPlanDayName(dayIndex, value) {
+        const draft = ensurePlanDraft();
+        if (!draft?.days?.[dayIndex]) return;
+        draft.days[dayIndex].name = value;
+    };
+
+    window.addFitnessPlanExercise = function addFitnessPlanExercise(dayIndex) {
+        const service = ensureService();
+        const draft = ensurePlanDraft();
+        if (!service || !draft?.days?.[dayIndex]) return;
+        if (!Array.isArray(draft.days[dayIndex].exercises)) draft.days[dayIndex].exercises = [];
+        draft.days[dayIndex].exercises.push(service.normalizeExercise({
+            name: '',
+            targetSets: 3,
+            targetReps: '8-12'
+        }));
+        renderPlanEditor();
+    };
+
+    window.removeFitnessPlanExercise = function removeFitnessPlanExercise(dayIndex, exerciseIndex) {
+        const draft = ensurePlanDraft();
+        if (!draft?.days?.[dayIndex]?.exercises) return;
+        draft.days[dayIndex].exercises.splice(exerciseIndex, 1);
+        renderPlanEditor();
+    };
+
+    window.updateFitnessPlanExercise = function updateFitnessPlanExercise(dayIndex, exerciseIndex, field, value) {
+        const draft = ensurePlanDraft();
+        if (!draft?.days?.[dayIndex]?.exercises?.[exerciseIndex]) return;
+        draft.days[dayIndex].exercises[exerciseIndex][field] = value;
+    };
+
+    window.saveFitnessPlan = function saveFitnessPlan() {
+        const service = ensureService();
+        const draft = ensurePlanDraft();
+        if (!service || !draft) return;
+        const input = {
+            ...draft,
+            name: document.getElementById('fitness-plan-name')?.value || '',
+            goal: document.getElementById('fitness-plan-goal')?.value || 'general',
+            status: document.getElementById('fitness-plan-status')?.value || 'active',
+            notes: document.getElementById('fitness-plan-notes')?.value || ''
+        };
+        const result = service.upsertFitnessPlan(getPlans(), input, currentFitnessPlanId || '');
+        if (!result.ok) {
+            alert(result.message || '保存失败');
+            return;
+        }
+        data.fitnessPlans = result.plans;
+        if (typeof saveData === 'function' && !saveData()) return;
+        closeFitnessPlanModal();
+        renderFitnessPage();
+        if (typeof renderDashboard === 'function') renderDashboard();
+    };
+
+    window.deleteCurrentFitnessPlan = function deleteCurrentFitnessPlan() {
+        const service = ensureService();
+        if (!service || !currentFitnessPlanId) return;
+        if (!confirm('确定删除这个训练计划吗？')) return;
+        if (typeof markDeletedItem === 'function') {
+            markDeletedItem('fitnessPlans', currentFitnessPlanId, { reason: 'manual-delete' });
+        }
+        data.fitnessPlans = service.removeFitnessPlan(getPlans(), currentFitnessPlanId);
+        if (typeof saveData === 'function' && !saveData()) return;
+        closeFitnessPlanModal();
+        renderFitnessPage();
+        if (typeof renderDashboard === 'function') renderDashboard();
     };
 
     function fillBodyMetricForm(metric = null) {

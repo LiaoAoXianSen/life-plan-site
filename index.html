@@ -459,9 +459,12 @@
             <div class="page-header">
                 <div>
                     <div class="page-title">运动健身</div>
-                    <div class="page-subtitle">先记录身材变化，训练计划和训练日志会分阶段补齐。</div>
+                    <div class="page-subtitle">身材记录和训练计划已可用，训练日志会继续补齐。</div>
                 </div>
-                <button class="btn btn-primary" onclick="openBodyMetricModal()">+ 记录身材</button>
+                <div class="fitness-header-actions">
+                    <button class="btn btn-secondary" onclick="openFitnessPlanModal()">+ 训练计划</button>
+                    <button class="btn btn-primary" onclick="openBodyMetricModal()">+ 记录身材</button>
+                </div>
             </div>
 
             <div class="fitness-hero">
@@ -478,10 +481,17 @@
 
             <div class="fitness-section">
                 <div class="fitness-section-head">
+                    <div class="section-title">训练计划</div>
+                    <button class="btn btn-secondary todo-mini-btn" onclick="openFitnessPlanModal()">新建计划</button>
+                </div>
+                <div id="fitness-plan-list" class="fitness-plan-list"></div>
+            </div>
+
+            <div class="fitness-section">
+                <div class="fitness-section-head">
                     <div class="section-title">后续模块</div>
                 </div>
                 <div class="fitness-placeholder-grid">
-                    <div id="fitness-plan-placeholder"></div>
                     <div id="fitness-workout-placeholder"></div>
                 </div>
             </div>
@@ -1308,6 +1318,60 @@
                 <div class="habit-note-actions">
                     <button class="habit-note-skip-btn" id="habit-note-skip-btn" onclick="submitHabitNoteModal(false)">本次不填</button>
                     <button class="btn btn-primary" id="habit-note-save-btn" onclick="submitHabitNoteModal(true)">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 训练计划弹窗 -->
+    <div id="fitness-plan-modal" class="modal-overlay">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <div class="modal-title" id="fitness-plan-modal-title">新建训练计划</div>
+                <button class="close-btn" onclick="closeFitnessPlanModal()">×</button>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>计划名称</label>
+                    <input type="text" id="fitness-plan-name" placeholder="例如 推拉腿 / 全身训练">
+                </div>
+                <div class="form-group">
+                    <label>目标</label>
+                    <select id="fitness-plan-goal">
+                        <option value="general">综合提升</option>
+                        <option value="strength">力量</option>
+                        <option value="hypertrophy">增肌</option>
+                        <option value="fatLoss">减脂</option>
+                        <option value="endurance">耐力</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>状态</label>
+                    <select id="fitness-plan-status">
+                        <option value="active">进行中</option>
+                        <option value="paused">暂停</option>
+                        <option value="archived">归档</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>训练日（周几）</label>
+                <div id="fitness-plan-weekdays" class="fitness-check-row"></div>
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <textarea id="fitness-plan-notes" rows="2" placeholder="例如：健身房三分化，优先保证深蹲和卧推"></textarea>
+            </div>
+            <div class="fitness-plan-editor-head">
+                <div class="section-title">训练日与动作</div>
+                <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanDay()">+ 添加训练日</button>
+            </div>
+            <div id="fitness-plan-days-editor" class="fitness-plan-days-editor"></div>
+            <div class="modal-action-row">
+                <button class="btn btn-danger" id="delete-fitness-plan-btn" onclick="deleteCurrentFitnessPlan()">删除</button>
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="closeFitnessPlanModal()">取消</button>
+                    <button class="btn btn-primary" onclick="saveFitnessPlan()">保存</button>
                 </div>
             </div>
         </div>

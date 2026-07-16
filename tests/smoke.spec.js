@@ -105,6 +105,48 @@ test('fitness page can create body metric records', async ({ page }) => {
     expect(errors).toEqual([]);
 });
 
+test('fitness page can create training plans', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+        if (message.type() === 'error') errors.push(message.text());
+    });
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData());
+
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '运动健身' }).click();
+    await expect(page.locator('#page-fitness')).toBeVisible();
+
+    await page.locator('#page-fitness .btn.btn-secondary', { hasText: '训练计划' }).click();
+    await expect(page.locator('#fitness-plan-modal')).toBeVisible();
+    await page.fill('#fitness-plan-name', '推拉腿');
+    await page.selectOption('#fitness-plan-goal', 'hypertrophy');
+    await page.fill('#fitness-plan-notes', '健身房三分化');
+
+    const firstExercise = page.locator('.fitness-plan-exercise-row').first();
+    await firstExercise.locator('input').nth(0).fill('深蹲');
+    await firstExercise.locator('input').nth(1).fill('4');
+    await firstExercise.locator('input').nth(2).fill('6-8');
+    await firstExercise.locator('input').nth(3).fill('100');
+
+    await page.locator('#fitness-plan-modal .btn.btn-primary', { hasText: '保存' }).click();
+    await expect(page.locator('#fitness-plan-list')).toContainText('推拉腿');
+    await expect(page.locator('#fitness-plan-list')).toContainText('深蹲');
+    await expect(page.locator('#fitness-plan-list')).toContainText('增肌');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessPlans).toHaveLength(1);
+    expect(stored.fitnessPlans[0].name).toBe('推拉腿');
+    expect(stored.fitnessPlans[0].goal).toBe('hypertrophy');
+    expect(stored.fitnessPlans[0].days[0].exercises[0].name).toBe('深蹲');
+    expect(stored.fitnessPlans[0].days[0].exercises[0].targetSets).toBe(4);
+    expect(stored.fitnessPlans[0].days[0].exercises[0].targetWeight).toBe(100);
+    expect(errors).toEqual([]);
+});
+
 test('local save failure keeps recovery actions visible until retry succeeds', async ({ page }) => {
     const data = createEmptyData();
     await page.addInitScript(value => {

@@ -20,6 +20,30 @@
         { value: 'afterMeal', label: '饭后' }
     ];
 
+    const PLAN_GOAL_OPTIONS = [
+        { value: 'general', label: '综合提升' },
+        { value: 'strength', label: '力量' },
+        { value: 'hypertrophy', label: '增肌' },
+        { value: 'fatLoss', label: '减脂' },
+        { value: 'endurance', label: '耐力' }
+    ];
+
+    const PLAN_STATUS_OPTIONS = [
+        { value: 'active', label: '进行中' },
+        { value: 'paused', label: '暂停' },
+        { value: 'archived', label: '归档' }
+    ];
+
+    const WEEKDAY_OPTIONS = [
+        { value: 1, label: '周一' },
+        { value: 2, label: '周二' },
+        { value: 3, label: '周三' },
+        { value: 4, label: '周四' },
+        { value: 5, label: '周五' },
+        { value: 6, label: '周六' },
+        { value: 0, label: '周日' }
+    ];
+
     function create(options = {}) {
         const {
             getTodayStr = () => new Date().toISOString().slice(0, 10),
@@ -70,13 +94,189 @@
                 });
         }
 
+        function parsePositiveInt(value, fallback = null) {
+            if (value === '' || value === null || value === undefined) return fallback;
+            const num = Number(value);
+            if (!Number.isFinite(num) || num <= 0) return fallback;
+            return Math.round(num);
+        }
+
+        function parseNonNegativeNumber(value, fallback = null) {
+            if (value === '' || value === null || value === undefined) return fallback;
+            const num = Number(value);
+            if (!Number.isFinite(num) || num < 0) return fallback;
+            return Math.round(num * 10) / 10;
+        }
+
+        function normalizeWeekdays(list = []) {
+            const values = (Array.isArray(list) ? list : [])
+                .map(item => Number(item))
+                .filter(item => Number.isInteger(item) && item >= 0 && item <= 6);
+            return Array.from(new Set(values)).sort((a, b) => {
+                const orderA = a === 0 ? 7 : a;
+                const orderB = b === 0 ? 7 : b;
+                return orderA - orderB;
+            });
+        }
+
+        function normalizeExercise(raw = {}, fallback = {}) {
+            const name = String(raw.name ?? fallback.name ?? '').trim();
+            const exercise = {
+                id: raw.id || fallback.id || genId(),
+                name,
+                targetSets: parsePositiveInt(raw.targetSets ?? fallback.targetSets, 3) || 3,
+                targetReps: String(raw.targetReps ?? fallback.targetReps ?? '8-12').trim() || '8-12',
+                note: typeof (raw.note ?? fallback.note) === 'string' ? String(raw.note ?? fallback.note) : ''
+            };
+            const targetWeight = parseNonNegativeNumber(raw.targetWeight ?? fallback.targetWeight, null);
+            if (targetWeight !== null) exercise.targetWeight = targetWeight;
+            const restSec = parsePositiveInt(raw.restSec ?? fallback.restSec, null);
+            if (restSec !== null) exercise.restSec = restSec;
+            return exercise;
+        }
+
+        function normalizePlanDay(raw = {}, fallback = {}, index = 0) {
+            const exercises = (Array.isArray(raw.exercises) ? raw.exercises : (fallback.exercises || []))
+                .map(item => normalizeExercise(item))
+                .filter(item => item.name);
+            return {
+                id: raw.id || fallback.id || genId(),
+                name: String(raw.name ?? fallback.name ?? `训练日 ${index + 1}`).trim() || `训练日 ${index + 1}`,
+                exercises
+            };
+        }
+
+        function normalizeFitnessPlan(raw = {}, fallback = {}) {
+            const createdAt = raw.createdAt || fallback.createdAt || getNowLocal();
+            const daysSource = Array.isArray(raw.days) ? raw.days : (fallback.days || []);
+            const days = daysSource
+                .map((item, index) => normalizePlanDay(item, {}, index))
+                .filter(item => item.name);
+            const goal = PLAN_GOAL_OPTIONS.some(item => item.value === raw.goal)
+                ? raw.goal
+                : (PLAN_GOAL_OPTIONS.some(item => item.value === fallback.goal) ? fallback.goal : 'general');
+            const status = PLAN_STATUS_OPTIONS.some(item => item.value === raw.status)
+                ? raw.status
+                : (PLAN_STATUS_OPTIONS.some(item => item.value === fallback.status) ? fallback.status : 'active');
+            return {
+                id: raw.id || fallback.id || genId(),
+                name: String(raw.name ?? fallback.name ?? '').trim(),
+                goal,
+                status,
+                weekdays: normalizeWeekdays(raw.weekdays ?? fallback.weekdays ?? []),
+                notes: typeof (raw.notes ?? fallback.notes) === 'string' ? String(raw.notes ?? fallback.notes) : '',
+                days,
+                createdAt,
+                updatedAt: raw.updatedAt || fallback.updatedAt || createdAt
+            };
+        }
+
+        function normalizeFitnessPlans(list = []) {
+            return (Array.isArray(list) ? list : [])
+                .map(item => normalizeFitnessPlan(item))
+                .filter(item => item.id && item.name)
+                .sort((a, b) => {
+                    const statusOrder = { active: 0, paused: 1, archived: 2 };
+                    const statusDiff = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+                    if (statusDiff) return statusDiff;
+                    return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+                });
+        }
+
         function normalizeFitnessData(target = {}) {
             if (!target || typeof target !== 'object') return target;
             if (!Array.isArray(target.bodyMetrics)) target.bodyMetrics = [];
             if (!Array.isArray(target.fitnessPlans)) target.fitnessPlans = [];
             if (!Array.isArray(target.fitnessWorkouts)) target.fitnessWorkouts = [];
             target.bodyMetrics = normalizeBodyMetrics(target.bodyMetrics);
+            target.fitnessPlans = normalizeFitnessPlans(target.fitnessPlans);
             return target;
+        }
+
+        function getPlanGoalLabel(value = 'general') {
+            return PLAN_GOAL_OPTIONS.find(item => item.value === value)?.label || '综合提升';
+        }
+
+        function getPlanStatusLabel(value = 'active') {
+            return PLAN_STATUS_OPTIONS.find(item => item.value === value)?.label || '进行中';
+        }
+
+        function getWeekdayLabels(weekdays = []) {
+            const map = new Map(WEEKDAY_OPTIONS.map(item => [item.value, item.label]));
+            return normalizeWeekdays(weekdays).map(value => map.get(value)).filter(Boolean);
+        }
+
+        function countPlanExercises(plan = {}) {
+            return (plan.days || []).reduce((sum, day) => sum + ((day.exercises || []).length), 0);
+        }
+
+        function createFitnessPlanDraft(overrides = {}) {
+            return normalizeFitnessPlan({
+                name: '',
+                goal: 'general',
+                status: 'active',
+                weekdays: [1, 3, 5],
+                notes: '',
+                days: [
+                    {
+                        name: 'A 日',
+                        exercises: [
+                            { name: '深蹲', targetSets: 4, targetReps: '6-8' },
+                            { name: '卧推', targetSets: 4, targetReps: '6-8' }
+                        ]
+                    }
+                ],
+                ...overrides
+            });
+        }
+
+        function validateFitnessPlanInput(input = {}) {
+            const plan = normalizeFitnessPlan(input);
+            if (!plan.name) return { ok: false, message: '请填写计划名称', plan };
+            if (!plan.days.length) return { ok: false, message: '请至少添加一个训练日', plan };
+            if (plan.days.some(day => !day.exercises.length)) {
+                return { ok: false, message: '每个训练日至少要有一个动作', plan };
+            }
+            return { ok: true, message: '', plan };
+        }
+
+        function upsertFitnessPlan(list = [], input = {}, existingId = '') {
+            const validation = validateFitnessPlanInput(input);
+            if (!validation.ok) return validation;
+            const plans = normalizeFitnessPlans(list);
+            const stamp = getNowLocal();
+            if (existingId) {
+                const index = plans.findIndex(item => item.id === existingId);
+                if (index >= 0) {
+                    plans[index] = normalizeFitnessPlan({
+                        ...plans[index],
+                        ...validation.plan,
+                        id: existingId,
+                        createdAt: plans[index].createdAt,
+                        updatedAt: stamp
+                    });
+                    return { ok: true, message: '', plans: normalizeFitnessPlans(plans), plan: plans[index] };
+                }
+            }
+            const plan = normalizeFitnessPlan({
+                ...validation.plan,
+                id: genId(),
+                createdAt: stamp,
+                updatedAt: stamp
+            });
+            return { ok: true, message: '', plans: normalizeFitnessPlans([plan, ...plans]), plan };
+        }
+
+        function removeFitnessPlan(list = [], planId = '') {
+            return normalizeFitnessPlans(list).filter(item => item.id !== planId);
+        }
+
+        function getActiveFitnessPlans(list = []) {
+            return normalizeFitnessPlans(list).filter(item => item.status === 'active');
+        }
+
+        function findFitnessPlan(list = [], planId = '') {
+            return normalizeFitnessPlans(list).find(item => item.id === planId) || null;
         }
 
         function formatMetricValue(value, unit = '') {
@@ -217,14 +417,25 @@
         return {
             METRIC_FIELDS,
             CONDITION_OPTIONS,
+            PLAN_GOAL_OPTIONS,
+            PLAN_STATUS_OPTIONS,
+            WEEKDAY_OPTIONS,
             parseMetricNumber,
             hasAnyMetric,
             normalizeBodyMetric,
             normalizeBodyMetrics,
+            normalizeExercise,
+            normalizePlanDay,
+            normalizeFitnessPlan,
+            normalizeFitnessPlans,
             normalizeFitnessData,
             formatMetricValue,
             formatSignedChange,
             getConditionLabel,
+            getPlanGoalLabel,
+            getPlanStatusLabel,
+            getWeekdayLabels,
+            countPlanExercises,
             getLatestBodyMetric,
             getMetricSeries,
             getMetricChange,
@@ -233,13 +444,22 @@
             validateBodyMetricInput,
             upsertBodyMetric,
             removeBodyMetric,
-            findSameDayMetrics
+            findSameDayMetrics,
+            createFitnessPlanDraft,
+            validateFitnessPlanInput,
+            upsertFitnessPlan,
+            removeFitnessPlan,
+            getActiveFitnessPlans,
+            findFitnessPlan
         };
     }
 
     window.LifePlanFitnessService = {
         create,
         METRIC_FIELDS,
-        CONDITION_OPTIONS
+        CONDITION_OPTIONS,
+        PLAN_GOAL_OPTIONS,
+        PLAN_STATUS_OPTIONS,
+        WEEKDAY_OPTIONS
     };
 })();

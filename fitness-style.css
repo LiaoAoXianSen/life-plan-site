@@ -160,9 +160,149 @@
     line-height: 1.5;
 }
 
+.fitness-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.fitness-plan-list,
+.fitness-plan-days-editor {
+    display: grid;
+    gap: 12px;
+}
+
+.fitness-plan-card,
+.fitness-plan-day-editor {
+    background: var(--card-bg, #fff);
+    border: 1px solid rgba(33, 110, 78, 0.12);
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(24, 48, 36, 0.04);
+}
+
+.fitness-plan-card {
+    padding: 16px;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fitness-plan-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(24, 48, 36, 0.08);
+}
+
+.fitness-plan-head,
+.fitness-plan-day-editor-head,
+.fitness-plan-editor-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.fitness-plan-editor-head {
+    align-items: center;
+    margin: 8px 0 12px;
+}
+
+.fitness-plan-name {
+    font-size: 16px;
+    font-weight: 750;
+    color: #1f3d2f;
+}
+
+.fitness-plan-meta {
+    margin-top: 4px;
+    color: #708178;
+    font-size: 12px;
+}
+
+.fitness-plan-primary {
+    text-align: right;
+}
+
+.fitness-plan-primary strong {
+    display: block;
+    font-size: 22px;
+    color: #216e4e;
+}
+
+.fitness-plan-primary span {
+    color: #708178;
+    font-size: 12px;
+}
+
+.fitness-plan-days {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.fitness-plan-day-chip {
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(33, 110, 78, 0.06);
+}
+
+.fitness-plan-day-chip strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #1f3d2f;
+}
+
+.fitness-plan-day-chip span {
+    color: #4d5f56;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.fitness-plan-day-editor {
+    padding: 14px;
+}
+
+.fitness-plan-exercise-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.fitness-plan-exercise-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) 72px 88px 96px auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.fitness-plan-day-actions {
+    margin-top: 10px;
+}
+
+.fitness-check-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.fitness-check-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(33, 110, 78, 0.08);
+    color: #1f3d2f;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.fitness-check-chip input {
+    margin: 0;
+}
+
 .fitness-placeholder-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 12px;
 }
 
@@ -212,11 +352,20 @@
         grid-template-columns: 1fr;
     }
 
-    .fitness-metric-head {
+    .fitness-metric-head,
+    .fitness-plan-head,
+    .fitness-plan-day-editor-head,
+    .fitness-plan-editor-head,
+    .fitness-header-actions {
         flex-direction: column;
     }
 
-    .fitness-metric-primary {
+    .fitness-metric-primary,
+    .fitness-plan-primary {
         text-align: left;
+    }
+
+    .fitness-plan-exercise-row {
+        grid-template-columns: 1fr 1fr;
     }
 }
