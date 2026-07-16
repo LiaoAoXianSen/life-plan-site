@@ -142,9 +142,9 @@ test('fitness page can create training plans', async ({ page }) => {
     expect(stored.fitnessPlans).toHaveLength(1);
     expect(stored.fitnessPlans[0].name).toBe('推拉腿');
     expect(stored.fitnessPlans[0].goal).toBe('hypertrophy');
-    expect(stored.fitnessPlans[0].days[0].exercises[0].name).toBe('深蹲');
-    expect(stored.fitnessPlans[0].days[0].exercises[0].targetSets).toBe(4);
-    expect(stored.fitnessPlans[0].days[0].exercises[0].targetWeight).toBe(100);
+    expect(stored.fitnessPlans[0].exercises[0].name).toBe('深蹲');
+    expect(stored.fitnessPlans[0].exercises[0].targetSets).toBe(4);
+    expect(stored.fitnessPlans[0].exercises[0].targetWeight).toBe(100);
     expect(errors).toEqual([]);
 });
 
@@ -288,11 +288,11 @@ test('fitness live workout can complete sets and finish session', async ({ page 
     page.once('dialog', dialog => dialog.accept());
     await page.locator('#fitness-live-modal .btn.btn-primary', { hasText: '结束训练' }).click();
     await expect(page.locator('#fitness-live-modal')).toBeHidden();
-    await expect(page.locator('#fitness-workout-list')).toContainText('力量日 · A 日');
+    await expect(page.locator('#fitness-workout-list')).toContainText('力量日');
     await expect(page.locator('#fitness-workout-list')).toContainText('已完成');
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
-    const live = stored.fitnessWorkouts.find(item => item.title === '力量日 · A 日' || item.planId === 'plan-live');
+    const live = stored.fitnessWorkouts.find(item => item.title === '力量日' || item.planId === 'plan-live');
     expect(live).toBeTruthy();
     expect(live.status).toBe('done');
     expect(live.exercises[0].sets.some(set => set.done)).toBe(true);
@@ -339,20 +339,20 @@ test('fitness plan can pick exercises from library', async ({ page }) => {
     await page.locator('#page-fitness .btn', { hasText: '训练计划' }).first().click();
     await expect(page.locator('#fitness-plan-modal')).toBeVisible();
     await page.fill('#fitness-plan-name', '推日计划');
-    await page.locator('#fitness-plan-days-editor .btn', { hasText: '从动作库选择' }).click();
+    await page.locator('#fitness-plan-exercises-editor .btn', { hasText: '从动作库选择' }).click();
     await expect(page.locator('#fitness-library-modal')).toBeVisible();
     await page.locator('#fitness-modal-library-list .fitness-library-card', { hasText: '杠铃卧推' }).click();
     await expect(page.locator('#fitness-library-modal')).toBeHidden();
-    await expect(page.locator('#fitness-plan-days-editor .fitness-plan-exercise-row input[type="text"]').first()).toHaveValue('杠铃卧推');
+    await expect(page.locator('#fitness-plan-exercises-editor .fitness-plan-exercise-row input[type="text"]').first()).toHaveValue('杠铃卧推');
     await page.locator('#fitness-plan-modal .btn.btn-primary', { hasText: '保存' }).click();
     await expect(page.locator('#fitness-plan-list')).toContainText('推日计划');
     await expect(page.locator('#fitness-plan-list')).toContainText('杠铃卧推');
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.fitnessPlans).toHaveLength(1);
-    expect(stored.fitnessPlans[0].days[0].exercises[0].name).toBe('杠铃卧推');
-    expect(stored.fitnessPlans[0].days[0].exercises[0].targetSets).toBe(4);
-    expect(stored.fitnessPlans[0].days[0].exercises[0].targetWeight).toBe(60);
+    expect(stored.fitnessPlans[0].exercises[0].name).toBe('杠铃卧推');
+    expect(stored.fitnessPlans[0].exercises[0].targetSets).toBe(4);
+    expect(stored.fitnessPlans[0].exercises[0].targetWeight).toBe(60);
     expect(errors).toEqual([]);
 });
 

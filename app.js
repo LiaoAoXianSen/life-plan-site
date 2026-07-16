@@ -3789,7 +3789,7 @@
                     suggestion: null
                 };
             const fitnessAction = fitnessSnippet.suggestion
-                ? `<button class="btn btn-secondary todo-mini-btn" onclick="startWorkoutFromPlanDay(${escapeJsArg(fitnessSnippet.suggestion.planId)}, ${escapeJsArg(fitnessSnippet.suggestion.dayId)})">按计划开练</button>`
+                ? `<button class="btn btn-secondary todo-mini-btn" onclick="startLiveWorkoutFromPlan(${escapeJsArg(fitnessSnippet.suggestion.planId)})">按计划开练</button>`
                 : `<button class="btn btn-secondary todo-mini-btn" onclick="navigateToPage('fitness')">去健身页</button>`;
 
             container.innerHTML = `
@@ -3854,7 +3854,7 @@
                             <strong>计划 ${escapeHtml(fitnessSnippet.planText)}</strong>
                         </div>
                         ${fitnessSnippet.suggestion ? `
-                            <div class="command-row" onclick="startWorkoutFromPlanDay(${escapeJsArg(fitnessSnippet.suggestion.planId)}, ${escapeJsArg(fitnessSnippet.suggestion.dayId)})">
+                            <div class="command-row" onclick="startLiveWorkoutFromPlan(${escapeJsArg(fitnessSnippet.suggestion.planId)})">
                                 <span>今日建议：${escapeHtml(fitnessSnippet.suggestion.label)}</span>
                                 <strong>开练</strong>
                             </div>

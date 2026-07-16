@@ -232,7 +232,7 @@
         if (activeWorkout) {
             actionHtml = `<button class="btn btn-primary" onclick="resumeLiveWorkout(${safeJs(activeWorkout.id)})">继续训练：${safeHtml(service.getWorkoutTitle(activeWorkout))}</button>`;
         } else if (suggestion) {
-            actionHtml = `<button class="btn btn-primary" onclick="startLiveWorkoutFromPlanDay(${safeJs(suggestion.plan.id)}, ${safeJs(suggestion.day.id)})">按计划开练：${safeHtml(suggestion.plan.name)} · ${safeHtml(suggestion.day.name)}</button>`;
+            actionHtml = `<button class="btn btn-primary" onclick="startLiveWorkoutFromPlan(${safeJs(suggestion.plan.id)})">按计划开练：${safeHtml(suggestion.plan.name)}</button>`;
         } else {
             actionHtml = `<button class="btn btn-primary" onclick="startFreeLiveWorkout()">自由开练</button>`;
         }
@@ -463,15 +463,16 @@
         if (!plans.length) {
             container.innerHTML = `
                 <div class="empty-state">
-                    还没有训练计划。可以先建一个「推拉腿」或「全身训练」计划，方便后面直接开练。
+                    还没有训练计划。建一个「推拉腿」或「全身训练」，开练时直接选计划即可。
                 </div>
             `;
             return;
         }
         container.innerHTML = plans.map(plan => {
-            const weekdays = service.getWeekdayLabels(plan.weekdays).join(' / ') || '未设置训练日';
-            const exerciseCount = service.countPlanExercises(plan);
-            const dayCount = (plan.days || []).length;
+            const exercises = service.getPlanExercises(plan);
+            const exerciseCount = exercises.length;
+            const preview = exercises.map(item => item.name).filter(Boolean).slice(0, 6).join('、') || '暂无动作';
+            const more = exerciseCount > 6 ? ` 等 ${exerciseCount} 个` : '';
             return `
                 <article class="fitness-plan-card">
                     <div class="fitness-plan-head" onclick="openFitnessPlanModal(${safeJs(plan.id)})">
@@ -482,25 +483,15 @@
                             </div>
                         </div>
                         <div class="fitness-plan-primary">
-                            <strong>${dayCount}</strong>
-                            <span>训练日</span>
+                            <strong>${exerciseCount}</strong>
+                            <span>动作</span>
                         </div>
                     </div>
-                    <div class="fitness-chip-row" onclick="openFitnessPlanModal(${safeJs(plan.id)})">
-                        <span class="fitness-chip">${safeHtml(weekdays)}</span>
-                        <span class="fitness-chip">动作 <strong>${exerciseCount}</strong></span>
-                    </div>
+                    <div class="fitness-plan-preview" onclick="openFitnessPlanModal(${safeJs(plan.id)})">${safeHtml(preview)}${safeHtml(more)}</div>
                     ${plan.notes ? `<div class="fitness-metric-note" onclick="openFitnessPlanModal(${safeJs(plan.id)})">${safeHtml(plan.notes)}</div>` : ''}
-                    <div class="fitness-plan-days">
-                        ${(plan.days || []).map(day => `
-                            <div class="fitness-plan-day-chip">
-                                <div class="fitness-plan-day-main" onclick="openFitnessPlanModal(${safeJs(plan.id)})">
-                                    <strong>${safeHtml(day.name)}</strong>
-                                    <span>${(day.exercises || []).map(item => safeHtml(item.name)).join('、') || '暂无动作'}</span>
-                                </div>
-                                <button type="button" class="btn btn-secondary todo-mini-btn" onclick="event.stopPropagation(); startLiveWorkoutFromPlanDay(${safeJs(plan.id)}, ${safeJs(day.id)})">开练</button>
-                            </div>
-                        `).join('')}
+                    <div class="fitness-plan-card-actions">
+                        <button type="button" class="btn btn-primary todo-mini-btn" onclick="event.stopPropagation(); startLiveWorkoutFromPlan(${safeJs(plan.id)})">开练</button>
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="event.stopPropagation(); openFitnessPlanModal(${safeJs(plan.id)})">编辑</button>
                     </div>
                 </article>
             `;
@@ -511,21 +502,18 @@
         const service = ensureService();
         if (!service) return null;
         if (!fitnessPlanDraft) fitnessPlanDraft = service.createFitnessPlanDraft();
-        if (!Array.isArray(fitnessPlanDraft.days) || !fitnessPlanDraft.days.length) {
-            fitnessPlanDraft.days = [{ id: (typeof genId === 'function' ? genId() : `day-${Date.now()}`), name: 'A 日', exercises: [] }];
+        if (!Array.isArray(fitnessPlanDraft.exercises)) {
+            fitnessPlanDraft.exercises = service.getPlanExercises(fitnessPlanDraft);
         }
-        fitnessPlanDraft.days.forEach(day => {
-            if (!Array.isArray(day.exercises)) day.exercises = [];
-            if (!day.exercises.length) {
-                day.exercises.push({
-                    id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`),
-                    name: '',
-                    targetSets: 3,
-                    targetReps: '8-12'
-                });
-            }
-        });
-        if (!Array.isArray(fitnessPlanDraft.weekdays)) fitnessPlanDraft.weekdays = [];
+        if (!fitnessPlanDraft.exercises.length) {
+            fitnessPlanDraft.exercises = [{
+                id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`),
+                name: '',
+                targetSets: 3,
+                targetReps: '8-12'
+            }];
+        }
+        fitnessPlanDraft.weekdays = [];
         return fitnessPlanDraft;
     }
 
@@ -545,8 +533,9 @@
 
     function renderPlanEditor() {
         const service = ensureService();
-        const daysBox = document.getElementById('fitness-plan-days-editor');
-        if (!service || !daysBox) return;
+        const editorBox = document.getElementById('fitness-plan-exercises-editor')
+            || document.getElementById('fitness-plan-days-editor');
+        if (!service || !editorBox) return;
         const draft = ensurePlanDraft();
         if (!draft) return;
 
@@ -556,45 +545,25 @@
         document.getElementById('fitness-plan-status').value = draft.status || 'active';
         document.getElementById('fitness-plan-notes').value = draft.notes || '';
 
-        const weekdayBox = document.getElementById('fitness-plan-weekdays');
-        if (weekdayBox) {
-            weekdayBox.innerHTML = service.WEEKDAY_OPTIONS.map(item => {
-                const checked = draft.weekdays.includes(item.value) ? 'checked' : '';
-                return `
-                    <label class="fitness-check-chip">
-                        <input type="checkbox" value="${item.value}" ${checked} onchange="toggleFitnessPlanWeekday(${item.value}, this.checked)">
-                        <span>${safeHtml(item.label)}</span>
-                    </label>
-                `;
-            }).join('');
-        }
-
-        daysBox.innerHTML = draft.days.map((day, dayIndex) => `
-            <div class="fitness-plan-day-editor">
-                <div class="fitness-plan-day-editor-head">
-                    <div class="form-group" style="flex:1;margin:0;">
-                        <label>训练日名称</label>
-                        <input type="text" value="${safeHtml(day.name)}" oninput="updateFitnessPlanDayName(${dayIndex}, this.value)" placeholder="例如 A 日 / 推日">
-                    </div>
-                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="removeFitnessPlanDay(${dayIndex})" ${draft.days.length <= 1 ? 'disabled' : ''}>删除训练日</button>
-                </div>
+        editorBox.innerHTML = `
+            <div class="fitness-plan-day-editor fitness-plan-simple-editor">
                 <div class="fitness-plan-exercise-list">
-                    ${(day.exercises || []).map((exercise, exerciseIndex) => `
+                    ${(draft.exercises || []).map((exercise, exerciseIndex) => `
                         <div class="fitness-plan-exercise-row">
-                            <input type="text" list="fitness-exercise-datalist" value="${safeHtml(exercise.name)}" placeholder="动作名 / 可从动作库选择" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'name', this.value)" onchange="applyLibraryDefaultsToPlanExercise(${dayIndex}, ${exerciseIndex}, this.value)">
-                            <input type="number" min="1" step="1" value="${exercise.targetSets ?? 3}" placeholder="组数" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetSets', this.value)">
-                            <input type="text" value="${safeHtml(exercise.targetReps || '')}" placeholder="次数" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetReps', this.value)">
-                            <input type="number" min="0" step="0.5" value="${exercise.targetWeight ?? ''}" placeholder="目标重量" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetWeight', this.value)">
-                            <button type="button" class="btn btn-secondary todo-mini-btn" onclick="removeFitnessPlanExercise(${dayIndex}, ${exerciseIndex})">删</button>
+                            <input type="text" list="fitness-exercise-datalist" value="${safeHtml(exercise.name)}" placeholder="动作名" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'name', this.value)" onchange="applyLibraryDefaultsToPlanExercise(${exerciseIndex}, this.value)">
+                            <input type="number" min="1" step="1" value="${exercise.targetSets ?? 3}" placeholder="组" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetSets', this.value)">
+                            <input type="text" value="${safeHtml(exercise.targetReps || '')}" placeholder="次" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetReps', this.value)">
+                            <input type="number" min="0" step="0.5" value="${exercise.targetWeight ?? ''}" placeholder="kg" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetWeight', this.value)">
+                            <button type="button" class="btn btn-secondary todo-mini-btn" onclick="removeFitnessPlanExercise(${exerciseIndex})">删</button>
                         </div>
                     `).join('') || '<div class="fitness-empty compact">还没有动作，可从动作库选择，也可以手动添加。</div>'}
                 </div>
                 <div class="fitness-plan-day-actions">
-                    <button type="button" class="btn btn-primary todo-mini-btn" onclick="openExerciseLibraryPickerForPlan(${dayIndex})">从动作库选择</button>
-                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanExercise(${dayIndex})">+ 手动添加</button>
+                    <button type="button" class="btn btn-primary todo-mini-btn" onclick="openExerciseLibraryPickerForPlan()">从动作库选择</button>
+                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanExercise()">+ 手动添加</button>
                 </div>
             </div>
-        `).join('');
+        `;
 
         ensureExerciseDatalist();
         const deleteBtn = document.getElementById('delete-fitness-plan-btn');
@@ -625,7 +594,7 @@
         const service = ensureService();
         const planSelect = document.getElementById('fitness-workout-plan');
         const daySelect = document.getElementById('fitness-workout-day');
-        if (!service || !planSelect || !daySelect) return;
+        if (!service || !planSelect) return;
         const plans = service.normalizeFitnessPlans(getPlans());
         const draft = ensureWorkoutDraft();
         planSelect.innerHTML = [
@@ -633,19 +602,20 @@
             ...plans.map(plan => `<option value="${safeHtml(plan.id)}">${safeHtml(plan.name)}</option>`)
         ].join('');
         planSelect.value = draft?.planId || '';
-        const selectedPlan = plans.find(item => item.id === planSelect.value) || null;
-        daySelect.innerHTML = selectedPlan
-            ? selectedPlan.days.map(day => `<option value="${safeHtml(day.id)}">${safeHtml(day.name)}</option>`).join('')
-            : '<option value="">无训练日</option>';
-        if (selectedPlan) {
-            const dayId = draft?.dayId && selectedPlan.days.some(day => day.id === draft.dayId)
-                ? draft.dayId
-                : (selectedPlan.days[0]?.id || '');
-            daySelect.value = dayId;
-            daySelect.disabled = false;
-        } else {
+        if (daySelect) {
+            daySelect.innerHTML = '<option value="">—</option>';
             daySelect.value = '';
             daySelect.disabled = true;
+            const dayGroup = daySelect.closest('.form-group');
+            if (dayGroup) dayGroup.style.display = 'none';
+        }
+        const selectedPlan = plans.find(item => item.id === planSelect.value) || null;
+        if (selectedPlan && draft) {
+            draft.dayId = selectedPlan.days?.[0]?.id || '';
+            draft.dayName = '';
+        } else if (draft) {
+            draft.dayId = '';
+            draft.dayName = '';
         }
     }
 
@@ -897,8 +867,7 @@
             suggestion: overview.suggestion
                 ? {
                     planId: overview.suggestion.plan.id,
-                    dayId: overview.suggestion.day.id,
-                    label: `${overview.suggestion.plan.name} · ${overview.suggestion.day.name}`
+                    label: overview.suggestion.plan.name
                 }
                 : null
         };
@@ -926,10 +895,14 @@
     };
 
     window.startWorkoutFromPlanDay = function startWorkoutFromPlanDay(planId = '', dayId = '') {
-        startLiveWorkoutFromPlanDay(planId, dayId);
+        startLiveWorkoutFromPlan(planId);
     };
 
     window.startLiveWorkoutFromPlanDay = function startLiveWorkoutFromPlanDay(planId = '', dayId = '') {
+        startLiveWorkoutFromPlan(planId);
+    };
+
+    window.startLiveWorkoutFromPlan = function startLiveWorkoutFromPlan(planId = '') {
         const service = ensureService();
         if (!service) return;
         const active = service.findActiveWorkout(getWorkouts());
@@ -942,12 +915,11 @@
             alert('找不到对应的训练计划');
             return;
         }
-        const day = (plan.days || []).find(item => item.id === dayId) || plan.days?.[0];
-        if (!day) {
-            alert('这个计划还没有训练日');
+        if (!service.getPlanExercises(plan).length) {
+            alert('这个计划还没有动作');
             return;
         }
-        const workout = service.startLiveWorkout(service.createWorkoutFromPlanDay(plan, day));
+        const workout = service.startLiveWorkout(service.createWorkoutFromPlan(plan));
         const result = service.upsertFitnessWorkout(getWorkouts(), workout, '');
         if (!result.ok) {
             alert(result.message || '开练失败');
@@ -1179,11 +1151,6 @@
         document.getElementById('fitness-library-modal')?.classList.add('active');
     };
 
-    window.openExerciseLibraryPickerForPlan = function openExerciseLibraryPickerForPlan(dayIndex = 0) {
-        syncPlanDraftFromForm();
-        openExerciseLibraryModal({ mode: 'plan', dayIndex });
-    };
-
     window.openExerciseLibraryPickerForLive = function openExerciseLibraryPickerForLive() {
         openExerciseLibraryModal({ mode: 'live' });
     };
@@ -1205,19 +1172,19 @@
         if (mode === 'plan') {
             syncPlanDraftFromForm();
             const draft = ensurePlanDraft();
-            const dayIndex = Number.isInteger(libraryPicker?.dayIndex) ? libraryPicker.dayIndex : 0;
-            if (!draft?.days?.[dayIndex]) return;
-            if (!Array.isArray(draft.days[dayIndex].exercises)) draft.days[dayIndex].exercises = [];
+            if (!draft) return;
+            if (!Array.isArray(draft.exercises)) draft.exercises = [];
             const nextExercise = service.normalizeExercise({
                 name: item.name,
                 targetSets: item.defaultSets,
                 targetReps: item.defaultReps,
                 targetWeight: item.defaultWeight,
-                note: item.note
+                note: item.note,
+                restSec: item.restSec
             });
-            const emptyIndex = draft.days[dayIndex].exercises.findIndex(entry => !String(entry?.name || '').trim());
-            if (emptyIndex >= 0) draft.days[dayIndex].exercises[emptyIndex] = nextExercise;
-            else draft.days[dayIndex].exercises.push(nextExercise);
+            const emptyIndex = draft.exercises.findIndex(entry => !String(entry?.name || '').trim());
+            if (emptyIndex >= 0) draft.exercises[emptyIndex] = nextExercise;
+            else draft.exercises.push(nextExercise);
             closeExerciseLibraryModal();
             renderPlanEditor();
             return;
@@ -1244,11 +1211,11 @@
         openExerciseLibraryItemModal(exerciseId);
     };
 
-    window.applyLibraryDefaultsToPlanExercise = function applyLibraryDefaultsToPlanExercise(dayIndex, exerciseIndex, name = '') {
+    window.applyLibraryDefaultsToPlanExercise = function applyLibraryDefaultsToPlanExercise(exerciseIndex, name = '') {
         const service = ensureService();
         const draft = ensurePlanDraft();
-        if (!service || !draft?.days?.[dayIndex]?.exercises?.[exerciseIndex]) return;
-        const exercise = draft.days[dayIndex].exercises[exerciseIndex];
+        if (!service || !draft?.exercises?.[exerciseIndex]) return;
+        const exercise = draft.exercises[exerciseIndex];
         exercise.name = name;
         const item = service.findExerciseLibraryByName(getLibrary({ seedDefaults: false }), name);
         if (!item) return;
@@ -1258,6 +1225,7 @@
             exercise.targetWeight = item.defaultWeight;
         }
         if (!exercise.note) exercise.note = item.note || '';
+        if (exercise.restSec == null && item.restSec != null) exercise.restSec = item.restSec;
         renderPlanEditor();
     };
 
@@ -1341,28 +1309,14 @@
         }
         const plan = service.findFitnessPlan(getPlans(), planId);
         draft.planName = plan?.name || '';
-        const day = plan?.days?.[0] || null;
-        draft.dayId = day?.id || '';
-        draft.dayName = day?.name || '';
-        if (!draft.title || draft.title === '自由训练') {
-            draft.title = service.getWorkoutTitle(draft);
+        draft.dayId = plan?.days?.[0]?.id || '';
+        draft.dayName = '';
+        if (!draft.title || draft.title === '自由训练' || String(draft.title).includes('·')) {
+            draft.title = plan?.name || '自由训练';
             document.getElementById('fitness-workout-title').value = draft.title;
         }
-        renderWorkoutSourceOptions();
-    };
-
-    window.onFitnessWorkoutDayChange = function onFitnessWorkoutDayChange() {
-        const service = ensureService();
-        const draft = ensureWorkoutDraft();
-        if (!service || !draft) return;
-        const plan = service.findFitnessPlan(getPlans(), draft.planId || document.getElementById('fitness-workout-plan')?.value || '');
-        const dayId = document.getElementById('fitness-workout-day')?.value || '';
-        const day = (plan?.days || []).find(item => item.id === dayId) || null;
-        draft.dayId = day?.id || '';
-        draft.dayName = day?.name || '';
-        draft.planName = plan?.name || draft.planName || '';
-        if (day && confirm('要用该训练日的动作覆盖当前编辑内容吗？')) {
-            const generated = service.createWorkoutFromPlanDay(plan, day, {
+        if (plan && service.getPlanExercises(plan).length && confirm('要用该计划的动作覆盖当前编辑内容吗？')) {
+            const generated = service.createWorkoutFromPlan(plan, {
                 date: document.getElementById('fitness-workout-date')?.value || draft.date,
                 status: document.getElementById('fitness-workout-status')?.value || draft.status,
                 notes: document.getElementById('fitness-workout-notes')?.value || draft.notes,
@@ -1372,10 +1326,11 @@
             renderWorkoutEditor();
             return;
         }
-        if (!draft.title || draft.title.includes('·') || draft.title === '自由训练') {
-            draft.title = service.getWorkoutTitle(draft);
-            document.getElementById('fitness-workout-title').value = draft.title;
-        }
+        renderWorkoutSourceOptions();
+    };
+
+    window.onFitnessWorkoutDayChange = function onFitnessWorkoutDayChange() {
+        // Training-day selector removed; keep no-op for old markup safety.
     };
 
     window.addFitnessWorkoutExercise = function addFitnessWorkoutExercise() {
@@ -1438,9 +1393,7 @@
         const draft = ensureWorkoutDraft();
         if (!service || !draft) return;
         const planId = document.getElementById('fitness-workout-plan')?.value || '';
-        const dayId = document.getElementById('fitness-workout-day')?.value || '';
         const plan = planId ? service.findFitnessPlan(getPlans(), planId) : null;
-        const day = plan ? (plan.days || []).find(item => item.id === dayId) : null;
         const input = {
             ...draft,
             date: document.getElementById('fitness-workout-date')?.value || '',
@@ -1450,8 +1403,8 @@
             notes: document.getElementById('fitness-workout-notes')?.value || '',
             planId: plan?.id || '',
             planName: plan?.name || '',
-            dayId: day?.id || '',
-            dayName: day?.name || ''
+            dayId: plan?.days?.[0]?.id || '',
+            dayName: ''
         };
         const result = service.upsertFitnessWorkout(getWorkouts(), input, currentFitnessWorkoutId || '');
         if (!result.ok) {
@@ -1486,9 +1439,17 @@
         const existing = currentFitnessPlanId
             ? service.findFitnessPlan(getPlans(), currentFitnessPlanId)
             : null;
-        fitnessPlanDraft = existing
-            ? service.normalizeFitnessPlan(JSON.parse(JSON.stringify(existing)))
-            : service.createFitnessPlanDraft();
+        if (existing) {
+            const normalized = service.normalizeFitnessPlan(JSON.parse(JSON.stringify(existing)));
+            fitnessPlanDraft = {
+                ...normalized,
+                exercises: service.getPlanExercises(normalized).length
+                    ? service.getPlanExercises(normalized)
+                    : [{ id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`), name: '', targetSets: 3, targetReps: '8-12' }]
+            };
+        } else {
+            fitnessPlanDraft = service.createFitnessPlanDraft();
+        }
         renderPlanEditor();
         document.getElementById('fitness-plan-modal')?.classList.add('active');
         document.getElementById('fitness-plan-name')?.focus();
@@ -1500,47 +1461,17 @@
         fitnessPlanDraft = null;
     };
 
-    window.toggleFitnessPlanWeekday = function toggleFitnessPlanWeekday(value, checked) {
-        const draft = ensurePlanDraft();
-        if (!draft) return;
-        const day = Number(value);
-        const set = new Set(draft.weekdays || []);
-        if (checked) set.add(day);
-        else set.delete(day);
-        draft.weekdays = Array.from(set);
+    window.openExerciseLibraryPickerForPlan = function openExerciseLibraryPickerForPlan() {
+        syncPlanDraftFromForm();
+        openExerciseLibraryModal({ mode: 'plan' });
     };
 
-    window.addFitnessPlanDay = function addFitnessPlanDay() {
+    window.addFitnessPlanExercise = function addFitnessPlanExercise() {
         const service = ensureService();
         const draft = ensurePlanDraft();
         if (!service || !draft) return;
-        const index = draft.days.length + 1;
-        draft.days.push(service.normalizePlanDay({
-            name: String.fromCharCode(64 + Math.min(index, 26)) + ' 日',
-            exercises: [{ name: '', targetSets: 3, targetReps: '8-12' }]
-        }, {}, draft.days.length));
-        renderPlanEditor();
-    };
-
-    window.removeFitnessPlanDay = function removeFitnessPlanDay(dayIndex) {
-        const draft = ensurePlanDraft();
-        if (!draft || draft.days.length <= 1) return;
-        draft.days.splice(dayIndex, 1);
-        renderPlanEditor();
-    };
-
-    window.updateFitnessPlanDayName = function updateFitnessPlanDayName(dayIndex, value) {
-        const draft = ensurePlanDraft();
-        if (!draft?.days?.[dayIndex]) return;
-        draft.days[dayIndex].name = value;
-    };
-
-    window.addFitnessPlanExercise = function addFitnessPlanExercise(dayIndex) {
-        const service = ensureService();
-        const draft = ensurePlanDraft();
-        if (!service || !draft?.days?.[dayIndex]) return;
-        if (!Array.isArray(draft.days[dayIndex].exercises)) draft.days[dayIndex].exercises = [];
-        draft.days[dayIndex].exercises.push(service.normalizeExercise({
+        if (!Array.isArray(draft.exercises)) draft.exercises = [];
+        draft.exercises.push(service.normalizeExercise({
             name: '',
             targetSets: 3,
             targetReps: '8-12'
@@ -1548,17 +1479,25 @@
         renderPlanEditor();
     };
 
-    window.removeFitnessPlanExercise = function removeFitnessPlanExercise(dayIndex, exerciseIndex) {
+    window.removeFitnessPlanExercise = function removeFitnessPlanExercise(exerciseIndex) {
         const draft = ensurePlanDraft();
-        if (!draft?.days?.[dayIndex]?.exercises) return;
-        draft.days[dayIndex].exercises.splice(exerciseIndex, 1);
+        if (!draft?.exercises) return;
+        draft.exercises.splice(exerciseIndex, 1);
+        if (!draft.exercises.length) {
+            draft.exercises.push({
+                id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`),
+                name: '',
+                targetSets: 3,
+                targetReps: '8-12'
+            });
+        }
         renderPlanEditor();
     };
 
-    window.updateFitnessPlanExercise = function updateFitnessPlanExercise(dayIndex, exerciseIndex, field, value) {
+    window.updateFitnessPlanExercise = function updateFitnessPlanExercise(exerciseIndex, field, value) {
         const draft = ensurePlanDraft();
-        if (!draft?.days?.[dayIndex]?.exercises?.[exerciseIndex]) return;
-        draft.days[dayIndex].exercises[exerciseIndex][field] = value;
+        if (!draft?.exercises?.[exerciseIndex]) return;
+        draft.exercises[exerciseIndex][field] = value;
     };
 
     window.saveFitnessPlan = function saveFitnessPlan() {
@@ -1570,7 +1509,9 @@
             name: document.getElementById('fitness-plan-name')?.value || '',
             goal: document.getElementById('fitness-plan-goal')?.value || 'general',
             status: document.getElementById('fitness-plan-status')?.value || 'active',
-            notes: document.getElementById('fitness-plan-notes')?.value || ''
+            notes: document.getElementById('fitness-plan-notes')?.value || '',
+            weekdays: [],
+            exercises: draft.exercises || []
         };
         const result = service.upsertFitnessPlan(getPlans(), input, currentFitnessPlanId || '');
         if (!result.ok) {

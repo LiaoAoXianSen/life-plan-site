@@ -5,14 +5,17 @@
         { key: 'chest', label: '胸围', unit: 'cm', step: '0.1' },
         { key: 'waist', label: '腰围', unit: 'cm', step: '0.1' },
         { key: 'hips', label: '臀围', unit: 'cm', step: '0.1' },
-        { key: 'leftArm', label: '左臂围', unit: 'cm', step: '0.1' },
-        { key: 'rightArm', label: '右臂围', unit: 'cm', step: '0.1' },
-        { key: 'leftThigh', label: '左大腿围', unit: 'cm', step: '0.1' },
-        { key: 'rightThigh', label: '右大腿围', unit: 'cm', step: '0.1' },
+        { key: 'arm', label: '臂围', unit: 'cm', step: '0.1' },
+        { key: 'thigh', label: '大腿围', unit: 'cm', step: '0.1' },
         { key: 'calf', label: '小腿围', unit: 'cm', step: '0.1' },
         { key: 'shoulder', label: '肩围', unit: 'cm', step: '0.1' },
         { key: 'height', label: '身高', unit: 'cm', step: '0.1' }
     ];
+
+    const LEGACY_METRIC_ALIASES = {
+        arm: ['leftArm', 'rightArm', 'arm'],
+        thigh: ['leftThigh', 'rightThigh', 'thigh']
+    };
 
     const CONDITION_OPTIONS = [
         { value: 'unknown', label: '不确定' },
@@ -120,6 +123,24 @@
             return METRIC_FIELDS.some(field => parseMetricNumber(metric[field.key]) !== null);
         }
 
+        function pickMetricValue(raw = {}, fallback = {}, key = '') {
+            const aliases = LEGACY_METRIC_ALIASES[key] || [key];
+            const values = [];
+            aliases.forEach(alias => {
+                const fromRaw = parseMetricNumber(raw[alias]);
+                if (fromRaw !== null) values.push(fromRaw);
+            });
+            if (!values.length) {
+                aliases.forEach(alias => {
+                    const fromFallback = parseMetricNumber(fallback[alias]);
+                    if (fromFallback !== null) values.push(fromFallback);
+                });
+            }
+            if (!values.length) return null;
+            // Old left/right pairs collapse to one number (prefer larger side).
+            return Math.max(...values);
+        }
+
         function normalizeBodyMetric(raw = {}, fallback = {}) {
             const createdAt = raw.createdAt || fallback.createdAt || getNowLocal();
             const date = String(raw.date || fallback.date || getTodayStr()).slice(0, 10);
@@ -135,7 +156,7 @@
                 updatedAt: raw.updatedAt || fallback.updatedAt || createdAt
             };
             METRIC_FIELDS.forEach(field => {
-                const value = parseMetricNumber(raw[field.key] ?? fallback[field.key]);
+                const value = pickMetricValue(raw, fallback, field.key);
                 if (value !== null) metric[field.key] = value;
                 else delete metric[field.key];
             });
@@ -200,17 +221,46 @@
                 .filter(item => item.name);
             return {
                 id: raw.id || fallback.id || genId(),
-                name: String(raw.name ?? fallback.name ?? `训练日 ${index + 1}`).trim() || `训练日 ${index + 1}`,
+                name: String(raw.name ?? fallback.name ?? `训练 ${index + 1}`).trim() || `训练 ${index + 1}`,
                 exercises
             };
         }
 
+        function collectPlanExercises(raw = {}, fallback = {}) {
+            const topLevel = Array.isArray(raw.exercises)
+                ? raw.exercises
+                : (Array.isArray(fallback.exercises) ? fallback.exercises : null);
+            if (topLevel) {
+                return topLevel.map(item => normalizeExercise(item)).filter(item => item.name);
+            }
+            const daysSource = Array.isArray(raw.days) ? raw.days : (fallback.days || []);
+            return daysSource
+                .flatMap(day => (Array.isArray(day?.exercises) ? day.exercises : []))
+                .map(item => normalizeExercise(item))
+                .filter(item => item.name);
+        }
+
+        function getPlanExercises(plan = {}) {
+            if (Array.isArray(plan.exercises) && plan.exercises.length) {
+                return plan.exercises.map(item => normalizeExercise(item)).filter(item => item.name);
+            }
+            return (plan.days || [])
+                .flatMap(day => day.exercises || [])
+                .map(item => normalizeExercise(item))
+                .filter(item => item.name);
+        }
+
         function normalizeFitnessPlan(raw = {}, fallback = {}) {
             const createdAt = raw.createdAt || fallback.createdAt || getNowLocal();
-            const daysSource = Array.isArray(raw.days) ? raw.days : (fallback.days || []);
-            const days = daysSource
-                .map((item, index) => normalizePlanDay(item, {}, index))
-                .filter(item => item.name);
+            const name = String(raw.name ?? fallback.name ?? '').trim();
+            const exercises = collectPlanExercises(raw, fallback);
+            const dayId = (Array.isArray(raw.days) && raw.days[0]?.id)
+                || (Array.isArray(fallback.days) && fallback.days[0]?.id)
+                || genId();
+            // Plans are now a named exercise list. Keep a single mirrored day for older data/workouts.
+            const days = exercises.length
+                ? [{ id: dayId, name: name || '训练', exercises }]
+                : [];
             const goal = PLAN_GOAL_OPTIONS.some(item => item.value === raw.goal)
                 ? raw.goal
                 : (PLAN_GOAL_OPTIONS.some(item => item.value === fallback.goal) ? fallback.goal : 'general');
@@ -219,11 +269,12 @@
                 : (PLAN_STATUS_OPTIONS.some(item => item.value === fallback.status) ? fallback.status : 'active');
             return {
                 id: raw.id || fallback.id || genId(),
-                name: String(raw.name ?? fallback.name ?? '').trim(),
+                name,
                 goal,
                 status,
-                weekdays: normalizeWeekdays(raw.weekdays ?? fallback.weekdays ?? []),
+                weekdays: [],
                 notes: typeof (raw.notes ?? fallback.notes) === 'string' ? String(raw.notes ?? fallback.notes) : '',
+                exercises,
                 days,
                 createdAt,
                 updatedAt: raw.updatedAt || fallback.updatedAt || createdAt
@@ -638,31 +689,34 @@
         }
 
         function countPlanExercises(plan = {}) {
-            return (plan.days || []).reduce((sum, day) => sum + ((day.exercises || []).length), 0);
+            return getPlanExercises(plan).length;
         }
 
         function createFitnessPlanDraft(overrides = {}) {
             const stamp = getNowLocal();
+            const dayId = genId();
             // Keep empty exercise placeholders for the editor; full normalize would strip them.
+            const exercises = [
+                {
+                    id: genId(),
+                    name: '',
+                    targetSets: 3,
+                    targetReps: '8-12'
+                }
+            ];
             return {
                 id: genId(),
                 name: '',
                 goal: 'general',
                 status: 'active',
-                weekdays: [1, 3, 5],
+                weekdays: [],
                 notes: '',
+                exercises,
                 days: [
                     {
-                        id: genId(),
-                        name: 'A 日',
-                        exercises: [
-                            {
-                                id: genId(),
-                                name: '',
-                                targetSets: 3,
-                                targetReps: '8-12'
-                            }
-                        ]
+                        id: dayId,
+                        name: '训练',
+                        exercises
                     }
                 ],
                 createdAt: stamp,
@@ -674,10 +728,7 @@
         function validateFitnessPlanInput(input = {}) {
             const plan = normalizeFitnessPlan(input);
             if (!plan.name) return { ok: false, message: '请填写计划名称', plan };
-            if (!plan.days.length) return { ok: false, message: '请至少添加一个训练日', plan };
-            if (plan.days.some(day => !day.exercises.length)) {
-                return { ok: false, message: '每个训练日至少要有一个动作', plan };
-            }
+            if (!plan.exercises.length) return { ok: false, message: '请至少添加一个动作', plan };
             return { ok: true, message: '', plan };
         }
 
@@ -742,30 +793,42 @@
             return (workout.exercises || []).reduce((sum, exercise) => sum + ((exercise.sets || []).length), 0);
         }
 
-        function createWorkoutFromPlanDay(plan = {}, day = {}, overrides = {}) {
+        function createWorkoutFromPlan(plan = {}, overrides = {}) {
             const sourcePlan = normalizeFitnessPlan(plan);
-            const sourceDay = normalizePlanDay(day);
+            const exercises = getPlanExercises(sourcePlan);
+            const day = sourcePlan.days?.[0] || null;
             return normalizeFitnessWorkout({
                 date: getTodayStr(),
                 status: 'planned',
                 planId: sourcePlan.id || '',
                 planName: sourcePlan.name || '',
-                dayId: sourceDay.id || '',
-                dayName: sourceDay.name || '',
-                title: sourcePlan.name && sourceDay.name
-                    ? `${sourcePlan.name} · ${sourceDay.name}`
-                    : (sourceDay.name || sourcePlan.name || '今日训练'),
+                dayId: day?.id || '',
+                dayName: '',
+                title: sourcePlan.name || '今日训练',
                 notes: '',
-                exercises: (sourceDay.exercises || []).map(exercise => normalizeWorkoutExercise({
+                exercises: exercises.map(exercise => normalizeWorkoutExercise({
                     name: exercise.name,
                     targetSets: exercise.targetSets,
                     targetReps: exercise.targetReps,
                     targetWeight: exercise.targetWeight,
                     note: exercise.note,
+                    restSec: exercise.restSec,
                     sets: createDefaultSets(exercise.targetSets, exercise)
                 })),
                 ...overrides
             });
+        }
+
+        function createWorkoutFromPlanDay(plan = {}, day = {}, overrides = {}) {
+            // Backward-compatible wrapper: plans no longer use multi-day structure.
+            if (day && Array.isArray(day.exercises) && day.exercises.length) {
+                return createWorkoutFromPlan({
+                    ...plan,
+                    exercises: day.exercises,
+                    days: [day]
+                }, overrides);
+            }
+            return createWorkoutFromPlan(plan, overrides);
         }
 
         function createFitnessWorkoutDraft(overrides = {}) {
@@ -865,20 +928,15 @@
             };
         }
 
-        function suggestTodayPlanDay(plans = [], dateStr = getTodayStr()) {
+        function suggestTodayPlan(plans = [], dateStr = getTodayStr()) {
             const weekday = new Date(`${dateStr}T00:00:00`).getDay();
-            const activePlans = getActiveFitnessPlans(plans);
-            for (const plan of activePlans) {
-                if ((plan.weekdays || []).includes(weekday) && (plan.days || []).length) {
-                    const dayIndex = Math.max(0, (plan.weekdays || []).indexOf(weekday));
-                    const day = plan.days[dayIndex % plan.days.length] || plan.days[0];
-                    return { plan, day, weekday };
-                }
-            }
-            if (activePlans[0]?.days?.length) {
-                return { plan: activePlans[0], day: activePlans[0].days[0], weekday };
-            }
-            return null;
+            const activePlans = getActiveFitnessPlans(plans).filter(plan => getPlanExercises(plan).length);
+            if (!activePlans.length) return null;
+            return { plan: activePlans[0], day: activePlans[0].days?.[0] || null, weekday };
+        }
+
+        function suggestTodayPlanDay(plans = [], dateStr = getTodayStr()) {
+            return suggestTodayPlan(plans, dateStr);
         }
 
         function buildFitnessOverview({ bodyMetrics = [], fitnessPlans = [], fitnessWorkouts = [] } = {}) {
@@ -886,7 +944,7 @@
             const workoutSummary = buildWorkoutSummary(fitnessWorkouts, 30);
             const plans = normalizeFitnessPlans(fitnessPlans);
             const activePlans = plans.filter(item => item.status === 'active');
-            const suggestion = suggestTodayPlanDay(plans);
+            const suggestion = suggestTodayPlan(plans);
             return {
                 metricSummary,
                 workoutSummary,
@@ -1078,6 +1136,7 @@
             getWeekdayLabels,
             getMuscleLabel,
             countPlanExercises,
+            getPlanExercises,
             getWorkoutStatusLabel,
             getWorkoutTitle,
             countCompletedSets,
@@ -1087,6 +1146,7 @@
             getMetricChange,
             buildBodyMetricSummary,
             buildWorkoutSummary,
+            suggestTodayPlan,
             suggestTodayPlanDay,
             buildFitnessOverview,
             createBodyMetricDraft,
@@ -1101,6 +1161,7 @@
             getActiveFitnessPlans,
             findFitnessPlan,
             createDefaultSets,
+            createWorkoutFromPlan,
             createWorkoutFromPlanDay,
             createFitnessWorkoutDraft,
             validateFitnessWorkoutInput,

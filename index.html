@@ -1361,12 +1361,8 @@
                     <select id="fitness-workout-plan" onchange="onFitnessWorkoutPlanChange()"></select>
                 </div>
                 <div class="form-group">
-                    <label>训练日</label>
-                    <select id="fitness-workout-day" onchange="onFitnessWorkoutDayChange()"></select>
-                </div>
-                <div class="form-group">
                     <label>标题</label>
-                    <input type="text" id="fitness-workout-title" placeholder="例如 推拉腿 · A 日">
+                    <input type="text" id="fitness-workout-title" placeholder="例如 推拉腿 / 全身训练">
                 </div>
             </div>
             <div class="form-group">
@@ -1505,7 +1501,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label>计划名称</label>
-                    <input type="text" id="fitness-plan-name" placeholder="例如 推拉腿 / 全身训练">
+                    <input type="text" id="fitness-plan-name" placeholder="例如 推日 / 拉日 / 腿日">
                 </div>
                 <div class="form-group">
                     <label>目标</label>
@@ -1527,18 +1523,16 @@
                 </div>
             </div>
             <div class="form-group">
-                <label>训练日（周几）</label>
-                <div id="fitness-plan-weekdays" class="fitness-check-row"></div>
-            </div>
-            <div class="form-group">
                 <label>备注</label>
-                <textarea id="fitness-plan-notes" rows="2" placeholder="例如：健身房三分化，优先保证深蹲和卧推"></textarea>
+                <textarea id="fitness-plan-notes" rows="2" placeholder="可选：训练重点、器械偏好等"></textarea>
             </div>
             <div class="fitness-plan-editor-head">
-                <div class="section-title">训练日与动作</div>
-                <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanDay()">+ 添加训练日</button>
+                <div>
+                    <div class="section-title">动作列表</div>
+                    <div class="fitness-plan-editor-hint">开练时直接选这个计划，不用再分训练日。</div>
+                </div>
             </div>
-            <div id="fitness-plan-days-editor" class="fitness-plan-days-editor"></div>
+            <div id="fitness-plan-exercises-editor" class="fitness-plan-days-editor"></div>
             <div class="modal-action-row">
                 <button class="btn btn-danger" id="delete-fitness-plan-btn" onclick="deleteCurrentFitnessPlan()">删除</button>
                 <div class="modal-action-right">
@@ -1596,20 +1590,12 @@
                     <input type="number" id="body-metric-hips" step="0.1" min="0" placeholder="可选">
                 </div>
                 <div class="form-group">
-                    <label>左臂围 (cm)</label>
-                    <input type="number" id="body-metric-leftArm" step="0.1" min="0" placeholder="可选">
+                    <label>臂围 (cm)</label>
+                    <input type="number" id="body-metric-arm" step="0.1" min="0" placeholder="可选">
                 </div>
                 <div class="form-group">
-                    <label>右臂围 (cm)</label>
-                    <input type="number" id="body-metric-rightArm" step="0.1" min="0" placeholder="可选">
-                </div>
-                <div class="form-group">
-                    <label>左大腿围 (cm)</label>
-                    <input type="number" id="body-metric-leftThigh" step="0.1" min="0" placeholder="可选">
-                </div>
-                <div class="form-group">
-                    <label>右大腿围 (cm)</label>
-                    <input type="number" id="body-metric-rightThigh" step="0.1" min="0" placeholder="可选">
+                    <label>大腿围 (cm)</label>
+                    <input type="number" id="body-metric-thigh" step="0.1" min="0" placeholder="可选">
                 </div>
                 <div class="form-group">
                     <label>小腿围 (cm)</label>

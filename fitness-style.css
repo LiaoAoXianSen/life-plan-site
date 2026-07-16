@@ -292,6 +292,31 @@
     font-size: 12px;
 }
 
+.fitness-plan-preview {
+    margin-top: 12px;
+    color: #4d5f56;
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.fitness-plan-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.fitness-plan-editor-hint {
+    margin-top: 4px;
+    color: #708178;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.fitness-plan-simple-editor {
+    padding: 14px;
+}
+
 .fitness-plan-days {
     display: grid;
     gap: 8px;
