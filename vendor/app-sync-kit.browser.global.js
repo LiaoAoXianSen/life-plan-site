@@ -307,6 +307,7 @@ var AppSyncKit = (() => {
     "bodyMetrics",
     "fitnessPlans",
     "fitnessWorkouts",
+    "exerciseLibrary",
     "wheels",
     "wheelTags",
     "wheelLibraryItems",

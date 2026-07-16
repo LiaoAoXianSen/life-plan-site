@@ -14,6 +14,7 @@
             bodyMetrics: [],
             fitnessPlans: [],
             fitnessWorkouts: [],
+            exerciseLibrary: [],
             wheels: [],
             wheelTags: [],
             wheelLibraryItems: [],
@@ -541,7 +542,7 @@
 
         function normalizeDataShape(target = data) {
             if (!target || typeof target !== 'object') return data;
-            ['records','todos','habits','checkins','habitPointLedger','habitRewards','habitCurrencies','templates','goals','deletedItems','materials','bodyMetrics','fitnessPlans','fitnessWorkouts','wheels','wheelTags','wheelLibraryItems','wheelHistory'].forEach(key => {
+            ['records','todos','habits','checkins','habitPointLedger','habitRewards','habitCurrencies','templates','goals','deletedItems','materials','bodyMetrics','fitnessPlans','fitnessWorkouts','exerciseLibrary','wheels','wheelTags','wheelLibraryItems','wheelHistory'].forEach(key => {
                 if (!Array.isArray(target[key])) target[key] = [];
             });
             target.habitCurrencies = normalizeHabitCurrencyList(target.habitCurrencies, target);
@@ -659,6 +660,7 @@
                 target.bodyMetrics = Array.isArray(target.bodyMetrics) ? target.bodyMetrics : [];
                 target.fitnessPlans = Array.isArray(target.fitnessPlans) ? target.fitnessPlans : [];
                 target.fitnessWorkouts = Array.isArray(target.fitnessWorkouts) ? target.fitnessWorkouts : [];
+                target.exerciseLibrary = Array.isArray(target.exerciseLibrary) ? target.exerciseLibrary : [];
             }
             target.wheelTags.forEach(tag => {
                 if (!tag.id) tag.id = genId();
@@ -988,7 +990,8 @@
                 materials: snapshotData.materials || [],
                 bodyMetrics: snapshotData.bodyMetrics || [],
                 fitnessPlans: snapshotData.fitnessPlans || [],
-                fitnessWorkouts: snapshotData.fitnessWorkouts || []
+                fitnessWorkouts: snapshotData.fitnessWorkouts || [],
+                exerciseLibrary: snapshotData.exerciseLibrary || []
             };
             const latestRecords = [...collections.records]
                 .filter(record => !record.isHabitRecord)
@@ -1047,6 +1050,7 @@
                         <span>身材 ${collections.bodyMetrics.length}</span>
                         <span>训练计划 ${collections.fitnessPlans.length}</span>
                         <span>训练日志 ${collections.fitnessWorkouts.length}</span>
+                        <span>动作库 ${collections.exerciseLibrary.length}</span>
                     </div>
                     <div class="snapshot-preview-list">
                         <strong>最近记录</strong>
@@ -7726,7 +7730,7 @@
         }
 
         function getImportSummary(imported) {
-            const collections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
+            const collections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'exerciseLibrary', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
             return collections
                 .map(key => `${key}:${Array.isArray(imported?.[key]) ? imported[key].length : 0}`)
                 .join(' · ');
@@ -7802,6 +7806,9 @@
                 'body-metric-modal': typeof closeBodyMetricModal === 'function' ? closeBodyMetricModal : null,
                 'fitness-plan-modal': typeof closeFitnessPlanModal === 'function' ? closeFitnessPlanModal : null,
                 'fitness-workout-modal': typeof closeFitnessWorkoutModal === 'function' ? closeFitnessWorkoutModal : null,
+                'fitness-live-modal': typeof closeLiveWorkoutModal === 'function' ? closeLiveWorkoutModal : null,
+                'fitness-library-modal': typeof closeExerciseLibraryModal === 'function' ? closeExerciseLibraryModal : null,
+                'fitness-library-item-modal': typeof closeExerciseLibraryItemModal === 'function' ? closeExerciseLibraryItemModal : null,
                 'ai-settings-modal': closeAiSettings,
                 'ai-assistant-modal': closeAiAssistant
             };

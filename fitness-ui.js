@@ -2,9 +2,18 @@
     let currentBodyMetricId = null;
     let currentFitnessPlanId = null;
     let currentFitnessWorkoutId = null;
+    let currentExerciseLibraryId = null;
     let fitnessPlanDraft = null;
     let fitnessWorkoutDraft = null;
+    let liveWorkoutDraft = null;
+    let liveWorkoutId = null;
     let fitnessService = null;
+    let restTimer = {
+        remaining: 0,
+        total: 0,
+        intervalId: null,
+        exerciseName: ''
+    };
 
     function ensureService() {
         if (fitnessService) return fitnessService;
@@ -54,6 +63,114 @@
         if (!Array.isArray(data.fitnessWorkouts)) data.fitnessWorkouts = [];
         return data.fitnessWorkouts;
     }
+
+    function getLibrary(options = {}) {
+        const service = ensureService();
+        if (!Array.isArray(data.exerciseLibrary)) data.exerciseLibrary = [];
+        if (!service) return data.exerciseLibrary;
+        const seedDefaults = options.seedDefaults !== false;
+        const before = JSON.stringify(data.exerciseLibrary);
+        data.exerciseLibrary = seedDefaults
+            ? service.ensureExerciseLibrary(data.exerciseLibrary, getWorkouts())
+            : service.normalizeExerciseLibrary(data.exerciseLibrary);
+        if (options.persist && before !== JSON.stringify(data.exerciseLibrary) && typeof saveData === 'function') {
+            saveData();
+        }
+        return data.exerciseLibrary;
+    }
+
+    function persistWorkouts(workouts) {
+        data.fitnessWorkouts = workouts;
+        return typeof saveData === 'function' ? saveData() : true;
+    }
+
+    function persistLibrary(library) {
+        data.exerciseLibrary = library;
+        return typeof saveData === 'function' ? saveData() : true;
+    }
+
+    function formatClock(totalSec = 0) {
+        const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+        const m = String(Math.floor(sec / 60)).padStart(2, '0');
+        const s = String(sec % 60).padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    function stopRestTimer(clearUi = true) {
+        if (restTimer.intervalId) {
+            clearInterval(restTimer.intervalId);
+            restTimer.intervalId = null;
+        }
+        restTimer.remaining = 0;
+        restTimer.total = 0;
+        restTimer.exerciseName = '';
+        if (clearUi) renderRestTimerBar();
+    }
+
+    function renderRestTimerBar() {
+        const bar = document.getElementById('fitness-rest-timer');
+        if (!bar) return;
+        if (!restTimer.remaining && !restTimer.intervalId) {
+            bar.classList.remove('active');
+            bar.innerHTML = '';
+            return;
+        }
+        const progress = restTimer.total > 0
+            ? Math.max(0, Math.min(100, (restTimer.remaining / restTimer.total) * 100))
+            : 0;
+        bar.classList.add('active');
+        bar.innerHTML = `
+            <div class="fitness-rest-timer-main">
+                <div>
+                    <div class="fitness-rest-timer-kicker">组间休息${restTimer.exerciseName ? ` · ${safeHtml(restTimer.exerciseName)}` : ''}</div>
+                    <div class="fitness-rest-timer-clock">${formatClock(restTimer.remaining)}</div>
+                </div>
+                <div class="fitness-rest-timer-actions">
+                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="adjustFitnessRestTimer(-15)">-15s</button>
+                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="adjustFitnessRestTimer(15)">+15s</button>
+                    <button type="button" class="btn btn-primary todo-mini-btn" onclick="skipFitnessRestTimer()">跳过</button>
+                </div>
+            </div>
+            <div class="fitness-rest-timer-track">
+                <div class="fitness-rest-timer-fill" style="width:${progress}%"></div>
+            </div>
+        `;
+    }
+
+    function startRestTimer(seconds = 90, exerciseName = '') {
+        stopRestTimer(false);
+        const total = Math.max(0, Number(seconds) || 0);
+        if (!total) {
+            renderRestTimerBar();
+            return;
+        }
+        restTimer.total = total;
+        restTimer.remaining = total;
+        restTimer.exerciseName = exerciseName || '';
+        renderRestTimerBar();
+        restTimer.intervalId = setInterval(() => {
+            restTimer.remaining -= 1;
+            if (restTimer.remaining <= 0) {
+                stopRestTimer(false);
+                restTimer.remaining = 0;
+                renderRestTimerBar();
+                return;
+            }
+            renderRestTimerBar();
+        }, 1000);
+    }
+
+    window.adjustFitnessRestTimer = function adjustFitnessRestTimer(delta = 0) {
+        if (!restTimer.total && !restTimer.remaining) return;
+        restTimer.remaining = Math.max(0, restTimer.remaining + Number(delta || 0));
+        restTimer.total = Math.max(restTimer.total, restTimer.remaining);
+        if (restTimer.remaining <= 0) stopRestTimer();
+        else renderRestTimerBar();
+    };
+
+    window.skipFitnessRestTimer = function skipFitnessRestTimer() {
+        stopRestTimer();
+    };
 
     function renderSparkline(series = []) {
         if (!series.length) {
@@ -109,17 +226,25 @@
         });
         const suggestion = overview.suggestion;
         const latestWorkout = overview.latestWorkout;
-        const actionHtml = suggestion
-            ? `<button class="btn btn-primary" onclick="startWorkoutFromPlanDay(${safeJs(suggestion.plan.id)}, ${safeJs(suggestion.day.id)})">按计划开练：${safeHtml(suggestion.plan.name)} · ${safeHtml(suggestion.day.name)}</button>`
-            : `<button class="btn btn-primary" onclick="openFitnessWorkoutModal()">记录自由训练</button>`;
+        const activeWorkout = service.findActiveWorkout(getWorkouts());
+        let actionHtml = '';
+        if (activeWorkout) {
+            actionHtml = `<button class="btn btn-primary" onclick="resumeLiveWorkout(${safeJs(activeWorkout.id)})">继续训练：${safeHtml(service.getWorkoutTitle(activeWorkout))}</button>`;
+        } else if (suggestion) {
+            actionHtml = `<button class="btn btn-primary" onclick="startLiveWorkoutFromPlanDay(${safeJs(suggestion.plan.id)}, ${safeJs(suggestion.day.id)})">按计划开练：${safeHtml(suggestion.plan.name)} · ${safeHtml(suggestion.day.name)}</button>`;
+        } else {
+            actionHtml = `<button class="btn btn-primary" onclick="startFreeLiveWorkout()">自由开练</button>`;
+        }
         container.innerHTML = `
             <div class="fitness-overview-card">
                 <div class="fitness-overview-copy">
                     <div class="fitness-overview-kicker">今日健身总览</div>
                     <div class="fitness-overview-title">
-                        ${overview.workoutSummary.todayCount
-                            ? `今天已有 ${overview.workoutSummary.todayCount} 条训练记录`
-                            : (suggestion ? '今天还没开练，可以直接按计划开始' : '还没有训练安排，先建计划或自由开练')}
+                        ${activeWorkout
+                            ? `训练进行中：${safeHtml(service.getWorkoutTitle(activeWorkout))} · ${service.countCompletedSets(activeWorkout)}/${service.countTotalSets(activeWorkout)} 组`
+                            : (overview.workoutSummary.todayCount
+                                ? `今天已有 ${overview.workoutSummary.todayCount} 条训练记录`
+                                : (suggestion ? '今天还没开练，可以直接按计划开始' : '还没有训练安排，先建计划或自由开练'))}
                     </div>
                     <div class="fitness-overview-meta">
                         <span>近 30 天完成 ${overview.workoutSummary.doneCount} 次</span>
@@ -133,6 +258,7 @@
                     ${actionHtml}
                     <button class="btn btn-secondary" onclick="openBodyMetricModal()">记录身材</button>
                     <button class="btn btn-secondary" onclick="openFitnessPlanModal()">管理计划</button>
+                    <button class="btn btn-secondary" onclick="openExerciseLibraryModal()">动作库</button>
                 </div>
             </div>
         `;
@@ -225,7 +351,7 @@
         if (!workouts.length) {
             container.innerHTML = `
                 <div class="empty-state">
-                    还没有训练日志。可以从训练计划一键开练，也可以直接记录自由训练。
+                    还没有训练日志。可以从训练计划一键开练，也可以直接自由开练。
                 </div>
             `;
             return;
@@ -234,8 +360,12 @@
             const doneSets = service.countCompletedSets(workout);
             const totalSets = service.countTotalSets(workout);
             const exerciseNames = (workout.exercises || []).map(item => item.name).filter(Boolean).slice(0, 4).join('、');
+            const isLive = workout.status === 'inProgress';
+            const openAction = isLive
+                ? `resumeLiveWorkout(${safeJs(workout.id)})`
+                : `openFitnessWorkoutModal(${safeJs(workout.id)})`;
             return `
-                <article class="fitness-workout-card" onclick="openFitnessWorkoutModal(${safeJs(workout.id)})">
+                <article class="fitness-workout-card ${isLive ? 'is-live' : ''}" onclick="${openAction}">
                     <div class="fitness-plan-head">
                         <div>
                             <div class="fitness-plan-name">${safeHtml(service.getWorkoutTitle(workout))}</div>
@@ -251,12 +381,48 @@
                     <div class="fitness-chip-row">
                         <span class="fitness-chip">动作 <strong>${(workout.exercises || []).length}</strong></span>
                         ${workout.durationMin ? `<span class="fitness-chip">时长 <strong>${workout.durationMin} 分</strong></span>` : ''}
+                        ${isLive ? '<span class="fitness-chip fitness-chip-live">训练中</span>' : ''}
                     </div>
                     ${exerciseNames ? `<div class="fitness-metric-note">${safeHtml(exerciseNames)}${(workout.exercises || []).length > 4 ? '…' : ''}</div>` : ''}
                     ${workout.notes ? `<div class="fitness-metric-note">${safeHtml(workout.notes)}</div>` : ''}
+                    ${isLive ? `<div class="fitness-plan-day-actions"><button type="button" class="btn btn-primary todo-mini-btn" onclick="event.stopPropagation(); resumeLiveWorkout(${safeJs(workout.id)})">继续训练</button></div>` : ''}
                 </article>
             `;
         }).join('');
+    }
+
+    function renderExerciseLibraryInto(container) {
+        const service = ensureService();
+        if (!service || !container) return;
+        const library = getLibrary();
+        if (!library.length) {
+            container.innerHTML = `<div class="empty-state">动作库还是空的，先加几个常用动作。</div>`;
+            return;
+        }
+        container.innerHTML = library.map(item => `
+            <article class="fitness-library-card" onclick="openExerciseLibraryItemModal(${safeJs(item.id)})">
+                <div class="fitness-plan-head">
+                    <div>
+                        <div class="fitness-plan-name">${safeHtml(item.name)}</div>
+                        <div class="fitness-plan-meta">${safeHtml(service.getMuscleLabel(item.muscle))}</div>
+                    </div>
+                    <div class="fitness-plan-primary">
+                        <strong>${item.defaultSets}</strong>
+                        <span>默认组</span>
+                    </div>
+                </div>
+                <div class="fitness-chip-row">
+                    <span class="fitness-chip">次数 <strong>${safeHtml(item.defaultReps || '—')}</strong></span>
+                    <span class="fitness-chip">休息 <strong>${item.restSec || 0}s</strong></span>
+                    ${item.defaultWeight != null ? `<span class="fitness-chip">重量 <strong>${item.defaultWeight}kg</strong></span>` : ''}
+                </div>
+            </article>
+        `).join('');
+    }
+
+    function renderExerciseLibraryList() {
+        renderExerciseLibraryInto(document.getElementById('fitness-page-library-list'));
+        renderExerciseLibraryInto(document.getElementById('fitness-modal-library-list'));
     }
 
     function renderPlanList() {
@@ -302,7 +468,7 @@
                                     <strong>${safeHtml(day.name)}</strong>
                                     <span>${(day.exercises || []).map(item => safeHtml(item.name)).join('、') || '暂无动作'}</span>
                                 </div>
-                                <button type="button" class="btn btn-secondary todo-mini-btn" onclick="event.stopPropagation(); startWorkoutFromPlanDay(${safeJs(plan.id)}, ${safeJs(day.id)})">开练</button>
+                                <button type="button" class="btn btn-secondary todo-mini-btn" onclick="event.stopPropagation(); startLiveWorkoutFromPlanDay(${safeJs(plan.id)}, ${safeJs(day.id)})">开练</button>
                             </div>
                         `).join('')}
                     </div>
@@ -436,6 +602,13 @@
         const draft = ensureWorkoutDraft();
         if (!draft) return;
 
+        const statusSelect = document.getElementById('fitness-workout-status');
+        if (statusSelect) {
+            statusSelect.innerHTML = service.WORKOUT_STATUS_OPTIONS.map(item =>
+                `<option value="${safeHtml(item.value)}">${safeHtml(item.label)}</option>`
+            ).join('');
+        }
+
         document.getElementById('fitness-workout-modal-title').textContent = currentFitnessWorkoutId ? '编辑训练日志' : '记录训练';
         document.getElementById('fitness-workout-date').value = draft.date || (typeof getTodayStr === 'function' ? getTodayStr() : '');
         document.getElementById('fitness-workout-status').value = draft.status || 'planned';
@@ -444,15 +617,18 @@
         document.getElementById('fitness-workout-notes').value = draft.notes || '';
         renderWorkoutSourceOptions();
 
-        listBox.innerHTML = draft.exercises.map((exercise, exerciseIndex) => `
+        listBox.innerHTML = draft.exercises.map((exercise, exerciseIndex) => {
+            const history = service.findLastExercisePerformance(getWorkouts(), exercise.name, currentFitnessWorkoutId || '');
+            return `
             <div class="fitness-workout-exercise-editor">
                 <div class="fitness-plan-day-editor-head">
                     <div class="form-group" style="flex:1;margin:0;">
                         <label>动作名称</label>
-                        <input type="text" value="${safeHtml(exercise.name || '')}" placeholder="例如 深蹲" oninput="updateFitnessWorkoutExercise(${exerciseIndex}, 'name', this.value)">
+                        <input type="text" value="${safeHtml(exercise.name || '')}" placeholder="例如 深蹲" list="fitness-exercise-datalist" oninput="updateFitnessWorkoutExercise(${exerciseIndex}, 'name', this.value)">
                     </div>
                     <button type="button" class="btn btn-secondary todo-mini-btn" onclick="removeFitnessWorkoutExercise(${exerciseIndex})" ${draft.exercises.length <= 1 ? 'disabled' : ''}>删除动作</button>
                 </div>
+                ${history?.set ? `<div class="fitness-history-hint">上次：${safeHtml(history.workoutDate)} · ${history.set.weight ?? '—'}kg × ${history.set.reps ?? '—'}</div>` : ''}
                 <div class="fitness-workout-set-list">
                     <div class="fitness-workout-set-head">
                         <span>组</span>
@@ -476,12 +652,147 @@
                 </div>
                 <div class="fitness-plan-day-actions">
                     <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessWorkoutSet(${exerciseIndex})">+ 添加一组</button>
+                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="copyLastPerformanceToExercise(${exerciseIndex})">复制上次</button>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
+        ensureExerciseDatalist();
         const deleteBtn = document.getElementById('delete-fitness-workout-btn');
         if (deleteBtn) deleteBtn.style.display = currentFitnessWorkoutId ? '' : 'none';
+    }
+
+    function ensureExerciseDatalist() {
+        let list = document.getElementById('fitness-exercise-datalist');
+        if (!list) {
+            list = document.createElement('datalist');
+            list.id = 'fitness-exercise-datalist';
+            document.body.appendChild(list);
+        }
+        list.innerHTML = getLibrary().map(item =>
+            `<option value="${safeHtml(item.name)}"></option>`
+        ).join('');
+    }
+
+    function ensureLiveDraft() {
+        const service = ensureService();
+        if (!service) return null;
+        if (!liveWorkoutDraft) {
+            const active = service.findActiveWorkout(getWorkouts());
+            liveWorkoutDraft = active ? service.normalizeFitnessWorkout(JSON.parse(JSON.stringify(active))) : null;
+            liveWorkoutId = active?.id || null;
+        }
+        if (!liveWorkoutDraft) return null;
+        if (!Array.isArray(liveWorkoutDraft.exercises)) liveWorkoutDraft.exercises = [];
+        liveWorkoutDraft.exercises.forEach(exercise => {
+            if (!Array.isArray(exercise.sets) || !exercise.sets.length) {
+                exercise.sets = service.createDefaultSets(exercise.targetSets || 3, exercise);
+            }
+        });
+        return liveWorkoutDraft;
+    }
+
+    function renderLiveWorkoutSession() {
+        const service = ensureService();
+        const modal = document.getElementById('fitness-live-modal');
+        const body = document.getElementById('fitness-live-body');
+        if (!service || !modal || !body) return;
+        const draft = ensureLiveDraft();
+        if (!draft) {
+            modal.classList.remove('active');
+            return;
+        }
+
+        const doneSets = service.countCompletedSets(draft);
+        const totalSets = service.countTotalSets(draft);
+        const elapsed = draft.startedAt
+            ? service.computeDurationMin(draft.startedAt, (typeof getLocalDateTimeStr === 'function' ? getLocalDateTimeStr() : new Date().toISOString()))
+            : null;
+
+        document.getElementById('fitness-live-modal-title').textContent = service.getWorkoutTitle(draft);
+        document.getElementById('fitness-live-meta').textContent =
+            `${formatDateLabel(draft.date)} · ${doneSets}/${totalSets} 组${elapsed ? ` · 已练 ${elapsed} 分` : ''}`;
+
+        body.innerHTML = (draft.exercises || []).map((exercise, exerciseIndex) => {
+            const history = service.findLastExercisePerformance(getWorkouts(), exercise.name, liveWorkoutId || '');
+            const restSec = service.getExerciseRestSec(exercise, getLibrary());
+            return `
+                <section class="fitness-live-exercise">
+                    <div class="fitness-live-exercise-head">
+                        <div>
+                            <div class="fitness-live-exercise-name">${safeHtml(exercise.name || '未命名动作')}</div>
+                            <div class="fitness-live-exercise-meta">
+                                目标 ${exercise.targetSets || (exercise.sets || []).length} 组
+                                ${exercise.targetReps ? ` · ${safeHtml(exercise.targetReps)} 次` : ''}
+                                ${exercise.targetWeight != null ? ` · ${exercise.targetWeight}kg` : ''}
+                                · 休息 ${restSec}s
+                            </div>
+                            ${history?.set ? `<div class="fitness-history-hint">上次 ${safeHtml(history.workoutDate)} · ${history.set.weight ?? '—'}kg × ${history.set.reps ?? '—'}</div>` : ''}
+                        </div>
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="copyLastPerformanceToLiveExercise(${exerciseIndex})">复制上次</button>
+                    </div>
+                    <div class="fitness-live-set-list">
+                        ${(exercise.sets || []).map((set, setIndex) => {
+                            const suggestion = !set.done ? service.suggestSetValues(exercise, setIndex, history) : null;
+                            return `
+                                <div class="fitness-live-set-row ${set.done ? 'is-done' : ''}">
+                                    <span class="fitness-set-index">${setIndex + 1}</span>
+                                    <input type="number" min="0" step="0.5" value="${set.weight ?? ''}" placeholder="kg"
+                                        oninput="updateLiveWorkoutSet(${exerciseIndex}, ${setIndex}, 'weight', this.value)">
+                                    <input type="number" min="0" step="1" value="${set.reps ?? ''}" placeholder="次"
+                                        oninput="updateLiveWorkoutSet(${exerciseIndex}, ${setIndex}, 'reps', this.value)">
+                                    <button type="button" class="btn ${set.done ? 'btn-secondary' : 'btn-primary'} todo-mini-btn"
+                                        onclick="toggleLiveWorkoutSetDone(${exerciseIndex}, ${setIndex})">
+                                        ${set.done ? '撤销' : '完成'}
+                                    </button>
+                                    ${suggestion ? `<div class="fitness-set-suggestion">${safeHtml(suggestion.label)}</div>` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    <div class="fitness-plan-day-actions">
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addLiveWorkoutSet(${exerciseIndex})">+ 加一组</button>
+                    </div>
+                </section>
+            `;
+        }).join('') || '<div class="empty-state">还没有动作，先从动作库加一个。</div>';
+
+        modal.classList.add('active');
+        renderRestTimerBar();
+    }
+
+    function openLiveWorkoutSession(workout, existingId = '') {
+        const service = ensureService();
+        if (!service || !workout) return;
+        liveWorkoutDraft = service.normalizeFitnessWorkout(JSON.parse(JSON.stringify(workout)));
+        liveWorkoutId = existingId || liveWorkoutDraft.id || null;
+        if (!liveWorkoutDraft.startedAt) {
+            liveWorkoutDraft = service.startLiveWorkout(liveWorkoutDraft);
+        } else if (liveWorkoutDraft.status !== 'inProgress') {
+            liveWorkoutDraft.status = 'inProgress';
+        }
+        renderLiveWorkoutSession();
+    }
+
+    function saveLiveWorkoutDraft(extra = {}) {
+        const service = ensureService();
+        const draft = ensureLiveDraft();
+        if (!service || !draft) return { ok: false, message: '没有进行中的训练' };
+        const payload = {
+            ...draft,
+            ...extra,
+            status: extra.status || draft.status || 'inProgress'
+        };
+        const result = service.upsertFitnessWorkout(getWorkouts(), payload, liveWorkoutId || '');
+        if (!result.ok) return result;
+        data.fitnessWorkouts = result.workouts;
+        liveWorkoutId = result.workout.id;
+        liveWorkoutDraft = service.normalizeFitnessWorkout(JSON.parse(JSON.stringify(result.workout)));
+        if (typeof saveData === 'function' && !saveData()) {
+            return { ok: false, message: '保存失败' };
+        }
+        return { ok: true, workout: result.workout };
     }
 
     window.renderFitnessPage = function renderFitnessPage() {
@@ -490,14 +801,18 @@
         if (!Array.isArray(data.bodyMetrics)) data.bodyMetrics = [];
         if (!Array.isArray(data.fitnessPlans)) data.fitnessPlans = [];
         if (!Array.isArray(data.fitnessWorkouts)) data.fitnessWorkouts = [];
+        if (!Array.isArray(data.exerciseLibrary)) data.exerciseLibrary = [];
         data.bodyMetrics = service.normalizeBodyMetrics(data.bodyMetrics);
         data.fitnessPlans = service.normalizeFitnessPlans(data.fitnessPlans);
         data.fitnessWorkouts = service.normalizeFitnessWorkouts(data.fitnessWorkouts);
+        getLibrary({ seedDefaults: true, persist: true });
         renderOverviewPanel();
         renderSummary();
         renderBodyMetricList();
         renderPlanList();
         renderWorkoutList();
+        renderExerciseLibraryList();
+        ensureExerciseDatalist();
     };
 
     window.getFitnessDashboardSnippet = function getFitnessDashboardSnippet() {
@@ -557,8 +872,17 @@
     };
 
     window.startWorkoutFromPlanDay = function startWorkoutFromPlanDay(planId = '', dayId = '') {
+        startLiveWorkoutFromPlanDay(planId, dayId);
+    };
+
+    window.startLiveWorkoutFromPlanDay = function startLiveWorkoutFromPlanDay(planId = '', dayId = '') {
         const service = ensureService();
         if (!service) return;
+        const active = service.findActiveWorkout(getWorkouts());
+        if (active && !confirm(`已有进行中的训练「${service.getWorkoutTitle(active)}」。要先继续它，还是新开一场？\n确定=新开，取消=继续旧的`)) {
+            resumeLiveWorkout(active.id);
+            return;
+        }
         const plan = service.findFitnessPlan(getPlans(), planId);
         if (!plan) {
             alert('找不到对应的训练计划');
@@ -569,11 +893,330 @@
             alert('这个计划还没有训练日');
             return;
         }
-        currentFitnessWorkoutId = null;
-        fitnessWorkoutDraft = service.createWorkoutFromPlanDay(plan, day);
+        const workout = service.startLiveWorkout(service.createWorkoutFromPlanDay(plan, day));
+        const result = service.upsertFitnessWorkout(getWorkouts(), workout, '');
+        if (!result.ok) {
+            alert(result.message || '开练失败');
+            return;
+        }
+        if (!persistWorkouts(result.workouts)) return;
+        openLiveWorkoutSession(result.workout, result.workout.id);
+        renderFitnessPage();
+        if (typeof renderDashboard === 'function') renderDashboard();
+    };
+
+    window.startFreeLiveWorkout = function startFreeLiveWorkout() {
+        const service = ensureService();
+        if (!service) return;
+        const active = service.findActiveWorkout(getWorkouts());
+        if (active && !confirm(`已有进行中的训练「${service.getWorkoutTitle(active)}」。要先继续它，还是新开一场？\n确定=新开，取消=继续旧的`)) {
+            resumeLiveWorkout(active.id);
+            return;
+        }
+        const library = getLibrary();
+        const seedExercises = library.slice(0, 1).map(item => service.createWorkoutExerciseFromLibrary(item));
+        const workout = service.startLiveWorkout(service.createFitnessWorkoutDraft({
+            title: '自由训练',
+            exercises: seedExercises.length
+                ? seedExercises
+                : [service.normalizeWorkoutExercise({ name: '', targetSets: 3, targetReps: '8-12', sets: service.createDefaultSets(3) })]
+        }));
+        const result = service.upsertFitnessWorkout(getWorkouts(), workout, '');
+        if (!result.ok) {
+            alert(result.message || '开练失败');
+            return;
+        }
+        if (!persistWorkouts(result.workouts)) return;
+        openLiveWorkoutSession(result.workout, result.workout.id);
+        renderFitnessPage();
+        if (typeof renderDashboard === 'function') renderDashboard();
+    };
+
+    window.resumeLiveWorkout = function resumeLiveWorkout(workoutId = '') {
+        const service = ensureService();
+        if (!service) return;
+        const workout = service.findFitnessWorkout(getWorkouts(), workoutId)
+            || service.findActiveWorkout(getWorkouts());
+        if (!workout) {
+            alert('没有找到进行中的训练');
+            return;
+        }
+        const live = workout.status === 'inProgress'
+            ? workout
+            : service.startLiveWorkout(workout);
+        if (live.status === 'inProgress' && workout.status !== 'inProgress') {
+            const result = service.upsertFitnessWorkout(getWorkouts(), live, workout.id);
+            if (!result.ok || !persistWorkouts(result.workouts)) return;
+            openLiveWorkoutSession(result.workout, result.workout.id);
+        } else {
+            openLiveWorkoutSession(live, workout.id);
+        }
+        renderFitnessPage();
+    };
+
+    window.closeLiveWorkoutModal = function closeLiveWorkoutModal(force = false) {
+        const draft = ensureLiveDraft();
+        if (draft && !force) {
+            const saved = saveLiveWorkoutDraft();
+            if (!saved.ok) {
+                alert(saved.message || '保存训练进度失败');
+                return;
+            }
+        }
+        document.getElementById('fitness-live-modal')?.classList.remove('active');
+        stopRestTimer();
+        liveWorkoutDraft = null;
+        // keep liveWorkoutId? no — clear session UI state
+        liveWorkoutId = null;
+        renderFitnessPage();
+        if (typeof renderDashboard === 'function') renderDashboard();
+    };
+
+    window.updateLiveWorkoutSet = function updateLiveWorkoutSet(exerciseIndex, setIndex, field, value) {
+        const draft = ensureLiveDraft();
+        if (!draft?.exercises?.[exerciseIndex]?.sets?.[setIndex]) return;
+        draft.exercises[exerciseIndex].sets[setIndex][field] = value;
+    };
+
+    window.addLiveWorkoutSet = function addLiveWorkoutSet(exerciseIndex) {
+        const service = ensureService();
+        const draft = ensureLiveDraft();
+        if (!service || !draft?.exercises?.[exerciseIndex]) return;
+        const exercise = draft.exercises[exerciseIndex];
+        if (!Array.isArray(exercise.sets)) exercise.sets = [];
+        const last = exercise.sets[exercise.sets.length - 1] || {};
+        exercise.sets.push(service.normalizeWorkoutSet({
+            weight: last.weight,
+            reps: last.reps,
+            done: false
+        }));
+        renderLiveWorkoutSession();
+    };
+
+    window.toggleLiveWorkoutSetDone = function toggleLiveWorkoutSetDone(exerciseIndex, setIndex) {
+        const service = ensureService();
+        const draft = ensureLiveDraft();
+        if (!service || !draft?.exercises?.[exerciseIndex]?.sets?.[setIndex]) return;
+        const set = draft.exercises[exerciseIndex].sets[setIndex];
+        if (set.done) {
+            set.done = false;
+            const saved = saveLiveWorkoutDraft();
+            if (!saved.ok) {
+                alert(saved.message || '保存失败');
+                return;
+            }
+            renderLiveWorkoutSession();
+            return;
+        }
+        const history = service.findLastExercisePerformance(getWorkouts(), draft.exercises[exerciseIndex].name, liveWorkoutId || '');
+        const result = service.completeWorkoutSet(draft, exerciseIndex, setIndex, {
+            history,
+            library: getLibrary(),
+            weight: document.querySelectorAll('.fitness-live-exercise')[exerciseIndex]
+                ?.querySelectorAll('.fitness-live-set-row')[setIndex]
+                ?.querySelector('input[type="number"]')?.value,
+            reps: document.querySelectorAll('.fitness-live-exercise')[exerciseIndex]
+                ?.querySelectorAll('.fitness-live-set-row')[setIndex]
+                ?.querySelectorAll('input[type="number"]')[1]?.value
+        });
+        if (!result.ok) {
+            alert(result.message || '完成组失败');
+            return;
+        }
+        liveWorkoutDraft = result.workout;
+        const saved = saveLiveWorkoutDraft();
+        if (!saved.ok) {
+            alert(saved.message || '保存失败');
+            return;
+        }
+        if (result.restSec > 0) {
+            startRestTimer(result.restSec, draft.exercises[exerciseIndex].name || '');
+        }
+        renderLiveWorkoutSession();
+        renderFitnessPage();
+    };
+
+    window.copyLastPerformanceToLiveExercise = function copyLastPerformanceToLiveExercise(exerciseIndex) {
+        const service = ensureService();
+        const draft = ensureLiveDraft();
+        if (!service || !draft?.exercises?.[exerciseIndex]) return;
+        const exercise = draft.exercises[exerciseIndex];
+        const history = service.findLastExercisePerformance(getWorkouts(), exercise.name, liveWorkoutId || '');
+        if (!history?.set && history?.targetWeight == null) {
+            alert('还没有这个动作的历史成绩');
+            return;
+        }
+        exercise.sets = (exercise.sets || []).map((set, setIndex) => {
+            if (set.done) return set;
+            if (history.doneSets?.[setIndex]) {
+                return service.normalizeWorkoutSet({
+                    ...set,
+                    weight: history.doneSets[setIndex].weight,
+                    reps: history.doneSets[setIndex].reps,
+                    done: false
+                });
+            }
+            const suggestion = service.suggestSetValues(exercise, setIndex, history);
+            return service.applySuggestionToSet(set, suggestion);
+        });
+        renderLiveWorkoutSession();
+    };
+
+    window.copyLastPerformanceToExercise = function copyLastPerformanceToExercise(exerciseIndex) {
+        const service = ensureService();
+        const draft = ensureWorkoutDraft();
+        if (!service || !draft?.exercises?.[exerciseIndex]) return;
+        const exercise = draft.exercises[exerciseIndex];
+        const history = service.findLastExercisePerformance(getWorkouts(), exercise.name, currentFitnessWorkoutId || '');
+        if (!history?.set && history?.targetWeight == null) {
+            alert('还没有这个动作的历史成绩');
+            return;
+        }
+        exercise.sets = (exercise.sets || []).map((set, setIndex) => {
+            if (history.doneSets?.[setIndex]) {
+                return service.normalizeWorkoutSet({
+                    ...set,
+                    weight: history.doneSets[setIndex].weight,
+                    reps: history.doneSets[setIndex].reps
+                });
+            }
+            const suggestion = service.suggestSetValues(exercise, setIndex, history);
+            return service.applySuggestionToSet(set, suggestion);
+        });
         renderWorkoutEditor();
-        document.getElementById('fitness-workout-modal')?.classList.add('active');
-        document.getElementById('fitness-workout-title')?.focus();
+    };
+
+    window.addLiveExerciseFromLibrary = function addLiveExerciseFromLibrary() {
+        const service = ensureService();
+        const draft = ensureLiveDraft();
+        if (!service || !draft) return;
+        const library = getLibrary();
+        if (!library.length) {
+            openExerciseLibraryModal();
+            return;
+        }
+        const names = library.map((item, index) => `${index + 1}. ${item.name}`).join('\n');
+        const pick = prompt(`输入动作编号或名称加入本场训练：\n${names}`);
+        if (pick === null) return;
+        const text = String(pick).trim();
+        let item = null;
+        if (/^\d+$/.test(text)) {
+            item = library[Number(text) - 1] || null;
+        } else {
+            item = service.findExerciseLibraryByName(library, text)
+                || library.find(entry => entry.name.includes(text));
+        }
+        if (!item) {
+            alert('没找到这个动作，可先到动作库新建');
+            return;
+        }
+        draft.exercises.push(service.createWorkoutExerciseFromLibrary(item));
+        const saved = saveLiveWorkoutDraft();
+        if (!saved.ok) {
+            alert(saved.message || '保存失败');
+            return;
+        }
+        renderLiveWorkoutSession();
+    };
+
+    window.finishLiveWorkout = function finishLiveWorkout() {
+        const service = ensureService();
+        const draft = ensureLiveDraft();
+        if (!service || !draft) return;
+        const doneSets = service.countCompletedSets(draft);
+        if (!doneSets && !confirm('还没有任何完成组，确定结束本场训练吗？')) return;
+        const notes = document.getElementById('fitness-live-notes')?.value || draft.notes || '';
+        const finished = service.finishLiveWorkout(draft, { notes });
+        const result = service.upsertFitnessWorkout(getWorkouts(), finished, liveWorkoutId || '');
+        if (!result.ok) {
+            alert(result.message || '结束训练失败');
+            return;
+        }
+        if (!persistWorkouts(result.workouts)) return;
+        stopRestTimer();
+        document.getElementById('fitness-live-modal')?.classList.remove('active');
+        liveWorkoutDraft = null;
+        liveWorkoutId = null;
+        alert(`训练完成！共完成 ${service.countCompletedSets(result.workout)} 组${result.workout.durationMin ? `，用时 ${result.workout.durationMin} 分钟` : ''}`);
+        renderFitnessPage();
+        if (typeof renderDashboard === 'function') renderDashboard();
+    };
+
+    window.openExerciseLibraryModal = function openExerciseLibraryModal() {
+        const service = ensureService();
+        if (!service) return;
+        getLibrary();
+        renderExerciseLibraryList();
+        document.getElementById('fitness-library-modal')?.classList.add('active');
+    };
+
+    window.closeExerciseLibraryModal = function closeExerciseLibraryModal() {
+        document.getElementById('fitness-library-modal')?.classList.remove('active');
+    };
+
+    window.openExerciseLibraryItemModal = function openExerciseLibraryItemModal(exerciseId = '') {
+        const service = ensureService();
+        if (!service) return;
+        currentExerciseLibraryId = exerciseId || null;
+        const existing = currentExerciseLibraryId
+            ? service.findExerciseLibraryItem(getLibrary(), currentExerciseLibraryId)
+            : null;
+        document.getElementById('fitness-library-item-modal-title').textContent = existing ? '编辑动作' : '新建动作';
+        document.getElementById('fitness-library-item-name').value = existing?.name || '';
+        document.getElementById('fitness-library-item-muscle').value = existing?.muscle || 'other';
+        document.getElementById('fitness-library-item-sets').value = existing?.defaultSets ?? 3;
+        document.getElementById('fitness-library-item-reps').value = existing?.defaultReps || '8-12';
+        document.getElementById('fitness-library-item-weight').value = existing?.defaultWeight ?? '';
+        document.getElementById('fitness-library-item-rest').value = existing?.restSec ?? service.DEFAULT_REST_SEC;
+        document.getElementById('fitness-library-item-note').value = existing?.note || '';
+        const deleteBtn = document.getElementById('delete-fitness-library-item-btn');
+        if (deleteBtn) deleteBtn.style.display = existing ? '' : 'none';
+        document.getElementById('fitness-library-item-modal')?.classList.add('active');
+        document.getElementById('fitness-library-item-name')?.focus();
+    };
+
+    window.closeExerciseLibraryItemModal = function closeExerciseLibraryItemModal() {
+        document.getElementById('fitness-library-item-modal')?.classList.remove('active');
+        currentExerciseLibraryId = null;
+    };
+
+    window.saveExerciseLibraryItem = function saveExerciseLibraryItem() {
+        const service = ensureService();
+        if (!service) return;
+        const input = {
+            name: document.getElementById('fitness-library-item-name')?.value || '',
+            muscle: document.getElementById('fitness-library-item-muscle')?.value || 'other',
+            defaultSets: document.getElementById('fitness-library-item-sets')?.value || 3,
+            defaultReps: document.getElementById('fitness-library-item-reps')?.value || '8-12',
+            defaultWeight: document.getElementById('fitness-library-item-weight')?.value || '',
+            restSec: document.getElementById('fitness-library-item-rest')?.value || service.DEFAULT_REST_SEC,
+            note: document.getElementById('fitness-library-item-note')?.value || ''
+        };
+        const result = service.upsertExerciseLibraryItem(getLibrary(), input, currentExerciseLibraryId || '');
+        if (!result.ok) {
+            alert(result.message || '保存失败');
+            return;
+        }
+        if (!persistLibrary(result.library)) return;
+        closeExerciseLibraryItemModal();
+        renderExerciseLibraryList();
+        ensureExerciseDatalist();
+        renderFitnessPage();
+    };
+
+    window.deleteCurrentExerciseLibraryItem = function deleteCurrentExerciseLibraryItem() {
+        const service = ensureService();
+        if (!service || !currentExerciseLibraryId) return;
+        if (!confirm('确定删除这个动作吗？')) return;
+        if (typeof markDeletedItem === 'function') {
+            markDeletedItem('exerciseLibrary', currentExerciseLibraryId, { reason: 'manual-delete' });
+        }
+        const next = service.removeExerciseLibraryItem(getLibrary(), currentExerciseLibraryId);
+        if (!persistLibrary(next)) return;
+        closeExerciseLibraryItemModal();
+        renderExerciseLibraryList();
+        ensureExerciseDatalist();
+        renderFitnessPage();
     };
 
     window.onFitnessWorkoutPlanChange = function onFitnessWorkoutPlanChange() {

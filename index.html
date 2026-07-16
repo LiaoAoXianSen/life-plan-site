@@ -463,6 +463,7 @@
                 </div>
                 <div class="fitness-header-actions">
                     <button class="btn btn-secondary" onclick="openFitnessPlanModal()">+ 训练计划</button>
+                    <button class="btn btn-secondary" onclick="startFreeLiveWorkout()">自由开练</button>
                     <button class="btn btn-secondary" onclick="openFitnessWorkoutModal()">+ 训练日志</button>
                     <button class="btn btn-primary" onclick="openBodyMetricModal()">+ 记录身材</button>
                 </div>
@@ -492,9 +493,20 @@
             <div class="fitness-section">
                 <div class="fitness-section-head">
                     <div class="section-title">训练日志</div>
-                    <button class="btn btn-secondary todo-mini-btn" onclick="openFitnessWorkoutModal()">记录训练</button>
+                    <div class="fitness-header-actions">
+                        <button class="btn btn-secondary todo-mini-btn" onclick="startFreeLiveWorkout()">开练</button>
+                        <button class="btn btn-secondary todo-mini-btn" onclick="openFitnessWorkoutModal()">补记</button>
+                    </div>
                 </div>
                 <div id="fitness-workout-list" class="fitness-workout-list"></div>
+            </div>
+
+            <div class="fitness-section">
+                <div class="fitness-section-head">
+                    <div class="section-title">动作库</div>
+                    <button class="btn btn-secondary todo-mini-btn" onclick="openExerciseLibraryModal()">管理动作</button>
+                </div>
+                <div id="fitness-page-library-list" class="fitness-library-list"></div>
             </div>
         </div>
 
@@ -1340,6 +1352,7 @@
                     <label>状态</label>
                     <select id="fitness-workout-status">
                         <option value="planned">计划中</option>
+                        <option value="inProgress">训练中</option>
                         <option value="done">已完成</option>
                         <option value="skipped">已跳过</option>
                     </select>
@@ -1377,6 +1390,110 @@
                 <div class="modal-action-right">
                     <button class="btn btn-secondary" onclick="closeFitnessWorkoutModal()">取消</button>
                     <button class="btn btn-primary" onclick="saveFitnessWorkout()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 开练会话弹窗 -->
+    <div id="fitness-live-modal" class="modal-overlay">
+        <div class="modal modal-lg fitness-live-modal">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title" id="fitness-live-modal-title">训练中</div>
+                    <div class="fitness-live-subtitle" id="fitness-live-meta">—</div>
+                </div>
+                <button class="close-btn" onclick="closeLiveWorkoutModal()">×</button>
+            </div>
+            <div id="fitness-rest-timer" class="fitness-rest-timer"></div>
+            <div id="fitness-live-body" class="fitness-live-body"></div>
+            <div class="form-group">
+                <label>本场备注</label>
+                <textarea id="fitness-live-notes" rows="2" placeholder="状态、感觉、需要调整的地方"></textarea>
+            </div>
+            <div class="modal-action-row">
+                <button class="btn btn-secondary" onclick="addLiveExerciseFromLibrary()">+ 从动作库添加</button>
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="closeLiveWorkoutModal()">暂存退出</button>
+                    <button class="btn btn-primary" onclick="finishLiveWorkout()">结束训练</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 动作库弹窗 -->
+    <div id="fitness-library-modal" class="modal-overlay">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <div class="modal-title">动作库</div>
+                <button class="close-btn" onclick="closeExerciseLibraryModal()">×</button>
+            </div>
+            <div class="fitness-plan-editor-head">
+                <div class="section-title">常用动作</div>
+                <button type="button" class="btn btn-secondary todo-mini-btn" onclick="openExerciseLibraryItemModal()">+ 新建动作</button>
+            </div>
+            <div id="fitness-modal-library-list" class="fitness-library-list"></div>
+            <div class="modal-action-row">
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="closeExerciseLibraryModal()">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 动作库条目弹窗 -->
+    <div id="fitness-library-item-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="fitness-library-item-modal-title">新建动作</div>
+                <button class="close-btn" onclick="closeExerciseLibraryItemModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label>动作名称</label>
+                <input type="text" id="fitness-library-item-name" placeholder="例如 杠铃深蹲">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>肌群</label>
+                    <select id="fitness-library-item-muscle">
+                        <option value="chest">胸</option>
+                        <option value="back">背</option>
+                        <option value="shoulder">肩</option>
+                        <option value="arm">手臂</option>
+                        <option value="leg">腿</option>
+                        <option value="core">核心</option>
+                        <option value="cardio">有氧</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>默认组数</label>
+                    <input type="number" id="fitness-library-item-sets" min="1" step="1" value="3">
+                </div>
+                <div class="form-group">
+                    <label>默认次数</label>
+                    <input type="text" id="fitness-library-item-reps" placeholder="8-12">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>默认重量 (kg)</label>
+                    <input type="number" id="fitness-library-item-weight" min="0" step="0.5" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>组间休息 (秒)</label>
+                    <input type="number" id="fitness-library-item-rest" min="0" step="5" value="90">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <textarea id="fitness-library-item-note" rows="2" placeholder="可选"></textarea>
+            </div>
+            <div class="modal-action-row">
+                <button class="btn btn-danger" id="delete-fitness-library-item-btn" onclick="deleteCurrentExerciseLibraryItem()">删除</button>
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="closeExerciseLibraryItemModal()">取消</button>
+                    <button class="btn btn-primary" onclick="saveExerciseLibraryItem()">保存</button>
                 </div>
             </div>
         </div>

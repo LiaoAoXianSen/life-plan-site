@@ -433,7 +433,7 @@
             merged.wheelTags = wheelSnapshot.wheelTags;
             merged.wheelLibraryItems = wheelSnapshot.wheelLibraryItems;
             merged.wheelHistory = wheelSnapshot.wheelHistory;
-            ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].forEach(key => {
+            ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'exerciseLibrary', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].forEach(key => {
                 if (['records', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'].includes(key)) return;
                 merged[key] = mergeArrayByIdentity(key, localData[key] || [], remoteData[key] || [], deletionMap);
             });

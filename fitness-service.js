@@ -36,6 +36,7 @@
 
     const WORKOUT_STATUS_OPTIONS = [
         { value: 'planned', label: '计划中' },
+        { value: 'inProgress', label: '训练中' },
         { value: 'done', label: '已完成' },
         { value: 'skipped', label: '已跳过' }
     ];
@@ -48,6 +49,38 @@
         { value: 5, label: '周五' },
         { value: 6, label: '周六' },
         { value: 0, label: '周日' }
+    ];
+
+    const EXERCISE_MUSCLE_OPTIONS = [
+        { value: 'chest', label: '胸' },
+        { value: 'back', label: '背' },
+        { value: 'shoulder', label: '肩' },
+        { value: 'arm', label: '手臂' },
+        { value: 'leg', label: '腿' },
+        { value: 'core', label: '核心' },
+        { value: 'cardio', label: '有氧' },
+        { value: 'other', label: '其他' }
+    ];
+
+    const DEFAULT_REST_SEC = 90;
+
+    const DEFAULT_EXERCISE_LIBRARY = [
+        { name: '杠铃深蹲', muscle: 'leg', defaultSets: 4, defaultReps: '5-8', restSec: 150 },
+        { name: '腿举', muscle: 'leg', defaultSets: 3, defaultReps: '8-12', restSec: 120 },
+        { name: '罗马尼亚硬拉', muscle: 'leg', defaultSets: 3, defaultReps: '8-10', restSec: 120 },
+        { name: '杠铃卧推', muscle: 'chest', defaultSets: 4, defaultReps: '5-8', restSec: 150 },
+        { name: '哑铃卧推', muscle: 'chest', defaultSets: 3, defaultReps: '8-12', restSec: 90 },
+        { name: '俯卧撑', muscle: 'chest', defaultSets: 3, defaultReps: '10-15', restSec: 60 },
+        { name: '引体向上', muscle: 'back', defaultSets: 4, defaultReps: '6-10', restSec: 120 },
+        { name: '杠铃划船', muscle: 'back', defaultSets: 4, defaultReps: '6-10', restSec: 120 },
+        { name: '高位下拉', muscle: 'back', defaultSets: 3, defaultReps: '8-12', restSec: 90 },
+        { name: '哑铃肩推', muscle: 'shoulder', defaultSets: 3, defaultReps: '8-12', restSec: 90 },
+        { name: '侧平举', muscle: 'shoulder', defaultSets: 3, defaultReps: '12-15', restSec: 60 },
+        { name: '杠铃弯举', muscle: 'arm', defaultSets: 3, defaultReps: '8-12', restSec: 60 },
+        { name: '绳索下压', muscle: 'arm', defaultSets: 3, defaultReps: '10-15', restSec: 60 },
+        { name: '卷腹', muscle: 'core', defaultSets: 3, defaultReps: '15-20', restSec: 45 },
+        { name: '平板支撑', muscle: 'core', defaultSets: 3, defaultReps: '30-60s', restSec: 45 },
+        { name: '跑步机', muscle: 'cardio', defaultSets: 1, defaultReps: '20-30min', restSec: 0 }
     ];
 
     function create(options = {}) {
@@ -260,7 +293,7 @@
             const exercises = (Array.isArray(raw.exercises) ? raw.exercises : (fallback.exercises || []))
                 .map(item => normalizeWorkoutExercise(item))
                 .filter(item => item.name);
-            return {
+            const workout = {
                 id: raw.id || fallback.id || genId(),
                 date,
                 status,
@@ -275,6 +308,11 @@
                 createdAt,
                 updatedAt: raw.updatedAt || fallback.updatedAt || createdAt
             };
+            const startedAt = String(raw.startedAt || fallback.startedAt || '').trim();
+            const finishedAt = String(raw.finishedAt || fallback.finishedAt || '').trim();
+            if (startedAt) workout.startedAt = startedAt;
+            if (finishedAt) workout.finishedAt = finishedAt;
+            return workout;
         }
 
         function normalizeFitnessWorkouts(list = []) {
@@ -282,10 +320,293 @@
                 .map(item => normalizeFitnessWorkout(item))
                 .filter(item => item.id && item.date && (item.title || item.exercises.length))
                 .sort((a, b) => {
+                    const statusRank = (status) => (status === 'inProgress' ? 0 : 1);
+                    const rankDiff = statusRank(a.status) - statusRank(b.status);
+                    if (rankDiff) return rankDiff;
                     const dateDiff = String(b.date || '').localeCompare(String(a.date || ''));
                     if (dateDiff) return dateDiff;
                     return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
                 });
+        }
+
+        function getMuscleLabel(value = 'other') {
+            return EXERCISE_MUSCLE_OPTIONS.find(item => item.value === value)?.label || '其他';
+        }
+
+        function normalizeExerciseLibraryItem(raw = {}, fallback = {}) {
+            const createdAt = raw.createdAt || fallback.createdAt || getNowLocal();
+            const name = String(raw.name ?? fallback.name ?? '').trim();
+            const muscle = EXERCISE_MUSCLE_OPTIONS.some(item => item.value === raw.muscle)
+                ? raw.muscle
+                : (EXERCISE_MUSCLE_OPTIONS.some(item => item.value === fallback.muscle) ? fallback.muscle : 'other');
+            const item = {
+                id: raw.id || fallback.id || genId(),
+                name,
+                muscle,
+                defaultSets: parsePositiveInt(raw.defaultSets ?? fallback.defaultSets, 3) || 3,
+                defaultReps: String(raw.defaultReps ?? fallback.defaultReps ?? '8-12').trim() || '8-12',
+                restSec: parsePositiveInt(raw.restSec ?? fallback.restSec, DEFAULT_REST_SEC) ?? DEFAULT_REST_SEC,
+                note: typeof (raw.note ?? fallback.note) === 'string' ? String(raw.note ?? fallback.note) : '',
+                createdAt,
+                updatedAt: raw.updatedAt || fallback.updatedAt || createdAt
+            };
+            const defaultWeight = parseNonNegativeNumber(raw.defaultWeight ?? fallback.defaultWeight, null);
+            if (defaultWeight !== null) item.defaultWeight = defaultWeight;
+            return item;
+        }
+
+        function normalizeExerciseLibrary(list = []) {
+            return (Array.isArray(list) ? list : [])
+                .map(item => normalizeExerciseLibraryItem(item))
+                .filter(item => item.id && item.name)
+                .sort((a, b) => {
+                    const muscleDiff = String(a.muscle || '').localeCompare(String(b.muscle || ''));
+                    if (muscleDiff) return muscleDiff;
+                    return String(a.name || '').localeCompare(String(b.name || ''), 'zh');
+                });
+        }
+
+        function createDefaultExerciseLibrary() {
+            return normalizeExerciseLibrary(DEFAULT_EXERCISE_LIBRARY.map(item => ({
+                ...item,
+                id: genId(),
+                createdAt: getNowLocal(),
+                updatedAt: getNowLocal()
+            })));
+        }
+
+        function ensureExerciseLibrary(list = [], workouts = []) {
+            let library = normalizeExerciseLibrary(list);
+            if (!library.length) library = createDefaultExerciseLibrary();
+            const known = new Set(library.map(item => item.name.toLowerCase()));
+            (Array.isArray(workouts) ? workouts : []).forEach(workout => {
+                (workout.exercises || []).forEach(exercise => {
+                    const name = String(exercise?.name || '').trim();
+                    if (!name || known.has(name.toLowerCase())) return;
+                    known.add(name.toLowerCase());
+                    library.push(normalizeExerciseLibraryItem({
+                        name,
+                        muscle: 'other',
+                        defaultSets: exercise.targetSets || (exercise.sets || []).length || 3,
+                        defaultReps: exercise.targetReps || '8-12',
+                        defaultWeight: exercise.targetWeight,
+                        restSec: DEFAULT_REST_SEC
+                    }));
+                });
+            });
+            return normalizeExerciseLibrary(library);
+        }
+
+        function findExerciseLibraryItem(list = [], exerciseId = '') {
+            return normalizeExerciseLibrary(list).find(item => item.id === exerciseId) || null;
+        }
+
+        function findExerciseLibraryByName(list = [], name = '') {
+            const key = String(name || '').trim().toLowerCase();
+            if (!key) return null;
+            return normalizeExerciseLibrary(list).find(item => item.name.toLowerCase() === key) || null;
+        }
+
+        function upsertExerciseLibraryItem(list = [], input = {}, existingId = '') {
+            const item = normalizeExerciseLibraryItem(input);
+            if (!item.name) return { ok: false, message: '请填写动作名称', library: normalizeExerciseLibrary(list) };
+            const library = normalizeExerciseLibrary(list);
+            const stamp = getNowLocal();
+            const duplicate = library.find(entry => entry.name.toLowerCase() === item.name.toLowerCase() && entry.id !== existingId);
+            if (duplicate) return { ok: false, message: '动作库里已有同名动作', library };
+            if (existingId) {
+                const index = library.findIndex(entry => entry.id === existingId);
+                if (index >= 0) {
+                    library[index] = normalizeExerciseLibraryItem({
+                        ...library[index],
+                        ...item,
+                        id: existingId,
+                        createdAt: library[index].createdAt,
+                        updatedAt: stamp
+                    });
+                    return { ok: true, message: '', library: normalizeExerciseLibrary(library), item: library[index] };
+                }
+            }
+            const created = normalizeExerciseLibraryItem({
+                ...item,
+                id: genId(),
+                createdAt: stamp,
+                updatedAt: stamp
+            });
+            return { ok: true, message: '', library: normalizeExerciseLibrary([created, ...library]), item: created };
+        }
+
+        function removeExerciseLibraryItem(list = [], exerciseId = '') {
+            return normalizeExerciseLibrary(list).filter(item => item.id !== exerciseId);
+        }
+
+        function createWorkoutExerciseFromLibrary(item = {}, overrides = {}) {
+            const source = normalizeExerciseLibraryItem(item);
+            return normalizeWorkoutExercise({
+                name: source.name,
+                targetSets: source.defaultSets,
+                targetReps: source.defaultReps,
+                targetWeight: source.defaultWeight,
+                note: source.note,
+                sets: createDefaultSets(source.defaultSets, {
+                    targetWeight: source.defaultWeight,
+                    targetReps: source.defaultReps
+                }),
+                ...overrides
+            });
+        }
+
+        function findLastExercisePerformance(workouts = [], exerciseName = '', excludeWorkoutId = '') {
+            const key = String(exerciseName || '').trim().toLowerCase();
+            if (!key) return null;
+            const ordered = normalizeFitnessWorkouts(workouts)
+                .filter(item => item.id !== excludeWorkoutId && item.status === 'done');
+            for (const workout of ordered) {
+                const exercise = (workout.exercises || []).find(item => String(item.name || '').trim().toLowerCase() === key);
+                if (!exercise) continue;
+                const doneSets = (exercise.sets || []).filter(set => set.done && (set.weight !== null || set.reps !== null));
+                const bestSet = doneSets[doneSets.length - 1] || (exercise.sets || []).find(set => set.weight !== null || set.reps !== null) || null;
+                if (!bestSet && !exercise.targetWeight && !exercise.targetReps) continue;
+                return {
+                    workoutId: workout.id,
+                    workoutDate: workout.date,
+                    workoutTitle: getWorkoutTitle(workout),
+                    exerciseName: exercise.name,
+                    targetWeight: exercise.targetWeight ?? null,
+                    targetReps: exercise.targetReps || '',
+                    set: bestSet ? normalizeWorkoutSet(bestSet) : null,
+                    doneSets: doneSets.map(set => normalizeWorkoutSet(set))
+                };
+            }
+            return null;
+        }
+
+        function getPreviousSetInExercise(exercise = {}, setIndex = 0) {
+            const sets = Array.isArray(exercise?.sets) ? exercise.sets : [];
+            for (let i = setIndex - 1; i >= 0; i -= 1) {
+                const set = sets[i];
+                if (set && (set.weight !== null || set.reps !== null || set.done)) {
+                    return normalizeWorkoutSet(set);
+                }
+            }
+            return null;
+        }
+
+        function suggestSetValues(exercise = {}, setIndex = 0, history = null) {
+            const previous = getPreviousSetInExercise(exercise, setIndex);
+            if (previous && (previous.weight !== null || previous.reps !== null)) {
+                return {
+                    source: 'previousSet',
+                    weight: previous.weight,
+                    reps: previous.reps,
+                    label: `复制上一组 ${previous.weight ?? '—'}kg × ${previous.reps ?? '—'}`
+                };
+            }
+            if (history?.set && (history.set.weight !== null || history.set.reps !== null)) {
+                return {
+                    source: 'history',
+                    weight: history.set.weight,
+                    reps: history.set.reps,
+                    label: `上次 ${history.workoutDate} ${history.set.weight ?? '—'}kg × ${history.set.reps ?? '—'}`
+                };
+            }
+            if (exercise?.targetWeight !== null && exercise?.targetWeight !== undefined) {
+                const reps = parsePositiveInt(String(exercise.targetReps || '').split(/[-~/]/)[0], null);
+                return {
+                    source: 'target',
+                    weight: exercise.targetWeight,
+                    reps,
+                    label: `目标 ${exercise.targetWeight}kg${exercise.targetReps ? ` × ${exercise.targetReps}` : ''}`
+                };
+            }
+            return null;
+        }
+
+        function applySuggestionToSet(set = {}, suggestion = null) {
+            if (!suggestion) return normalizeWorkoutSet(set);
+            return normalizeWorkoutSet({
+                ...set,
+                weight: set.weight === null || set.weight === undefined || set.weight === ''
+                    ? suggestion.weight
+                    : set.weight,
+                reps: set.reps === null || set.reps === undefined || set.reps === ''
+                    ? suggestion.reps
+                    : set.reps
+            });
+        }
+
+        function getExerciseRestSec(exercise = {}, library = []) {
+            const match = findExerciseLibraryByName(library, exercise?.name || '');
+            if (match && Number.isFinite(match.restSec)) return match.restSec;
+            return DEFAULT_REST_SEC;
+        }
+
+        function computeDurationMin(startedAt = '', finishedAt = '') {
+            const start = Date.parse(startedAt);
+            const end = Date.parse(finishedAt || getNowLocal());
+            if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+            return Math.max(1, Math.round((end - start) / 60000));
+        }
+
+        function startLiveWorkout(input = {}) {
+            const stamp = getNowLocal();
+            return normalizeFitnessWorkout({
+                ...input,
+                status: 'inProgress',
+                startedAt: input.startedAt || stamp,
+                finishedAt: '',
+                date: input.date || getTodayStr(),
+                updatedAt: stamp
+            });
+        }
+
+        function completeWorkoutSet(workout = {}, exerciseIndex = 0, setIndex = 0, options = {}) {
+            const next = normalizeFitnessWorkout(JSON.parse(JSON.stringify(workout || {})));
+            const exercise = next.exercises?.[exerciseIndex];
+            if (!exercise?.sets?.[setIndex]) {
+                return { ok: false, message: '找不到对应组', workout: next };
+            }
+            const history = options.history || null;
+            let set = normalizeWorkoutSet(exercise.sets[setIndex]);
+            if (options.autoFill !== false) {
+                const suggestion = suggestSetValues(exercise, setIndex, history);
+                set = applySuggestionToSet(set, suggestion);
+            }
+            if (options.weight !== undefined) set.weight = parseNonNegativeNumber(options.weight, set.weight);
+            if (options.reps !== undefined) set.reps = parsePositiveInt(options.reps, set.reps);
+            set.done = options.done === false ? false : true;
+            exercise.sets[setIndex] = set;
+            if (!next.startedAt) next.startedAt = getNowLocal();
+            if (next.status === 'planned') next.status = 'inProgress';
+            next.updatedAt = getNowLocal();
+            return {
+                ok: true,
+                message: '',
+                workout: normalizeFitnessWorkout(next),
+                restSec: getExerciseRestSec(exercise, options.library || [])
+            };
+        }
+
+        function finishLiveWorkout(workout = {}, overrides = {}) {
+            const stamp = getNowLocal();
+            const startedAt = workout.startedAt || stamp;
+            const finishedAt = overrides.finishedAt || stamp;
+            const durationMin = overrides.durationMin !== undefined
+                ? parsePositiveInt(overrides.durationMin, null)
+                : (workout.durationMin || computeDurationMin(startedAt, finishedAt));
+            return normalizeFitnessWorkout({
+                ...workout,
+                ...overrides,
+                status: overrides.status || 'done',
+                startedAt,
+                finishedAt,
+                durationMin,
+                updatedAt: stamp
+            });
+        }
+
+        function findActiveWorkout(list = []) {
+            return normalizeFitnessWorkouts(list).find(item => item.status === 'inProgress') || null;
         }
 
         function normalizeFitnessData(target = {}) {
@@ -293,9 +614,13 @@
             if (!Array.isArray(target.bodyMetrics)) target.bodyMetrics = [];
             if (!Array.isArray(target.fitnessPlans)) target.fitnessPlans = [];
             if (!Array.isArray(target.fitnessWorkouts)) target.fitnessWorkouts = [];
+            if (!Array.isArray(target.exerciseLibrary)) target.exerciseLibrary = [];
             target.bodyMetrics = normalizeBodyMetrics(target.bodyMetrics);
             target.fitnessPlans = normalizeFitnessPlans(target.fitnessPlans);
             target.fitnessWorkouts = normalizeFitnessWorkouts(target.fitnessWorkouts);
+            // Keep empty library empty during normalize so load/sync does not auto-dirty data.
+            // Defaults are seeded only when the fitness UI asks for a usable library.
+            target.exerciseLibrary = normalizeExerciseLibrary(target.exerciseLibrary);
             return target;
         }
 
@@ -701,6 +1026,8 @@
             PLAN_STATUS_OPTIONS,
             WORKOUT_STATUS_OPTIONS,
             WEEKDAY_OPTIONS,
+            EXERCISE_MUSCLE_OPTIONS,
+            DEFAULT_REST_SEC,
             parseMetricNumber,
             hasAnyMetric,
             normalizeBodyMetric,
@@ -713,6 +1040,25 @@
             normalizeWorkoutExercise,
             normalizeFitnessWorkout,
             normalizeFitnessWorkouts,
+            normalizeExerciseLibraryItem,
+            normalizeExerciseLibrary,
+            createDefaultExerciseLibrary,
+            ensureExerciseLibrary,
+            findExerciseLibraryItem,
+            findExerciseLibraryByName,
+            upsertExerciseLibraryItem,
+            removeExerciseLibraryItem,
+            createWorkoutExerciseFromLibrary,
+            findLastExercisePerformance,
+            getPreviousSetInExercise,
+            suggestSetValues,
+            applySuggestionToSet,
+            getExerciseRestSec,
+            computeDurationMin,
+            startLiveWorkout,
+            completeWorkoutSet,
+            finishLiveWorkout,
+            findActiveWorkout,
             normalizeFitnessData,
             formatMetricValue,
             formatSignedChange,
@@ -720,6 +1066,7 @@
             getPlanGoalLabel,
             getPlanStatusLabel,
             getWeekdayLabels,
+            getMuscleLabel,
             countPlanExercises,
             getWorkoutStatusLabel,
             getWorkoutTitle,
@@ -760,6 +1107,8 @@
         PLAN_GOAL_OPTIONS,
         PLAN_STATUS_OPTIONS,
         WORKOUT_STATUS_OPTIONS,
-        WEEKDAY_OPTIONS
+        WEEKDAY_OPTIONS,
+        EXERCISE_MUSCLE_OPTIONS,
+        DEFAULT_REST_SEC
     };
 })();

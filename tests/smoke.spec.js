@@ -16,6 +16,7 @@ function createEmptyData(overrides = {}) {
         bodyMetrics: [],
         fitnessPlans: [],
         fitnessWorkouts: [],
+        exerciseLibrary: [],
         wheels: [],
         wheelTags: [],
         wheelLibraryItems: [],
@@ -190,6 +191,110 @@ test('fitness page can create workout logs from free training', async ({ page })
     expect(stored.fitnessWorkouts[0].exercises[0].sets[0].weight).toBe(60);
     expect(stored.fitnessWorkouts[0].exercises[0].sets[0].reps).toBe(8);
     expect(stored.fitnessWorkouts[0].exercises[0].sets[0].done).toBe(true);
+    expect(errors).toEqual([]);
+});
+
+
+test('fitness live workout can complete sets and finish session', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+        if (message.type() === 'error') errors.push(message.text());
+    });
+
+    const today = new Date();
+    const todayStr = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, '0'),
+        String(today.getDate()).padStart(2, '0')
+    ].join('-');
+    const weekday = today.getDay();
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData({
+        exerciseLibrary: [
+            {
+                id: 'lib-squat',
+                name: '杠铃深蹲',
+                muscle: 'leg',
+                defaultSets: 3,
+                defaultReps: '5',
+                restSec: 90,
+                createdAt: `${todayStr} 08:00`,
+                updatedAt: `${todayStr} 08:00`
+            }
+        ],
+        fitnessPlans: [
+            {
+                id: 'plan-live',
+                name: '力量日',
+                goal: 'strength',
+                status: 'active',
+                weekdays: [weekday],
+                notes: '',
+                days: [
+                    {
+                        id: 'day-live',
+                        name: 'A 日',
+                        exercises: [{ id: 'ex-live', name: '杠铃深蹲', targetSets: 2, targetReps: '5', targetWeight: 100 }]
+                    }
+                ],
+                createdAt: `${todayStr} 08:00`,
+                updatedAt: `${todayStr} 08:00`
+            }
+        ],
+        fitnessWorkouts: [
+            {
+                id: 'history-1',
+                date: todayStr,
+                status: 'done',
+                title: '历史深蹲',
+                notes: '',
+                durationMin: 30,
+                exercises: [
+                    {
+                        id: 'hex-1',
+                        name: '杠铃深蹲',
+                        sets: [{ id: 'hset-1', weight: 95, reps: 5, done: true }]
+                    }
+                ],
+                createdAt: `${todayStr} 07:00`,
+                updatedAt: `${todayStr} 07:00`
+            }
+        ]
+    }));
+
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '运动健身' }).click();
+    await expect(page.locator('#page-fitness')).toBeVisible();
+    await expect(page.locator('#fitness-page-library-list')).toContainText('杠铃深蹲');
+
+    await page.locator('#fitness-overview .btn.btn-primary', { hasText: '按计划开练' }).click();
+    await expect(page.locator('#fitness-live-modal')).toBeVisible();
+    await expect(page.locator('#fitness-live-body')).toContainText('杠铃深蹲');
+    await expect(page.locator('#fitness-live-body')).toContainText('上次');
+
+    const firstSet = page.locator('.fitness-live-set-row').first();
+    await firstSet.locator('input[type="number"]').nth(0).fill('100');
+    await firstSet.locator('input[type="number"]').nth(1).fill('5');
+    await firstSet.locator('button', { hasText: '完成' }).click();
+    await expect(page.locator('#fitness-rest-timer')).toBeVisible();
+    await page.locator('#fitness-rest-timer .btn', { hasText: '跳过' }).click();
+
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('#fitness-live-modal .btn.btn-primary', { hasText: '结束训练' }).click();
+    await expect(page.locator('#fitness-live-modal')).toBeHidden();
+    await expect(page.locator('#fitness-workout-list')).toContainText('力量日 · A 日');
+    await expect(page.locator('#fitness-workout-list')).toContainText('已完成');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const live = stored.fitnessWorkouts.find(item => item.title === '力量日 · A 日' || item.planId === 'plan-live');
+    expect(live).toBeTruthy();
+    expect(live.status).toBe('done');
+    expect(live.exercises[0].sets.some(set => set.done)).toBe(true);
+    expect(Array.isArray(stored.exerciseLibrary)).toBe(true);
+    expect(stored.exerciseLibrary.some(item => item.name === '杠铃深蹲')).toBe(true);
     expect(errors).toEqual([]);
 });
 
@@ -1899,6 +2004,7 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
         bodyMetrics: [],
         fitnessPlans: [],
         fitnessWorkouts: [],
+        exerciseLibrary: [],
         wheels: [
             {
                 id: 'wheel-normal',
@@ -2016,6 +2122,7 @@ function createWheelGestureData(wheelName = '手感测试盘') {
         bodyMetrics: [],
         fitnessPlans: [],
         fitnessWorkouts: [],
+        exerciseLibrary: [],
         wheels: [
             {
                 id: 'gesture-wheel',
@@ -2065,6 +2172,7 @@ test('wheel can be spun by dragging the canvas', async ({ page }) => {
         bodyMetrics: [],
         fitnessPlans: [],
         fitnessWorkouts: [],
+        exerciseLibrary: [],
         wheels: [
             {
                 id: 'drag-wheel',
@@ -2120,6 +2228,7 @@ test('tag wheel two-stage spin can be converted to a todo', async ({ page }) => 
         bodyMetrics: [],
         fitnessPlans: [],
         fitnessWorkouts: [],
+        exerciseLibrary: [],
         wheels: [
             {
                 id: 'tag-wheel',
@@ -2191,6 +2300,7 @@ test('tag wheel creation requires and saves selected tags', async ({ page }) => 
         bodyMetrics: [],
         fitnessPlans: [],
         fitnessWorkouts: [],
+        exerciseLibrary: [],
         wheels: [
             {
                 id: 'normal-wheel',
