@@ -199,17 +199,104 @@
             });
         }
 
+        function normalizePlanSet(raw = {}, fallback = {}) {
+            const set = {
+                id: raw.id || fallback.id || genId()
+            };
+            const weight = parseNonNegativeNumber(raw.weight ?? fallback.weight, null);
+            if (weight !== null) set.weight = weight;
+            const reps = parsePositiveInt(raw.reps ?? fallback.reps, null);
+            if (reps !== null) set.reps = reps;
+            return set;
+        }
+
+        function parseRepsHint(value, fallback = null) {
+            return parsePositiveInt(String(value || '').split(/[-~/]/)[0], fallback);
+        }
+
+        function summarizePlanSets(sets = [], fallback = {}) {
+            const list = Array.isArray(sets) ? sets : [];
+            const weights = list.map(item => item?.weight).filter(value => value !== null && value !== undefined);
+            const reps = list.map(item => item?.reps).filter(value => value !== null && value !== undefined);
+            const summary = {
+                targetSets: list.length || parsePositiveInt(fallback.targetSets, 3) || 3
+            };
+            if (weights.length) {
+                const uniqueWeights = Array.from(new Set(weights));
+                summary.targetWeight = uniqueWeights.length === 1
+                    ? uniqueWeights[0]
+                    : Math.max(...uniqueWeights);
+            } else {
+                const targetWeight = parseNonNegativeNumber(fallback.targetWeight, null);
+                if (targetWeight !== null) summary.targetWeight = targetWeight;
+            }
+            if (reps.length) {
+                const uniqueReps = Array.from(new Set(reps));
+                summary.targetReps = uniqueReps.length === 1
+                    ? String(uniqueReps[0])
+                    : `${Math.min(...uniqueReps)}-${Math.max(...uniqueReps)}`;
+            } else {
+                summary.targetReps = String(fallback.targetReps || '8-12').trim() || '8-12';
+            }
+            return summary;
+        }
+
+        function createPlanSets(count = 3, template = {}, existing = []) {
+            const size = Math.max(1, parsePositiveInt(count, 3) || 3);
+            const source = Array.isArray(existing) ? existing : [];
+            const defaultWeight = parseNonNegativeNumber(template.targetWeight, null);
+            const defaultReps = parseRepsHint(template.targetReps, null);
+            return Array.from({ length: size }, (_, index) => {
+                const prev = source[index] || source[source.length - 1] || {};
+                return normalizePlanSet({
+                    id: prev.id,
+                    weight: prev.weight ?? defaultWeight,
+                    reps: prev.reps ?? defaultReps
+                });
+            });
+        }
+
         function normalizeExercise(raw = {}, fallback = {}) {
             const name = String(raw.name ?? fallback.name ?? '').trim();
+            const hasRawSets = Array.isArray(raw.sets);
+            const hasFallbackSets = Array.isArray(fallback.sets);
+            const setSource = hasRawSets
+                ? raw.sets
+                : (hasFallbackSets ? fallback.sets : null);
+            let sets = setSource
+                ? setSource.map(item => normalizePlanSet(item)).filter(Boolean)
+                : [];
+            const requestedSets = parsePositiveInt(
+                raw.targetSets ?? fallback.targetSets,
+                sets.length || 3
+            ) || (sets.length || 3);
+            if (!sets.length) {
+                sets = createPlanSets(requestedSets, {
+                    targetWeight: raw.targetWeight ?? fallback.targetWeight,
+                    targetReps: raw.targetReps ?? fallback.targetReps
+                });
+            } else if (sets.length !== requestedSets && !hasRawSets) {
+                sets = createPlanSets(requestedSets, {
+                    targetWeight: raw.targetWeight ?? fallback.targetWeight,
+                    targetReps: raw.targetReps ?? fallback.targetReps
+                }, sets);
+            }
+            const summary = summarizePlanSets(sets, {
+                targetSets: requestedSets,
+                targetWeight: raw.targetWeight ?? fallback.targetWeight,
+                targetReps: raw.targetReps ?? fallback.targetReps
+            });
             const exercise = {
                 id: raw.id || fallback.id || genId(),
                 name,
-                targetSets: parsePositiveInt(raw.targetSets ?? fallback.targetSets, 3) || 3,
-                targetReps: String(raw.targetReps ?? fallback.targetReps ?? '8-12').trim() || '8-12',
+                targetSets: summary.targetSets,
+                targetReps: summary.targetReps,
+                sets,
                 note: typeof (raw.note ?? fallback.note) === 'string' ? String(raw.note ?? fallback.note) : ''
             };
-            const targetWeight = parseNonNegativeNumber(raw.targetWeight ?? fallback.targetWeight, null);
-            if (targetWeight !== null) exercise.targetWeight = targetWeight;
+            if (summary.targetWeight !== null && summary.targetWeight !== undefined) {
+                exercise.targetWeight = summary.targetWeight;
+            }
             const restSec = parsePositiveInt(raw.restSec ?? fallback.restSec, null);
             if (restSec !== null) exercise.restSec = restSec;
             return exercise;
@@ -308,19 +395,38 @@
         }
 
         function createDefaultSets(count = 3, template = {}) {
+            const plannedSets = Array.isArray(template.sets) ? template.sets : null;
+            if (plannedSets && plannedSets.length) {
+                return plannedSets.map(item => normalizeWorkoutSet({
+                    weight: item.weight ?? template.targetWeight,
+                    reps: item.reps ?? parseRepsHint(template.targetReps, null),
+                    done: false
+                }));
+            }
             const size = parsePositiveInt(count, 3) || 3;
             return Array.from({ length: size }, () => normalizeWorkoutSet({
                 weight: template.targetWeight,
-                reps: parsePositiveInt(String(template.targetReps || '').split(/[-~/]/)[0], null),
+                reps: parseRepsHint(template.targetReps, null),
                 done: false
             }));
         }
 
         function normalizeWorkoutExercise(raw = {}, fallback = {}) {
             const name = String(raw.name ?? fallback.name ?? '').trim();
+            const plannedSource = Array.isArray(raw.plannedSets)
+                ? raw.plannedSets
+                : (Array.isArray(fallback.plannedSets) ? fallback.plannedSets : null);
+            const plannedSets = plannedSource
+                ? plannedSource.map(item => normalizePlanSet(item)).filter(Boolean)
+                : [];
+            const template = {
+                targetWeight: raw.targetWeight ?? fallback.targetWeight,
+                targetReps: raw.targetReps ?? fallback.targetReps,
+                sets: plannedSets.length ? plannedSets : undefined
+            };
             const setsSource = Array.isArray(raw.sets)
                 ? raw.sets
-                : (Array.isArray(fallback.sets) ? fallback.sets : createDefaultSets(raw.targetSets ?? fallback.targetSets ?? 3, raw));
+                : (Array.isArray(fallback.sets) ? fallback.sets : createDefaultSets(raw.targetSets ?? fallback.targetSets ?? 3, template));
             const sets = setsSource.map(item => normalizeWorkoutSet(item)).filter(Boolean);
             const exercise = {
                 id: raw.id || fallback.id || genId(),
@@ -328,8 +434,9 @@
                 targetSets: parsePositiveInt(raw.targetSets ?? fallback.targetSets, sets.length || 3) || (sets.length || 3),
                 targetReps: String(raw.targetReps ?? fallback.targetReps ?? '').trim(),
                 note: typeof (raw.note ?? fallback.note) === 'string' ? String(raw.note ?? fallback.note) : '',
-                sets: sets.length ? sets : createDefaultSets(3, raw)
+                sets: sets.length ? sets : createDefaultSets(3, template)
             };
+            if (plannedSets.length) exercise.plannedSets = plannedSets;
             const targetWeight = parseNonNegativeNumber(raw.targetWeight ?? fallback.targetWeight, null);
             if (targetWeight !== null) exercise.targetWeight = targetWeight;
             return exercise;
@@ -561,8 +668,17 @@
                     label: `上次 ${history.workoutDate} ${history.set.weight ?? '—'}kg × ${history.set.reps ?? '—'}`
                 };
             }
+            const planned = Array.isArray(exercise?.plannedSets) ? exercise.plannedSets[setIndex] : null;
+            if (planned && (planned.weight != null || planned.reps != null)) {
+                return {
+                    source: 'planSet',
+                    weight: planned.weight,
+                    reps: planned.reps,
+                    label: `计划 ${planned.weight ?? '—'}kg × ${planned.reps ?? '—'}`
+                };
+            }
             if (exercise?.targetWeight !== null && exercise?.targetWeight !== undefined) {
-                const reps = parsePositiveInt(String(exercise.targetReps || '').split(/[-~/]/)[0], null);
+                const reps = parseRepsHint(exercise.targetReps, null);
                 return {
                     source: 'target',
                     weight: exercise.targetWeight,
@@ -701,7 +817,8 @@
                     id: genId(),
                     name: '',
                     targetSets: 3,
-                    targetReps: '8-12'
+                    targetReps: '8-12',
+                    sets: createPlanSets(3, { targetReps: '8-12' })
                 }
             ];
             return {
@@ -813,10 +930,86 @@
                     targetWeight: exercise.targetWeight,
                     note: exercise.note,
                     restSec: exercise.restSec,
+                    plannedSets: exercise.sets,
                     sets: createDefaultSets(exercise.targetSets, exercise)
                 })),
                 ...overrides
             });
+        }
+
+        function buildPlanExercisesFromWorkout(workout = {}) {
+            const source = normalizeFitnessWorkout(workout);
+            return (source.exercises || [])
+                .map(exercise => {
+                    const sets = (exercise.sets || []).map(set => normalizePlanSet({
+                        weight: set.weight,
+                        reps: set.reps
+                    }));
+                    if (!exercise.name || !sets.length) return null;
+                    return normalizeExercise({
+                        name: exercise.name,
+                        targetSets: sets.length,
+                        targetReps: exercise.targetReps,
+                        targetWeight: exercise.targetWeight,
+                        note: exercise.note,
+                        restSec: exercise.restSec,
+                        sets
+                    });
+                })
+                .filter(Boolean);
+        }
+
+        function serializePlanPrescription(exercises = []) {
+            return (Array.isArray(exercises) ? exercises : [])
+                .map(exercise => {
+                    const sets = (exercise.sets || []).map(set => ({
+                        weight: set.weight ?? null,
+                        reps: set.reps ?? null
+                    }));
+                    return {
+                        name: String(exercise.name || '').trim(),
+                        sets
+                    };
+                })
+                .filter(item => item.name);
+        }
+
+        function hasPlanPrescriptionDiff(plan = {}, workout = {}) {
+            const planExercises = serializePlanPrescription(getPlanExercises(plan));
+            const workoutExercises = serializePlanPrescription(buildPlanExercisesFromWorkout(workout));
+            if (planExercises.length !== workoutExercises.length) return true;
+            return planExercises.some((exercise, index) => {
+                const other = workoutExercises[index];
+                if (!other || exercise.name !== other.name) return true;
+                if (exercise.sets.length !== other.sets.length) return true;
+                return exercise.sets.some((set, setIndex) => {
+                    const next = other.sets[setIndex] || {};
+                    return (set.weight ?? null) !== (next.weight ?? null)
+                        || (set.reps ?? null) !== (next.reps ?? null);
+                });
+            });
+        }
+
+        function updatePlanFromWorkout(list = [], planId = '', workout = {}) {
+            const plans = normalizeFitnessPlans(list);
+            const index = plans.findIndex(item => item.id === planId);
+            if (index < 0) return { ok: false, message: '找不到对应计划', plans };
+            const exercises = buildPlanExercisesFromWorkout(workout);
+            if (!exercises.length) return { ok: false, message: '本场没有可回写的动作', plans };
+            const current = plans[index];
+            const stamp = getNowLocal();
+            plans[index] = normalizeFitnessPlan({
+                ...current,
+                exercises,
+                updatedAt: stamp
+            });
+            return {
+                ok: true,
+                message: '',
+                plans: normalizeFitnessPlans(plans),
+                plan: plans[index],
+                changed: hasPlanPrescriptionDiff(current, workout)
+            };
         }
 
         function createWorkoutFromPlanDay(plan = {}, day = {}, overrides = {}) {
@@ -1161,6 +1354,11 @@
             getActiveFitnessPlans,
             findFitnessPlan,
             createDefaultSets,
+            createPlanSets,
+            normalizePlanSet,
+            buildPlanExercisesFromWorkout,
+            hasPlanPrescriptionDiff,
+            updatePlanFromWorkout,
             createWorkoutFromPlan,
             createWorkoutFromPlanDay,
             createFitnessWorkoutDraft,

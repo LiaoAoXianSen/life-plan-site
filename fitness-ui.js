@@ -85,6 +85,11 @@
         return typeof saveData === 'function' ? saveData() : true;
     }
 
+    function persistPlans(plans) {
+        data.fitnessPlans = plans;
+        return typeof saveData === 'function' ? saveData() : true;
+    }
+
     function persistLibrary(library) {
         data.exerciseLibrary = library;
         return typeof saveData === 'function' ? saveData() : true;
@@ -472,9 +477,16 @@
         container.innerHTML = plans.map(plan => {
             const exercises = service.getPlanExercises(plan);
             const exerciseCount = exercises.length;
-            const tags = exercises.slice(0, 5).map(item => `
-                <span class="fitness-exercise-tag">${safeHtml(item.name)}</span>
-            `).join('');
+            const tags = exercises.slice(0, 5).map(item => {
+                const setCount = item.targetSets || (item.sets || []).length || 0;
+                const sample = (item.sets || []).find(set => set.weight != null || set.reps != null);
+                const detail = sample
+                    ? `${setCount}×${sample.weight ?? '—'}kg/${sample.reps ?? '—'}`
+                    : (item.targetWeight != null
+                        ? `${setCount}×${item.targetWeight}kg`
+                        : `${setCount} 组`);
+                return `<span class="fitness-exercise-tag">${safeHtml(item.name)} · ${safeHtml(detail)}</span>`;
+            }).join('');
             const moreCount = Math.max(0, exerciseCount - 5);
             return `
                 <article class="fitness-plan-card">
@@ -513,18 +525,22 @@
             fitnessPlanDraft.exercises = service.getPlanExercises(fitnessPlanDraft);
         }
         if (!fitnessPlanDraft.exercises.length) {
-            fitnessPlanDraft.exercises = [{
-                id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`),
+            fitnessPlanDraft.exercises = [service.normalizeExercise({
                 name: '',
                 targetSets: 3,
                 targetReps: '8-12'
-            }];
+            })];
         }
+        fitnessPlanDraft.exercises = fitnessPlanDraft.exercises.map(item => {
+            if (Array.isArray(item.sets) && item.sets.length) return item;
+            return service.normalizeExercise(item);
+        });
         fitnessPlanDraft.weekdays = [];
         return fitnessPlanDraft;
     }
 
     function syncPlanDraftFromForm() {
+        const service = ensureService();
         const draft = ensurePlanDraft();
         if (!draft) return null;
         const nameEl = document.getElementById('fitness-plan-name');
@@ -535,6 +551,30 @@
         if (goalEl) draft.goal = goalEl.value || draft.goal || 'general';
         if (statusEl) draft.status = statusEl.value || draft.status || 'active';
         if (notesEl) draft.notes = notesEl.value || '';
+        const editor = document.getElementById('fitness-plan-exercises-editor');
+        const cards = editor ? Array.from(editor.querySelectorAll('.fitness-plan-exercise-card')) : [];
+        if (service && cards.length) {
+            draft.exercises = cards.map((card, exerciseIndex) => {
+                const prev = draft.exercises?.[exerciseIndex] || {};
+                const name = card.querySelector('.fitness-plan-exercise-card-head input')?.value || '';
+                const setRows = Array.from(card.querySelectorAll('.fitness-plan-set-row'));
+                const sets = setRows.map((row, setIndex) => {
+                    const inputs = row.querySelectorAll('input[type="number"]');
+                    const prevSet = prev.sets?.[setIndex] || {};
+                    return service.normalizePlanSet({
+                        id: prevSet.id,
+                        weight: inputs[0]?.value,
+                        reps: inputs[1]?.value
+                    });
+                });
+                return service.normalizeExercise({
+                    ...prev,
+                    name,
+                    targetSets: sets.length || prev.targetSets || 3,
+                    sets: sets.length ? sets : prev.sets
+                });
+            });
+        }
         return draft;
     }
 
@@ -552,30 +592,55 @@
         document.getElementById('fitness-plan-status').value = draft.status || 'active';
         document.getElementById('fitness-plan-notes').value = draft.notes || '';
 
-const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
-            const weightValue = exercise.targetWeight == null ? '' : exercise.targetWeight;
-            return `
-                <div class="fitness-plan-exercise-row">
-                    <input type="text" list="fitness-exercise-datalist" value="${safeHtml(exercise.name)}" placeholder="动作名称" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'name', this.value)" onchange="applyLibraryDefaultsToPlanExercise(${exerciseIndex}, this.value)">
-                    <input type="number" min="1" step="1" value="${exercise.targetSets || 3}" placeholder="3" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetSets', this.value)">
-                    <input type="text" value="${safeHtml(exercise.targetReps || '')}" placeholder="8-12" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetReps', this.value)">
-                    <input type="number" min="0" step="0.5" value="${weightValue}" placeholder="kg" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetWeight', this.value)">
-                    <button type="button" class="btn btn-secondary fitness-icon-btn" onclick="removeFitnessPlanExercise(${exerciseIndex})" title="删除动作">&times;</button>
+const exerciseCards = (draft.exercises || []).map((exercise, exerciseIndex) => {
+            const sets = Array.isArray(exercise.sets) && exercise.sets.length
+                ? exercise.sets
+                : service.createPlanSets(exercise.targetSets || 3, exercise);
+            exercise.sets = sets;
+            const setRows = sets.map((set, setIndex) => `
+                <div class="fitness-plan-set-row">
+                    <span class="fitness-set-index">${setIndex + 1}</span>
+                    <div class="fitness-live-field">
+                        <input type="number" min="0" step="0.5" value="${set.weight ?? ''}" placeholder="kg"
+                            oninput="updateFitnessPlanSet(${exerciseIndex}, ${setIndex}, 'weight', this.value)">
+                        <span class="fitness-live-unit">kg</span>
+                    </div>
+                    <div class="fitness-live-field">
+                        <input type="number" min="0" step="1" value="${set.reps ?? ''}" placeholder="次"
+                            oninput="updateFitnessPlanSet(${exerciseIndex}, ${setIndex}, 'reps', this.value)">
+                        <span class="fitness-live-unit">次</span>
+                    </div>
+                    <button type="button" class="btn btn-secondary fitness-icon-btn" onclick="removeFitnessPlanSet(${exerciseIndex}, ${setIndex})" title="删除组">&times;</button>
                 </div>
+            `).join('');
+            return `
+                <section class="fitness-plan-exercise-card">
+                    <div class="fitness-plan-exercise-card-head">
+                        <input type="text" list="fitness-exercise-datalist" value="${safeHtml(exercise.name)}" placeholder="动作名称"
+                            oninput="updateFitnessPlanExercise(${exerciseIndex}, 'name', this.value)"
+                            onchange="applyLibraryDefaultsToPlanExercise(${exerciseIndex}, this.value)">
+                        <button type="button" class="btn btn-secondary fitness-icon-btn" onclick="removeFitnessPlanExercise(${exerciseIndex})" title="删除动作">&times;</button>
+                    </div>
+                    <div class="fitness-plan-set-table">
+                        <div class="fitness-plan-set-head">
+                            <span>组</span>
+                            <span>重量</span>
+                            <span>次数</span>
+                            <span></span>
+                        </div>
+                        ${setRows}
+                    </div>
+                    <div class="fitness-plan-day-actions compact">
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanSet(${exerciseIndex})">+ 加一组</button>
+                    </div>
+                </section>
             `;
         }).join('');
 
         editorBox.innerHTML = `
             <div class="fitness-plan-simple-editor">
                 <div class="fitness-plan-exercise-list">
-                    <div class="fitness-plan-exercise-head">
-                        <span>动作</span>
-                        <span>组</span>
-                        <span>次数</span>
-                        <span>目标重量</span>
-                        <span></span>
-                    </div>
-                    ${exerciseRows || '<div class="fitness-empty compact">还没有动作，可从动作库选择，也可以手动添加。</div>'}
+                    ${exerciseCards || '<div class="fitness-empty compact">还没有动作，可从动作库选择，也可以手动添加。</div>'}
                 </div>
                 <div class="fitness-plan-day-actions">
                     <button type="button" class="btn btn-primary" onclick="openExerciseLibraryPickerForPlan()">从动作库选择</button>
@@ -1172,11 +1237,34 @@ const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
             return;
         }
         if (!persistWorkouts(result.workouts)) return;
+
+        let planUpdated = false;
+        if (result.workout.planId) {
+            const plan = service.findFitnessPlan(getPlans(), result.workout.planId);
+            if (plan && service.hasPlanPrescriptionDiff(plan, result.workout)) {
+                const shouldUpdate = confirm('本场重量/次数与计划不同。要把这次实际成绩写回计划吗？');
+                if (shouldUpdate) {
+                    const planResult = service.updatePlanFromWorkout(getPlans(), result.workout.planId, result.workout);
+                    if (!planResult.ok) {
+                        alert(planResult.message || '更新计划失败');
+                    } else if (!persistPlans(planResult.plans)) {
+                        alert('计划已改但保存失败');
+                        return;
+                    } else {
+                        planUpdated = true;
+                    }
+                }
+            }
+        }
+
         stopRestTimer();
         document.getElementById('fitness-live-modal')?.classList.remove('active');
         liveWorkoutDraft = null;
         liveWorkoutId = null;
-        alert(`训练完成！共完成 ${service.countCompletedSets(result.workout)} 组${result.workout.durationMin ? `，用时 ${result.workout.durationMin} 分钟` : ''}`);
+        const doneCount = service.countCompletedSets(result.workout);
+        const durationText = result.workout.durationMin ? `，用时 ${result.workout.durationMin} 分钟` : '';
+        const planText = planUpdated ? '，并已更新计划' : '';
+        alert(`训练完成！共完成 ${doneCount} 组${durationText}${planText}`);
         renderFitnessPage();
         if (typeof renderDashboard === 'function') renderDashboard();
     };
@@ -1222,7 +1310,11 @@ const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
                 targetReps: item.defaultReps,
                 targetWeight: item.defaultWeight,
                 note: item.note,
-                restSec: item.restSec
+                restSec: item.restSec,
+                sets: service.createPlanSets(item.defaultSets || 3, {
+                    targetWeight: item.defaultWeight,
+                    targetReps: item.defaultReps || '8-12'
+                })
             });
             const emptyIndex = draft.exercises.findIndex(entry => !String(entry?.name || '').trim());
             if (emptyIndex >= 0) draft.exercises[emptyIndex] = nextExercise;
@@ -1255,19 +1347,38 @@ const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
 
     window.applyLibraryDefaultsToPlanExercise = function applyLibraryDefaultsToPlanExercise(exerciseIndex, name = '') {
         const service = ensureService();
+        syncPlanDraftFromForm();
         const draft = ensurePlanDraft();
         if (!service || !draft?.exercises?.[exerciseIndex]) return;
         const exercise = draft.exercises[exerciseIndex];
         exercise.name = name;
         const item = service.findExerciseLibraryByName(getLibrary({ seedDefaults: false }), name);
         if (!item) return;
-        if (!exercise.targetSets) exercise.targetSets = item.defaultSets;
-        if (!exercise.targetReps) exercise.targetReps = item.defaultReps;
-        if (exercise.targetWeight == null || exercise.targetWeight === '') {
-            exercise.targetWeight = item.defaultWeight;
+        const hasFilledSets = Array.isArray(exercise.sets)
+            && exercise.sets.some(set => set.weight != null || set.reps != null);
+        if (!hasFilledSets) {
+            draft.exercises[exerciseIndex] = service.normalizeExercise({
+                ...exercise,
+                name: item.name,
+                targetSets: item.defaultSets || exercise.targetSets || 3,
+                targetReps: item.defaultReps || exercise.targetReps || '8-12',
+                targetWeight: item.defaultWeight,
+                note: exercise.note || item.note || '',
+                restSec: exercise.restSec ?? item.restSec,
+                sets: service.createPlanSets(item.defaultSets || exercise.targetSets || 3, {
+                    targetWeight: item.defaultWeight,
+                    targetReps: item.defaultReps || '8-12'
+                })
+            });
+        } else {
+            if (!exercise.targetSets) exercise.targetSets = item.defaultSets;
+            if (!exercise.targetReps) exercise.targetReps = item.defaultReps;
+            if (exercise.targetWeight == null || exercise.targetWeight === '') {
+                exercise.targetWeight = item.defaultWeight;
+            }
+            if (!exercise.note) exercise.note = item.note || '';
+            if (exercise.restSec == null && item.restSec != null) exercise.restSec = item.restSec;
         }
-        if (!exercise.note) exercise.note = item.note || '';
-        if (exercise.restSec == null && item.restSec != null) exercise.restSec = item.restSec;
         renderPlanEditor();
     };
 
@@ -1483,11 +1594,12 @@ const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
             : null;
         if (existing) {
             const normalized = service.normalizeFitnessPlan(JSON.parse(JSON.stringify(existing)));
+            const exercises = service.getPlanExercises(normalized);
             fitnessPlanDraft = {
                 ...normalized,
-                exercises: service.getPlanExercises(normalized).length
-                    ? service.getPlanExercises(normalized)
-                    : [{ id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`), name: '', targetSets: 3, targetReps: '8-12' }]
+                exercises: exercises.length
+                    ? exercises
+                    : [service.normalizeExercise({ name: '', targetSets: 3, targetReps: '8-12' })]
             };
         } else {
             fitnessPlanDraft = service.createFitnessPlanDraft();
@@ -1510,6 +1622,7 @@ const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
 
     window.addFitnessPlanExercise = function addFitnessPlanExercise() {
         const service = ensureService();
+        syncPlanDraftFromForm();
         const draft = ensurePlanDraft();
         if (!service || !draft) return;
         if (!Array.isArray(draft.exercises)) draft.exercises = [];
@@ -1522,16 +1635,15 @@ const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
     };
 
     window.removeFitnessPlanExercise = function removeFitnessPlanExercise(exerciseIndex) {
+        const service = ensureService();
+        syncPlanDraftFromForm();
         const draft = ensurePlanDraft();
         if (!draft?.exercises) return;
         draft.exercises.splice(exerciseIndex, 1);
         if (!draft.exercises.length) {
-            draft.exercises.push({
-                id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`),
-                name: '',
-                targetSets: 3,
-                targetReps: '8-12'
-            });
+            draft.exercises.push(service
+                ? service.normalizeExercise({ name: '', targetSets: 3, targetReps: '8-12' })
+                : { id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`), name: '', targetSets: 3, targetReps: '8-12', sets: [] });
         }
         renderPlanEditor();
     };
@@ -1542,16 +1654,66 @@ const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
         draft.exercises[exerciseIndex][field] = value;
     };
 
-    window.saveFitnessPlan = function saveFitnessPlan() {
+    window.addFitnessPlanSet = function addFitnessPlanSet(exerciseIndex) {
+        const service = ensureService();
+        syncPlanDraftFromForm();
+        const draft = ensurePlanDraft();
+        if (!service || !draft?.exercises?.[exerciseIndex]) return;
+        const exercise = draft.exercises[exerciseIndex];
+        if (!Array.isArray(exercise.sets)) exercise.sets = [];
+        const last = exercise.sets[exercise.sets.length - 1] || {};
+        exercise.sets.push(service.normalizePlanSet({
+            weight: last.weight,
+            reps: last.reps
+        }));
+        exercise.targetSets = exercise.sets.length;
+        renderPlanEditor();
+    };
+
+    window.removeFitnessPlanSet = function removeFitnessPlanSet(exerciseIndex, setIndex) {
+        const service = ensureService();
+        syncPlanDraftFromForm();
+        const draft = ensurePlanDraft();
+        if (!service || !draft?.exercises?.[exerciseIndex]) return;
+        const exercise = draft.exercises[exerciseIndex];
+        if (!Array.isArray(exercise.sets)) return;
+        exercise.sets.splice(setIndex, 1);
+        if (!exercise.sets.length) {
+            exercise.sets = service.createPlanSets(1, exercise);
+        }
+        exercise.targetSets = exercise.sets.length;
+        renderPlanEditor();
+    };
+
+    window.updateFitnessPlanSet = function updateFitnessPlanSet(exerciseIndex, setIndex, field, value) {
         const service = ensureService();
         const draft = ensurePlanDraft();
+        if (!service || !draft?.exercises?.[exerciseIndex]) return;
+        const exercise = draft.exercises[exerciseIndex];
+        if (!Array.isArray(exercise.sets)) {
+            exercise.sets = service.createPlanSets(exercise.targetSets || 3, exercise);
+        }
+        if (!exercise.sets[setIndex]) return;
+        if (field === 'weight') {
+            exercise.sets[setIndex].weight = value === '' ? undefined : Number(value);
+            if (!Number.isFinite(exercise.sets[setIndex].weight)) delete exercise.sets[setIndex].weight;
+        } else if (field === 'reps') {
+            exercise.sets[setIndex].reps = value === '' ? undefined : parseInt(value, 10);
+            if (!Number.isFinite(exercise.sets[setIndex].reps)) delete exercise.sets[setIndex].reps;
+        }
+        exercise.targetSets = exercise.sets.length;
+    };
+
+    window.saveFitnessPlan = function saveFitnessPlan() {
+        const service = ensureService();
+        const draft = syncPlanDraftFromForm();
         if (!service || !draft) return;
         const input = {
             ...draft,
-            name: document.getElementById('fitness-plan-name')?.value || '',
-            goal: document.getElementById('fitness-plan-goal')?.value || 'general',
-            status: document.getElementById('fitness-plan-status')?.value || 'active',
-            notes: document.getElementById('fitness-plan-notes')?.value || '',
+            name: draft.name || '',
+            goal: draft.goal || 'general',
+            status: draft.status || 'active',
+            notes: draft.notes || '',
             weekdays: [],
             exercises: draft.exercises || []
         };

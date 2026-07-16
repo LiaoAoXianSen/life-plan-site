@@ -127,16 +127,25 @@ test('fitness page can create training plans', async ({ page }) => {
     await page.selectOption('#fitness-plan-goal', 'hypertrophy');
     await page.fill('#fitness-plan-notes', '健身房三分化');
 
-    const firstExercise = page.locator('.fitness-plan-exercise-row').first();
-    await firstExercise.locator('input').nth(0).fill('深蹲');
-    await firstExercise.locator('input').nth(1).fill('4');
-    await firstExercise.locator('input').nth(2).fill('6-8');
-    await firstExercise.locator('input').nth(3).fill('100');
+    const firstExercise = page.locator('.fitness-plan-exercise-card').first();
+    await firstExercise.locator('.fitness-plan-exercise-card-head input').fill('深蹲');
+    // Default draft has 3 sets; add one more for a 4-set prescription.
+    await firstExercise.locator('button', { hasText: '+ 加一组' }).click();
+    const setRows = firstExercise.locator('.fitness-plan-set-row');
+    await expect(setRows).toHaveCount(4);
+    await setRows.nth(0).locator('input[type="number"]').nth(0).fill('100');
+    await setRows.nth(0).locator('input[type="number"]').nth(1).fill('6');
+    await setRows.nth(1).locator('input[type="number"]').nth(0).fill('100');
+    await setRows.nth(1).locator('input[type="number"]').nth(1).fill('8');
+    await setRows.nth(2).locator('input[type="number"]').nth(0).fill('95');
+    await setRows.nth(2).locator('input[type="number"]').nth(1).fill('8');
+    await setRows.nth(3).locator('input[type="number"]').nth(0).fill('95');
+    await setRows.nth(3).locator('input[type="number"]').nth(1).fill('8');
 
     await page.locator('#fitness-plan-modal .btn.btn-primary', { hasText: '保存' }).click();
-    await expect(page.locator('#fitness-plan-list')).toContainText('推拉腿');
-    await expect(page.locator('#fitness-plan-list')).toContainText('深蹲');
-    await expect(page.locator('#fitness-plan-list')).toContainText('增肌');
+    await expect(page.locator('#fitness-plan-list .fitness-plan-card')).toContainText('推拉腿');
+    await expect(page.locator('#fitness-plan-list .fitness-plan-card')).toContainText('深蹲');
+    await expect(page.locator('#fitness-plan-list .fitness-plan-card')).toContainText('增肌');
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.fitnessPlans).toHaveLength(1);
@@ -144,7 +153,9 @@ test('fitness page can create training plans', async ({ page }) => {
     expect(stored.fitnessPlans[0].goal).toBe('hypertrophy');
     expect(stored.fitnessPlans[0].exercises[0].name).toBe('深蹲');
     expect(stored.fitnessPlans[0].exercises[0].targetSets).toBe(4);
-    expect(stored.fitnessPlans[0].exercises[0].targetWeight).toBe(100);
+    expect(stored.fitnessPlans[0].exercises[0].sets).toHaveLength(4);
+    expect(stored.fitnessPlans[0].exercises[0].sets[0]).toMatchObject({ weight: 100, reps: 6 });
+    expect(stored.fitnessPlans[0].exercises[0].sets[2]).toMatchObject({ weight: 95, reps: 8 });
     expect(errors).toEqual([]);
 });
 
@@ -279,23 +290,37 @@ test('fitness live workout can complete sets and finish session', async ({ page 
     await expect(page.locator('#fitness-live-body')).toContainText('上次');
 
     const firstSet = page.locator('.fitness-live-set-row').first();
-    await firstSet.locator('input[type="number"]').nth(0).fill('100');
+    await firstSet.locator('input[type="number"]').nth(0).fill('105');
     await firstSet.locator('input[type="number"]').nth(1).fill('5');
     await firstSet.locator('button', { hasText: '完成' }).click();
     await expect(page.locator('#fitness-rest-timer')).toBeVisible();
     await page.locator('#fitness-rest-timer .btn', { hasText: '跳过' }).click();
 
-    page.once('dialog', dialog => dialog.accept());
+    const secondSet = page.locator('.fitness-live-set-row').nth(1);
+    await secondSet.locator('input[type="number"]').nth(0).fill('105');
+    await secondSet.locator('input[type="number"]').nth(1).fill('4');
+    await secondSet.locator('button', { hasText: '完成' }).click();
+    await page.locator('#fitness-rest-timer .btn', { hasText: '跳过' }).click();
+
+    const dialogMessages = [];
+    page.on('dialog', async dialog => {
+        dialogMessages.push(dialog.message());
+        await dialog.accept();
+    });
     await page.locator('#fitness-live-modal .btn.btn-primary', { hasText: '结束训练' }).click();
     await expect(page.locator('#fitness-live-modal')).toBeHidden();
     await expect(page.locator('#fitness-workout-list')).toContainText('力量日');
     await expect(page.locator('#fitness-workout-list')).toContainText('已完成');
+    expect(dialogMessages.some(message => message.includes('写回计划'))).toBe(true);
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     const live = stored.fitnessWorkouts.find(item => item.title === '力量日' || item.planId === 'plan-live');
     expect(live).toBeTruthy();
     expect(live.status).toBe('done');
     expect(live.exercises[0].sets.some(set => set.done)).toBe(true);
+    const plan = stored.fitnessPlans.find(item => item.id === 'plan-live');
+    expect(plan.exercises[0].sets[0]).toMatchObject({ weight: 105, reps: 5 });
+    expect(plan.exercises[0].sets[1]).toMatchObject({ weight: 105, reps: 4 });
     expect(Array.isArray(stored.exerciseLibrary)).toBe(true);
     expect(stored.exerciseLibrary.some(item => item.name === '杠铃深蹲')).toBe(true);
     expect(errors).toEqual([]);
@@ -343,7 +368,8 @@ test('fitness plan can pick exercises from library', async ({ page }) => {
     await expect(page.locator('#fitness-library-modal')).toBeVisible();
     await page.locator('#fitness-modal-library-list .fitness-library-card', { hasText: '杠铃卧推' }).click();
     await expect(page.locator('#fitness-library-modal')).toBeHidden();
-    await expect(page.locator('#fitness-plan-exercises-editor .fitness-plan-exercise-row input[type="text"]').first()).toHaveValue('杠铃卧推');
+    await expect(page.locator('#fitness-plan-exercises-editor .fitness-plan-exercise-card-head input').first()).toHaveValue('杠铃卧推');
+    await expect(page.locator('#fitness-plan-exercises-editor .fitness-plan-set-row')).toHaveCount(4);
     await page.locator('#fitness-plan-modal .btn.btn-primary', { hasText: '保存' }).click();
     await expect(page.locator('#fitness-plan-list')).toContainText('推日计划');
     await expect(page.locator('#fitness-plan-list')).toContainText('杠铃卧推');
@@ -353,6 +379,8 @@ test('fitness plan can pick exercises from library', async ({ page }) => {
     expect(stored.fitnessPlans[0].exercises[0].name).toBe('杠铃卧推');
     expect(stored.fitnessPlans[0].exercises[0].targetSets).toBe(4);
     expect(stored.fitnessPlans[0].exercises[0].targetWeight).toBe(60);
+    expect(stored.fitnessPlans[0].exercises[0].sets).toHaveLength(4);
+    expect(stored.fitnessPlans[0].exercises[0].sets[0]).toMatchObject({ weight: 60, reps: 6 });
     expect(errors).toEqual([]);
 });
 

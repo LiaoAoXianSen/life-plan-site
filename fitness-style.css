@@ -520,7 +520,7 @@
 
 .fitness-plan-exercise-list {
     display: grid;
-    gap: 8px;
+    gap: 10px;
 }
 
 .fitness-plan-exercise-head,
@@ -553,11 +553,79 @@
     outline: none;
 }
 
+.fitness-plan-exercise-card {
+    padding: 12px;
+    border: 1px solid var(--line, #dfe7e1);
+    border-radius: 12px;
+    background: var(--surface-soft, #f8faf8);
+}
+
+.fitness-plan-exercise-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 40px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.fitness-plan-exercise-card-head input {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--line, #dfe7e1);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text, #17211b);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.fitness-plan-exercise-card-head input:focus {
+    border-color: var(--accent-2, #2f80ed);
+    outline: none;
+}
+
+.fitness-plan-set-table {
+    display: grid;
+    gap: 6px;
+}
+
+.fitness-plan-set-head,
+.fitness-plan-set-row {
+    display: grid;
+    grid-template-columns: 32px 96px 84px 40px;
+    gap: 8px;
+    align-items: center;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.fitness-plan-set-head {
+    color: var(--muted, #647269);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 2px;
+}
+
+.fitness-plan-set-row {
+    padding: 4px 0;
+}
+
+.fitness-plan-set-row .fitness-live-field input {
+    min-height: 36px;
+    padding: 6px 28px 6px 8px;
+    font-size: 14px;
+}
+
 .fitness-plan-day-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 12px;
+}
+
+.fitness-plan-day-actions.compact {
+    margin-top: 8px;
 }
 
 .fitness-check-row {
@@ -939,6 +1007,13 @@
 
     .fitness-plan-exercise-row input:first-child {
         grid-column: 1 / -1;
+    }
+
+    .fitness-plan-set-head,
+    .fitness-plan-set-row {
+        grid-template-columns: 28px 88px 76px 36px;
+        gap: 6px;
+        width: 100%;
     }
 
     .fitness-live-set-head,
