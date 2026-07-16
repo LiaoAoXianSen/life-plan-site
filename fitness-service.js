@@ -642,7 +642,10 @@
         }
 
         function createFitnessPlanDraft(overrides = {}) {
-            return normalizeFitnessPlan({
+            const stamp = getNowLocal();
+            // Keep empty exercise placeholders for the editor; full normalize would strip them.
+            return {
+                id: genId(),
                 name: '',
                 goal: 'general',
                 status: 'active',
@@ -650,15 +653,22 @@
                 notes: '',
                 days: [
                     {
+                        id: genId(),
                         name: 'A 日',
                         exercises: [
-                            { name: '深蹲', targetSets: 4, targetReps: '6-8' },
-                            { name: '卧推', targetSets: 4, targetReps: '6-8' }
+                            {
+                                id: genId(),
+                                name: '',
+                                targetSets: 3,
+                                targetReps: '8-12'
+                            }
                         ]
                     }
                 ],
+                createdAt: stamp,
+                updatedAt: stamp,
                 ...overrides
-            });
+            };
         }
 
         function validateFitnessPlanInput(input = {}) {

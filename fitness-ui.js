@@ -7,6 +7,7 @@
     let fitnessWorkoutDraft = null;
     let liveWorkoutDraft = null;
     let liveWorkoutId = null;
+    let libraryPicker = null;
     let fitnessService = null;
     let restTimer = {
         remaining: 0,
@@ -394,35 +395,64 @@
     function renderExerciseLibraryInto(container) {
         const service = ensureService();
         if (!service || !container) return;
-        const library = getLibrary();
+        const library = getLibrary({ seedDefaults: true, persist: true });
+        const pickerMode = libraryPicker?.mode || 'manage';
         if (!library.length) {
-            container.innerHTML = `<div class="empty-state">动作库还是空的，先加几个常用动作。</div>`;
+            container.innerHTML = `
+                <div class="empty-state">
+                    动作库还是空的，先新建几个常用动作。
+                    <div style="margin-top:10px;">
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="openExerciseLibraryItemModal()">+ 新建动作</button>
+                    </div>
+                </div>
+            `;
             return;
         }
-        container.innerHTML = library.map(item => `
-            <article class="fitness-library-card" onclick="openExerciseLibraryItemModal(${safeJs(item.id)})">
-                <div class="fitness-plan-head">
-                    <div>
-                        <div class="fitness-plan-name">${safeHtml(item.name)}</div>
-                        <div class="fitness-plan-meta">${safeHtml(service.getMuscleLabel(item.muscle))}</div>
+        container.innerHTML = library.map(item => {
+            const action = pickerMode === 'manage'
+                ? `openExerciseLibraryItemModal(${safeJs(item.id)})`
+                : `pickExerciseFromLibrary(${safeJs(item.id)})`;
+            const actionLabel = pickerMode === 'manage' ? '编辑' : '添加';
+            return `
+                <article class="fitness-library-card" onclick="${action}">
+                    <div class="fitness-plan-head">
+                        <div>
+                            <div class="fitness-plan-name">${safeHtml(item.name)}</div>
+                            <div class="fitness-plan-meta">${safeHtml(service.getMuscleLabel(item.muscle))}</div>
+                        </div>
+                        <div class="fitness-plan-primary">
+                            <strong>${item.defaultSets}</strong>
+                            <span>默认组</span>
+                        </div>
                     </div>
-                    <div class="fitness-plan-primary">
-                        <strong>${item.defaultSets}</strong>
-                        <span>默认组</span>
+                    <div class="fitness-chip-row">
+                        <span class="fitness-chip">次数 <strong>${safeHtml(item.defaultReps || '—')}</strong></span>
+                        <span class="fitness-chip">休息 <strong>${item.restSec || 0}s</strong></span>
+                        ${item.defaultWeight != null ? `<span class="fitness-chip">重量 <strong>${item.defaultWeight}kg</strong></span>` : ''}
+                        <span class="fitness-chip fitness-chip-live">${actionLabel}</span>
                     </div>
-                </div>
-                <div class="fitness-chip-row">
-                    <span class="fitness-chip">次数 <strong>${safeHtml(item.defaultReps || '—')}</strong></span>
-                    <span class="fitness-chip">休息 <strong>${item.restSec || 0}s</strong></span>
-                    ${item.defaultWeight != null ? `<span class="fitness-chip">重量 <strong>${item.defaultWeight}kg</strong></span>` : ''}
-                </div>
-            </article>
-        `).join('');
+                </article>
+            `;
+        }).join('');
     }
 
     function renderExerciseLibraryList() {
-        renderExerciseLibraryInto(document.getElementById('fitness-page-library-list'));
         renderExerciseLibraryInto(document.getElementById('fitness-modal-library-list'));
+        const titleEl = document.getElementById('fitness-library-modal-title');
+        const hintEl = document.getElementById('fitness-library-modal-hint');
+        const createBtn = document.getElementById('fitness-library-create-btn');
+        const mode = libraryPicker?.mode || 'manage';
+        if (titleEl) {
+            titleEl.textContent = mode === 'manage'
+                ? '动作库'
+                : (mode === 'plan' ? '从动作库加入计划' : '从动作库加入本场训练');
+        }
+        if (hintEl) {
+            hintEl.textContent = mode === 'manage'
+                ? '管理常用动作，计划与开练时都可以直接选用。'
+                : '点选动作即可加入，也可先新建动作。';
+        }
+        if (createBtn) createBtn.style.display = '';
     }
 
     function renderPlanList() {
@@ -486,9 +516,31 @@
         }
         fitnessPlanDraft.days.forEach(day => {
             if (!Array.isArray(day.exercises)) day.exercises = [];
+            if (!day.exercises.length) {
+                day.exercises.push({
+                    id: (typeof genId === 'function' ? genId() : `ex-${Date.now()}`),
+                    name: '',
+                    targetSets: 3,
+                    targetReps: '8-12'
+                });
+            }
         });
         if (!Array.isArray(fitnessPlanDraft.weekdays)) fitnessPlanDraft.weekdays = [];
         return fitnessPlanDraft;
+    }
+
+    function syncPlanDraftFromForm() {
+        const draft = ensurePlanDraft();
+        if (!draft) return null;
+        const nameEl = document.getElementById('fitness-plan-name');
+        const goalEl = document.getElementById('fitness-plan-goal');
+        const statusEl = document.getElementById('fitness-plan-status');
+        const notesEl = document.getElementById('fitness-plan-notes');
+        if (nameEl) draft.name = nameEl.value || '';
+        if (goalEl) draft.goal = goalEl.value || draft.goal || 'general';
+        if (statusEl) draft.status = statusEl.value || draft.status || 'active';
+        if (notesEl) draft.notes = notesEl.value || '';
+        return draft;
     }
 
     function renderPlanEditor() {
@@ -529,20 +581,22 @@
                 <div class="fitness-plan-exercise-list">
                     ${(day.exercises || []).map((exercise, exerciseIndex) => `
                         <div class="fitness-plan-exercise-row">
-                            <input type="text" value="${safeHtml(exercise.name)}" placeholder="动作名" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'name', this.value)">
+                            <input type="text" list="fitness-exercise-datalist" value="${safeHtml(exercise.name)}" placeholder="动作名 / 可从动作库选择" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'name', this.value)" onchange="applyLibraryDefaultsToPlanExercise(${dayIndex}, ${exerciseIndex}, this.value)">
                             <input type="number" min="1" step="1" value="${exercise.targetSets ?? 3}" placeholder="组数" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetSets', this.value)">
                             <input type="text" value="${safeHtml(exercise.targetReps || '')}" placeholder="次数" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetReps', this.value)">
                             <input type="number" min="0" step="0.5" value="${exercise.targetWeight ?? ''}" placeholder="目标重量" oninput="updateFitnessPlanExercise(${dayIndex}, ${exerciseIndex}, 'targetWeight', this.value)">
                             <button type="button" class="btn btn-secondary todo-mini-btn" onclick="removeFitnessPlanExercise(${dayIndex}, ${exerciseIndex})">删</button>
                         </div>
-                    `).join('') || '<div class="fitness-empty compact">还没有动作，先加一个。</div>'}
+                    `).join('') || '<div class="fitness-empty compact">还没有动作，可从动作库选择，也可以手动添加。</div>'}
                 </div>
                 <div class="fitness-plan-day-actions">
-                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanExercise(${dayIndex})">+ 添加动作</button>
+                    <button type="button" class="btn btn-primary todo-mini-btn" onclick="openExerciseLibraryPickerForPlan(${dayIndex})">从动作库选择</button>
+                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanExercise(${dayIndex})">+ 手动添加</button>
                 </div>
             </div>
         `).join('');
 
+        ensureExerciseDatalist();
         const deleteBtn = document.getElementById('delete-fitness-plan-btn');
         if (deleteBtn) deleteBtn.style.display = currentFitnessPlanId ? '' : 'none';
     }
@@ -1087,36 +1141,7 @@
     };
 
     window.addLiveExerciseFromLibrary = function addLiveExerciseFromLibrary() {
-        const service = ensureService();
-        const draft = ensureLiveDraft();
-        if (!service || !draft) return;
-        const library = getLibrary();
-        if (!library.length) {
-            openExerciseLibraryModal();
-            return;
-        }
-        const names = library.map((item, index) => `${index + 1}. ${item.name}`).join('\n');
-        const pick = prompt(`输入动作编号或名称加入本场训练：\n${names}`);
-        if (pick === null) return;
-        const text = String(pick).trim();
-        let item = null;
-        if (/^\d+$/.test(text)) {
-            item = library[Number(text) - 1] || null;
-        } else {
-            item = service.findExerciseLibraryByName(library, text)
-                || library.find(entry => entry.name.includes(text));
-        }
-        if (!item) {
-            alert('没找到这个动作，可先到动作库新建');
-            return;
-        }
-        draft.exercises.push(service.createWorkoutExerciseFromLibrary(item));
-        const saved = saveLiveWorkoutDraft();
-        if (!saved.ok) {
-            alert(saved.message || '保存失败');
-            return;
-        }
-        renderLiveWorkoutSession();
+        openExerciseLibraryPickerForLive();
     };
 
     window.finishLiveWorkout = function finishLiveWorkout() {
@@ -1142,16 +1167,98 @@
         if (typeof renderDashboard === 'function') renderDashboard();
     };
 
-    window.openExerciseLibraryModal = function openExerciseLibraryModal() {
+    window.openExerciseLibraryModal = function openExerciseLibraryModal(options = {}) {
         const service = ensureService();
         if (!service) return;
-        getLibrary();
+        libraryPicker = {
+            mode: options.mode || 'manage',
+            dayIndex: Number.isInteger(options.dayIndex) ? options.dayIndex : null
+        };
+        getLibrary({ seedDefaults: true, persist: true });
         renderExerciseLibraryList();
         document.getElementById('fitness-library-modal')?.classList.add('active');
     };
 
+    window.openExerciseLibraryPickerForPlan = function openExerciseLibraryPickerForPlan(dayIndex = 0) {
+        syncPlanDraftFromForm();
+        openExerciseLibraryModal({ mode: 'plan', dayIndex });
+    };
+
+    window.openExerciseLibraryPickerForLive = function openExerciseLibraryPickerForLive() {
+        openExerciseLibraryModal({ mode: 'live' });
+    };
+
     window.closeExerciseLibraryModal = function closeExerciseLibraryModal() {
         document.getElementById('fitness-library-modal')?.classList.remove('active');
+        libraryPicker = null;
+    };
+
+    window.pickExerciseFromLibrary = function pickExerciseFromLibrary(exerciseId = '') {
+        const service = ensureService();
+        if (!service) return;
+        const item = service.findExerciseLibraryItem(getLibrary({ seedDefaults: true }), exerciseId);
+        if (!item) {
+            alert('找不到这个动作');
+            return;
+        }
+        const mode = libraryPicker?.mode || 'manage';
+        if (mode === 'plan') {
+            syncPlanDraftFromForm();
+            const draft = ensurePlanDraft();
+            const dayIndex = Number.isInteger(libraryPicker?.dayIndex) ? libraryPicker.dayIndex : 0;
+            if (!draft?.days?.[dayIndex]) return;
+            if (!Array.isArray(draft.days[dayIndex].exercises)) draft.days[dayIndex].exercises = [];
+            const nextExercise = service.normalizeExercise({
+                name: item.name,
+                targetSets: item.defaultSets,
+                targetReps: item.defaultReps,
+                targetWeight: item.defaultWeight,
+                note: item.note
+            });
+            const emptyIndex = draft.days[dayIndex].exercises.findIndex(entry => !String(entry?.name || '').trim());
+            if (emptyIndex >= 0) draft.days[dayIndex].exercises[emptyIndex] = nextExercise;
+            else draft.days[dayIndex].exercises.push(nextExercise);
+            closeExerciseLibraryModal();
+            renderPlanEditor();
+            return;
+        }
+        if (mode === 'live') {
+            const draft = ensureLiveDraft();
+            if (!draft) {
+                alert('当前没有进行中的训练');
+                return;
+            }
+            const nextExercise = service.createWorkoutExerciseFromLibrary(item);
+            const emptyIndex = (draft.exercises || []).findIndex(entry => !String(entry?.name || '').trim());
+            if (emptyIndex >= 0) draft.exercises[emptyIndex] = nextExercise;
+            else draft.exercises.push(nextExercise);
+            const saved = saveLiveWorkoutDraft();
+            if (!saved.ok) {
+                alert(saved.message || '保存失败');
+                return;
+            }
+            closeExerciseLibraryModal();
+            renderLiveWorkoutSession();
+            return;
+        }
+        openExerciseLibraryItemModal(exerciseId);
+    };
+
+    window.applyLibraryDefaultsToPlanExercise = function applyLibraryDefaultsToPlanExercise(dayIndex, exerciseIndex, name = '') {
+        const service = ensureService();
+        const draft = ensurePlanDraft();
+        if (!service || !draft?.days?.[dayIndex]?.exercises?.[exerciseIndex]) return;
+        const exercise = draft.days[dayIndex].exercises[exerciseIndex];
+        exercise.name = name;
+        const item = service.findExerciseLibraryByName(getLibrary({ seedDefaults: false }), name);
+        if (!item) return;
+        if (!exercise.targetSets) exercise.targetSets = item.defaultSets;
+        if (!exercise.targetReps) exercise.targetReps = item.defaultReps;
+        if (exercise.targetWeight == null || exercise.targetWeight === '') {
+            exercise.targetWeight = item.defaultWeight;
+        }
+        if (!exercise.note) exercise.note = item.note || '';
+        renderPlanEditor();
     };
 
     window.openExerciseLibraryItemModal = function openExerciseLibraryItemModal(exerciseId = '') {

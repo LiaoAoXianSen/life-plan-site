@@ -268,7 +268,10 @@ test('fitness live workout can complete sets and finish session', async ({ page 
     await page.goto('/');
     await page.locator('.nav-item', { hasText: '运动健身' }).click();
     await expect(page.locator('#page-fitness')).toBeVisible();
-    await expect(page.locator('#fitness-page-library-list')).toContainText('杠铃深蹲');
+    await page.locator('#page-fitness .btn', { hasText: '动作库' }).first().click();
+    await expect(page.locator('#fitness-library-modal')).toBeVisible();
+    await expect(page.locator('#fitness-modal-library-list')).toContainText('杠铃深蹲');
+    await page.locator('#fitness-library-modal .btn.btn-secondary', { hasText: '关闭' }).click();
 
     await page.locator('#fitness-overview .btn.btn-primary', { hasText: '按计划开练' }).click();
     await expect(page.locator('#fitness-live-modal')).toBeVisible();
@@ -295,6 +298,61 @@ test('fitness live workout can complete sets and finish session', async ({ page 
     expect(live.exercises[0].sets.some(set => set.done)).toBe(true);
     expect(Array.isArray(stored.exerciseLibrary)).toBe(true);
     expect(stored.exerciseLibrary.some(item => item.name === '杠铃深蹲')).toBe(true);
+    expect(errors).toEqual([]);
+});
+
+
+test('fitness plan can pick exercises from library', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+        if (message.type() === 'error') errors.push(message.text());
+    });
+
+    const today = new Date();
+    const todayStr = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, '0'),
+        String(today.getDate()).padStart(2, '0')
+    ].join('-');
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData({
+        exerciseLibrary: [
+            {
+                id: 'lib-bench',
+                name: '杠铃卧推',
+                muscle: 'chest',
+                defaultSets: 4,
+                defaultReps: '6-8',
+                defaultWeight: 60,
+                restSec: 120,
+                createdAt: `${todayStr} 08:00`,
+                updatedAt: `${todayStr} 08:00`
+            }
+        ]
+    }));
+
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '运动健身' }).click();
+    await page.locator('#page-fitness .btn', { hasText: '训练计划' }).first().click();
+    await expect(page.locator('#fitness-plan-modal')).toBeVisible();
+    await page.fill('#fitness-plan-name', '推日计划');
+    await page.locator('#fitness-plan-days-editor .btn', { hasText: '从动作库选择' }).click();
+    await expect(page.locator('#fitness-library-modal')).toBeVisible();
+    await page.locator('#fitness-modal-library-list .fitness-library-card', { hasText: '杠铃卧推' }).click();
+    await expect(page.locator('#fitness-library-modal')).toBeHidden();
+    await expect(page.locator('#fitness-plan-days-editor .fitness-plan-exercise-row input[type="text"]').first()).toHaveValue('杠铃卧推');
+    await page.locator('#fitness-plan-modal .btn.btn-primary', { hasText: '保存' }).click();
+    await expect(page.locator('#fitness-plan-list')).toContainText('推日计划');
+    await expect(page.locator('#fitness-plan-list')).toContainText('杠铃卧推');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessPlans).toHaveLength(1);
+    expect(stored.fitnessPlans[0].days[0].exercises[0].name).toBe('杠铃卧推');
+    expect(stored.fitnessPlans[0].days[0].exercises[0].targetSets).toBe(4);
+    expect(stored.fitnessPlans[0].days[0].exercises[0].targetWeight).toBe(60);
     expect(errors).toEqual([]);
 });
 

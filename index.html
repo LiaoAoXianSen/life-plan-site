@@ -462,6 +462,7 @@
                     <div class="page-subtitle">身材、训练计划和训练日志都在这里统一管理。</div>
                 </div>
                 <div class="fitness-header-actions">
+                    <button class="btn btn-secondary" onclick="openExerciseLibraryModal()">动作库</button>
                     <button class="btn btn-secondary" onclick="openFitnessPlanModal()">+ 训练计划</button>
                     <button class="btn btn-secondary" onclick="startFreeLiveWorkout()">自由开练</button>
                     <button class="btn btn-secondary" onclick="openFitnessWorkoutModal()">+ 训练日志</button>
@@ -499,14 +500,6 @@
                     </div>
                 </div>
                 <div id="fitness-workout-list" class="fitness-workout-list"></div>
-            </div>
-
-            <div class="fitness-section">
-                <div class="fitness-section-head">
-                    <div class="section-title">动作库</div>
-                    <button class="btn btn-secondary todo-mini-btn" onclick="openExerciseLibraryModal()">管理动作</button>
-                </div>
-                <div id="fitness-page-library-list" class="fitness-library-list"></div>
             </div>
         </div>
 
@@ -1425,12 +1418,15 @@
     <div id="fitness-library-modal" class="modal-overlay">
         <div class="modal modal-lg">
             <div class="modal-header">
-                <div class="modal-title">动作库</div>
+                <div>
+                    <div class="modal-title" id="fitness-library-modal-title">动作库</div>
+                    <div class="fitness-live-subtitle" id="fitness-library-modal-hint">管理常用动作，计划与开练时都可以直接选用。</div>
+                </div>
                 <button class="close-btn" onclick="closeExerciseLibraryModal()">×</button>
             </div>
             <div class="fitness-plan-editor-head">
                 <div class="section-title">常用动作</div>
-                <button type="button" class="btn btn-secondary todo-mini-btn" onclick="openExerciseLibraryItemModal()">+ 新建动作</button>
+                <button type="button" class="btn btn-secondary todo-mini-btn" id="fitness-library-create-btn" onclick="openExerciseLibraryItemModal()">+ 新建动作</button>
             </div>
             <div id="fitness-modal-library-list" class="fitness-library-list"></div>
             <div class="modal-action-row">

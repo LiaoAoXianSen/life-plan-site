@@ -453,6 +453,11 @@
     align-items: flex-start;
 }
 
+#fitness-library-modal.active,
+#fitness-library-item-modal.active {
+    z-index: 140;
+}
+
 .fitness-live-subtitle {
     margin-top: 4px;
     color: #6b7c72;
