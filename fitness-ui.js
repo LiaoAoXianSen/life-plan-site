@@ -239,7 +239,7 @@
         container.innerHTML = `
             <div class="fitness-overview-card">
                 <div class="fitness-overview-copy">
-                    <div class="fitness-overview-kicker">今日健身总览</div>
+                    <div class="fitness-overview-kicker">今日状态</div>
                     <div class="fitness-overview-title">
                         ${activeWorkout
                             ? `训练进行中：${safeHtml(service.getWorkoutTitle(activeWorkout))} · ${service.countCompletedSets(activeWorkout)}/${service.countTotalSets(activeWorkout)} 组`
@@ -248,18 +248,19 @@
                                 : (suggestion ? '今天还没开练，可以直接按计划开始' : '还没有训练安排，先建计划或自由开练'))}
                     </div>
                     <div class="fitness-overview-meta">
-                        <span>近 30 天完成 ${overview.workoutSummary.doneCount} 次</span>
-                        <span>连续训练 ${overview.workoutSummary.streak} 天</span>
-                        <span>进行中计划 ${overview.activePlanCount}</span>
-                        <span>当前体重 ${safeHtml(service.formatMetricValue(overview.latestMetric?.weight, 'kg'))}</span>
+                        <span class="fitness-meta-pill">近 30 天 ${overview.workoutSummary.doneCount} 次</span>
+                        <span class="fitness-meta-pill">连续 ${overview.workoutSummary.streak} 天</span>
+                        <span class="fitness-meta-pill">计划 ${overview.activePlanCount}</span>
+                        <span class="fitness-meta-pill">体重 ${safeHtml(service.formatMetricValue(overview.latestMetric?.weight, 'kg'))}</span>
                     </div>
-                    ${latestWorkout ? `<div class="fitness-overview-note">最近训练：${safeHtml(formatDateLabel(latestWorkout.date))} · ${safeHtml(service.getWorkoutTitle(latestWorkout))}</div>` : ''}
+                    ${latestWorkout ? `<div class="fitness-overview-note">最近：${safeHtml(formatDateLabel(latestWorkout.date))} · ${safeHtml(service.getWorkoutTitle(latestWorkout))}</div>` : ''}
                 </div>
                 <div class="fitness-overview-actions">
                     ${actionHtml}
-                    <button class="btn btn-secondary" onclick="openBodyMetricModal()">记录身材</button>
-                    <button class="btn btn-secondary" onclick="openFitnessPlanModal()">管理计划</button>
-                    <button class="btn btn-secondary" onclick="openExerciseLibraryModal()">动作库</button>
+                    <div class="fitness-overview-secondary">
+                        <button class="btn btn-secondary" onclick="openBodyMetricModal()">记录身材</button>
+                        <button class="btn btn-secondary" onclick="openFitnessPlanModal()">管理计划</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -471,27 +472,33 @@
         container.innerHTML = plans.map(plan => {
             const exercises = service.getPlanExercises(plan);
             const exerciseCount = exercises.length;
-            const preview = exercises.map(item => item.name).filter(Boolean).slice(0, 6).join('、') || '暂无动作';
-            const more = exerciseCount > 6 ? ` 等 ${exerciseCount} 个` : '';
+            const tags = exercises.slice(0, 5).map(item => `
+                <span class="fitness-exercise-tag">${safeHtml(item.name)}</span>
+            `).join('');
+            const moreCount = Math.max(0, exerciseCount - 5);
             return `
                 <article class="fitness-plan-card">
                     <div class="fitness-plan-head" onclick="openFitnessPlanModal(${safeJs(plan.id)})">
                         <div>
-                            <div class="fitness-plan-name">${safeHtml(plan.name)}</div>
-                            <div class="fitness-plan-meta">
-                                ${safeHtml(service.getPlanGoalLabel(plan.goal))} · ${safeHtml(service.getPlanStatusLabel(plan.status))}
+                            <div class="fitness-plan-name-row">
+                                <div class="fitness-plan-name">${safeHtml(plan.name)}</div>
+                                <span class="fitness-status-badge status-${safeHtml(plan.status || 'active')}">${safeHtml(service.getPlanStatusLabel(plan.status))}</span>
                             </div>
+                            <div class="fitness-plan-meta">${safeHtml(service.getPlanGoalLabel(plan.goal))} · ${exerciseCount} 个动作</div>
                         </div>
                         <div class="fitness-plan-primary">
                             <strong>${exerciseCount}</strong>
                             <span>动作</span>
                         </div>
                     </div>
-                    <div class="fitness-plan-preview" onclick="openFitnessPlanModal(${safeJs(plan.id)})">${safeHtml(preview)}${safeHtml(more)}</div>
+                    <div class="fitness-exercise-tag-row" onclick="openFitnessPlanModal(${safeJs(plan.id)})">
+                        ${tags || '<span class="fitness-exercise-tag is-empty">暂无动作</span>'}
+                        ${moreCount ? `<span class="fitness-exercise-tag is-more">+${moreCount}</span>` : ''}
+                    </div>
                     ${plan.notes ? `<div class="fitness-metric-note" onclick="openFitnessPlanModal(${safeJs(plan.id)})">${safeHtml(plan.notes)}</div>` : ''}
                     <div class="fitness-plan-card-actions">
-                        <button type="button" class="btn btn-primary todo-mini-btn" onclick="event.stopPropagation(); startLiveWorkoutFromPlan(${safeJs(plan.id)})">开练</button>
-                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="event.stopPropagation(); openFitnessPlanModal(${safeJs(plan.id)})">编辑</button>
+                        <button type="button" class="btn btn-primary" onclick="event.stopPropagation(); startLiveWorkoutFromPlan(${safeJs(plan.id)})">开练</button>
+                        <button type="button" class="btn btn-secondary" onclick="event.stopPropagation(); openFitnessPlanModal(${safeJs(plan.id)})">编辑</button>
                     </div>
                 </article>
             `;
@@ -545,22 +552,34 @@
         document.getElementById('fitness-plan-status').value = draft.status || 'active';
         document.getElementById('fitness-plan-notes').value = draft.notes || '';
 
+const exerciseRows = (draft.exercises || []).map((exercise, exerciseIndex) => {
+            const weightValue = exercise.targetWeight == null ? '' : exercise.targetWeight;
+            return `
+                <div class="fitness-plan-exercise-row">
+                    <input type="text" list="fitness-exercise-datalist" value="${safeHtml(exercise.name)}" placeholder="动作名称" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'name', this.value)" onchange="applyLibraryDefaultsToPlanExercise(${exerciseIndex}, this.value)">
+                    <input type="number" min="1" step="1" value="${exercise.targetSets || 3}" placeholder="3" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetSets', this.value)">
+                    <input type="text" value="${safeHtml(exercise.targetReps || '')}" placeholder="8-12" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetReps', this.value)">
+                    <input type="number" min="0" step="0.5" value="${weightValue}" placeholder="kg" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetWeight', this.value)">
+                    <button type="button" class="btn btn-secondary fitness-icon-btn" onclick="removeFitnessPlanExercise(${exerciseIndex})" title="删除动作">&times;</button>
+                </div>
+            `;
+        }).join('');
+
         editorBox.innerHTML = `
-            <div class="fitness-plan-day-editor fitness-plan-simple-editor">
+            <div class="fitness-plan-simple-editor">
                 <div class="fitness-plan-exercise-list">
-                    ${(draft.exercises || []).map((exercise, exerciseIndex) => `
-                        <div class="fitness-plan-exercise-row">
-                            <input type="text" list="fitness-exercise-datalist" value="${safeHtml(exercise.name)}" placeholder="动作名" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'name', this.value)" onchange="applyLibraryDefaultsToPlanExercise(${exerciseIndex}, this.value)">
-                            <input type="number" min="1" step="1" value="${exercise.targetSets ?? 3}" placeholder="组" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetSets', this.value)">
-                            <input type="text" value="${safeHtml(exercise.targetReps || '')}" placeholder="次" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetReps', this.value)">
-                            <input type="number" min="0" step="0.5" value="${exercise.targetWeight ?? ''}" placeholder="kg" oninput="updateFitnessPlanExercise(${exerciseIndex}, 'targetWeight', this.value)">
-                            <button type="button" class="btn btn-secondary todo-mini-btn" onclick="removeFitnessPlanExercise(${exerciseIndex})">删</button>
-                        </div>
-                    `).join('') || '<div class="fitness-empty compact">还没有动作，可从动作库选择，也可以手动添加。</div>'}
+                    <div class="fitness-plan-exercise-head">
+                        <span>动作</span>
+                        <span>组</span>
+                        <span>次数</span>
+                        <span>目标重量</span>
+                        <span></span>
+                    </div>
+                    ${exerciseRows || '<div class="fitness-empty compact">还没有动作，可从动作库选择，也可以手动添加。</div>'}
                 </div>
                 <div class="fitness-plan-day-actions">
-                    <button type="button" class="btn btn-primary todo-mini-btn" onclick="openExerciseLibraryPickerForPlan()">从动作库选择</button>
-                    <button type="button" class="btn btn-secondary todo-mini-btn" onclick="addFitnessPlanExercise()">+ 手动添加</button>
+                    <button type="button" class="btn btn-primary" onclick="openExerciseLibraryPickerForPlan()">从动作库选择</button>
+                    <button type="button" class="btn btn-secondary" onclick="addFitnessPlanExercise()">手动添加</button>
                 </div>
             </div>
         `;

@@ -85,7 +85,7 @@ test('fitness page can create body metric records', async ({ page }) => {
     await expect(page.locator('#page-fitness')).toBeVisible();
     await expect(page.locator('#page-fitness .page-title')).toHaveText('运动健身');
 
-    await page.locator('#page-fitness .btn.btn-primary', { hasText: '记录身材' }).click();
+    await page.locator('#page-fitness .btn', { hasText: '记录身材' }).first().click();
     await expect(page.locator('#body-metric-modal')).toBeVisible();
     await page.fill('#body-metric-weight', '72.4');
     await page.fill('#body-metric-bodyFat', '18.6');
@@ -121,7 +121,7 @@ test('fitness page can create training plans', async ({ page }) => {
     await page.locator('.nav-item', { hasText: '运动健身' }).click();
     await expect(page.locator('#page-fitness')).toBeVisible();
 
-    await page.locator('#page-fitness .btn.btn-secondary', { hasText: '训练计划' }).click();
+    await page.locator('#page-fitness .btn', { hasText: '新建计划' }).first().click();
     await expect(page.locator('#fitness-plan-modal')).toBeVisible();
     await page.fill('#fitness-plan-name', '推拉腿');
     await page.selectOption('#fitness-plan-goal', 'hypertrophy');
@@ -163,7 +163,7 @@ test('fitness page can create workout logs from free training', async ({ page })
     await page.locator('.nav-item', { hasText: '运动健身' }).click();
     await expect(page.locator('#page-fitness')).toBeVisible();
 
-    await page.locator('#page-fitness .btn.btn-secondary', { hasText: '训练日志' }).click();
+    await page.locator('#page-fitness .btn', { hasText: '补记' }).first().click();
     await expect(page.locator('#fitness-workout-modal')).toBeVisible();
     await page.fill('#fitness-workout-title', '自由上肢');
     await page.selectOption('#fitness-workout-status', 'done');
@@ -336,7 +336,7 @@ test('fitness plan can pick exercises from library', async ({ page }) => {
 
     await page.goto('/');
     await page.locator('.nav-item', { hasText: '运动健身' }).click();
-    await page.locator('#page-fitness .btn', { hasText: '训练计划' }).first().click();
+    await page.locator('#page-fitness .btn', { hasText: '新建计划' }).first().click();
     await expect(page.locator('#fitness-plan-modal')).toBeVisible();
     await page.fill('#fitness-plan-name', '推日计划');
     await page.locator('#fitness-plan-exercises-editor .btn', { hasText: '从动作库选择' }).click();
@@ -436,7 +436,7 @@ test('fitness overview appears on fitness page and dashboard', async ({ page }) 
     await expect(page.locator('#hero-meta')).toContainText('近30天训练');
 
     await page.locator('.nav-item', { hasText: '运动健身' }).click();
-    await expect(page.locator('#fitness-overview')).toContainText('今日健身总览');
+    await expect(page.locator('#fitness-overview')).toContainText('今日状态');
     await expect(page.locator('#fitness-overview')).toContainText('今天已有 1 条训练记录');
     await expect(page.locator('#fitness-summary')).toContainText('71.5');
     await expect(page.locator('#fitness-summary')).toContainText('近 30 天训练');
