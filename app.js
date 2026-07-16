@@ -11,6 +11,9 @@
             goals: [],
             deletedItems: [],
             materials: [],
+            bodyMetrics: [],
+            fitnessPlans: [],
+            fitnessWorkouts: [],
             wheels: [],
             wheelTags: [],
             wheelLibraryItems: [],
@@ -538,7 +541,7 @@
 
         function normalizeDataShape(target = data) {
             if (!target || typeof target !== 'object') return data;
-            ['records','todos','habits','checkins','habitPointLedger','habitRewards','habitCurrencies','templates','goals','deletedItems','materials','wheels','wheelTags','wheelLibraryItems','wheelHistory'].forEach(key => {
+            ['records','todos','habits','checkins','habitPointLedger','habitRewards','habitCurrencies','templates','goals','deletedItems','materials','bodyMetrics','fitnessPlans','fitnessWorkouts','wheels','wheelTags','wheelLibraryItems','wheelHistory'].forEach(key => {
                 if (!Array.isArray(target[key])) target[key] = [];
             });
             target.habitCurrencies = normalizeHabitCurrencyList(target.habitCurrencies, target);
@@ -645,6 +648,18 @@
                 if (!material.createdAt) material.createdAt = getLocalDateTimeStr();
                 if (!material.updatedAt) material.updatedAt = material.createdAt;
             });
+            if (window.LifePlanFitnessService?.create) {
+                const fitnessService = window.LifePlanFitnessService.create({
+                    getTodayStr: () => getTodayStr(),
+                    getNowLocal: () => getLocalDateTimeStr(),
+                    genId: () => genId()
+                });
+                fitnessService.normalizeFitnessData(target);
+            } else {
+                target.bodyMetrics = Array.isArray(target.bodyMetrics) ? target.bodyMetrics : [];
+                target.fitnessPlans = Array.isArray(target.fitnessPlans) ? target.fitnessPlans : [];
+                target.fitnessWorkouts = Array.isArray(target.fitnessWorkouts) ? target.fitnessWorkouts : [];
+            }
             target.wheelTags.forEach(tag => {
                 if (!tag.id) tag.id = genId();
             });
@@ -970,7 +985,10 @@
                 habitRewards: snapshotData.habitRewards || [],
                 habitCurrencies: snapshotData.habitCurrencies || [],
                 goals: snapshotData.goals || [],
-                materials: snapshotData.materials || []
+                materials: snapshotData.materials || [],
+                bodyMetrics: snapshotData.bodyMetrics || [],
+                fitnessPlans: snapshotData.fitnessPlans || [],
+                fitnessWorkouts: snapshotData.fitnessWorkouts || []
             };
             const latestRecords = [...collections.records]
                 .filter(record => !record.isHabitRecord)
@@ -1026,6 +1044,9 @@
                         <span>打卡 ${collections.checkins.length}</span>
                         <span>目标 ${collections.goals.length}</span>
                         <span>素材 ${collections.materials.length}</span>
+                        <span>身材 ${collections.bodyMetrics.length}</span>
+                        <span>训练计划 ${collections.fitnessPlans.length}</span>
+                        <span>训练日志 ${collections.fitnessWorkouts.length}</span>
                     </div>
                     <div class="snapshot-preview-list">
                         <strong>最近记录</strong>
@@ -1112,6 +1133,7 @@
             renderHabitCurrencyOptions();
             renderGoalList();
             renderWheelPage();
+            if (typeof renderFitnessPage === 'function') renderFitnessPage();
             refreshKnowledgeViews();
             if (currentHabitId) {
                 renderHeatmap();
@@ -3649,6 +3671,9 @@
             if (pageName === 'search') renderGlobalSearch();
             if (pageName === 'todos') renderTodoTable();
             if (pageName === 'habits') { renderHabitTabs(); renderHabitRewards(); if(currentHabitId) renderHeatmap(); if(currentHabitView === 'matrix') renderHabitMatrix(); }
+            if (pageName === 'fitness') {
+                if (typeof renderFitnessPage === 'function') renderFitnessPage();
+            }
             if (pageName === 'goals') renderGoalList();
             if (pageName === 'wheel') renderWheelPage();
         }
@@ -7647,7 +7672,7 @@
         }
 
         function getImportSummary(imported) {
-            const collections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
+            const collections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
             return collections
                 .map(key => `${key}:${Array.isArray(imported?.[key]) ? imported[key].length : 0}`)
                 .join(' · ');
@@ -7720,6 +7745,7 @@
                 'todo-detail-modal': closeTodoDetail,
                 'snapshot-modal': closeSnapshotModal,
                 'material-modal': closeMaterialModal,
+                'body-metric-modal': typeof closeBodyMetricModal === 'function' ? closeBodyMetricModal : null,
                 'ai-settings-modal': closeAiSettings,
                 'ai-assistant-modal': closeAiAssistant
             };

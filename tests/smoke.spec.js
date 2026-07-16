@@ -13,6 +13,9 @@ function createEmptyData(overrides = {}) {
         goals: [],
         deletedItems: [],
         materials: [],
+        bodyMetrics: [],
+        fitnessPlans: [],
+        fitnessWorkouts: [],
         wheels: [],
         wheelTags: [],
         wheelLibraryItems: [],
@@ -52,6 +55,7 @@ test('loads the app and opens core pages', async ({ page }) => {
         ['全局搜索', '#page-search'],
         ['待办总览', '#page-todos'],
         ['习惯打卡', '#page-habits'],
+        ['运动健身', '#page-fitness'],
         ['目标管理', '#page-goals'],
         ['工具转盘', '#page-wheel']
     ];
@@ -61,6 +65,43 @@ test('loads the app and opens core pages', async ({ page }) => {
         await expect(page.locator(selector)).toBeVisible();
     }
 
+    expect(errors).toEqual([]);
+});
+
+test('fitness page can create body metric records', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+        if (message.type() === 'error') errors.push(message.text());
+    });
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData());
+
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '运动健身' }).click();
+    await expect(page.locator('#page-fitness')).toBeVisible();
+    await expect(page.locator('#page-fitness .page-title')).toHaveText('运动健身');
+
+    await page.locator('#page-fitness .btn.btn-primary', { hasText: '记录身材' }).click();
+    await expect(page.locator('#body-metric-modal')).toBeVisible();
+    await page.fill('#body-metric-weight', '72.4');
+    await page.fill('#body-metric-bodyFat', '18.6');
+    await page.fill('#body-metric-waist', '82');
+    await page.fill('#body-metric-note', '早上空腹');
+    await page.locator('#body-metric-modal .btn.btn-primary', { hasText: '保存' }).click();
+
+    await expect(page.locator('#fitness-body-metric-list')).toContainText('72.4');
+    await expect(page.locator('#fitness-body-metric-list')).toContainText('腰围');
+    await expect(page.locator('#fitness-summary')).toContainText('72.4');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.bodyMetrics).toHaveLength(1);
+    expect(stored.bodyMetrics[0].weight).toBe(72.4);
+    expect(stored.bodyMetrics[0].bodyFat).toBe(18.6);
+    expect(stored.bodyMetrics[0].waist).toBe(82);
+    expect(stored.bodyMetrics[0].note).toBe('早上空腹');
     expect(errors).toEqual([]);
 });
 
@@ -1680,6 +1721,9 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
         goals: [],
         deletedItems: [],
         materials: [],
+        bodyMetrics: [],
+        fitnessPlans: [],
+        fitnessWorkouts: [],
         wheels: [
             {
                 id: 'wheel-normal',
@@ -1794,6 +1838,9 @@ function createWheelGestureData(wheelName = '手感测试盘') {
         goals: [],
         deletedItems: [],
         materials: [],
+        bodyMetrics: [],
+        fitnessPlans: [],
+        fitnessWorkouts: [],
         wheels: [
             {
                 id: 'gesture-wheel',
@@ -1840,6 +1887,9 @@ test('wheel can be spun by dragging the canvas', async ({ page }) => {
         goals: [],
         deletedItems: [],
         materials: [],
+        bodyMetrics: [],
+        fitnessPlans: [],
+        fitnessWorkouts: [],
         wheels: [
             {
                 id: 'drag-wheel',
@@ -1892,6 +1942,9 @@ test('tag wheel two-stage spin can be converted to a todo', async ({ page }) => 
         goals: [],
         deletedItems: [],
         materials: [],
+        bodyMetrics: [],
+        fitnessPlans: [],
+        fitnessWorkouts: [],
         wheels: [
             {
                 id: 'tag-wheel',
@@ -1960,6 +2013,9 @@ test('tag wheel creation requires and saves selected tags', async ({ page }) => 
         goals: [],
         deletedItems: [],
         materials: [],
+        bodyMetrics: [],
+        fitnessPlans: [],
+        fitnessWorkouts: [],
         wheels: [
             {
                 id: 'normal-wheel',

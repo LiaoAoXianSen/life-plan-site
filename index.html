@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="./styles.css">
 <link rel="stylesheet" href="./habit-style.css">
 <link rel="stylesheet" href="./wheel-tool.css">
+<link rel="stylesheet" href="./fitness-style.css">
 </head>
 <body>
     <!-- 侧边栏 -->
@@ -21,6 +22,7 @@
             <div class="nav-item" data-page-target="search" onclick="switchPage('search', this)">🔎 全局搜索</div>
             <div class="nav-item" data-page-target="todos" onclick="switchPage('todos', this)">✅ 待办总览</div>
             <div class="nav-item" data-page-target="habits" onclick="switchPage('habits', this)">🔥 习惯打卡</div>
+            <div class="nav-item" data-page-target="fitness" onclick="switchPage('fitness', this)">🏋️ 运动健身</div>
             <div class="nav-item" data-page-target="goals" onclick="switchPage('goals', this)">🎯 目标管理</div>
             <div class="nav-item" data-page-target="wheel" onclick="switchPage('wheel', this)">🎡 工具转盘</div>
         </div>
@@ -450,6 +452,39 @@
                 </div>
             </div>
             <div class="habit-rewards-panel" id="habit-rewards-panel"></div>
+        </div>
+
+        <!-- 运动健身页 -->
+        <div id="page-fitness" class="page">
+            <div class="page-header">
+                <div>
+                    <div class="page-title">运动健身</div>
+                    <div class="page-subtitle">先记录身材变化，训练计划和训练日志会分阶段补齐。</div>
+                </div>
+                <button class="btn btn-primary" onclick="openBodyMetricModal()">+ 记录身材</button>
+            </div>
+
+            <div class="fitness-hero">
+                <div id="fitness-summary"></div>
+            </div>
+
+            <div class="fitness-section">
+                <div class="fitness-section-head">
+                    <div class="section-title">身材记录</div>
+                    <button class="btn btn-secondary todo-mini-btn" onclick="openBodyMetricModal()">新增记录</button>
+                </div>
+                <div id="fitness-body-metric-list" class="fitness-metric-list"></div>
+            </div>
+
+            <div class="fitness-section">
+                <div class="fitness-section-head">
+                    <div class="section-title">后续模块</div>
+                </div>
+                <div class="fitness-placeholder-grid">
+                    <div id="fitness-plan-placeholder"></div>
+                    <div id="fitness-workout-placeholder"></div>
+                </div>
+            </div>
         </div>
 
         <!-- 目标管理页 -->
@@ -1278,6 +1313,91 @@
         </div>
     </div>
 
+    <!-- 身材记录弹窗 -->
+    <div id="body-metric-modal" class="modal-overlay">
+        <div class="modal modal-md">
+            <div class="modal-header">
+                <div class="modal-title" id="body-metric-modal-title">记录身材</div>
+                <button class="close-btn" onclick="closeBodyMetricModal()">×</button>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>测量日期</label>
+                    <input type="date" id="body-metric-date">
+                </div>
+                <div class="form-group">
+                    <label>测量状态</label>
+                    <select id="body-metric-condition">
+                        <option value="fasted">空腹</option>
+                        <option value="afterMeal">饭后</option>
+                        <option value="unknown">不确定</option>
+                    </select>
+                </div>
+            </div>
+            <div class="body-metric-grid">
+                <div class="form-group">
+                    <label>体重 (kg)</label>
+                    <input type="number" id="body-metric-weight" step="0.1" min="0" placeholder="例如 72.4">
+                </div>
+                <div class="form-group">
+                    <label>体脂 (%)</label>
+                    <input type="number" id="body-metric-bodyFat" step="0.1" min="0" placeholder="例如 18.6">
+                </div>
+                <div class="form-group">
+                    <label>身高 (cm)</label>
+                    <input type="number" id="body-metric-height" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>胸围 (cm)</label>
+                    <input type="number" id="body-metric-chest" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>腰围 (cm)</label>
+                    <input type="number" id="body-metric-waist" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>臀围 (cm)</label>
+                    <input type="number" id="body-metric-hips" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>左臂围 (cm)</label>
+                    <input type="number" id="body-metric-leftArm" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>右臂围 (cm)</label>
+                    <input type="number" id="body-metric-rightArm" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>左大腿围 (cm)</label>
+                    <input type="number" id="body-metric-leftThigh" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>右大腿围 (cm)</label>
+                    <input type="number" id="body-metric-rightThigh" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>小腿围 (cm)</label>
+                    <input type="number" id="body-metric-calf" step="0.1" min="0" placeholder="可选">
+                </div>
+                <div class="form-group">
+                    <label>肩围 (cm)</label>
+                    <input type="number" id="body-metric-shoulder" step="0.1" min="0" placeholder="可选">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <textarea id="body-metric-note" rows="3" placeholder="例如：早上空腹、训练后、换秤后第一次测量"></textarea>
+            </div>
+            <div class="modal-action-row">
+                <button class="btn btn-danger" id="delete-body-metric-btn" onclick="deleteCurrentBodyMetric()">删除</button>
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="closeBodyMetricModal()">取消</button>
+                    <button class="btn btn-primary" onclick="saveBodyMetric()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 新建目标弹窗 -->
     <div id="goal-modal" class="modal-overlay">
         <div class="modal modal-sm">
@@ -1430,6 +1550,8 @@
 
     <script src="./habit-engine.js"></script>
     <script src="./habit-ui.js"></script>
+    <script src="./fitness-service.js"></script>
+    <script src="./fitness-ui.js"></script>
     <script src="./vendor/app-sync-kit.browser.global.js"></script>
     <script src="./sync-service.js"></script>
     <script src="./snapshot-service.js"></script>
