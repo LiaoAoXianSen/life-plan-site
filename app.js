@@ -7747,6 +7747,7 @@
                 'material-modal': closeMaterialModal,
                 'body-metric-modal': typeof closeBodyMetricModal === 'function' ? closeBodyMetricModal : null,
                 'fitness-plan-modal': typeof closeFitnessPlanModal === 'function' ? closeFitnessPlanModal : null,
+                'fitness-workout-modal': typeof closeFitnessWorkoutModal === 'function' ? closeFitnessWorkoutModal : null,
                 'ai-settings-modal': closeAiSettings,
                 'ai-assistant-modal': closeAiAssistant
             };

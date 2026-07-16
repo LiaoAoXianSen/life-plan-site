@@ -34,6 +34,12 @@
         { value: 'archived', label: '归档' }
     ];
 
+    const WORKOUT_STATUS_OPTIONS = [
+        { value: 'planned', label: '计划中' },
+        { value: 'done', label: '已完成' },
+        { value: 'skipped', label: '已跳过' }
+    ];
+
     const WEEKDAY_OPTIONS = [
         { value: 1, label: '周一' },
         { value: 2, label: '周二' },
@@ -183,6 +189,85 @@
                 });
         }
 
+        function normalizeWorkoutSet(raw = {}, fallback = {}) {
+            const set = {
+                id: raw.id || fallback.id || genId(),
+                done: raw.done === true || fallback.done === true
+            };
+            const weight = parseNonNegativeNumber(raw.weight ?? fallback.weight, null);
+            if (weight !== null) set.weight = weight;
+            const reps = parsePositiveInt(raw.reps ?? fallback.reps, null);
+            if (reps !== null) set.reps = reps;
+            const rpe = parseNonNegativeNumber(raw.rpe ?? fallback.rpe, null);
+            if (rpe !== null) set.rpe = rpe;
+            return set;
+        }
+
+        function createDefaultSets(count = 3, template = {}) {
+            const size = parsePositiveInt(count, 3) || 3;
+            return Array.from({ length: size }, () => normalizeWorkoutSet({
+                weight: template.targetWeight,
+                reps: parsePositiveInt(String(template.targetReps || '').split(/[-~/]/)[0], null),
+                done: false
+            }));
+        }
+
+        function normalizeWorkoutExercise(raw = {}, fallback = {}) {
+            const name = String(raw.name ?? fallback.name ?? '').trim();
+            const setsSource = Array.isArray(raw.sets)
+                ? raw.sets
+                : (Array.isArray(fallback.sets) ? fallback.sets : createDefaultSets(raw.targetSets ?? fallback.targetSets ?? 3, raw));
+            const sets = setsSource.map(item => normalizeWorkoutSet(item)).filter(Boolean);
+            const exercise = {
+                id: raw.id || fallback.id || genId(),
+                name,
+                targetSets: parsePositiveInt(raw.targetSets ?? fallback.targetSets, sets.length || 3) || (sets.length || 3),
+                targetReps: String(raw.targetReps ?? fallback.targetReps ?? '').trim(),
+                note: typeof (raw.note ?? fallback.note) === 'string' ? String(raw.note ?? fallback.note) : '',
+                sets: sets.length ? sets : createDefaultSets(3, raw)
+            };
+            const targetWeight = parseNonNegativeNumber(raw.targetWeight ?? fallback.targetWeight, null);
+            if (targetWeight !== null) exercise.targetWeight = targetWeight;
+            return exercise;
+        }
+
+        function normalizeFitnessWorkout(raw = {}, fallback = {}) {
+            const createdAt = raw.createdAt || fallback.createdAt || getNowLocal();
+            const date = String(raw.date || fallback.date || getTodayStr()).slice(0, 10);
+            const status = WORKOUT_STATUS_OPTIONS.some(item => item.value === raw.status)
+                ? raw.status
+                : (WORKOUT_STATUS_OPTIONS.some(item => item.value === fallback.status) ? fallback.status : 'planned');
+            const exercises = (Array.isArray(raw.exercises) ? raw.exercises : (fallback.exercises || []))
+                .map(item => normalizeWorkoutExercise(item))
+                .filter(item => item.name);
+            return {
+                id: raw.id || fallback.id || genId(),
+                date,
+                status,
+                planId: raw.planId || fallback.planId || '',
+                planName: String(raw.planName ?? fallback.planName ?? '').trim(),
+                dayId: raw.dayId || fallback.dayId || '',
+                dayName: String(raw.dayName ?? fallback.dayName ?? '').trim(),
+                title: String(raw.title ?? fallback.title ?? '').trim(),
+                notes: typeof (raw.notes ?? fallback.notes) === 'string' ? String(raw.notes ?? fallback.notes) : '',
+                durationMin: parsePositiveInt(raw.durationMin ?? fallback.durationMin, null),
+                exercises,
+                createdAt,
+                updatedAt: raw.updatedAt || fallback.updatedAt || createdAt
+            };
+        }
+
+        function normalizeFitnessWorkouts(list = []) {
+            return (Array.isArray(list) ? list : [])
+                .map(item => normalizeFitnessWorkout(item))
+                .filter(item => item.id && item.date && (item.title || item.exercises.length))
+                .sort((a, b) => {
+                    const dateDiff = String(b.date || '').localeCompare(String(a.date || ''));
+                    if (dateDiff) return dateDiff;
+                    return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+                });
+        }
+
         function normalizeFitnessData(target = {}) {
             if (!target || typeof target !== 'object') return target;
             if (!Array.isArray(target.bodyMetrics)) target.bodyMetrics = [];
@@ -190,6 +275,7 @@
             if (!Array.isArray(target.fitnessWorkouts)) target.fitnessWorkouts = [];
             target.bodyMetrics = normalizeBodyMetrics(target.bodyMetrics);
             target.fitnessPlans = normalizeFitnessPlans(target.fitnessPlans);
+            target.fitnessWorkouts = normalizeFitnessWorkouts(target.fitnessWorkouts);
             return target;
         }
 
@@ -277,6 +363,135 @@
 
         function findFitnessPlan(list = [], planId = '') {
             return normalizeFitnessPlans(list).find(item => item.id === planId) || null;
+        }
+
+        function getWorkoutStatusLabel(value = 'planned') {
+            return WORKOUT_STATUS_OPTIONS.find(item => item.value === value)?.label || '计划中';
+        }
+
+        function getWorkoutTitle(workout = {}) {
+            if (workout.title) return workout.title;
+            if (workout.planName && workout.dayName) return `${workout.planName} · ${workout.dayName}`;
+            if (workout.dayName) return workout.dayName;
+            if (workout.planName) return workout.planName;
+            return '自由训练';
+        }
+
+        function countCompletedSets(workout = {}) {
+            return (workout.exercises || []).reduce((sum, exercise) => {
+                return sum + (exercise.sets || []).filter(set => set.done).length;
+            }, 0);
+        }
+
+        function countTotalSets(workout = {}) {
+            return (workout.exercises || []).reduce((sum, exercise) => sum + ((exercise.sets || []).length), 0);
+        }
+
+        function createWorkoutFromPlanDay(plan = {}, day = {}, overrides = {}) {
+            const sourcePlan = normalizeFitnessPlan(plan);
+            const sourceDay = normalizePlanDay(day);
+            return normalizeFitnessWorkout({
+                date: getTodayStr(),
+                status: 'planned',
+                planId: sourcePlan.id || '',
+                planName: sourcePlan.name || '',
+                dayId: sourceDay.id || '',
+                dayName: sourceDay.name || '',
+                title: sourcePlan.name && sourceDay.name
+                    ? `${sourcePlan.name} · ${sourceDay.name}`
+                    : (sourceDay.name || sourcePlan.name || '今日训练'),
+                notes: '',
+                exercises: (sourceDay.exercises || []).map(exercise => normalizeWorkoutExercise({
+                    name: exercise.name,
+                    targetSets: exercise.targetSets,
+                    targetReps: exercise.targetReps,
+                    targetWeight: exercise.targetWeight,
+                    note: exercise.note,
+                    sets: createDefaultSets(exercise.targetSets, exercise)
+                })),
+                ...overrides
+            });
+        }
+
+        function createFitnessWorkoutDraft(overrides = {}) {
+            return normalizeFitnessWorkout({
+                date: getTodayStr(),
+                status: 'planned',
+                title: '自由训练',
+                notes: '',
+                exercises: [
+                    normalizeWorkoutExercise({
+                        name: '',
+                        targetSets: 3,
+                        targetReps: '8-12',
+                        sets: createDefaultSets(3)
+                    })
+                ],
+                ...overrides
+            });
+        }
+
+        function validateFitnessWorkoutInput(input = {}) {
+            const workout = normalizeFitnessWorkout(input);
+            if (!workout.date) return { ok: false, message: '请填写训练日期', workout };
+            if (!workout.exercises.length) return { ok: false, message: '请至少添加一个动作', workout };
+            if (!workout.title) workout.title = getWorkoutTitle(workout);
+            return { ok: true, message: '', workout };
+        }
+
+        function upsertFitnessWorkout(list = [], input = {}, existingId = '') {
+            const validation = validateFitnessWorkoutInput(input);
+            if (!validation.ok) return validation;
+            const workouts = normalizeFitnessWorkouts(list);
+            const stamp = getNowLocal();
+            if (existingId) {
+                const index = workouts.findIndex(item => item.id === existingId);
+                if (index >= 0) {
+                    workouts[index] = normalizeFitnessWorkout({
+                        ...workouts[index],
+                        ...validation.workout,
+                        id: existingId,
+                        createdAt: workouts[index].createdAt,
+                        updatedAt: stamp
+                    });
+                    return { ok: true, message: '', workouts: normalizeFitnessWorkouts(workouts), workout: workouts[index] };
+                }
+            }
+            const workout = normalizeFitnessWorkout({
+                ...validation.workout,
+                id: genId(),
+                createdAt: stamp,
+                updatedAt: stamp
+            });
+            return { ok: true, message: '', workouts: normalizeFitnessWorkouts([workout, ...workouts]), workout };
+        }
+
+        function removeFitnessWorkout(list = [], workoutId = '') {
+            return normalizeFitnessWorkouts(list).filter(item => item.id !== workoutId);
+        }
+
+        function findFitnessWorkout(list = [], workoutId = '') {
+            return normalizeFitnessWorkouts(list).find(item => item.id === workoutId) || null;
+        }
+
+        function buildWorkoutSummary(list = [], days = 30) {
+            const workouts = normalizeFitnessWorkouts(list);
+            const today = getTodayStr();
+            const thresholdDate = (() => {
+                const date = new Date(`${today}T00:00:00`);
+                date.setDate(date.getDate() - days);
+                return date.toISOString().slice(0, 10);
+            })();
+            const recent = workouts.filter(item => item.date >= thresholdDate);
+            const doneCount = recent.filter(item => item.status === 'done').length;
+            const plannedCount = recent.filter(item => item.status === 'planned').length;
+            return {
+                total: workouts.length,
+                recentCount: recent.length,
+                doneCount,
+                plannedCount,
+                latest: workouts[0] || null
+            };
         }
 
         function formatMetricValue(value, unit = '') {
@@ -419,6 +634,7 @@
             CONDITION_OPTIONS,
             PLAN_GOAL_OPTIONS,
             PLAN_STATUS_OPTIONS,
+            WORKOUT_STATUS_OPTIONS,
             WEEKDAY_OPTIONS,
             parseMetricNumber,
             hasAnyMetric,
@@ -428,6 +644,10 @@
             normalizePlanDay,
             normalizeFitnessPlan,
             normalizeFitnessPlans,
+            normalizeWorkoutSet,
+            normalizeWorkoutExercise,
+            normalizeFitnessWorkout,
+            normalizeFitnessWorkouts,
             normalizeFitnessData,
             formatMetricValue,
             formatSignedChange,
@@ -436,10 +656,15 @@
             getPlanStatusLabel,
             getWeekdayLabels,
             countPlanExercises,
+            getWorkoutStatusLabel,
+            getWorkoutTitle,
+            countCompletedSets,
+            countTotalSets,
             getLatestBodyMetric,
             getMetricSeries,
             getMetricChange,
             buildBodyMetricSummary,
+            buildWorkoutSummary,
             createBodyMetricDraft,
             validateBodyMetricInput,
             upsertBodyMetric,
@@ -450,7 +675,14 @@
             upsertFitnessPlan,
             removeFitnessPlan,
             getActiveFitnessPlans,
-            findFitnessPlan
+            findFitnessPlan,
+            createDefaultSets,
+            createWorkoutFromPlanDay,
+            createFitnessWorkoutDraft,
+            validateFitnessWorkoutInput,
+            upsertFitnessWorkout,
+            removeFitnessWorkout,
+            findFitnessWorkout
         };
     }
 
@@ -460,6 +692,7 @@
         CONDITION_OPTIONS,
         PLAN_GOAL_OPTIONS,
         PLAN_STATUS_OPTIONS,
+        WORKOUT_STATUS_OPTIONS,
         WEEKDAY_OPTIONS
     };
 })();

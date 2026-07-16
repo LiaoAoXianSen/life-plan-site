@@ -147,6 +147,52 @@ test('fitness page can create training plans', async ({ page }) => {
     expect(errors).toEqual([]);
 });
 
+test('fitness page can create workout logs from free training', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+        if (message.type() === 'error') errors.push(message.text());
+    });
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData());
+
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '运动健身' }).click();
+    await expect(page.locator('#page-fitness')).toBeVisible();
+
+    await page.locator('#page-fitness .btn.btn-secondary', { hasText: '训练日志' }).click();
+    await expect(page.locator('#fitness-workout-modal')).toBeVisible();
+    await page.fill('#fitness-workout-title', '自由上肢');
+    await page.selectOption('#fitness-workout-status', 'done');
+    await page.fill('#fitness-workout-duration', '55');
+    await page.fill('#fitness-workout-notes', '状态不错');
+
+    const exerciseEditor = page.locator('.fitness-workout-exercise-editor').first();
+    await exerciseEditor.locator('input[type="text"]').first().fill('卧推');
+    const firstSet = exerciseEditor.locator('.fitness-workout-set-row').first();
+    await firstSet.locator('input[type="number"]').nth(0).fill('60');
+    await firstSet.locator('input[type="number"]').nth(1).fill('8');
+    await firstSet.locator('input[type="checkbox"]').check();
+
+    await page.locator('#fitness-workout-modal .btn.btn-primary', { hasText: '保存' }).click();
+    await expect(page.locator('#fitness-workout-list')).toContainText('自由上肢');
+    await expect(page.locator('#fitness-workout-list')).toContainText('卧推');
+    await expect(page.locator('#fitness-workout-list')).toContainText('已完成');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts).toHaveLength(1);
+    expect(stored.fitnessWorkouts[0].title).toBe('自由上肢');
+    expect(stored.fitnessWorkouts[0].status).toBe('done');
+    expect(stored.fitnessWorkouts[0].durationMin).toBe(55);
+    expect(stored.fitnessWorkouts[0].exercises[0].name).toBe('卧推');
+    expect(stored.fitnessWorkouts[0].exercises[0].sets[0].weight).toBe(60);
+    expect(stored.fitnessWorkouts[0].exercises[0].sets[0].reps).toBe(8);
+    expect(stored.fitnessWorkouts[0].exercises[0].sets[0].done).toBe(true);
+    expect(errors).toEqual([]);
+});
+
 test('local save failure keeps recovery actions visible until retry succeeds', async ({ page }) => {
     const data = createEmptyData();
     await page.addInitScript(value => {
