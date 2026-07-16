@@ -52,10 +52,30 @@
 
     function create(options = {}) {
         const {
-            getTodayStr = () => new Date().toISOString().slice(0, 10),
+            getTodayStr = () => {
+                const now = new Date();
+                const y = now.getFullYear();
+                const m = String(now.getMonth() + 1).padStart(2, '0');
+                const d = String(now.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            },
             getNowLocal = () => new Date().toISOString(),
             genId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
         } = options;
+
+        function toLocalDateKey(date = new Date()) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function shiftLocalDateKey(dateStr = getTodayStr(), days = 0) {
+            const base = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`);
+            if (Number.isNaN(base.getTime())) return String(dateStr || '').slice(0, 10);
+            base.setDate(base.getDate() + days);
+            return toLocalDateKey(base);
+        }
 
         function parseMetricNumber(value) {
             if (value === '' || value === null || value === undefined) return null;
@@ -477,11 +497,7 @@
         function buildWorkoutSummary(list = [], days = 30) {
             const workouts = normalizeFitnessWorkouts(list);
             const today = getTodayStr();
-            const thresholdDate = (() => {
-                const date = new Date(`${today}T00:00:00`);
-                date.setDate(date.getDate() - days);
-                return date.toISOString().slice(0, 10);
-            })();
+            const thresholdDate = shiftLocalDateKey(today, -days);
             const recent = workouts.filter(item => item.date >= thresholdDate);
             const doneCount = recent.filter(item => item.status === 'done').length;
             const plannedCount = recent.filter(item => item.status === 'planned').length;
@@ -491,14 +507,12 @@
                 const doneDates = new Set(
                     workouts.filter(item => item.status === 'done').map(item => item.date)
                 );
-                const cursor = new Date(`${today}T00:00:00`);
+                let cursor = today;
                 // 若今天还没练，从昨天开始算连续
-                if (!doneDates.has(today)) cursor.setDate(cursor.getDate() - 1);
-                while (true) {
-                    const key = cursor.toISOString().slice(0, 10);
-                    if (!doneDates.has(key)) break;
+                if (!doneDates.has(today)) cursor = shiftLocalDateKey(today, -1);
+                while (doneDates.has(cursor)) {
                     count += 1;
-                    cursor.setDate(cursor.getDate() - 1);
+                    cursor = shiftLocalDateKey(cursor, -1);
                     if (count > 365) break;
                 }
                 return count;
@@ -595,11 +609,7 @@
                 };
             }
             const latest = series[series.length - 1];
-            const threshold = (() => {
-                const date = new Date(`${latest.date}T00:00:00`);
-                date.setDate(date.getDate() - days);
-                return date.toISOString().slice(0, 10);
-            })();
+            const threshold = shiftLocalDateKey(latest.date, -days);
             let previous = null;
             for (let i = series.length - 2; i >= 0; i -= 1) {
                 if (series[i].date <= threshold || i === 0) {
