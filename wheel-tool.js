@@ -881,10 +881,6 @@
                             <span>权重 ${tag.weight}</span>
                             <span>${items.length} 个可抽公共项</span>
                         </div>
-                        <div class="wheel-tag-actions">
-                            <button type="button" class="wheel-mini-btn primary" ${items.length ? '' : 'disabled'} onclick="spinDirectTag(${safeJsArg(tag.id)})">只转这个标签</button>
-                            <button type="button" class="wheel-mini-btn" ${items.length ? '' : 'disabled'} onclick="previewTagStage(${safeJsArg(tag.id)})">先看这个标签池</button>
-                        </div>
                     </article>
                 `;
             }).join('');
@@ -892,7 +888,7 @@
                 <div class="wheel-panel-head">
                     <div>
                         <div class="card-title">标签转盘配置</div>
-                        <div class="wheel-hint">勾选参与方向抽取的标签；也可以点“只转这个标签”单独开转。</div>
+                        <div class="wheel-hint">勾选参与方向抽取的标签。想单独转某个标签，去“标签管理”。</div>
                     </div>
                     <div class="wheel-head-actions">
                         <button class="btn btn-secondary" onclick="renameWheel(${safeJsArg(wheel.id)})">改名</button>
@@ -1038,7 +1034,7 @@
             <div class="wheel-panel-head">
                 <div>
                     <div class="card-title">标签管理</div>
-                    <div class="wheel-hint">标签只有名称、颜色和权重。公共项可以挂多个标签。</div>
+                    <div class="wheel-hint">标签只有名称、颜色和权重。也可以在这里单独转某个标签。</div>
                 </div>
             </div>
             <div class="wheel-inline-form tags-form">
@@ -1048,15 +1044,20 @@
                 <button class="btn btn-primary" onclick="addWheelTag()">添加</button>
             </div>
             <div class="wheel-list">
-                ${data.wheelTags.map(tag => `
-                    <div class="wheel-row" data-wheel-tag-id="${safeHtml(tag.id)}">
-                        <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
-                        <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
-                        <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">修改</button>
-                        <button class="wheel-mini-btn" onclick="toggleWheelTagEnabled(${safeJsArg(tag.id)})">${tag.enabled === false ? '启用' : '停用'}</button>
-                        <button class="wheel-mini-btn danger" onclick="deleteWheelTag(${safeJsArg(tag.id)})">删除</button>
-                    </div>
-                `).join('') || '<div class="empty-state">暂无标签。</div>'}
+                ${data.wheelTags.map(tag => {
+                    const items = getTagItemPool(tag.id);
+                    return `
+                        <div class="wheel-row" data-wheel-tag-id="${safeHtml(tag.id)}">
+                            <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
+                            <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${items.length} 个公共项 · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
+                            <button class="wheel-mini-btn primary" ${items.length && tag.enabled !== false ? '' : 'disabled'} onclick="spinDirectTag(${safeJsArg(tag.id)})">只转这个标签</button>
+                            <button class="wheel-mini-btn" ${items.length && tag.enabled !== false ? '' : 'disabled'} onclick="previewTagStage(${safeJsArg(tag.id)})">先看这个标签池</button>
+                            <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">修改</button>
+                            <button class="wheel-mini-btn" onclick="toggleWheelTagEnabled(${safeJsArg(tag.id)})">${tag.enabled === false ? '启用' : '停用'}</button>
+                            <button class="wheel-mini-btn danger" onclick="deleteWheelTag(${safeJsArg(tag.id)})">删除</button>
+                        </div>
+                    `;
+                }).join('') || '<div class="empty-state">暂无标签。</div>'}
             </div>
         `;
     }
@@ -1928,13 +1929,30 @@
         });
     };
 
+    function ensureTagWheelContext() {
+        if (currentWheelMode !== 'tag') {
+            currentWheelMode = 'tag';
+            const tagWheel = data.wheels.find(item => item.mode === 'tag');
+            if (tagWheel) currentWheelId = tagWheel.id;
+        }
+        const wheel = getCurrentWheel();
+        if (!wheel || wheel.mode !== 'tag') {
+            alert('请先创建一个标签转盘');
+            return null;
+        }
+        return wheel;
+    }
+
     window.spinDirectTag = function spinDirectTag(tagId) {
+        const wheel = ensureTagWheelContext();
+        if (!wheel) return;
         const tag = data.wheelTags.find(item => item.id === tagId);
-        const items = setTagItemsStage(tag, currentWheelId || '');
+        const items = setTagItemsStage(tag, wheel.id);
         if (!tag || !items?.length) return alert('这个标签下没有可抽公共项');
         currentWheelResultId = null;
+        document.getElementById('wheel-tags-modal')?.classList.remove('active');
+        document.getElementById('wheel-items-modal')?.classList.remove('active');
         renderWheelPage();
-        const wheel = getCurrentWheel();
         const stageItems = getStageEntries(wheel);
         const result = weightedPick(stageItems);
         const resultIndex = stageItems.findIndex(item => item.id === result.id);
@@ -1942,8 +1960,8 @@
             animateSpin(stageItems, Math.max(0, resultIndex), () => {
                 saveHistory({
                     mode: 'tag',
-                    wheelId: wheel?.id || currentWheelId || '',
-                    wheelName: wheel?.name || '标签转盘',
+                    wheelId: wheel.id,
+                    wheelName: wheel.name || '标签转盘',
                     tagId: tag.id,
                     tagName: tag.name,
                     resultId: result.id,
@@ -1956,10 +1974,14 @@
     };
 
     window.previewTagStage = function previewTagStage(tagId) {
+        const wheel = ensureTagWheelContext();
+        if (!wheel) return;
         const tag = data.wheelTags.find(item => item.id === tagId);
-        const items = setTagItemsStage(tag, currentWheelId || '');
+        const items = setTagItemsStage(tag, wheel.id);
         if (!tag || !items?.length) return alert('这个标签下没有可抽公共项');
         currentWheelResultId = null;
+        document.getElementById('wheel-tags-modal')?.classList.remove('active');
+        document.getElementById('wheel-items-modal')?.classList.remove('active');
         renderWheelPage();
     };
 

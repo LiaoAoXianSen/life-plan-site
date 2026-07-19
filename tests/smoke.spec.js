@@ -2464,10 +2464,10 @@ test('tag wheel can spin a single selected tag directly', async ({ page }) => {
     await page.goto('/');
     await page.locator('.nav-item', { hasText: '工具转盘' }).click();
     await page.locator('#wheel-action-menu-button').click();
-    await page.locator('#wheel-action-menu').getByRole('button', { name: '修改当前盘' }).click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '标签管理' }).click();
 
-    const itemsModal = page.locator('#wheel-items-modal');
-    await itemsModal.locator('[data-wheel-tag-id="tag-home"] button', { hasText: '只转这个标签' }).click();
+    const tagsModal = page.locator('#wheel-tags-modal');
+    await tagsModal.locator('[data-wheel-tag-id="tag-home"] button', { hasText: '只转这个标签' }).click();
     await expect(page.locator('#wheel-result')).toContainText('煮面', { timeout: 3000 });
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
