@@ -1,6 +1,5 @@
 (function () {
     const palette = ['#ff6b6b', '#ff9f43', '#ffd166', '#06d6a0', '#2ec4b6', '#00bbf9', '#5c7cfa', '#9b5de5', '#f15bb5', '#8ac926'];
-    const WHEEL_TAG_GROUPS = ['类型', '场景', '状态', '人数', '成本', '时间', '其他'];
     let wheelRotation = 0;
     let wheelSpinning = false;
     let wheelStageState = createWheelStageState();
@@ -16,12 +15,7 @@
 
     function createWheelStageState() {
         return {
-            type: 'wheel',
-            tagWheelId: '',
-            tagId: '',
-            tagName: '',
-            tagColor: '',
-            itemCount: 0
+            type: 'wheel'
         };
     }
 
@@ -129,21 +123,6 @@
         return Math.max(1, Math.round(Number(value) || 1));
     }
 
-    function normalizeWheelTagGroup(value) {
-        const group = String(value || '').trim();
-        return WHEEL_TAG_GROUPS.includes(group) ? group : '其他';
-    }
-
-    function getGroupedWheelTags(tags = data.wheelTags) {
-        const grouped = new Map(WHEEL_TAG_GROUPS.map(group => [group, []]));
-        (Array.isArray(tags) ? tags : []).forEach(tag => {
-            const group = normalizeWheelTagGroup(tag?.group);
-            if (!grouped.has(group)) grouped.set(group, []);
-            grouped.get(group).push(tag);
-        });
-        return Array.from(grouped.entries()).filter(([, items]) => items.length);
-    }
-
     function ensureWheelTimestamp(value, fallback) {
         return typeof value === 'string' && value ? value : fallback;
     }
@@ -167,7 +146,6 @@
                 id: tag?.id || id(),
                 name: String(tag?.name || '未命名标签').trim() || '未命名标签',
                     color: safeColor(tag?.color, palette[data.wheelTags.length % palette.length]),
-                    group: normalizeWheelTagGroup(tag?.group),
                     weight: ensureWheelWeight(tag?.weight),
                     enabled: tag?.enabled !== false,
                     createdAt,
@@ -195,7 +173,6 @@
                     id: id(),
                     name: '未分类',
                     color: '#8a8f98',
-                    group: '其他',
                     weight: 1,
                     enabled: true,
                     createdAt: stamp,
@@ -245,9 +222,7 @@
             };
             if (mode === 'tag') {
                 normalized.tagIds = normalizeTagIds(wheel?.tagIds);
-                normalized.tagPlayMode = wheel?.tagPlayMode === 'filter' ? 'filter' : 'direction';
                 normalized.filterMatchMode = wheel?.filterMatchMode === 'any' ? 'any' : 'all';
-                normalized.filterTagIds = normalizeTagIds(wheel?.filterTagIds);
                 return normalized;
             }
             normalized.items = dedupeWheelItemsByName(wheel?.items).map(item => {
@@ -291,11 +266,11 @@
 
         const stamp = now();
         const seedTags = [
-            ['出门', '#2f7d6d', '场景'],
-            ['在家', '#e86c52', '场景'],
-            ['学习', '#3e65b0', '类型'],
-            ['美食', '#ebb050', '类型']
-        ].map(([name, color, group]) => ({ id: id(), name, color, group, weight: 1, enabled: true, createdAt: stamp, updatedAt: stamp }));
+            ['出门', '#2f7d6d'],
+            ['在家', '#e86c52'],
+            ['学习', '#3e65b0'],
+            ['美食', '#ebb050']
+        ].map(([name, color]) => ({ id: id(), name, color, weight: 1, enabled: true, createdAt: stamp, updatedAt: stamp }));
 
         const tagId = name => seedTags.find(tag => tag.name === name)?.id;
         const seedItems = [
@@ -358,40 +333,26 @@
         return wheel;
     }
 
-    function getFilterTagIds(wheel = {}) {
-        return uniqueTagIds(Array.isArray(wheel.filterTagIds) ? wheel.filterTagIds : []);
-    }
-
-    function getWheelTagPlayMode(wheel = {}) {
-        return wheel?.tagPlayMode === 'filter' ? 'filter' : 'direction';
-    }
-
     function getWheelFilterMatchMode(wheel = {}) {
         return wheel?.filterMatchMode === 'any' ? 'any' : 'all';
     }
 
-    function getFilterCandidatesForWheel(wheel = {}) {
-        const filterTagIds = getFilterTagIds(wheel);
-        if (!filterTagIds.length) return [];
+    function getTagCandidatesForSelection(wheel = {}) {
+        const selectedTagIds = uniqueTagIds(Array.isArray(wheel.tagIds) ? wheel.tagIds : []);
+        if (!selectedTagIds.length) return [];
         const matchMode = getWheelFilterMatchMode(wheel);
         return data.wheelLibraryItems.filter(item => {
             if (item.enabled === false) return false;
             const itemTags = new Set(item.tagIds || []);
             return matchMode === 'any'
-                ? filterTagIds.some(tagId => itemTags.has(tagId))
-                : filterTagIds.every(tagId => itemTags.has(tagId));
+                ? selectedTagIds.some(tagId => itemTags.has(tagId))
+                : selectedTagIds.every(tagId => itemTags.has(tagId));
         });
     }
 
     function getEnabledEntries(wheel) {
         if (!wheel) return [];
-        if (wheel.mode === 'tag') {
-            if (wheel.tagPlayMode === 'filter') return getFilterCandidatesForWheel(wheel);
-            const selected = new Set(Array.isArray(wheel.tagIds) ? wheel.tagIds : []);
-            return data.wheelTags
-                .filter(tag => tag.enabled !== false && selected.has(tag.id))
-                .filter(tag => data.wheelLibraryItems.some(item => item.enabled !== false && item.tagIds?.includes(tag.id)));
-        }
+        if (wheel.mode === 'tag') return getTagCandidatesForSelection(wheel);
         return (wheel.items || []).filter(item => item.enabled !== false);
     }
 
@@ -409,7 +370,7 @@
     function tagChips(tagIds = []) {
         const tags = tagIds.map(tagId => data.wheelTags.find(tag => tag.id === tagId)).filter(Boolean);
         if (!tags.length) return '<span class="wheel-chip muted">无标签</span>';
-        return tags.map(tag => `<span class="wheel-chip" style="--chip-color:${safeColor(tag.color)}"><em>${safeHtml(tag.group || '其他')}</em>${safeHtml(tag.name)}</span>`).join('');
+        return tags.map(tag => `<span class="wheel-chip" style="--chip-color:${safeColor(tag.color)}">${safeHtml(tag.name)}</span>`).join('');
     }
 
     function weightedPick(items) {
@@ -449,47 +410,12 @@
         wheelStageState = createWheelStageState();
     }
 
-    function setTagItemsStage(tag, wheelId = currentWheelId || '') {
-        const items = getTagItemPool(tag?.id);
-        if (!tag || !items.length) return null;
-        wheelStageState = {
-            type: 'tag-items',
-            tagWheelId: wheelId,
-            tagId: tag.id,
-            tagName: tag.name,
-            tagColor: tag.color || '#216e4e',
-            itemCount: items.length
-        };
-        return items;
-    }
-
     function getStageEntries(wheel) {
         if (!wheel) return [];
-        if (isTagItemsStage(wheel)) {
-            return data.wheelLibraryItems
-                .filter(item => item.enabled !== false && item.tagIds?.includes(wheelStageState.tagId))
-                .map((item, index) => ({
-                    ...item,
-                    color: palette[index % palette.length]
-                }));
-        }
         return getEnabledEntries(wheel).map((item, index) => ({
             ...item,
             color: item.color || palette[index % palette.length]
         }));
-    }
-
-    function isTagItemsStage(wheel) {
-        return Boolean(wheel && wheelStageState.type === 'tag-items' && wheelStageState.tagId && wheel.id === wheelStageState.tagWheelId);
-    }
-
-    function getTagCandidatesForWheel(wheel) {
-        if (!wheel || wheel.mode !== 'tag') return [];
-        const selected = new Set(Array.isArray(wheel.tagIds) ? wheel.tagIds : []);
-        return data.wheelTags
-            .filter(tag => tag.enabled !== false && selected.has(tag.id))
-            .map(tag => ({ tag, items: getTagItemPool(tag.id) }))
-            .filter(entry => entry.items.length > 0);
     }
 
     function countWheelHistory(wheelId = '') {
@@ -499,17 +425,13 @@
     function getWheelHeadline(wheel) {
         if (!wheel) return '工具转盘';
         if (wheel.name === '默认普通转盘') return '今天做什么';
-        if (wheel.name === '默认标签转盘') return '先抽个方向';
+        if (wheel.name === '默认标签转盘') return '按标签抽一个';
         return wheel.name || '未命名转盘';
     }
 
     function getWheelPanelSummaryMarkup(wheel) {
-        const activeWheelCount = isTagItemsStage(wheel)
-            ? (Number(wheelStageState.itemCount) || 0)
-            : getEnabledEntries(wheel).length;
-        const activeLabel = wheel?.mode === 'tag'
-            ? (isTagItemsStage(wheel) ? '标签内候选' : '可抽标签')
-            : '当前选项';
+        const activeWheelCount = getEnabledEntries(wheel).length;
+        const activeLabel = wheel?.mode === 'tag' ? '候选公共项' : '当前选项';
         const libraryCount = data.wheelLibraryItems.filter(item => item.enabled !== false).length;
         const tagCount = data.wheelTags.filter(tag => tag.enabled !== false).length;
         const historyCount = countWheelHistory(wheel?.id || '');
@@ -706,62 +628,22 @@
         const container = document.getElementById('wheel-stage-summary');
         if (!container) return;
         const headline = safeHtml(getWheelHeadline(wheel));
-        if (isTagItemsStage(wheel)) {
-            const tag = getTagById(wheelStageState.tagId);
-            const tagColor = wheelStageState.tagColor || tag?.color || '#216e4e';
-            container.innerHTML = `
-                <div class="wheel-stage-card hero compact active">
-                    <div class="wheel-stage-card-top">
-                        <span class="wheel-stage-badge">第二段</span>
-                        <span class="wheel-stage-badge muted">标签已锁定</span>
-                    </div>
-                    <div class="wheel-stage-title">已锁定 ${getTagChipMarkup(wheelStageState.tagName, tagColor)}</div>
-                    <div class="wheel-stage-copy">${headline} · 再转一次抽具体内容。</div>
-                </div>
-            `;
-            return;
-        }
         if (wheel?.mode === 'tag') {
-            const playMode = getWheelTagPlayMode(wheel);
-            if (playMode === 'filter') {
-                const filterTags = getFilterTagIds(wheel).map(getTagById).filter(Boolean);
-                const candidates = getFilterCandidatesForWheel(wheel);
-                const matchLabel = getWheelFilterMatchMode(wheel) === 'any' ? '任意满足' : '全部满足';
-                container.innerHTML = `
-                    <div class="wheel-stage-card hero compact">
-                        <div class="wheel-stage-card-top">
-                            <span class="wheel-stage-badge">条件抽</span>
-                            <span class="wheel-stage-badge muted">${safeHtml(matchLabel)}</span>
-                        </div>
-                        <div class="wheel-stage-title">${headline}</div>
-                        <div class="wheel-stage-copy">从符合条件的公共项里直接抽一个。</div>
-                        <div class="wheel-stage-quick-tags">
-                            ${filterTags.map(tag => `<span class="wheel-stage-quick-tag static">${getTagChipMarkup(tag.name, tag.color)}<span>${safeHtml(tag.group || '其他')}</span></span>`).join('') || '<span class="wheel-stage-quick-tag static"><span>还没选择条件</span></span>'}
-                        </div>
-                        <div class="wheel-stage-copy">当前候选 ${candidates.length} 项${candidates.length ? `：${safeHtml(candidates.slice(0, 5).map(item => item.name).join('、'))}${candidates.length > 5 ? '…' : ''}` : ''}</div>
-                    </div>
-                `;
-                return;
-            }
-            const tagCandidates = getTagCandidatesForWheel(wheel).slice(0, 6);
+            const selectedTags = uniqueTagIds(wheel.tagIds || []).map(getTagById).filter(Boolean);
+            const candidates = getTagCandidatesForSelection(wheel);
+            const matchLabel = getWheelFilterMatchMode(wheel) === 'any' ? '任意满足' : '全部满足';
             container.innerHTML = `
                 <div class="wheel-stage-card hero compact">
                     <div class="wheel-stage-card-top">
                         <span class="wheel-stage-badge">标签转盘</span>
-                        <span class="wheel-stage-badge muted">先抽方向</span>
+                        <span class="wheel-stage-badge muted">${safeHtml(matchLabel)}</span>
                     </div>
                     <div class="wheel-stage-title">${headline}</div>
-                    <div class="wheel-stage-copy">先抽方向，再抽具体答案。</div>
-                    ${tagCandidates.length ? `
-                        <div class="wheel-stage-quick-tags">
-                            ${tagCandidates.map(entry => `
-                                <button type="button" class="wheel-stage-quick-tag" onclick="spinDirectTag(${safeJsArg(entry.tag.id)})">
-                                    ${getTagChipMarkup(entry.tag.name, entry.tag.color || '#216e4e')}
-                                    <span>${entry.items.length} 项</span>
-                                </button>
-                            `).join('')}
-                        </div>
-                    ` : ''}
+                    <div class="wheel-stage-copy">选几个标签，直接从符合条件的公共项里抽一个。</div>
+                    <div class="wheel-stage-quick-tags">
+                        ${selectedTags.map(tag => `<span class="wheel-stage-quick-tag static">${getTagChipMarkup(tag.name, tag.color)}</span>`).join('') || '<span class="wheel-stage-quick-tag static"><span>还没选择标签</span></span>'}
+                    </div>
+                    <div class="wheel-stage-copy">当前候选 ${candidates.length} 项${candidates.length ? `：${safeHtml(candidates.slice(0, 5).map(item => item.name).join('、'))}${candidates.length > 5 ? '…' : ''}` : ''}</div>
                 </div>
             `;
             return;
@@ -784,11 +666,11 @@
         const wheel = getCurrentWheel();
         const history = data.wheelHistory.find(item => item.id === currentWheelResultId);
         if (!history) {
-            const itemCount = isTagItemsStage(wheel) ? Number(wheelStageState.itemCount) || 0 : getStageEntries(wheel).length;
+            const itemCount = getStageEntries(wheel).length;
             container.innerHTML = `
                 <div class="wheel-result-card pending compact">
-                    <span class="wheel-result-kicker">${isTagItemsStage(wheel) ? '第二段' : '准备开始'}</span>
-                    <strong class="wheel-result-title">${isTagItemsStage(wheel) ? '再转一次' : '转一转'}</strong>
+                    <span class="wheel-result-kicker">准备开始</span>
+                    <strong class="wheel-result-title">转一转</strong>
                     <span class="wheel-result-note">${itemCount} 个候选</span>
                 </div>
             `;
@@ -905,7 +787,6 @@
 
     function renderStage() {
         const wheel = getCurrentWheel();
-        const tagItemsStage = isTagItemsStage(wheel);
         renderSelector();
         document.querySelectorAll('#wheel-mode-tabs button').forEach(btn => btn.classList.toggle('active', btn.textContent.includes(wheel?.mode === 'tag' ? '标签' : '普通')));
         renderStageSummary(wheel);
@@ -913,23 +794,16 @@
         drawWheelCanvas(entries);
         const actionWrap = document.querySelector('.wheel-actions');
         if (actionWrap) {
-            const isFilterMode = wheel?.mode === 'tag' && getWheelTagPlayMode(wheel) === 'filter' && !tagItemsStage;
             actionWrap.innerHTML = `
-                <button class="btn btn-primary" onclick="spinWheel()">${tagItemsStage ? '继续抽具体内容' : (isFilterMode ? '从条件里抽一个' : (wheel?.mode === 'tag' ? '先抽一个标签' : '开始抽取'))}</button>
-                ${tagItemsStage ? `<button class="btn btn-secondary" onclick="returnToTagWheel()">返回标签转盘</button>` : `<button class="btn btn-secondary" onclick="renderWheelPage()">刷新</button>`}
+                <button class="btn btn-primary" onclick="spinWheel()">${wheel?.mode === 'tag' ? '按标签抽一个' : '开始抽取'}</button>
+                <button class="btn btn-secondary" onclick="renderWheelPage()">刷新</button>
             `;
         }
         const stageHint = document.getElementById('wheel-stage-hint');
         if (stageHint) {
-            if (tagItemsStage) {
-                stageHint.textContent = `当前是第二段，正在从“${wheelStageState.tagName}”对应的内容池里继续抽取。`;
-            } else if (wheel?.mode === 'tag') {
-                stageHint.textContent = getWheelTagPlayMode(wheel) === 'filter'
-                    ? '按条件抽会直接从符合标签条件的公共项里给出结果。'
-                    : '标签转盘会先定标签，再自动进入第二段抽内容；如果你已经想好标签，也可以直接点“只转这个标签”。';
-            } else {
-                stageHint.textContent = '点击转盘或按钮都可以开始，普通转盘会直接给出最终结果。';
-            }
+            stageHint.textContent = wheel?.mode === 'tag'
+                ? '选好标签后直接抽公共项，全部满足或任意满足都可以。'
+                : '点击转盘或按钮都可以开始，普通转盘会直接给出最终结果。';
         }
         attachWheelPointerGestures(entries);
         renderResult();
@@ -938,70 +812,48 @@
     function renderItemsPanel(wheel) {
         if (!wheel) return '<div class="empty-state">暂无转盘</div>';
         if (wheel.mode === 'tag') {
-            const playMode = getWheelTagPlayMode(wheel);
-            const directionSelected = new Set(wheel.tagIds || []);
-            const filterSelected = new Set(getFilterTagIds(wheel));
+            const selected = new Set(wheel.tagIds || []);
             const matchMode = getWheelFilterMatchMode(wheel);
-            const renderTagCards = (mode = 'direction') => getGroupedWheelTags().map(([group, tags]) => `
-                <div class="wheel-tag-group-block">
-                    <div class="wheel-tag-group-title">${safeHtml(group)}</div>
-                    <div class="wheel-tag-grid compact">
-                        ${tags.map(tag => {
-                            const items = getTagItemPool(tag.id);
-                            const selected = mode === 'filter' ? filterSelected.has(tag.id) : directionSelected.has(tag.id);
-                            return `
-                                <article class="wheel-tag-card ${selected ? 'selected' : ''}" data-wheel-tag-id="${safeHtml(tag.id)}">
-                                    <label class="wheel-tag-toggle">
-                                        <input type="checkbox" ${selected ? 'checked' : ''} onchange="${mode === 'filter' ? 'toggleWheelFilterTag' : 'toggleWheelTag'}(${safeJsArg(wheel.id)},${safeJsArg(tag.id)},this.checked)">
-                                        <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
-                                        <span class="wheel-tag-title">${safeHtml(tag.name)}</span>
-                                    </label>
-                                    <div class="wheel-tag-meta">
-                                        <span>${safeHtml(tag.group || '其他')}</span>
-                                        <span>${items.length} 项</span>
-                                    </div>
-                                    ${mode === 'direction' ? `
-                                        <div class="wheel-tag-actions">
-                                            <button type="button" class="wheel-mini-btn primary" ${items.length ? '' : 'disabled'} onclick="spinDirectTag(${safeJsArg(tag.id)})">只转这个标签</button>
-                                            <button type="button" class="wheel-mini-btn" ${items.length ? '' : 'disabled'} onclick="previewTagStage(${safeJsArg(tag.id)})">先看这个标签池</button>
-                                        </div>
-                                    ` : ''}
-                                </article>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-            `).join('');
-            const candidates = getFilterCandidatesForWheel(wheel);
+            const candidates = getTagCandidatesForSelection(wheel);
+            const tagCards = data.wheelTags.map(tag => {
+                const items = getTagItemPool(tag.id);
+                return `
+                    <article class="wheel-tag-card ${selected.has(tag.id) ? 'selected' : ''}" data-wheel-tag-id="${safeHtml(tag.id)}">
+                        <label class="wheel-tag-toggle">
+                            <input type="checkbox" ${selected.has(tag.id) ? 'checked' : ''} onchange="toggleWheelTag(${safeJsArg(wheel.id)},${safeJsArg(tag.id)},this.checked)">
+                            <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
+                            <span class="wheel-tag-title">${safeHtml(tag.name)}</span>
+                        </label>
+                        <div class="wheel-tag-meta">
+                            <span>权重 ${tag.weight}</span>
+                            <span>${items.length} 项</span>
+                        </div>
+                    </article>
+                `;
+            }).join('');
             return `
                 <div class="wheel-panel-head">
                     <div>
                         <div class="card-title">标签转盘配置</div>
-                        <div class="wheel-hint">先抽方向适合随机给方向；按条件抽适合“吃喝 + 在家”这类精准筛选。</div>
+                        <div class="wheel-hint">勾选标签后直接抽公共项。全部满足更精准，任意满足更宽。</div>
                     </div>
                     <div class="wheel-head-actions">
                         <button class="btn btn-secondary" onclick="renameWheel(${safeJsArg(wheel.id)})">改名</button>
                         <button class="btn btn-danger" onclick="deleteWheel(${safeJsArg(wheel.id)})">删除转盘</button>
                     </div>
                 </div>
-                <div class="segmented wheel-play-mode-tabs">
-                    <button type="button" class="${playMode === 'direction' ? 'active' : ''}" onclick="setWheelTagPlayMode(${safeJsArg(wheel.id)}, 'direction')">先抽方向</button>
-                    <button type="button" class="${playMode === 'filter' ? 'active' : ''}" onclick="setWheelTagPlayMode(${safeJsArg(wheel.id)}, 'filter')">按条件抽</button>
-                </div>
-                ${playMode === 'filter' ? `
-                    <div class="wheel-filter-panel">
-                        <div class="wheel-filter-toolbar">
-                            <span>匹配方式</span>
-                            <button type="button" class="wheel-mini-btn ${matchMode === 'all' ? 'primary' : ''}" onclick="setWheelFilterMatchMode(${safeJsArg(wheel.id)}, 'all')">全部满足</button>
-                            <button type="button" class="wheel-mini-btn ${matchMode === 'any' ? 'primary' : ''}" onclick="setWheelFilterMatchMode(${safeJsArg(wheel.id)}, 'any')">任意满足</button>
-                            <strong>候选 ${candidates.length} 项</strong>
-                        </div>
-                        <div class="wheel-filter-preview">${candidates.length ? safeHtml(candidates.slice(0, 8).map(item => item.name).join('、')) + (candidates.length > 8 ? '…' : '') : '没有符合条件的公共项，减少标签或切到“任意满足”。'}</div>
+                <div class="wheel-filter-panel">
+                    <div class="wheel-filter-toolbar">
+                        <span>匹配方式</span>
+                        <button type="button" class="wheel-mini-btn ${matchMode === 'all' ? 'primary' : ''}" onclick="setWheelFilterMatchMode(${safeJsArg(wheel.id)}, 'all')">全部满足</button>
+                        <button type="button" class="wheel-mini-btn ${matchMode === 'any' ? 'primary' : ''}" onclick="setWheelFilterMatchMode(${safeJsArg(wheel.id)}, 'any')">任意满足</button>
+                        <strong>候选 ${candidates.length} 项</strong>
                     </div>
-                    ${renderTagCards('filter') || '<div class="empty-state">暂无标签，先去“标签”面板新增。</div>'}
-                ` : `
-                    ${renderTagCards('direction') || '<div class="empty-state">暂无标签，先去“标签”面板新增。</div>'}
-                `}
+                    <div class="wheel-filter-preview">${candidates.length ? safeHtml(candidates.slice(0, 8).map(item => item.name).join('、')) + (candidates.length > 8 ? '…' : '') : '没有符合条件的公共项，减少标签或切到“任意满足”。'}</div>
+                </div>
+                <div class="wheel-tag-grid compact">
+                    ${tagCards || '<div class="empty-state">暂无标签，先去“标签”面板新增。</div>'}
+                </div>
             `;
         }
         const filteredLibraryItems = getFilteredLibraryItemsForCopy();
@@ -1055,20 +907,13 @@
         const selectedVisibleCount = filteredItems.filter(item => selectedIds.has(item.id)).length;
         const selectedTotalCount = selectedIds.size;
         const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
-        const tagOptions = data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}">${safeHtml(tag.group || '其他')} · ${safeHtml(tag.name)}</option>`).join('');
-        const batchTagPicker = getGroupedWheelTags().map(([group, tags]) => `
-            <div class="wheel-library-batch-tag-group">
-                <div class="wheel-tag-group-title">${safeHtml(group)}</div>
-                <div class="wheel-library-batch-tags">
-                    ${tags.map(tag => `
-                        <label class="wheel-library-batch-tag">
-                            <input type="checkbox" value="${safeHtml(tag.id)}">
-                            <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
-                            <span>${safeHtml(tag.name)}</span>
-                        </label>
-                    `).join('')}
-                </div>
-            </div>
+        const tagOptions = data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}">${safeHtml(tag.name)}</option>`).join('');
+        const batchTagPicker = data.wheelTags.map(tag => `
+            <label class="wheel-library-batch-tag">
+                <input type="checkbox" value="${safeHtml(tag.id)}">
+                <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
+                <span>${safeHtml(tag.name)}</span>
+            </label>
         `).join('');
         return `
             <div class="wheel-panel-head">
@@ -1096,7 +941,9 @@
                     <span>本次导入标签</span>
                     <small>可多选；也可以每行继续写标签</small>
                 </div>
-                ${batchTagPicker || '<div class="empty-state compact">还没有标签，先在标签面板新增。</div>'}
+                <div class="wheel-library-batch-tags">
+                    ${batchTagPicker || '<div class="empty-state compact">还没有标签，先在标签面板新增。</div>'}
+                </div>
             </div>
             <div class="wheel-library-toolbar">
                 <label class="wheel-library-filter">
@@ -1140,31 +987,23 @@
             <div class="wheel-panel-head">
                 <div>
                     <div class="card-title">标签管理</div>
-                    <div class="wheel-hint">标签有颜色和权重，标签转盘会按权重抽标签。</div>
+                    <div class="wheel-hint">标签只有名称、颜色和权重。公共项可以挂多个标签。</div>
                 </div>
             </div>
             <div class="wheel-inline-form tags-form">
                 <input id="wheel-tag-name" placeholder="标签名称">
-                <select id="wheel-tag-group">
-                    ${WHEEL_TAG_GROUPS.map(group => `<option value="${safeHtml(group)}">${safeHtml(group)}</option>`).join('')}
-                </select>
                 <input id="wheel-tag-weight" type="number" min="1" value="1">
                 <input id="wheel-tag-color" type="color" value="#216e4e">
                 <button class="btn btn-primary" onclick="addWheelTag()">添加</button>
             </div>
             <div class="wheel-list">
-                ${getGroupedWheelTags().map(([group, tags]) => `
-                    <div class="wheel-tag-group-block list-mode">
-                        <div class="wheel-tag-group-title">${safeHtml(group)}</div>
-                        ${tags.map(tag => `
-                            <div class="wheel-row" data-wheel-tag-id="${safeHtml(tag.id)}">
-                                <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
-                                <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>${safeHtml(tag.group || '其他')} · 权重 ${tag.weight} · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
-                                <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">修改</button>
-                                <button class="wheel-mini-btn" onclick="toggleWheelTagEnabled(${safeJsArg(tag.id)})">${tag.enabled === false ? '启用' : '停用'}</button>
-                                <button class="wheel-mini-btn danger" onclick="deleteWheelTag(${safeJsArg(tag.id)})">删除</button>
-                            </div>
-                        `).join('')}
+                ${data.wheelTags.map(tag => `
+                    <div class="wheel-row" data-wheel-tag-id="${safeHtml(tag.id)}">
+                        <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
+                        <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
+                        <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">修改</button>
+                        <button class="wheel-mini-btn" onclick="toggleWheelTagEnabled(${safeJsArg(tag.id)})">${tag.enabled === false ? '启用' : '停用'}</button>
+                        <button class="wheel-mini-btn danger" onclick="deleteWheelTag(${safeJsArg(tag.id)})">删除</button>
                     </div>
                 `).join('') || '<div class="empty-state">暂无标签。</div>'}
             </div>
@@ -1780,12 +1619,11 @@
 
     window.addWheelTag = function addWheelTag() {
         const name = document.getElementById('wheel-tag-name')?.value.trim();
-        const group = normalizeWheelTagGroup(document.getElementById('wheel-tag-group')?.value);
         const weight = Math.max(1, Number(document.getElementById('wheel-tag-weight')?.value) || 1);
         const color = document.getElementById('wheel-tag-color')?.value || palette[data.wheelTags.length % palette.length];
         if (!name) return alert('请输入标签名称');
         if (data.wheelTags.some(tag => normalizeName(tag.name) === normalizeName(name))) return alert('已经有同名标签');
-        data.wheelTags.push({ id: id(), name, group, color, weight, enabled: true, createdAt: now(), updatedAt: now() });
+        data.wheelTags.push({ id: id(), name, color, weight, enabled: true, createdAt: now(), updatedAt: now() });
         persist();
         renderWheelPage();
     };
@@ -1798,12 +1636,9 @@
         const trimmed = name.trim();
         if (!trimmed) return alert('名称不能为空');
         if (data.wheelTags.some(item => item.id !== tag.id && normalizeName(item.name) === normalizeName(trimmed))) return alert('已经有同名标签');
-        const group = prompt('标签分组：类型 / 场景 / 状态 / 人数 / 成本 / 时间 / 其他', tag.group || '其他');
-        if (group === null) return;
         const weight = prompt('标签权重', tag.weight);
         if (weight === null) return;
         tag.name = trimmed;
-        tag.group = normalizeWheelTagGroup(group);
         tag.weight = Math.max(1, Number(weight) || 1);
         tag.updatedAt = now();
         persist();
@@ -1829,21 +1664,9 @@
         data.wheels.forEach(wheel => {
             if (wheel.mode === 'tag') {
                 wheel.tagIds = (wheel.tagIds || []).filter(id => id !== tagId);
-                wheel.filterTagIds = (wheel.filterTagIds || []).filter(id => id !== tagId);
             } else delete wheel.tagIds;
         });
         if (typeof markDeletedItem === 'function') markDeletedItem('wheelTags', tagId, { name: tag.name });
-        persist();
-        renderWheelPage();
-    };
-
-    window.setWheelTagPlayMode = function setWheelTagPlayMode(wheelId, mode = 'direction') {
-        const wheel = data.wheels.find(item => item.id === wheelId);
-        if (!wheel || wheel.mode !== 'tag') return;
-        wheel.tagPlayMode = mode === 'filter' ? 'filter' : 'direction';
-        wheel.updatedAt = now();
-        currentWheelResultId = null;
-        resetWheelStageState();
         persist();
         renderWheelPage();
     };
@@ -1870,18 +1693,6 @@
             return;
         }
         wheel.tagIds = uniqueTagIds(Array.from(set));
-        wheel.updatedAt = now();
-        persist();
-        renderWheelPage();
-    };
-
-    window.toggleWheelFilterTag = function toggleWheelFilterTag(wheelId, tagId, checked) {
-        const wheel = data.wheels.find(item => item.id === wheelId);
-        if (!wheel || wheel.mode !== 'tag') return;
-        const set = new Set(wheel.filterTagIds || []);
-        if (checked) set.add(tagId);
-        else set.delete(tagId);
-        wheel.filterTagIds = uniqueTagIds(Array.from(set));
         wheel.updatedAt = now();
         currentWheelResultId = null;
         persist();
@@ -2012,66 +1823,26 @@
         const wheel = getCurrentWheel();
         if (!wheel) return alert('请先创建转盘');
         currentWheelResultId = null;
-        if (isTagItemsStage(wheel)) {
-            const items = getStageEntries(wheel);
-            if (!items.length) return alert('这个标签下没有可抽公共项');
+        if (wheel.mode === 'tag') {
+            const selectedTagIds = uniqueTagIds(wheel.tagIds || []);
+            if (!selectedTagIds.length) return alert('请先选择至少一个标签');
+            const items = getTagCandidatesForSelection(wheel);
+            if (!items.length) return alert('没有符合条件的公共项，试试减少标签或改成任意满足');
             const result = weightedPick(items);
-            const resultIndex = items.findIndex(item => item.id === result.id);
-            animateSpin(items, Math.max(0, resultIndex), () => {
+            const entries = items.map((item, index) => ({ ...item, color: palette[index % palette.length] }));
+            const resultIndex = entries.findIndex(item => item.id === result.id);
+            animateSpin(entries, Math.max(0, resultIndex), () => {
+                const selectedTags = tagNames(selectedTagIds).join(' + ');
                 saveHistory({
                     mode: 'tag',
                     wheelId: wheel.id,
                     wheelName: wheel.name,
-                    tagId: wheelStageState.tagId,
-                    tagName: wheelStageState.tagName,
+                    tagId: '',
+                    tagName: selectedTags,
                     resultId: result.id,
                     resultName: result.name,
                     note: result.note || ''
                 });
-                renderWheelPage();
-            });
-            return;
-        }
-        if (wheel.mode === 'tag') {
-            if (getWheelTagPlayMode(wheel) === 'filter') {
-                const items = getFilterCandidatesForWheel(wheel);
-                if (!getFilterTagIds(wheel).length) return alert('请先选择按条件抽的标签');
-                if (!items.length) return alert('没有符合条件的公共项，试试减少标签或改成任意满足');
-                const result = weightedPick(items);
-                const entries = items.map((item, index) => ({ ...item, color: palette[index % palette.length] }));
-                const resultIndex = entries.findIndex(item => item.id === result.id);
-                animateSpin(entries, Math.max(0, resultIndex), () => {
-                    const filterTags = tagNames(getFilterTagIds(wheel)).join(' + ');
-                    saveHistory({
-                        mode: 'tag',
-                        wheelId: wheel.id,
-                        wheelName: wheel.name,
-                        tagId: '',
-                        tagName: `条件：${filterTags}`,
-                        resultId: result.id,
-                        resultName: result.name,
-                        note: result.note || ''
-                    });
-                    renderWheelPage();
-                });
-                return;
-            }
-            const tags = getEnabledEntries(wheel);
-            if (!tags.length) return alert('这个标签转盘没有可抽标签，或标签下没有启用的公共项');
-            const tag = weightedPick(tags);
-            const items = data.wheelLibraryItems.filter(item => item.enabled !== false && item.tagIds?.includes(tag.id));
-            if (!items.length) return alert('这个标签下没有可抽公共项');
-            const tagIndex = tags.findIndex(item => item.id === tag.id);
-            const entries = tags.map((item, index) => ({ ...item, color: item.color || palette[index % palette.length] }));
-            animateSpin(entries, Math.max(0, tagIndex), () => {
-                wheelStageState = {
-                    type: 'tag-items',
-                    tagWheelId: wheel.id,
-                    tagId: tag.id,
-                    tagName: tag.name,
-                    tagColor: tag.color || palette[tagIndex % palette.length],
-                    itemCount: items.length
-                };
                 renderWheelPage();
             });
             return;
@@ -2084,46 +1855,6 @@
             saveHistory({ mode: 'normal', wheelId: wheel.id, wheelName: wheel.name, resultId: result.id, resultName: result.name, note: result.note || '' });
             renderWheelPage();
         });
-    };
-
-    window.spinDirectTag = function spinDirectTag(tagId) {
-        const tag = data.wheelTags.find(item => item.id === tagId);
-        const items = setTagItemsStage(tag, currentWheelId || '');
-        if (!tag || !items?.length) return alert('这个标签下没有可抽公共项');
-        currentWheelResultId = null;
-        renderWheelPage();
-        const wheel = getCurrentWheel();
-        const stageItems = getStageEntries(wheel);
-        const result = weightedPick(stageItems);
-        const resultIndex = stageItems.findIndex(item => item.id === result.id);
-        requestAnimationFrame(() => {
-            animateSpin(stageItems, Math.max(0, resultIndex), () => {
-                saveHistory({
-                    mode: 'tag',
-                    wheelId: wheel?.id || currentWheelId || '',
-                    wheelName: wheel?.name || '标签转盘',
-                    tagId: tag.id,
-                    tagName: tag.name,
-                    resultId: result.id,
-                    resultName: result.name,
-                    note: result.note || ''
-                });
-                renderWheelPage();
-            });
-        });
-    };
-
-    window.previewTagStage = function previewTagStage(tagId) {
-        const tag = data.wheelTags.find(item => item.id === tagId);
-        const items = setTagItemsStage(tag, currentWheelId || '');
-        if (!tag || !items?.length) return alert('这个标签下没有可抽公共项');
-        currentWheelResultId = null;
-        renderWheelPage();
-    };
-
-    window.returnToTagWheel = function returnToTagWheel() {
-        resetWheelStageState();
-        renderWheelPage();
     };
 
     window.convertWheelResultToTodo = function convertWheelResultToTodo(historyId) {
