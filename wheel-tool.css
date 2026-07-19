@@ -1048,6 +1048,12 @@
 .wheel-library-bulk-actions {
     justify-content: flex-end;
     flex-wrap: wrap;
+    gap: 6px;
+}
+
+.wheel-library-bulk-actions .wheel-mini-btn {
+    min-height: 32px;
+    padding: 0 10px;
 }
 
 .wheel-library-select {

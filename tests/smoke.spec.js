@@ -2174,7 +2174,7 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅', '寿司', '晨跑']);
     await libraryModal.getByLabel('选择火锅').check();
     await libraryModal.locator('#wheel-library-batch-tag').selectOption('tag-sport');
-    await libraryModal.getByRole('button', { name: '添加到选中' }).click();
+    await libraryModal.getByRole('button', { name: '加标签' }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.name === '寿司').tagIds).toEqual(['tag-food']);
     expect(stored.wheelLibraryItems.find(item => item.name === '晨跑').tagIds).toEqual(expect.arrayContaining(['tag-food', 'tag-sport']));
@@ -2182,9 +2182,21 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-sport');
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(3);
     await libraryModal.locator('#wheel-library-batch-tag').selectOption('tag-sport');
-    await libraryModal.getByRole('button', { name: '从选中移除' }).click();
+    await libraryModal.getByRole('button', { name: '去标签' }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(['tag-food']);
+    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
+    await libraryModal.getByLabel('选择寿司').check();
+    await libraryModal.getByRole('button', { name: '批量停用' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems.find(item => item.name === '寿司').enabled).toBe(false);
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('删除选中的');
+        dialog.accept();
+    });
+    await libraryModal.getByRole('button', { name: '批量删除' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems.some(item => item.name === '寿司')).toBe(false);
     await libraryModal.locator('.close-btn').click();
 
     await page.locator('#wheel-action-menu-button').click();

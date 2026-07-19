@@ -1003,14 +1003,17 @@
                 <div class="wheel-library-bulk-actions">
                     <label class="wheel-check-row wheel-select-all-row">
                         <input type="checkbox" ${allVisibleSelected ? 'checked' : ''} ${filteredItems.length ? '' : 'disabled'} onchange="toggleAllWheelLibrarySelection(this.checked)">
-                        <span>选中当前筛选 ${selectedVisibleCount}/${filteredItems.length}</span>
+                        <span>选中 ${selectedVisibleCount}/${filteredItems.length}</span>
                     </label>
                     <select id="wheel-library-batch-tag" ${data.wheelTags.length ? '' : 'disabled'}>
-                        <option value="">选择标签</option>
+                        <option value="">批量打标签</option>
                         ${tagOptions}
                     </select>
-                    <button class="wheel-mini-btn primary" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('add')">添加到选中</button>
-                    <button class="wheel-mini-btn danger" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('remove')">从选中移除</button>
+                    <button class="wheel-mini-btn primary" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('add')">加标签</button>
+                    <button class="wheel-mini-btn" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('remove')">去标签</button>
+                    <button class="wheel-mini-btn" ${selectedTotalCount ? '' : 'disabled'} onclick="batchToggleWheelLibraryItems(true)">批量启用</button>
+                    <button class="wheel-mini-btn" ${selectedTotalCount ? '' : 'disabled'} onclick="batchToggleWheelLibraryItems(false)">批量停用</button>
+                    <button class="wheel-mini-btn danger" ${selectedTotalCount ? '' : 'disabled'} onclick="batchDeleteWheelLibraryItems()">批量删除</button>
                 </div>
             </div>
             <div class="wheel-list">
@@ -1636,6 +1639,39 @@
         });
         if (!changed && action === 'remove') return alert('没有可移除的标签；公共项至少要保留一个标签');
         if (!changed) return alert('选中的公共项已经包含这个标签');
+        persist();
+        renderWheelPage();
+    };
+
+    window.batchToggleWheelLibraryItems = function batchToggleWheelLibraryItems(enabled = true) {
+        const selectedIds = getSelectedLibraryItemIds();
+        if (!selectedIds.length) return alert('请先勾选公共项');
+        let changed = 0;
+        selectedIds.forEach(itemId => {
+            const item = data.wheelLibraryItems.find(entry => entry.id === itemId);
+            if (!item) return;
+            const nextEnabled = enabled !== false;
+            if ((item.enabled !== false) === nextEnabled) return;
+            item.enabled = nextEnabled;
+            item.updatedAt = now();
+            changed++;
+        });
+        if (!changed) return alert(enabled ? '选中的公共项已经是启用状态' : '选中的公共项已经是停用状态');
+        persist();
+        renderWheelPage();
+    };
+
+    window.batchDeleteWheelLibraryItems = function batchDeleteWheelLibraryItems() {
+        const selectedIds = getSelectedLibraryItemIds();
+        if (!selectedIds.length) return alert('请先勾选公共项');
+        if (!confirm(`确定删除选中的 ${selectedIds.length} 个公共项吗？普通转盘里已复制的私有项不会受影响。`)) return;
+        const removeSet = new Set(selectedIds);
+        const removed = data.wheelLibraryItems.filter(item => removeSet.has(item.id));
+        data.wheelLibraryItems = data.wheelLibraryItems.filter(item => !removeSet.has(item.id));
+        selectedIds.forEach(itemId => wheelSelectedLibraryItemIds.delete(itemId));
+        if (typeof markDeletedItem === 'function') {
+            removed.forEach(item => markDeletedItem('wheelLibraryItems', item.id, { name: item?.name || '' }));
+        }
         persist();
         renderWheelPage();
     };
