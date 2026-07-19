@@ -927,7 +927,7 @@
 }
 
 .wheel-inline-form.library-form {
-    grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) 74px auto;
+    grid-template-columns: minmax(0, 1fr) 74px auto;
 }
 
 .wheel-library-batch-box {

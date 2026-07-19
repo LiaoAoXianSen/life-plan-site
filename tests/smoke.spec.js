@@ -2159,9 +2159,13 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
     const libraryModal = page.locator('#wheel-library-modal');
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-food"]').check();
-    await libraryModal.locator('#wheel-library-batch-text').fill('寿司,4\n晨跑,2,运动');
+    await libraryModal.locator('#wheel-library-name').fill('寿司');
+    await libraryModal.locator('#wheel-library-weight').fill('4');
+    await libraryModal.getByRole('button', { name: '添加', exact: true }).click();
+    await expect(libraryModal.locator('#wheel-library-name')).toHaveValue('');
+    await libraryModal.locator('#wheel-library-batch-text').fill('晨跑,2,运动');
     page.once('dialog', dialog => {
-        expect(dialog.message()).toContain('已导入公共项 2 项');
+        expect(dialog.message()).toContain('已导入公共项 1 项');
         dialog.accept();
     });
     await libraryModal.getByRole('button', { name: '导入多行公共项' }).click();

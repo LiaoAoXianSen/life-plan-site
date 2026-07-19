@@ -11,6 +11,7 @@
     let wheelLibraryTagFilter = '';
     let wheelActionMenuOpen = false;
     const wheelSelectedLibraryItemIds = new Set();
+    const wheelLibraryQuickTagIds = new Set();
     let wheelDragState = null;
 
     function createWheelStageState() {
@@ -955,9 +956,13 @@
         const selectedTotalCount = selectedIds.size;
         const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
         const tagOptions = data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}">${safeHtml(tag.name)}</option>`).join('');
+        const validQuickTagIds = new Set(data.wheelTags.map(tag => tag.id));
+        Array.from(wheelLibraryQuickTagIds).forEach(tagId => {
+            if (!validQuickTagIds.has(tagId)) wheelLibraryQuickTagIds.delete(tagId);
+        });
         const batchTagPicker = data.wheelTags.map(tag => `
             <label class="wheel-library-batch-tag">
-                <input type="checkbox" value="${safeHtml(tag.id)}">
+                <input type="checkbox" value="${safeHtml(tag.id)}" ${wheelLibraryQuickTagIds.has(tag.id) ? 'checked' : ''} onchange="toggleWheelLibraryQuickTag(${safeJsArg(tag.id)}, this.checked)">
                 <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
                 <span>${safeHtml(tag.name)}</span>
             </label>
@@ -972,7 +977,6 @@
             </div>
             <div class="wheel-inline-form library-form">
                 <input id="wheel-library-name" placeholder="公共项名称">
-                <input id="wheel-library-tags" placeholder="标签，用逗号分隔">
                 <input id="wheel-library-weight" type="number" min="1" value="1">
                 <button class="btn btn-primary" onclick="addWheelLibraryItem()">添加</button>
             </div>
@@ -980,13 +984,13 @@
                 <textarea id="wheel-library-batch-text" rows="4" placeholder="每行一个公共项：名称,权重，也可继续写行内标签&#10;咖啡店学习,1&#10;周末晨跑,2,运动/户外"></textarea>
                 <div class="wheel-library-batch-side">
                     <button class="btn btn-secondary" onclick="importWheelLibraryBatchFromTextarea()">导入多行公共项</button>
-                    <div class="wheel-hint">下方勾选的标签会自动加到本次导入的每个公共项。</div>
+                    <div class="wheel-hint">下方勾选的标签会自动加到单个添加和本次导入的公共项。</div>
                 </div>
             </div>
             <div class="wheel-library-batch-tag-panel">
                 <div class="wheel-library-batch-tag-head">
-                    <span>本次导入标签</span>
-                    <small>可多选；也可以每行继续写标签</small>
+                    <span>快速选择标签</span>
+                    <small>单个添加和批量导入共用；也可每行继续写标签</small>
                 </div>
                 <div class="wheel-library-batch-tags">
                     ${batchTagPicker || '<div class="empty-state compact">还没有标签，先在标签面板新增。</div>'}
@@ -1522,20 +1526,32 @@
 
     window.addWheelLibraryItem = function addWheelLibraryItem() {
         const name = document.getElementById('wheel-library-name')?.value.trim();
-        const tagText = document.getElementById('wheel-library-tags')?.value.trim();
         const weight = Math.max(1, Number(document.getElementById('wheel-library-weight')?.value) || 1);
         if (!name) return alert('请输入公共项名称');
         if (data.wheelLibraryItems.some(item => normalizeName(item.name) === normalizeName(name))) return alert('公共项里已经有同名内容');
-        const tagIds = uniqueTagIds(ensureTagsByText(tagText));
-        if (!tagIds.length) return alert('公共项至少需要绑定一个标签');
+        const tagIds = getWheelLibraryBatchSelectedTagIds();
+        if (!tagIds.length) return alert('请先在下方勾选至少一个标签');
         data.wheelLibraryItems.push({ id: id(), name, note: '', weight, enabled: true, tagIds, createdAt: now(), updatedAt: now() });
+        const nameInput = document.getElementById('wheel-library-name');
+        if (nameInput) nameInput.value = '';
         persist();
         renderWheelPage();
     };
 
     function getWheelLibraryBatchSelectedTagIds() {
-        return uniqueTagIds(Array.from(document.querySelectorAll('.wheel-library-batch-tag input:checked')).map(input => input.value));
+        const fromDom = Array.from(document.querySelectorAll('.wheel-library-batch-tag input:checked')).map(input => input.value);
+        if (fromDom.length) {
+            wheelLibraryQuickTagIds.clear();
+            fromDom.forEach(tagId => wheelLibraryQuickTagIds.add(tagId));
+        }
+        return uniqueTagIds(Array.from(wheelLibraryQuickTagIds));
     }
+
+    window.toggleWheelLibraryQuickTag = function toggleWheelLibraryQuickTag(tagId = '', checked = false) {
+        if (!tagId) return;
+        if (checked) wheelLibraryQuickTagIds.add(tagId);
+        else wheelLibraryQuickTagIds.delete(tagId);
+    };
 
     function importWheelLibraryItemsFromText(text, extraTagIds = []) {
         const seen = new Set(data.wheelLibraryItems.map(item => normalizeName(item.name)));
