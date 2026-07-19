@@ -5172,11 +5172,6 @@
                         </div>
                         <h3>${escapeHtml(record.title || '未命名灵感')}</h3>
                         <div class="idea-card-preview" title="${escapeHtml((record.content || '').replace(/\s+/g, ' ').trim())}">${escapeHtml(preview)}</div>
-                        <div class="idea-detail-grid compact">
-                            <div><strong>下一步</strong><span>${escapeHtml(record.ideaNextAction || '未设置')}</span></div>
-                            <div><strong>关联待办</strong><span>${escapeHtml(todo?.text || '未关联')}</span></div>
-                            <div class="wide"><strong>结论</strong><span>${escapeHtml(record.ideaConclusion || '还没有结论')}</span></div>
-                        </div>
                         <div class="idea-card-actions">
                             <button class="btn btn-secondary todo-mini-btn" onclick="openRecordPreview(${escapeJsArg(record.id)})">查看</button>
                             <button class="btn btn-secondary todo-mini-btn" onclick="convertIdeaToTodo(${escapeJsArg(record.id)})">${todo ? '打开待办' : '转成待办'}</button>
