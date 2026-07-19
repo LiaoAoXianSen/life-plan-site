@@ -5145,6 +5145,13 @@
             `;
         }
 
+        function truncateIdeaPreview(text = '', maxLen = 80) {
+            const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+            if (!normalized) return '还没有正文';
+            if (normalized.length <= maxLen) return normalized;
+            return `${normalized.slice(0, maxLen).trimEnd()}…`;
+        }
+
         function renderIdeaPool() {
             const list = document.getElementById('idea-pool-list');
             if (!list) return;
@@ -5156,6 +5163,7 @@
             }
             list.innerHTML = `<div class="idea-grid">${ideas.map(record => {
                 const todo = getIdeaTodo(record);
+                const preview = truncateIdeaPreview(record.content || '', 80);
                 return `
                     <article class="idea-card">
                         <div class="idea-card-head">
@@ -5163,7 +5171,7 @@
                             ${renderIdeaBadges(record)}
                         </div>
                         <h3>${escapeHtml(record.title || '未命名灵感')}</h3>
-                        <div class="idea-card-preview">${escapeHtml((record.content || '').replace(/\n/g, ' ')) || '还没有正文'}</div>
+                        <div class="idea-card-preview" title="${escapeHtml((record.content || '').replace(/\s+/g, ' ').trim())}">${escapeHtml(preview)}</div>
                         <div class="idea-detail-grid compact">
                             <div><strong>下一步</strong><span>${escapeHtml(record.ideaNextAction || '未设置')}</span></div>
                             <div><strong>关联待办</strong><span>${escapeHtml(todo?.text || '未关联')}</span></div>

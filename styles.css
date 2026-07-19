@@ -1464,10 +1464,11 @@
     .habit-quick-head {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        gap: 14px;
+        align-items: flex-start;
+        gap: 10px;
+        min-width: 0;
     }
-    .habit-quick-main { min-width: 0; flex: 1 1 auto; }
+    .habit-quick-main { min-width: 0; flex: 1 1 auto; overflow: hidden; }
     .habit-quick-title-row {
         display: flex;
         align-items: center;
@@ -1547,18 +1548,20 @@
     }
     .habit-quick-actions {
         display: flex;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         gap: 8px;
         flex: 0 0 auto;
         justify-content: flex-end;
         align-items: center;
+        max-width: 100%;
     }
     .habit-quick-actions.compact {
         gap: 6px;
+        flex: 0 1 auto;
     }
     .habit-quick-btn {
-        min-height: 38px;
-        padding: 0 15px;
+        min-height: 34px;
+        padding: 0 12px;
         border-radius: 999px;
         border: 1px solid #cad8cf;
         background: #fff;
@@ -2241,6 +2244,15 @@
         line-height: 1.7;
         overflow-wrap: anywhere;
     }
+    .idea-card-preview {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-height: calc(1.7em * 3);
+    }
     .idea-card-actions {
         display: flex;
         justify-content: flex-end;
@@ -2526,10 +2538,10 @@
         .habit-wallet-actions .btn {
             flex: 1 1 140px;
         }
-        .habit-quick-head { flex-direction: row; align-items: center; }
+        .habit-quick-head { flex-direction: column; align-items: stretch; }
         .habit-quick-status { align-self: flex-start; }
-        .habit-quick-actions { justify-content: flex-end; flex-wrap: nowrap; }
-        .habit-quick-btn { width: auto; padding-inline: 13px; }
+        .habit-quick-actions { justify-content: flex-start; flex-wrap: wrap; width: 100%; }
+        .habit-quick-btn { width: auto; padding-inline: 12px; }
         .sidebar-button-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .sidebar-bottom[open] { grid-template-columns: 1fr 1fr; }
         .card-title { display: block; }
