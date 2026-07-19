@@ -6,6 +6,12 @@
 
 但不建议把当前网页内容原样塞进手机壳里，而是应该像 `D:/project/wheel-app` 现在这样，先明确“首页只服务一个核心动作”，再把其余能力拆到二级面板、抽屉或独立页。
 
+> **位置备忘（2026-07-19）**  
+> 大转盘正式独立 App：`D:\project\wheel-app`（Capacitor，`com.wheelapp.mobile`）。  
+> 旧原生离线原型：`D:\project\spin-wheel-app`（勿当正线）。  
+> 同步底座：`D:\project\app-sync-kit`；云路径 `/apps/wheel-app/data.json`。  
+> 周边 App 总表与后续 fitness/habit/core 拆分备忘：见 `docs/related-apps.md`。
+
 ## 为什么现在不像 App
 
 当前 `D:/project/life-plan-site` 更像一套功能很多的管理台：

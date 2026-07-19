@@ -11,6 +11,8 @@
 - `wheel-tool.css`：工具转盘独立样式。
 - `docs/knowledge-features.md`：灵感池、素材库、全局搜索的专题说明。
 - `docs/project-feature-index.md`：当前总索引文档。
+- `docs/related-apps.md`：周边独立 App 地图（大转盘正式仓 `D:\project\wheel-app`、旧 `spin-wheel-app`、同步底座 `app-sync-kit`、后续 fitness/habit/core 拆分备忘）。
+- `docs/life-plan-app-redesign.md`：人生规划 App 化信息架构方向。
 - `docs/environment-workflow.md`：本地 Git、启动、检查、打包和测试数据工作流。
 - `scripts/serve.ps1`：本地静态预览脚本。
 - `scripts/check.ps1`：基础检查脚本。
@@ -354,6 +356,8 @@
 
 ## 14. 工具转盘
 
+### 14.1 本站内嵌
+
 工具转盘逻辑在 `wheel-tool.js`，样式在 `wheel-tool.css`。它复用主应用数据和保存函数。
 
 数据集合：
@@ -384,9 +388,27 @@
 - 抽取：`spinWheel`
 - 指定标签抽取：`spinDirectTag`
 - 历史：`saveHistory`、`renderHistoryPanel`、`deleteWheelHistory`、`clearWheelHistory`
-- 转待办：`convertWheelResultToTodo`
+- 转待办：`convertWheelResultToTodo`（**本站集成能力**；独立 App 无完整待办产品）
 
 转盘公共项也纳入全局搜索。
+
+本站转盘云同步（与主数据分离 path，共用 `syncConfig.webdavUrl`）：
+
+- 默认远程路径：`/apps/wheel-app/data.json`
+- 配置/状态键：`lifePlanWheelSyncConfig`、`lifePlanWheelSyncState`
+- 切片与合并：`getWheelSnapshot` / `applyWheelSnapshot` / `mergeWheelSnapshots`
+
+### 14.2 独立大转盘 App（勿遗忘）
+
+正式独立手机 App **不在本仓**，完整位置与关系见 **`docs/related-apps.md`**。
+
+| 角色 | 绝对路径 | 说明 |
+|---|---|---|
+| **正式线** | `D:\project\wheel-app` | React + Capacitor；`com.wheelapp.mobile`；与本站共用 `/apps/wheel-app/data.json` |
+| 同步 adapter | `D:\project\app-sync-kit\packages\adapter-wheel-app` | 默认 remote path 同上 |
+| 旧原生原型 | `D:\project\spin-wheel-app` | Java/SQLite 离线；**备份格式不兼容**，勿当正线 |
+
+独立 App 与本站内嵌是「同模型、同云路径、代码分仓」；改转盘产品能力优先改 `wheel-app`。
 
 ## 15. 数据备份、快照与云同步
 
