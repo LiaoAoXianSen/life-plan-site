@@ -1056,6 +1056,20 @@
         const selectedTotalCount = selectedIds.size;
         const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
         const tagOptions = data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}">${safeHtml(tag.group || '其他')} · ${safeHtml(tag.name)}</option>`).join('');
+        const batchTagPicker = getGroupedWheelTags().map(([group, tags]) => `
+            <div class="wheel-library-batch-tag-group">
+                <div class="wheel-tag-group-title">${safeHtml(group)}</div>
+                <div class="wheel-library-batch-tags">
+                    ${tags.map(tag => `
+                        <label class="wheel-library-batch-tag">
+                            <input type="checkbox" value="${safeHtml(tag.id)}">
+                            <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
+                            <span>${safeHtml(tag.name)}</span>
+                        </label>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
         return `
             <div class="wheel-panel-head">
                 <div>
@@ -1071,8 +1085,18 @@
                 <button class="btn btn-primary" onclick="addWheelLibraryItem()">添加</button>
             </div>
             <div class="wheel-library-batch-box">
-                <textarea id="wheel-library-batch-text" rows="4" placeholder="每行一个公共项：名称,权重,标签1/标签2&#10;咖啡店学习,1,出门/学习/美食&#10;周末晨跑,2,运动/户外"></textarea>
-                <button class="btn btn-secondary" onclick="importWheelLibraryBatchFromTextarea()">导入多行公共项</button>
+                <textarea id="wheel-library-batch-text" rows="4" placeholder="每行一个公共项：名称,权重，也可继续写行内标签&#10;咖啡店学习,1&#10;周末晨跑,2,运动/户外"></textarea>
+                <div class="wheel-library-batch-side">
+                    <button class="btn btn-secondary" onclick="importWheelLibraryBatchFromTextarea()">导入多行公共项</button>
+                    <div class="wheel-hint">下方勾选的标签会自动加到本次导入的每个公共项。</div>
+                </div>
+            </div>
+            <div class="wheel-library-batch-tag-panel">
+                <div class="wheel-library-batch-tag-head">
+                    <span>本次导入标签</span>
+                    <small>可多选；也可以每行继续写标签</small>
+                </div>
+                ${batchTagPicker || '<div class="empty-state compact">还没有标签，先在标签面板新增。</div>'}
             </div>
             <div class="wheel-library-toolbar">
                 <label class="wheel-library-filter">
@@ -1623,8 +1647,13 @@
         renderWheelPage();
     };
 
-    function importWheelLibraryItemsFromText(text) {
+    function getWheelLibraryBatchSelectedTagIds() {
+        return uniqueTagIds(Array.from(document.querySelectorAll('.wheel-library-batch-tag input:checked')).map(input => input.value));
+    }
+
+    function importWheelLibraryItemsFromText(text, extraTagIds = []) {
         const seen = new Set(data.wheelLibraryItems.map(item => normalizeName(item.name)));
+        const extra = uniqueTagIds(extraTagIds);
         let added = 0;
         const skipped = [];
         parseWeightedLines(text).forEach(item => {
@@ -1633,7 +1662,7 @@
                 skipped.push(item.name);
                 return;
             }
-            const tagIds = uniqueTagIds(ensureTagsByText(item.tagText));
+            const tagIds = uniqueTagIds([...extra, ...ensureTagsByText(item.tagText)]);
             if (!tagIds.length) {
                 skipped.push(`${item.name}(缺少标签)`);
                 return;
@@ -1658,7 +1687,7 @@
         const textarea = document.getElementById('wheel-library-batch-text');
         const text = textarea?.value.trim() || '';
         if (!text) return alert('请先在多行文本框里输入公共项');
-        const { added, skipped } = importWheelLibraryItemsFromText(text);
+        const { added, skipped } = importWheelLibraryItemsFromText(text, getWheelLibraryBatchSelectedTagIds());
         persist();
         if (textarea) textarea.value = '';
         renderWheelPage();
