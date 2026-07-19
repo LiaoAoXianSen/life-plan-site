@@ -2370,6 +2370,64 @@ test('tag wheel two-stage spin can be converted to a todo', async ({ page }) => 
     expect(linkedTodo.sourceType).toBe('wheel');
 });
 
+test('normal wheel creation supports multiple items and batch textarea', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), createEmptyData({
+        wheels: [],
+        wheelTags: [],
+        wheelLibraryItems: [],
+        wheelHistory: []
+    }));
+    await page.reload();
+    await page.locator('.nav-item', { hasText: '工具转盘' }).click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '新建转盘' }).click();
+
+    const createModal = page.locator('#wheel-create-modal');
+    await expect(createModal).toHaveClass(/active/);
+    await createModal.locator('#wheel-create-name').fill('今晚吃什么');
+    await createModal.locator('.wheel-create-item-row').first().locator('.wheel-create-item-name').fill('火锅');
+    await createModal.locator('.wheel-create-item-row').first().locator('.wheel-create-item-weight').fill('10');
+    await createModal.getByRole('button', { name: '+ 添加一项' }).click();
+    await createModal.locator('.wheel-create-item-row').nth(1).locator('.wheel-create-item-name').fill('烧烤');
+    await createModal.locator('.wheel-create-item-row').nth(1).locator('.wheel-create-item-weight').fill('5');
+    await createModal.getByRole('button', { name: '批量添加' }).click();
+
+    const batchModal = page.locator('#wheel-batch-modal');
+    await expect(batchModal).toHaveClass(/active/);
+    await batchModal.locator('#wheel-batch-text').fill('麦当劳\n火锅,2');
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('跳过重复');
+        dialog.accept();
+    });
+    await batchModal.getByRole('button', { name: '确认添加' }).click();
+    await expect(createModal.locator('.wheel-create-item-row')).toHaveCount(3);
+    await createModal.getByRole('button', { name: '创建并编辑' }).click();
+
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const created = stored.wheels.find(wheel => wheel.name === '今晚吃什么');
+    expect(created.mode).toBe('normal');
+    expect(created.items.map(item => item.name)).toEqual(['火锅', '烧烤', '麦当劳']);
+    expect(created.items.map(item => item.weight)).toEqual([10, 5, 1]);
+
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '修改当前盘' }).click();
+    const itemsModal = page.locator('#wheel-items-modal');
+    await itemsModal.getByRole('button', { name: '批量导入' }).click();
+    await batchModal.locator('#wheel-batch-text').fill('麻辣烫,3\n烧烤,9');
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已导入 1 项');
+        expect(dialog.message()).toContain('跳过重复');
+        dialog.accept();
+    });
+    await batchModal.getByRole('button', { name: '确认添加' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const updated = stored.wheels.find(wheel => wheel.name === '今晚吃什么');
+    expect(updated.items.map(item => item.name)).toEqual(['火锅', '烧烤', '麦当劳', '麻辣烫']);
+    expect(updated.items.find(item => item.name === '麻辣烫').weight).toBe(3);
+});
+
 test('tag wheel creation requires and saves selected tags', async ({ page }) => {
     const data = {
         records: [],

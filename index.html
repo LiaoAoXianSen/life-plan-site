@@ -937,7 +937,7 @@
     </div>
 
     <div id="wheel-create-modal" class="modal-overlay">
-        <div class="modal modal-sm">
+        <div class="modal modal-md">
             <div class="modal-header">
                 <div class="modal-title">新建转盘</div>
                 <button class="close-btn" onclick="closeWheelCreateModal()">×</button>
@@ -953,9 +953,16 @@
                 <label>转盘名称</label>
                 <input type="text" id="wheel-create-name" placeholder="例如：今天吃什么 / 周末做什么">
             </div>
-            <div class="form-group" id="wheel-create-first-item-group">
-                <label>第一个选项</label>
-                <input type="text" id="wheel-create-first-item" placeholder="普通转盘至少先放一个选项">
+            <div class="form-group" id="wheel-create-items-group">
+                <div class="wheel-create-items-head">
+                    <label>选项</label>
+                    <span id="wheel-create-items-count">1 个选项</span>
+                </div>
+                <div id="wheel-create-items-editor" class="wheel-create-items-editor"></div>
+                <div class="wheel-create-items-actions">
+                    <button type="button" class="btn btn-secondary" onclick="addWheelCreateItemRow()">+ 添加一项</button>
+                    <button type="button" class="btn btn-secondary" onclick="openWheelCreateBatchModal()">批量添加</button>
+                </div>
             </div>
             <div class="form-group" id="wheel-create-tag-group" style="display:none;">
                 <label>选择标签</label>
@@ -967,6 +974,24 @@
             <div class="modal-action-row">
                 <button class="btn btn-secondary" onclick="closeWheelCreateModal()">取消</button>
                 <button class="btn btn-primary" onclick="saveWheelCreateModal()">创建并编辑</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="wheel-batch-modal" class="modal-overlay">
+        <div class="modal modal-md">
+            <div class="modal-header">
+                <div class="modal-title" id="wheel-batch-modal-title">批量添加选项</div>
+                <button class="close-btn" onclick="closeWheelBatchModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label>多行选项</label>
+                <textarea id="wheel-batch-text" rows="8" placeholder="每行一个选项，可写：名称,权重&#10;火锅,10&#10;烧烤,5&#10;麦当劳"></textarea>
+            </div>
+            <div class="sync-status">权重不填默认 1；重复名称会自动跳过。</div>
+            <div class="modal-action-row">
+                <button class="btn btn-secondary" onclick="closeWheelBatchModal()">取消</button>
+                <button class="btn btn-primary" onclick="applyWheelBatchText()">确认添加</button>
             </div>
         </div>
     </div>

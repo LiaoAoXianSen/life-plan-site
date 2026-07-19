@@ -5,6 +5,8 @@
     let wheelStageState = createWheelStageState();
     let wheelPanelCollapsed = true;
     let wheelCreateMode = 'normal';
+    let wheelCreateItemsDraft = [];
+    let wheelBatchTarget = 'panel';
     let wheelLibraryCopyTagFilter = '';
     let wheelLibraryTagFilter = '';
     let wheelActionMenuOpen = false;
@@ -1150,15 +1152,74 @@
         renderWheelPage();
     };
 
+    function createWheelItemPayload(item = {}, stamp = now()) {
+        const name = String(item.name || '').trim();
+        if (!name) return null;
+        return {
+            id: id(),
+            name,
+            note: '',
+            weight: ensureWheelWeight(item.weight),
+            enabled: true,
+            createdAt: stamp,
+            updatedAt: stamp
+        };
+    }
+
+    function normalizeWheelCreateDraft(items = wheelCreateItemsDraft) {
+        const source = Array.isArray(items) && items.length ? items : [{ name: '', weight: 1 }];
+        return source.map(item => ({
+            name: String(item?.name || ''),
+            weight: ensureWheelWeight(item?.weight)
+        }));
+    }
+
+    function getValidWheelCreateItems() {
+        const seen = new Set();
+        const skipped = [];
+        const items = [];
+        normalizeWheelCreateDraft().forEach(item => {
+            const name = String(item.name || '').trim();
+            const key = normalizeName(name);
+            if (!key) return;
+            if (seen.has(key)) {
+                skipped.push(name);
+                return;
+            }
+            seen.add(key);
+            items.push({ name, weight: ensureWheelWeight(item.weight) });
+        });
+        return { items, skipped };
+    }
+
+    function renderWheelCreateItemsEditor() {
+        const editor = document.getElementById('wheel-create-items-editor');
+        const countEl = document.getElementById('wheel-create-items-count');
+        if (!editor) return;
+        wheelCreateItemsDraft = normalizeWheelCreateDraft();
+        editor.innerHTML = wheelCreateItemsDraft.map((item, index) => `
+            <div class="wheel-create-item-row">
+                <input class="wheel-create-item-name" value="${safeHtml(item.name)}" placeholder="选项" oninput="updateWheelCreateItem(${index}, 'name', this.value)">
+                <input class="wheel-create-item-weight" type="number" min="1" value="${safeHtml(item.weight)}" placeholder="权重" oninput="updateWheelCreateItem(${index}, 'weight', this.value)">
+                <button type="button" class="wheel-create-item-remove" onclick="removeWheelCreateItemRow(${index})" title="删除选项">×</button>
+            </div>
+        `).join('');
+        if (countEl) {
+            const validCount = getValidWheelCreateItems().items.length;
+            countEl.textContent = `${validCount || wheelCreateItemsDraft.length} 个选项`;
+        }
+    }
+
     function updateWheelCreateModeUi() {
         document.getElementById('wheel-create-mode-normal')?.classList.toggle('active', wheelCreateMode === 'normal');
         document.getElementById('wheel-create-mode-tag')?.classList.toggle('active', wheelCreateMode === 'tag');
-        const firstItemGroup = document.getElementById('wheel-create-first-item-group');
+        const itemsGroup = document.getElementById('wheel-create-items-group');
         const tagGroup = document.getElementById('wheel-create-tag-group');
         const tagOptions = document.getElementById('wheel-create-tag-options');
         const tagHelp = document.getElementById('wheel-create-tag-help');
-        if (firstItemGroup) firstItemGroup.style.display = wheelCreateMode === 'tag' ? 'none' : '';
+        if (itemsGroup) itemsGroup.style.display = wheelCreateMode === 'tag' ? 'none' : '';
         if (tagGroup) tagGroup.style.display = wheelCreateMode === 'tag' ? '' : 'none';
+        if (wheelCreateMode === 'normal') renderWheelCreateItemsEditor();
         if (tagOptions && wheelCreateMode === 'tag') {
             tagOptions.innerHTML = data.wheelTags.map(tag => `
                 <label class="wheel-create-tag-option">
@@ -1171,15 +1232,21 @@
         if (tagHelp) tagHelp.style.display = wheelCreateMode === 'tag' ? '' : 'none';
     }
 
-    function createWheelFromForm({ mode, name, firstItem = '', tagIds = [] }) {
+    function createWheelFromForm({ mode, name, items: inputItems = [], tagIds = [] }) {
         const trimmed = String(name || '').trim() || (mode === 'tag' ? '新的标签转盘' : '新的普通转盘');
         const stamp = now();
         const items = [];
         let selectedTagIds;
         if (mode !== 'tag') {
-            const firstName = String(firstItem || '').trim();
-            if (!firstName) return alert('普通转盘至少需要 1 个转盘项');
-            items.push({ id: id(), name: firstName, note: '', weight: 1, enabled: true, createdAt: stamp, updatedAt: stamp });
+            const seen = new Set();
+            inputItems.forEach(item => {
+                const payload = createWheelItemPayload(item, stamp);
+                const key = normalizeName(payload?.name);
+                if (!payload || seen.has(key)) return;
+                seen.add(key);
+                items.push(payload);
+            });
+            if (!items.length) return alert('普通转盘至少需要 1 个转盘项');
         } else {
             selectedTagIds = uniqueTagIds(tagIds);
             if (!selectedTagIds.length) return alert('标签转盘至少需要选择一个标签');
@@ -1195,10 +1262,9 @@
 
     window.openWheelCreateModal = function openWheelCreateModal(mode = currentWheelMode) {
         wheelCreateMode = mode === 'tag' ? 'tag' : 'normal';
+        wheelCreateItemsDraft = [{ name: '', weight: 1 }];
         const nameInput = document.getElementById('wheel-create-name');
-        const firstItemInput = document.getElementById('wheel-create-first-item');
         if (nameInput) nameInput.value = wheelCreateMode === 'tag' ? '新的标签转盘' : '新的普通转盘';
-        if (firstItemInput) firstItemInput.value = '';
         updateWheelCreateModeUi();
         document.getElementById('wheel-create-modal')?.classList.add('active');
     };
@@ -1213,18 +1279,42 @@
         if (nameInput && (!nameInput.value.trim() || ['新的普通转盘', '新的标签转盘'].includes(nameInput.value.trim()))) {
             nameInput.value = wheelCreateMode === 'tag' ? '新的标签转盘' : '新的普通转盘';
         }
+        if (wheelCreateMode === 'normal' && !wheelCreateItemsDraft.length) wheelCreateItemsDraft = [{ name: '', weight: 1 }];
         updateWheelCreateModeUi();
+    };
+
+    window.updateWheelCreateItem = function updateWheelCreateItem(index, field, value) {
+        if (!wheelCreateItemsDraft[index]) return;
+        if (field === 'name') wheelCreateItemsDraft[index].name = value;
+        if (field === 'weight') wheelCreateItemsDraft[index].weight = ensureWheelWeight(value);
+        const countEl = document.getElementById('wheel-create-items-count');
+        if (countEl) countEl.textContent = `${getValidWheelCreateItems().items.length || wheelCreateItemsDraft.length} 个选项`;
+    };
+
+    window.addWheelCreateItemRow = function addWheelCreateItemRow() {
+        wheelCreateItemsDraft = normalizeWheelCreateDraft();
+        wheelCreateItemsDraft.push({ name: '', weight: 1 });
+        renderWheelCreateItemsEditor();
+        const inputs = document.querySelectorAll('#wheel-create-items-editor .wheel-create-item-name');
+        inputs[inputs.length - 1]?.focus();
+    };
+
+    window.removeWheelCreateItemRow = function removeWheelCreateItemRow(index) {
+        wheelCreateItemsDraft = normalizeWheelCreateDraft();
+        wheelCreateItemsDraft.splice(index, 1);
+        if (!wheelCreateItemsDraft.length) wheelCreateItemsDraft.push({ name: '', weight: 1 });
+        renderWheelCreateItemsEditor();
     };
 
     window.saveWheelCreateModal = function saveWheelCreateModal() {
         const name = document.getElementById('wheel-create-name')?.value || '';
-        const firstItem = document.getElementById('wheel-create-first-item')?.value || '';
         const tagIds = Array.from(document.querySelectorAll('#wheel-create-tag-options input:checked')).map(input => input.value);
-        const wheel = createWheelFromForm({ mode: wheelCreateMode, name, firstItem, tagIds });
+        const { items, skipped } = getValidWheelCreateItems();
+        const wheel = createWheelFromForm({ mode: wheelCreateMode, name, items, tagIds });
         if (!wheel) return;
         closeWheelCreateModal();
         renderWheelPage();
-        openWheelPanelModal('items');
+        if (skipped.length) alert(`已创建，跳过重复：${skipped.join('、')}`);
     };
 
     window.createWheel = function createWheel() {
@@ -1324,23 +1414,70 @@
     window.openWheelBatchImport = function openWheelBatchImport() {
         const wheel = getCurrentWheel();
         if (!wheel || wheel.mode !== 'normal') return alert('批量导入转盘项只适用于普通转盘');
-        const text = prompt('每行一个选项，格式：名称,权重', '火锅,10\n烧烤,5\n麻辣烫');
-        if (text === null) return;
+        wheelBatchTarget = 'panel';
+        const title = document.getElementById('wheel-batch-modal-title');
+        const textarea = document.getElementById('wheel-batch-text');
+        if (title) title.textContent = '批量添加到当前转盘';
+        if (textarea) textarea.value = '';
+        document.getElementById('wheel-batch-modal')?.classList.add('active');
+        setTimeout(() => textarea?.focus(), 0);
+    };
+
+    window.openWheelCreateBatchModal = function openWheelCreateBatchModal() {
+        wheelBatchTarget = 'create';
+        const title = document.getElementById('wheel-batch-modal-title');
+        const textarea = document.getElementById('wheel-batch-text');
+        if (title) title.textContent = '批量添加新转盘选项';
+        if (textarea) textarea.value = '';
+        document.getElementById('wheel-batch-modal')?.classList.add('active');
+        setTimeout(() => textarea?.focus(), 0);
+    };
+
+    window.closeWheelBatchModal = function closeWheelBatchModal() {
+        document.getElementById('wheel-batch-modal')?.classList.remove('active');
+    };
+
+    window.applyWheelBatchText = function applyWheelBatchText() {
+        const textarea = document.getElementById('wheel-batch-text');
+        const items = parseWeightedLines(textarea?.value || '');
+        if (!items.length) return alert('请先输入至少一个选项');
+        if (wheelBatchTarget === 'create') {
+            const seen = new Set(wheelCreateItemsDraft.map(item => normalizeName(item.name)).filter(Boolean));
+            const skipped = [];
+            items.forEach(item => {
+                const key = normalizeName(item.name);
+                if (seen.has(key)) {
+                    skipped.push(item.name);
+                    return;
+                }
+                seen.add(key);
+                wheelCreateItemsDraft.push({ name: item.name, weight: item.weight });
+            });
+            closeWheelBatchModal();
+            renderWheelCreateItemsEditor();
+            if (skipped.length) alert(`已添加，跳过重复：${skipped.join('、')}`);
+            return;
+        }
+
+        const wheel = getCurrentWheel();
+        if (!wheel || wheel.mode !== 'normal') return alert('批量导入转盘项只适用于普通转盘');
         const seen = new Set((wheel.items || []).map(item => normalizeName(item.name)));
         const skipped = [];
         let added = 0;
-        parseWeightedLines(text).forEach(item => {
+        const stamp = now();
+        items.forEach(item => {
             const key = normalizeName(item.name);
             if (seen.has(key)) {
                 skipped.push(item.name);
                 return;
             }
             seen.add(key);
-            wheel.items.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, createdAt: now(), updatedAt: now() });
+            wheel.items.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, createdAt: stamp, updatedAt: stamp });
             added++;
         });
         wheel.updatedAt = now();
         persist();
+        closeWheelBatchModal();
         renderWheelPage();
         alert(`已导入 ${added} 项${skipped.length ? `，跳过重复：${skipped.join('、')}` : ''}`);
     };
