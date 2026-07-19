@@ -2301,7 +2301,7 @@ test('wheel can be spun by dragging the canvas', async ({ page }) => {
     expect(stored.wheelHistory[0].resultName).toBe('拖动结果');
 });
 
-test('tag wheel spin can be converted to a todo', async ({ page }) => {
+test('tag wheel two-stage spin can be converted to a todo', async ({ page }) => {
     const data = {
         records: [],
         todos: [],
@@ -2324,7 +2324,6 @@ test('tag wheel spin can be converted to a todo', async ({ page }) => {
                 name: '标签晚餐盘',
                 mode: 'tag',
                 tagIds: ['tag-dinner'],
-                filterMatchMode: 'all',
                 items: [],
                 createdAt: '2026-07-06 10:00',
                 updatedAt: '2026-07-06 10:00'
@@ -2348,8 +2347,12 @@ test('tag wheel spin can be converted to a todo', async ({ page }) => {
     await page.evaluate(() => { window.__wheelSpinDurationMs = 80; });
     await page.locator('.nav-item', { hasText: '工具转盘' }).click();
 
+    await page.getByRole('button', { name: '先抽一个标签' }).click();
+    await expect(page.locator('#wheel-stage-summary')).toContainText('已锁定');
     await expect(page.locator('#wheel-stage-summary')).toContainText('晚餐');
-    await page.getByRole('button', { name: '按标签抽一个' }).click();
+    await expect(page.getByRole('button', { name: '继续抽具体内容' })).toBeVisible();
+
+    await page.getByRole('button', { name: '继续抽具体内容' }).click();
     await expect(page.locator('#wheel-result')).toContainText('番茄牛肉面', { timeout: 3000 });
 
     page.once('dialog', dialog => {
@@ -2428,27 +2431,24 @@ test('normal wheel creation supports multiple items and batch textarea', async (
     expect(updated.items.find(item => item.name === '麻辣烫').weight).toBe(3);
 });
 
-test('tag wheel filters library items by selected tags', async ({ page }) => {
+test('tag wheel can spin a single selected tag directly', async ({ page }) => {
     const data = createEmptyData({
         wheels: [
             {
-                id: 'tag-wheel-filter',
-                name: '晚饭筛选',
+                id: 'tag-wheel-direct',
+                name: '晚饭标签盘',
                 mode: 'tag',
-                tagIds: [],
-                filterMatchMode: 'all',
+                tagIds: ['tag-food', 'tag-home'],
                 items: []
             }
         ],
         wheelTags: [
             { id: 'tag-food', name: '吃喝', color: '#e86c52', weight: 1, enabled: true },
-            { id: 'tag-home', name: '在家', color: '#2f7d6d', weight: 1, enabled: true },
-            { id: 'tag-out', name: '出门', color: '#3e65b0', weight: 1, enabled: true }
+            { id: 'tag-home', name: '在家', color: '#2f7d6d', weight: 1, enabled: true }
         ],
         wheelLibraryItems: [
-            { id: 'item-noodle', name: '煮面', weight: 1, enabled: true, tagIds: ['tag-food', 'tag-home'] },
-            { id: 'item-hotpot', name: '火锅', weight: 1, enabled: true, tagIds: ['tag-food', 'tag-out'] },
-            { id: 'item-walk', name: '散步', weight: 1, enabled: true, tagIds: ['tag-out'] }
+            { id: 'item-noodle', name: '煮面', weight: 1, enabled: true, tagIds: ['tag-home'] },
+            { id: 'item-hotpot', name: '火锅', weight: 1, enabled: true, tagIds: ['tag-food'] }
         ],
         wheelHistory: []
     });
@@ -2463,20 +2463,12 @@ test('tag wheel filters library items by selected tags', async ({ page }) => {
     await page.locator('#wheel-action-menu').getByRole('button', { name: '修改当前盘' }).click();
 
     const itemsModal = page.locator('#wheel-items-modal');
-    await expect(itemsModal.locator('.wheel-filter-panel')).toContainText('候选 0 项');
-    await itemsModal.locator('[data-wheel-tag-id="tag-food"] input[type="checkbox"]').check();
-    await expect(itemsModal.locator('.wheel-filter-panel')).toContainText('候选 2 项');
-    await itemsModal.locator('[data-wheel-tag-id="tag-home"] input[type="checkbox"]').check();
-    await expect(itemsModal.locator('.wheel-filter-panel')).toContainText('候选 1 项');
-    await itemsModal.locator('.close-btn').click();
+    await itemsModal.locator('[data-wheel-tag-id="tag-home"] button', { hasText: '只转这个标签' }).click();
+    await expect(page.locator('#wheel-result')).toContainText('煮面', { timeout: 3000 });
 
-    await page.getByRole('button', { name: '按标签抽一个' }).click();
-    await expect(page.locator('#wheel-result')).toContainText('煮面');
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
-    const wheel = stored.wheels.find(item => item.id === 'tag-wheel-filter');
-    expect(wheel.filterMatchMode).toBe('all');
-    expect(wheel.tagIds).toEqual(['tag-food', 'tag-home']);
-    expect(stored.wheelHistory[0].tagName).toContain('吃喝 + 在家');
+    expect(stored.wheelHistory[0].tagName).toBe('在家');
+    expect(stored.wheelHistory[0].resultName).toBe('煮面');
 });
 
 test('tag wheel creation requires and saves selected tags', async ({ page }) => {
