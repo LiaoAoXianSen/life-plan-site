@@ -2428,6 +2428,61 @@ test('normal wheel creation supports multiple items and batch textarea', async (
     expect(updated.items.find(item => item.name === '麻辣烫').weight).toBe(3);
 });
 
+test('tag wheel supports grouped labels and filter mode', async ({ page }) => {
+    const data = createEmptyData({
+        wheels: [
+            {
+                id: 'tag-wheel-filter',
+                name: '晚饭筛选',
+                mode: 'tag',
+                tagIds: ['tag-food', 'tag-home', 'tag-out'],
+                tagPlayMode: 'direction',
+                filterMatchMode: 'all',
+                filterTagIds: [],
+                items: []
+            }
+        ],
+        wheelTags: [
+            { id: 'tag-food', name: '吃喝', group: '类型', color: '#e86c52', weight: 1, enabled: true },
+            { id: 'tag-home', name: '在家', group: '场景', color: '#2f7d6d', weight: 1, enabled: true },
+            { id: 'tag-out', name: '出门', group: '场景', color: '#3e65b0', weight: 1, enabled: true }
+        ],
+        wheelLibraryItems: [
+            { id: 'item-noodle', name: '煮面', weight: 1, enabled: true, tagIds: ['tag-food', 'tag-home'] },
+            { id: 'item-hotpot', name: '火锅', weight: 1, enabled: true, tagIds: ['tag-food', 'tag-out'] },
+            { id: 'item-walk', name: '散步', weight: 1, enabled: true, tagIds: ['tag-out'] }
+        ],
+        wheelHistory: []
+    });
+
+    await page.addInitScript(value => {
+        window.__wheelSpinDurationMs = 1;
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, data);
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '工具转盘' }).click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '修改当前盘' }).click();
+
+    const itemsModal = page.locator('#wheel-items-modal');
+    await itemsModal.getByRole('button', { name: '按条件抽' }).click();
+    await expect(itemsModal.locator('.wheel-filter-panel')).toContainText('候选 0 项');
+    await itemsModal.locator('[data-wheel-tag-id="tag-food"] input[type="checkbox"]').check();
+    await expect(itemsModal.locator('.wheel-filter-panel')).toContainText('候选 2 项');
+    await itemsModal.locator('[data-wheel-tag-id="tag-home"] input[type="checkbox"]').check();
+    await expect(itemsModal.locator('.wheel-filter-panel')).toContainText('候选 1 项');
+    await itemsModal.locator('.close-btn').click();
+
+    await page.getByRole('button', { name: '从条件里抽一个' }).click();
+    await expect(page.locator('#wheel-result')).toContainText('煮面');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const wheel = stored.wheels.find(item => item.id === 'tag-wheel-filter');
+    expect(wheel.tagPlayMode).toBe('filter');
+    expect(wheel.filterMatchMode).toBe('all');
+    expect(wheel.filterTagIds).toEqual(['tag-food', 'tag-home']);
+    expect(stored.wheelHistory[0].tagName).toContain('吃喝 + 在家');
+});
+
 test('tag wheel creation requires and saves selected tags', async ({ page }) => {
     const data = {
         records: [],
