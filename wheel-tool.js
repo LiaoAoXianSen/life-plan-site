@@ -1286,7 +1286,7 @@
                     <button class="wheel-mini-btn danger" data-library-bulk="delete" ${selectedTotalCount ? '' : 'disabled'} onclick="batchDeleteWheelLibraryItems()">批量删除</button>
                 </div>
             </div>
-            <div class="wheel-hint compact">批量操作按全部勾选项计数（跨筛选保留）；全选/取消全选只作用于当前筛选列表。</div>
+            <div class="wheel-hint compact">批量加/去标签、启用/停用、删除和导入前都会二次确认；加标签/导入会显示当前选中的标签名，避免多加或错加。批量操作按全部勾选项计数（跨筛选保留）。</div>
             <div class="wheel-list" id="wheel-library-list">
                 ${filteredItems.map(item => `
                     <div class="wheel-row library ${selectedIds.has(item.id) ? 'selected' : ''}" data-library-item-id="${safeHtml(item.id)}">
@@ -1915,6 +1915,25 @@
         return uniqueTagIds(Array.from(wheelLibraryQuickTagIds));
     }
 
+    function formatWheelTagNames(tagIds = []) {
+        const names = tagNames(tagIds);
+        if (!names.length) return '（未选择标签）';
+        if (names.length <= 6) return names.join('、');
+        return `${names.slice(0, 6).join('、')} 等 ${names.length} 个`;
+    }
+
+    function countWheelBatchLines(text = '') {
+        return String(text || '')
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(Boolean)
+            .length;
+    }
+
+    function confirmWheelLibraryBatchAction(message = '') {
+        return confirm(message);
+    }
+
     function captureWheelLibraryFormDraft() {
         return {
             name: document.getElementById('wheel-library-name')?.value || '',
@@ -2104,6 +2123,11 @@
         if (!text) return alert('请先在多行文本框里输入公共项');
         const selectedTagIds = getWheelLibraryBatchSelectedTagIds();
         if (!selectedTagIds.length) return alert('请先在下方勾选至少一个标签');
+        const lineCount = countWheelBatchLines(text);
+        const tagLabel = formatWheelTagNames(selectedTagIds);
+        if (!confirmWheelLibraryBatchAction(
+            `确定批量导入约 ${lineCount} 行公共项吗？\n\n将统一绑定标签：${tagLabel}\n\n请确认标签没多选、没选错，再继续。`
+        )) return;
         const { added, skipped } = importWheelLibraryItemsFromText(text, selectedTagIds);
         if (!added && skipped.length === 1 && skipped[0] === '请先勾选至少一个标签') {
             return alert(skipped[0]);
@@ -2115,7 +2139,7 @@
             alert(skipped.length ? `没有导入成功：${skipped.join('、')}` : '没有导入成功');
             return;
         }
-        alert(`已导入公共项 ${added} 项${skipped.length ? `，跳过：${skipped.join('、')}` : ''}`);
+        alert(`已导入公共项 ${added} 项（标签：${tagLabel}）${skipped.length ? `，跳过：${skipped.join('、')}` : ''}`);
     };
 
     function updateWheelLibrarySelectionUi() {
@@ -2171,6 +2195,13 @@
         const selectedIds = getSelectedLibraryItemIds();
         if (!selectedIds.length) return alert('请先勾选公共项');
         if (!tagIds.length) return alert('请先在上方“快速选择标签”里勾选至少一个标签');
+        const tagLabel = formatWheelTagNames(tagIds);
+        const isRemove = action === 'remove';
+        if (!confirmWheelLibraryBatchAction(
+            isRemove
+                ? `确定给选中的 ${selectedIds.length} 个公共项去掉标签吗？\n\n将移除：${tagLabel}\n\n每个公共项至少会保留 1 个标签。`
+                : `确定给选中的 ${selectedIds.length} 个公共项加标签吗？\n\n将添加：${tagLabel}\n\n请确认标签没多选、没选错。`
+        )) return;
         let changed = 0;
         let blockedOnlyTag = 0;
         selectedIds.forEach(itemId => {
@@ -2179,7 +2210,7 @@
             const set = new Set(item.tagIds || []);
             let itemChanged = false;
             tagIds.forEach(tagId => {
-                if (action === 'remove') {
+                if (isRemove) {
                     if (!set.has(tagId)) return;
                     if (set.size <= 1) {
                         blockedOnlyTag += 1;
@@ -2198,7 +2229,7 @@
             item.updatedAt = now();
             changed += 1;
         });
-        if (!changed && action === 'remove') {
+        if (!changed && isRemove) {
             return alert(blockedOnlyTag
                 ? '没有可移除的标签；公共项至少要保留一个标签'
                 : '选中的公共项都不包含这些标签');
@@ -2206,11 +2237,16 @@
         if (!changed) return alert('选中的公共项已经包含这些标签');
         persist();
         renderWheelPage();
+        alert(isRemove
+            ? `已从 ${changed} 个公共项去掉标签：${tagLabel}`
+            : `已给 ${changed} 个公共项加上标签：${tagLabel}`);
     };
 
     window.batchToggleWheelLibraryItems = function batchToggleWheelLibraryItems(enabled = true) {
         const selectedIds = getSelectedLibraryItemIds();
         if (!selectedIds.length) return alert('请先勾选公共项');
+        const actionLabel = enabled ? '启用' : '停用';
+        if (!confirmWheelLibraryBatchAction(`确定批量${actionLabel}选中的 ${selectedIds.length} 个公共项吗？`)) return;
         let changed = 0;
         selectedIds.forEach(itemId => {
             const item = data.wheelLibraryItems.find(entry => entry.id === itemId);
@@ -2224,6 +2260,7 @@
         if (!changed) return alert(enabled ? '选中的公共项已经是启用状态' : '选中的公共项已经是停用状态');
         persist();
         renderWheelPage();
+        alert(`已批量${actionLabel} ${changed} 个公共项`);
     };
 
     window.batchDeleteWheelLibraryItems = function batchDeleteWheelLibraryItems() {

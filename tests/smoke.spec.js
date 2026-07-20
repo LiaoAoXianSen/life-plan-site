@@ -2250,11 +2250,26 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await expect(libraryModal.locator('#wheel-library-name')).toHaveValue('');
     // Batch import only accepts trailing pure-number weight; tags come from checkbox only.
     await libraryModal.locator('#wheel-library-batch-text').fill('晨跑,2\n周末晨跑,2,运动\n麦当劳,肯德基,3');
-    page.once('dialog', dialog => {
-        expect(dialog.message()).toContain('已导入公共项 3 项');
-        dialog.accept();
-    });
-    await libraryModal.getByRole('button', { name: '导入多行公共项' }).click();
+    const acceptDialogs = async (checks = []) => {
+        let index = 0;
+        const done = new Promise(resolve => {
+            const onDialog = async dialog => {
+                const check = checks[index];
+                if (check) expect(dialog.message()).toContain(check);
+                index += 1;
+                await dialog.accept();
+                if (index >= checks.length) {
+                    page.off('dialog', onDialog);
+                    resolve();
+                }
+            };
+            page.on('dialog', onDialog);
+        });
+        return done;
+    };
+    let dialogsDone = acceptDialogs(['将统一绑定标签：美食', '已导入公共项 3 项']);
+    await libraryModal.getByRole('button', { name: '导入多行公共项' }).click({ noWaitAfter: true });
+    await dialogsDone;
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.name === '晨跑')?.weight).toBe(2);
     // "周末晨跑,2,运动" keeps the whole line as name because last token is not a number.
@@ -2268,7 +2283,9 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     // Selecting items should not rebuild the whole panel and jump scroll to top.
     await expect.poll(async () => libraryModal.locator('#wheel-library-list').evaluate(el => el.scrollTop)).toBeGreaterThanOrEqual(0);
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]').check();
-    await libraryModal.getByRole('button', { name: '加标签' }).click();
+    dialogsDone = acceptDialogs(['将添加：美食、运动', '已给 1 个公共项加上标签']);
+    await libraryModal.getByRole('button', { name: '加标签' }).click({ noWaitAfter: true });
+    await dialogsDone;
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.name === '寿司').tagIds).toEqual(['tag-food']);
     // Only 火锅 was selected, so 晨跑 keeps the batch checkbox tags only.
@@ -2281,7 +2298,9 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-food"]').uncheck();
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]').check();
     await libraryModal.getByLabel('选择火锅').check();
-    await libraryModal.getByRole('button', { name: '去标签' }).click();
+    dialogsDone = acceptDialogs(['将移除：运动', '已从 1 个公共项去掉标签']);
+    await libraryModal.getByRole('button', { name: '去标签' }).click({ noWaitAfter: true });
+    await dialogsDone;
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(['tag-food']);
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
@@ -2294,15 +2313,15 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-sport');
     await expect(libraryModal.locator('#wheel-library-selected-count')).toContainText('选中 2（当前筛选');
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
-    await libraryModal.getByRole('button', { name: '批量停用' }).click();
+    dialogsDone = acceptDialogs(['确定批量停用选中的 2 个公共项', '已批量停用 2 个公共项']);
+    await libraryModal.getByRole('button', { name: '批量停用' }).click({ noWaitAfter: true });
+    await dialogsDone;
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.name === '寿司').enabled).toBe(false);
     expect(stored.wheelLibraryItems.find(item => item.name === '晨跑').enabled).toBe(false);
-    page.once('dialog', dialog => {
-        expect(dialog.message()).toContain('删除选中的 2 个公共项');
-        dialog.accept();
-    });
-    await libraryModal.getByRole('button', { name: '批量删除' }).click();
+    dialogsDone = acceptDialogs(['删除选中的 2 个公共项']);
+    await libraryModal.getByRole('button', { name: '批量删除' }).click({ noWaitAfter: true });
+    await dialogsDone;
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.some(item => item.name === '寿司')).toBe(false);
     expect(stored.wheelLibraryItems.some(item => item.name === '晨跑')).toBe(false);
