@@ -7353,7 +7353,10 @@
             let d = new Date(firstMonday);
             while (d <= endDate || d.getDay() !== 1) {
                 const dateStr = formatLocalDateKey(d);
-                const count = getCheckinCount(currentHabitId, dateStr);
+                const checkinsOnDate = getHabitCheckinsOnDate(currentHabitId, dateStr);
+                const count = checkinsOnDate.length;
+                const notedCheckin = [...checkinsOnDate].reverse().find(checkin => normalizeInlineText(checkin.note));
+                const noteSummary = notedCheckin ? getCheckinNoteSummary(notedCheckin.note, 24) : '';
                 
                 let level = 0;
                 if (count >= 1) level = 1;
@@ -7364,11 +7367,12 @@
                 const isCurrentYear = d.getFullYear() === year;
                 const isFuture = dateStr > getTodayStr();
                 cells.push(`
-                    <div class="heatmap-cell ${isCurrentYear ? 'level-' + level : ''} ${isFuture ? 'future' : ''}" 
+                    <div class="heatmap-cell ${isCurrentYear ? 'level-' + level : ''} ${isFuture ? 'future' : ''} ${noteSummary ? 'has-note' : ''}" 
                         data-date="${dateStr}"
                         data-count="${count}"
-                        ${isFuture ? '' : `onclick="toggleCheckin('${currentHabitId}', '${dateStr}'); renderHeatmap(); renderTimeline(); renderHabitMatrix();"`}
-                        ${isFuture ? '' : `oncontextmenu="event.preventDefault(); decreaseCheckin('${currentHabitId}', '${dateStr}'); renderHeatmap(); renderTimeline(); renderHabitMatrix();"`}>
+                        data-note="${noteSummary ? ` · 备注 ${escapeHtml(noteSummary)}` : ''}"
+                        ${isFuture ? '' : `onclick="toggleCheckin(${escapeJsArg(currentHabitId)}, ${escapeJsArg(dateStr)}); renderHeatmap(); renderTimeline(); renderHabitMatrix();"`}
+                        ${isFuture ? '' : `oncontextmenu="event.preventDefault(); decreaseCheckin(${escapeJsArg(currentHabitId)}, ${escapeJsArg(dateStr)}); renderHeatmap(); renderTimeline(); renderHabitMatrix();"`}>
                     </div>
                 `);
 
@@ -7385,6 +7389,75 @@
             monthsLabel.innerHTML = months.map(m => `<span>${m}</span>`).join('');
 
             renderHabitStats(habit, year);
+            renderHabitCheckinHistory(habit);
+        }
+
+        function renderHabitCheckinHistory(habit) {
+            const container = document.getElementById('habit-checkin-history');
+            if (!container) return;
+            if (!habit) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const checkins = data.checkins
+                .filter(checkin => checkin.habitId === habit.id)
+                .sort((a, b) => {
+                    const aValue = a.checkinAt || (a.time ? `${a.date}T${a.time}:00` : a.createdAt || a.updatedAt || '');
+                    const bValue = b.checkinAt || (b.time ? `${b.date}T${b.time}:00` : b.createdAt || b.updatedAt || '');
+                    return bValue.localeCompare(aValue);
+                });
+            const noteCount = checkins.filter(checkin => normalizeInlineText(checkin.note)).length;
+            const recentCheckins = checkins.slice(0, 30);
+
+            if (checkins.length === 0) {
+                container.innerHTML = `
+                    <div class="habit-history-head">
+                        <div>
+                            <div class="habit-history-title">最近打卡备注</div>
+                            <div class="habit-history-meta">${escapeHtml(habit.name)}</div>
+                        </div>
+                    </div>
+                    <div class="habit-history-empty">这条习惯还没有打卡记录</div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="habit-history-head">
+                    <div>
+                        <div class="habit-history-title">最近打卡备注</div>
+                        <div class="habit-history-meta">${escapeHtml(habit.name)} · ${checkins.length} 次打卡 · ${noteCount} 条备注</div>
+                    </div>
+                </div>
+                <div class="habit-history-list">
+                    ${recentCheckins.map(checkin => {
+                        const noteText = normalizeInlineText(checkin.note);
+                        const notePreview = getCheckinNoteSummary(noteText, 72);
+                        const clockTime = getCheckinClockTime(checkin);
+                        return `
+                            <div class="habit-history-item ${noteText ? 'has-note' : ''}">
+                                <div class="habit-history-main">
+                                    <div class="habit-history-date">${formatDate(checkin.date)}${clockTime ? ` ${escapeHtml(clockTime)}` : ''}</div>
+                                    <div class="habit-history-note">${notePreview ? escapeHtml(notePreview) : '暂无备注'}</div>
+                                </div>
+                                <button class="btn btn-secondary todo-mini-btn" onclick="openHabitCheckinNote(${escapeJsArg(checkin.id)})">${noteText ? '编辑' : '补备注'}</button>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function openHabitCheckinNote(checkinId) {
+            const checkin = data.checkins.find(item => item.id === checkinId);
+            if (!checkin) return;
+            openHabitNoteModal({
+                habitId: checkin.habitId,
+                date: checkin.date,
+                mode: 'edit',
+                checkinId: checkin.id
+            });
         }
 
         function renderHabitStats(habit, year) {

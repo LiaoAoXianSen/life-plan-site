@@ -1995,8 +1995,19 @@
     .heatmap-cell.level-3 { background: #36a766; }
     .heatmap-cell.level-4 { background: #16633d; }
     .heatmap-cell.future { cursor: not-allowed; opacity: .38; }
+    .heatmap-cell.has-note::before {
+        content: '';
+        position: absolute;
+        right: 2px;
+        bottom: 2px;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #f6c85f;
+        box-shadow: 0 0 0 1px rgba(255,255,255,.85);
+    }
     .heatmap-cell::after {
-        content: attr(data-date) ' · 打卡 ' attr(data-count) ' 次';
+        content: attr(data-date) ' · 打卡 ' attr(data-count) ' 次' attr(data-note);
         position: absolute;
         top: -32px;
         left: 50%;
@@ -2019,6 +2030,67 @@
     .stat-card { background: var(--surface-soft); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 10px; text-align: center; }
     .stat-value { font-size: 24px; font-weight: 850; color: var(--accent); margin-bottom: 5px; }
     .stat-label { font-size: 12px; color: var(--muted); font-weight: 750; }
+    .habit-checkin-history {
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+        overflow: hidden;
+    }
+    .habit-history-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--line);
+        background: var(--surface-soft);
+    }
+    .habit-history-title {
+        font-size: 14px;
+        font-weight: 850;
+        color: var(--text);
+    }
+    .habit-history-meta {
+        margin-top: 3px;
+        font-size: 12px;
+        font-weight: 750;
+        color: var(--muted);
+    }
+    .habit-history-list {
+        display: grid;
+        max-height: 360px;
+        overflow: auto;
+    }
+    .habit-history-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+    }
+    .habit-history-item:last-child { border-bottom: 0; }
+    .habit-history-item.has-note { background: #fbfdf9; }
+    .habit-history-main { min-width: 0; }
+    .habit-history-date {
+        font-size: 13px;
+        font-weight: 850;
+        color: var(--text);
+    }
+    .habit-history-note {
+        margin-top: 5px;
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+    }
+    .habit-history-item.has-note .habit-history-note { color: #52655b; }
+    .habit-history-empty {
+        padding: 18px 14px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 750;
+    }
 
     .goal-card {
         background: var(--surface);
@@ -2608,6 +2680,8 @@
         .habit-quick-status { align-self: flex-start; }
         .habit-quick-actions { justify-content: flex-start; flex-wrap: wrap; width: 100%; }
         .habit-quick-btn { width: auto; padding-inline: 12px; }
+        .habit-history-item { grid-template-columns: 1fr; align-items: stretch; }
+        .habit-history-item .btn { width: 100%; justify-content: center; }
         .sidebar-button-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .sidebar-bottom[open] { grid-template-columns: 1fr 1fr; }
         .card-title { display: block; }
