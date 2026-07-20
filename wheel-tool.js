@@ -13,6 +13,9 @@
     let editingWheelTagId = null;
     const wheelSelectedLibraryItemIds = new Set();
     const wheelLibraryQuickTagIds = new Set();
+    let wheelLibraryAiSuggestions = [];
+    let wheelLibraryAiStatus = '';
+    let wheelLibraryAiRunning = false;
     let wheelDragState = null;
 
     function createWheelStageState() {
@@ -987,6 +990,37 @@
         `;
     }
 
+    function renderWheelLibraryAiSuggestions() {
+        if (!wheelLibraryAiSuggestions.length) {
+            return wheelLibraryAiStatus
+                ? `<div class="wheel-library-ai-status">${safeHtml(wheelLibraryAiStatus)}</div>`
+                : '<div class="wheel-hint compact">输入公共项后点“AI 推荐标签”，结果可勾选修改再添加。</div>';
+        }
+        const options = wheelLibraryAiSuggestions.map((item, index) => {
+            const tag = getTagById(item.tagId);
+            if (!tag) return '';
+            return `
+                <label class="wheel-library-ai-tag ${item.selected ? 'selected' : ''}">
+                    <input type="checkbox" ${item.selected ? 'checked' : ''} onchange="toggleWheelLibraryAiSuggestion(${index}, this.checked)">
+                    <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
+                    <span class="wheel-library-ai-tag-main">
+                        <strong>${safeHtml(tag.name)}</strong>
+                        ${item.reason ? `<small>${safeHtml(item.reason)}</small>` : ''}
+                    </span>
+                </label>
+            `;
+        }).join('');
+        return `
+            <div class="wheel-library-ai-result">
+                <div class="wheel-library-ai-result-head">
+                    <span>AI 推荐（可改）</span>
+                    <small>${safeHtml(wheelLibraryAiStatus || '勾选你要的标签，再点添加')}</small>
+                </div>
+                <div class="wheel-library-ai-tags">${options}</div>
+            </div>
+        `;
+    }
+
     function renderLibraryPanel() {
         const filteredItems = getFilteredLibraryItemsForManage();
         const selectedIds = new Set(getSelectedLibraryItemIds());
@@ -998,6 +1032,7 @@
         Array.from(wheelLibraryQuickTagIds).forEach(tagId => {
             if (!validQuickTagIds.has(tagId)) wheelLibraryQuickTagIds.delete(tagId);
         });
+        wheelLibraryAiSuggestions = wheelLibraryAiSuggestions.filter(item => validQuickTagIds.has(item.tagId));
         const batchTagPicker = data.wheelTags.map(tag => `
             <label class="wheel-library-batch-tag">
                 <input type="checkbox" value="${safeHtml(tag.id)}" ${wheelLibraryQuickTagIds.has(tag.id) ? 'checked' : ''} onchange="toggleWheelLibraryQuickTag(${safeJsArg(tag.id)}, this.checked)">
@@ -1016,7 +1051,11 @@
             <div class="wheel-inline-form library-form">
                 <input id="wheel-library-name" placeholder="公共项名称">
                 <input id="wheel-library-weight" type="number" min="1" value="1">
+                <button class="btn btn-secondary" id="wheel-library-ai-btn" ${wheelLibraryAiRunning ? 'disabled' : ''} onclick="suggestWheelLibraryTagsByAi()">${wheelLibraryAiRunning ? '推荐中…' : 'AI 推荐标签'}</button>
                 <button class="btn btn-primary" onclick="addWheelLibraryItem()">添加</button>
+            </div>
+            <div class="wheel-library-ai-box" id="wheel-library-ai-box">
+                ${renderWheelLibraryAiSuggestions()}
             </div>
             <div class="wheel-library-batch-box">
                 <textarea id="wheel-library-batch-text" rows="4" placeholder="每行一个公共项：名称 或 名称,权重&#10;咖啡店学习&#10;周末晨跑,2&#10;麦当劳,肯德基,3"></textarea>
@@ -1028,7 +1067,7 @@
             <div class="wheel-library-batch-tag-panel">
                 <div class="wheel-library-batch-tag-head">
                     <span>快速选择标签</span>
-                    <small>单个添加和批量导入共用；批量文本不再解析行内标签</small>
+                    <small>单个添加、AI 推荐和批量导入共用；也可手动改勾选</small>
                 </div>
                 <div class="wheel-library-batch-tags">
                     ${batchTagPicker || '<div class="empty-state compact">还没有标签，先在标签面板新增。</div>'}
@@ -1590,10 +1629,12 @@
         if (!name) return alert('请输入公共项名称');
         if (data.wheelLibraryItems.some(item => normalizeName(item.name) === normalizeName(name))) return alert('公共项里已经有同名内容');
         const tagIds = getWheelLibraryBatchSelectedTagIds();
-        if (!tagIds.length) return alert('请先在下方勾选至少一个标签');
+        if (!tagIds.length) return alert('请先在下方勾选至少一个标签（可先 AI 推荐再改）');
         data.wheelLibraryItems.push({ id: id(), name, note: '', weight, enabled: true, tagIds, createdAt: now(), updatedAt: now() });
         const nameInput = document.getElementById('wheel-library-name');
         if (nameInput) nameInput.value = '';
+        wheelLibraryAiSuggestions = [];
+        wheelLibraryAiStatus = '';
         persist();
         renderWheelPage();
     };
@@ -1607,10 +1648,157 @@
         return uniqueTagIds(Array.from(wheelLibraryQuickTagIds));
     }
 
+    function captureWheelLibraryFormDraft() {
+        return {
+            name: document.getElementById('wheel-library-name')?.value || '',
+            weight: document.getElementById('wheel-library-weight')?.value || '1',
+            batchText: document.getElementById('wheel-library-batch-text')?.value || ''
+        };
+    }
+
+    function restoreWheelLibraryFormDraft(draft = {}) {
+        const nameInput = document.getElementById('wheel-library-name');
+        const weightInput = document.getElementById('wheel-library-weight');
+        const batchInput = document.getElementById('wheel-library-batch-text');
+        if (nameInput) nameInput.value = draft.name || '';
+        if (weightInput) weightInput.value = draft.weight || '1';
+        if (batchInput) batchInput.value = draft.batchText || '';
+    }
+
+    function refreshWheelLibraryPanelPreservingDraft() {
+        const draft = captureWheelLibraryFormDraft();
+        renderWheelPage();
+        restoreWheelLibraryFormDraft(draft);
+    }
+
+    function applyWheelLibraryAiSuggestionsToQuickTags() {
+        const selected = wheelLibraryAiSuggestions.filter(item => item.selected).map(item => item.tagId);
+        if (!selected.length) return;
+        selected.forEach(tagId => wheelLibraryQuickTagIds.add(tagId));
+    }
+
+    function mapAiTagsToExistingSuggestions(aiResult = {}) {
+        const byName = new Map(data.wheelTags.map(tag => [normalizeName(tag.name), tag]));
+        const seen = new Set();
+        const tags = Array.isArray(aiResult.tags) ? aiResult.tags : [];
+        return tags
+            .map(tag => {
+                const name = String(tag?.name || tag || '').trim();
+                const existing = byName.get(normalizeName(name));
+                if (!existing || seen.has(existing.id)) return null;
+                seen.add(existing.id);
+                return {
+                    tagId: existing.id,
+                    name: existing.name,
+                    reason: String(tag?.reason || '').trim(),
+                    selected: true
+                };
+            })
+            .filter(Boolean)
+            .slice(0, 5);
+    }
+
+    function buildWheelLibraryAiPayload(itemText = '') {
+        return {
+            mode: 'wheelTagSuggest',
+            title: '公共项标签推荐',
+            today: today(),
+            userInput: itemText,
+            context: {
+                itemText,
+                existingTags: data.wheelTags.map(tag => ({
+                    id: tag.id,
+                    name: tag.name,
+                    enabled: tag.enabled !== false
+                })),
+                sampleLibraryItems: data.wheelLibraryItems.slice(0, 20).map(item => ({
+                    name: item.name,
+                    tags: tagNames(item.tagIds || [])
+                }))
+            },
+            instruction: [
+                '根据 itemText / userInput 从 existingTags 里推荐 1-5 个标签。',
+                '只能使用 existingTags 里已有的 name，禁止新建标签名。',
+                '返回 tags 数组，每项 {name, reason}；items 可为空数组。',
+                'reason 用很短的中文说明为什么相关。'
+            ].join('\n')
+        };
+    }
+
+    window.toggleWheelLibraryAiSuggestion = function toggleWheelLibraryAiSuggestion(index, checked) {
+        const item = wheelLibraryAiSuggestions[index];
+        if (!item) return;
+        item.selected = !!checked;
+        if (item.selected) wheelLibraryQuickTagIds.add(item.tagId);
+        else wheelLibraryQuickTagIds.delete(item.tagId);
+        // Keep quick-tag checkboxes in sync without wiping the form draft.
+        document.querySelectorAll('.wheel-library-batch-tag input').forEach(input => {
+            input.checked = wheelLibraryQuickTagIds.has(input.value);
+        });
+        const labels = document.querySelectorAll('.wheel-library-ai-tag');
+        const label = labels[index];
+        if (label) label.classList.toggle('selected', item.selected);
+    };
+
+    window.suggestWheelLibraryTagsByAi = async function suggestWheelLibraryTagsByAi() {
+        if (wheelLibraryAiRunning) return;
+        const itemText = document.getElementById('wheel-library-name')?.value.trim() || '';
+        if (!itemText) return alert('请先输入公共项名称');
+        if (!data.wheelTags.length) return alert('还没有标签，请先在标签管理里新增');
+        const bridge = window.LifePlanAiBridge;
+        if (!bridge) return alert('AI 服务未就绪，请刷新页面后再试');
+
+        wheelLibraryAiRunning = true;
+        wheelLibraryAiStatus = '正在根据现有标签推荐…';
+        refreshWheelLibraryPanelPreservingDraft();
+        try {
+            const payload = buildWheelLibraryAiPayload(itemText);
+            const useRemote = typeof bridge.isRemoteReady === 'function' && bridge.isRemoteReady();
+            let result;
+            try {
+                result = useRemote
+                    ? await bridge.requestRemote(payload)
+                    : bridge.generateLocal(payload);
+            } catch (err) {
+                result = bridge.generateLocal(payload);
+                wheelLibraryAiStatus = `远程 AI 失败，已用本地规则：${err.message || '请求失败'}`;
+            }
+            const suggestions = mapAiTagsToExistingSuggestions(result || {});
+            wheelLibraryAiSuggestions = suggestions;
+            if (!wheelLibraryAiStatus.startsWith('远程 AI 失败')) {
+                wheelLibraryAiStatus = useRemote
+                    ? (result?.summary || `远程 AI 推荐了 ${suggestions.length} 个标签，可修改后添加`)
+                    : (result?.summary || `本地规则推荐了 ${suggestions.length} 个标签，可修改后添加`);
+            }
+            if (!suggestions.length) {
+                wheelLibraryAiStatus = '没有匹配到现有标签，请手动勾选下方标签';
+            } else {
+                applyWheelLibraryAiSuggestionsToQuickTags();
+            }
+        } catch (err) {
+            wheelLibraryAiSuggestions = [];
+            wheelLibraryAiStatus = err.message || 'AI 推荐失败';
+        } finally {
+            wheelLibraryAiRunning = false;
+            refreshWheelLibraryPanelPreservingDraft();
+        }
+    };
+
     window.toggleWheelLibraryQuickTag = function toggleWheelLibraryQuickTag(tagId = '', checked = false) {
         if (!tagId) return;
         if (checked) wheelLibraryQuickTagIds.add(tagId);
         else wheelLibraryQuickTagIds.delete(tagId);
+        // Keep AI suggestion chips aligned with manual quick-tag edits.
+        wheelLibraryAiSuggestions.forEach(item => {
+            if (item.tagId === tagId) item.selected = !!checked;
+        });
+        document.querySelectorAll('.wheel-library-ai-tag').forEach((label, index) => {
+            const item = wheelLibraryAiSuggestions[index];
+            if (!item) return;
+            label.classList.toggle('selected', item.selected);
+            const checkbox = label.querySelector('input[type="checkbox"]');
+            if (checkbox) checkbox.checked = item.selected;
+        });
     };
 
     function importWheelLibraryItemsFromText(text, extraTagIds = []) {

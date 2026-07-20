@@ -1436,6 +1436,14 @@
             return aiService.normalizeAiResult(result);
         }
 
+        // Shared AI bridge for page modules (e.g. wheel library tag suggestions).
+        window.LifePlanAiBridge = {
+            isRemoteReady: () => isRemoteAiReady(),
+            requestRemote: payload => requestRemoteAi(payload),
+            generateLocal: payload => generateLocalAiResult(payload),
+            normalizeResult: result => normalizeAiResult(result)
+        };
+
         const AI_MODE_META = {
             todayPlan: {
                 title: 'AI 今日计划',

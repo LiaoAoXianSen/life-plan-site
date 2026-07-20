@@ -2182,6 +2182,13 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
     const libraryModal = page.locator('#wheel-library-modal');
+    await libraryModal.locator('#wheel-library-name').fill('周末晨跑拉伸');
+    await libraryModal.getByRole('button', { name: 'AI 推荐标签' }).click();
+    await expect(libraryModal.locator('.wheel-library-ai-tag')).toContainText(['运动']);
+    await expect(libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]')).toBeChecked();
+    // User can uncheck AI suggestion before adding.
+    await libraryModal.locator('.wheel-library-ai-tag', { hasText: '运动' }).locator('input').uncheck();
+    await expect(libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]')).not.toBeChecked();
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-food"]').check();
     await libraryModal.locator('#wheel-library-name').fill('寿司');
     await libraryModal.locator('#wheel-library-weight').fill('4');

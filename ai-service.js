@@ -59,6 +59,23 @@
                 thinking: normalizeText(result?.diary?.thinking || result?.thinking),
                 smallJoy: normalizeText(result?.diary?.smallJoy || result?.smallJoy)
             };
+            const tagSource = Array.isArray(result?.tags)
+                ? result.tags
+                : Array.isArray(result?.suggestedTags)
+                    ? result.suggestedTags
+                    : [];
+            normalized.tags = tagSource
+                .map(tag => {
+                    if (typeof tag === 'string') {
+                        return { name: normalizeText(tag), reason: '', weight: 1 };
+                    }
+                    return {
+                        name: normalizeText(tag?.name || tag?.tag || tag?.text || tag?.title),
+                        reason: normalizeText(tag?.reason || tag?.note || tag?.why),
+                        weight: Math.max(1, Math.round(Number(tag?.weight) || 1))
+                    };
+                })
+                .filter(tag => tag.name);
             normalized.items = normalized.items
                 .map(item => ({
                     text: normalizeText(item?.text || item?.title),
@@ -102,10 +119,11 @@
                         content: [
                             '你是一个个人规划应用里的 AI 助手。',
                             '请只返回严格 JSON，不要 Markdown。',
-                            'JSON 字段：title 字符串，summary 字符串，items 数组，可选 diary 对象，可选 capture 对象。',
+                            'JSON 字段：title 字符串，summary 字符串，items 数组，可选 diary 对象，可选 capture 对象，可选 tags 数组。',
                             'items 每项字段：text 字符串，note 字符串，可选 urgency/group/dueDate/planStartDate/planEndDate/subTodos/reason。',
                             'diary 可选字段：oneLine/review/tomorrow/improve/thinking/smallJoy，均为字符串。',
                             'capture 可选字段：cleanText、diaryText、workText、planText、ideaText、suggestedTargets。',
+                            '当 mode 为 wheelTagSuggest 时：items 可为空；tags 返回 1-5 个推荐标签，字段 name/reason；name 必须来自 context.existingTags，禁止自造标签。',
                             '建议必须具体、短、可执行。'
                         ].join('\n')
                     },
@@ -224,8 +242,77 @@
             });
         }
 
+        function normalizeNameKey(value = '') {
+            return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+        }
+
+        function scoreWheelTagMatch(itemText = '', tagName = '') {
+            const text = normalizeNameKey(itemText);
+            const tag = normalizeNameKey(tagName);
+            if (!text || !tag) return 0;
+            if (text === tag) return 100;
+            if (text.includes(tag)) return 80 + Math.min(tag.length, 10);
+            if (tag.includes(text) && text.length >= 2) return 50;
+            // Chinese/short keyword overlap without spaces.
+            let overlap = 0;
+            const units = tag.length <= 8 ? Array.from(tag) : tag.split(/[\s/、,，]+/).filter(Boolean);
+            units.forEach(unit => {
+                if (unit.length >= 2 && text.includes(unit)) overlap += unit.length >= 3 ? 12 : 8;
+            });
+            return overlap;
+        }
+
+        function generateLocalWheelTagSuggest(payload = {}) {
+            const itemText = String(payload.userInput || payload.context?.itemText || '').trim();
+            const existingTags = Array.isArray(payload.context?.existingTags) ? payload.context.existingTags : [];
+            if (!itemText) {
+                return normalizeAiResult({
+                    title: '先填写公共项',
+                    summary: '输入一条公共项内容后，再根据现有标签推荐。',
+                    tags: [],
+                    items: []
+                });
+            }
+            if (!existingTags.length) {
+                return normalizeAiResult({
+                    title: '还没有标签',
+                    summary: '请先在标签管理里新增标签，再使用 AI 推荐。',
+                    tags: [],
+                    items: []
+                });
+            }
+            const ranked = existingTags
+                .map(tag => {
+                    const name = String(tag?.name || tag || '').trim();
+                    const score = scoreWheelTagMatch(itemText, name);
+                    return {
+                        name,
+                        reason: score >= 80
+                            ? '名称直接相关'
+                            : score >= 12
+                                ? '关键词相近'
+                                : '可选手动勾选',
+                        weight: 1,
+                        score
+                    };
+                })
+                .filter(tag => tag.name)
+                .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'zh-CN'));
+            const strong = ranked.filter(tag => tag.score >= 12).slice(0, 5);
+            const tags = (strong.length ? strong : ranked.slice(0, 3)).map(({ name, reason, weight }) => ({ name, reason, weight }));
+            return normalizeAiResult({
+                title: '公共项标签推荐',
+                summary: strong.length
+                    ? `本地规则从现有标签里挑了 ${tags.length} 个候选，可勾选修改后再添加。`
+                    : '未找到强相关标签，先给出前几个现有标签供你挑选。',
+                tags,
+                items: []
+            });
+        }
+
         function generateLocalAiResult(payload) {
             const today = payload.today || getTodayStr();
+            if (payload.mode === 'wheelTagSuggest') return generateLocalWheelTagSuggest(payload);
             if (payload.mode === 'chatCapture') return generateLocalCaptureResult(payload);
             if (payload.mode === 'diaryReview') {
                 const diary = payload.context.selectedDiary;
@@ -338,6 +425,7 @@
             getCaptureSentences,
             extractCaptureTodoItems,
             generateLocalCaptureResult,
+            generateLocalWheelTagSuggest,
             generateLocalAiResult
         };
     }
