@@ -1477,12 +1477,28 @@
         wheelLibraryAiRunning = false;
     }
 
+    function resetWheelLibraryFormState() {
+        resetWheelLibraryAiState();
+        wheelSelectedLibraryItemIds.clear();
+        // Keep quick tags intentionally: users often re-import with the same tags.
+        // Only clear one-shot form drafts.
+        const nameInput = document.getElementById('wheel-library-name');
+        const weightInput = document.getElementById('wheel-library-weight');
+        const batchInput = document.getElementById('wheel-library-batch-text');
+        if (nameInput) nameInput.value = '';
+        if (weightInput) weightInput.value = '1';
+        if (batchInput) batchInput.value = '';
+    }
+
     function resetWheelPanelTransientState(panel = '') {
         if (panel === 'library' || !panel) {
-            resetWheelLibraryAiState();
+            resetWheelLibraryFormState();
         }
         if (panel === 'tags' || !panel) {
             editingWheelTagId = null;
+        }
+        if (panel === 'items' || !panel) {
+            wheelLibraryCopyTagFilter = '';
         }
     }
 

@@ -1495,6 +1495,13 @@
             document.getElementById('ai-assistant-modal').classList.remove('active');
             aiLastResult = null;
             currentAiSourceRecordId = '';
+            setAiAssistantRunning(false);
+            const inputEl = document.getElementById('ai-user-input');
+            if (inputEl) inputEl.value = '';
+            const resultPanel = document.getElementById('ai-result-panel');
+            if (resultPanel) resultPanel.innerHTML = '';
+            const contextPanel = document.getElementById('ai-context-panel');
+            if (contextPanel) contextPanel.innerHTML = '';
         }
 
         function setAiMode(mode) {
@@ -5651,6 +5658,14 @@
         function closeMaterialModal() {
             document.getElementById('material-modal').classList.remove('active');
             currentMaterialId = null;
+            const contentEl = document.getElementById('material-content');
+            const tagsEl = document.getElementById('material-tags');
+            const sourceEl = document.getElementById('material-source');
+            const noteEl = document.getElementById('material-note');
+            if (contentEl) contentEl.value = '';
+            if (tagsEl) tagsEl.value = '';
+            if (sourceEl) sourceEl.value = '';
+            if (noteEl) noteEl.value = '';
         }
 
         function saveMaterial() {
@@ -6604,6 +6619,14 @@
 
         function closeHabitRewardModal() {
             document.getElementById('habit-reward-modal').classList.remove('active');
+            const nameEl = document.getElementById('habit-reward-name');
+            const costEl = document.getElementById('habit-reward-cost');
+            const stockEl = document.getElementById('habit-reward-stock');
+            const noteEl = document.getElementById('habit-reward-note');
+            if (nameEl) nameEl.value = '';
+            if (costEl) costEl.value = '10';
+            if (stockEl) stockEl.value = '0';
+            if (noteEl) noteEl.value = '';
         }
 
         function saveHabitReward() {
@@ -6668,6 +6691,12 @@
 
         function closeHabitPointAdjustModal() {
             document.getElementById('habit-point-adjust-modal').classList.remove('active');
+            const typeEl = document.getElementById('habit-point-adjust-type');
+            const amountEl = document.getElementById('habit-point-adjust-amount');
+            const noteEl = document.getElementById('habit-point-adjust-note');
+            if (typeEl) typeEl.value = 'add';
+            if (amountEl) amountEl.value = '1';
+            if (noteEl) noteEl.value = '';
         }
 
         function saveHabitPointAdjust() {
@@ -6810,6 +6839,8 @@
 
         function closeHabitCurrencyModal() {
             document.getElementById('habit-currency-modal').classList.remove('active');
+            const input = document.getElementById('habit-currency-new-name');
+            if (input) input.value = '';
         }
 
         function addHabitCurrencyFromModal() {
@@ -7717,6 +7748,13 @@
         function closeHabitModal() {
             document.getElementById('habit-modal').classList.remove('active');
             editingHabitId = null;
+            // Clear abandoned draft values so reopening "新建习惯" never shows stale fields.
+            const nameEl = document.getElementById('habit-name');
+            const tagEl = document.getElementById('habit-tag');
+            const noteEl = document.getElementById('habit-note');
+            if (nameEl) nameEl.value = '';
+            if (tagEl) tagEl.value = '';
+            if (noteEl) noteEl.value = '';
         }
 
         function toggleHabitRule() {
@@ -7909,6 +7947,12 @@
         function closeGoalModal() {
             document.getElementById('goal-modal').classList.remove('active');
             currentGoalId = null;
+            const nameEl = document.getElementById('goal-name');
+            const targetEl = document.getElementById('goal-target');
+            const progressEl = document.getElementById('goal-progress');
+            if (nameEl) nameEl.value = '';
+            if (targetEl) targetEl.value = '';
+            if (progressEl) progressEl.value = '0';
         }
 
         function saveGoal() {

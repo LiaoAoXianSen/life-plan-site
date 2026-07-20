@@ -2230,13 +2230,15 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await libraryModal.getByRole('button', { name: 'AI 推荐标签' }).click();
     await expect(libraryModal.locator('.wheel-library-ai-tag')).toContainText(['运动']);
     await expect(libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]')).toBeChecked();
-    // Closing the library modal should clear transient AI recommendations.
+    // Closing the library modal should clear transient AI recommendations and form drafts.
     await libraryModal.locator('.close-btn').click();
     await expect(libraryModal).not.toHaveClass(/active/);
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
     await expect(libraryModal.locator('.wheel-library-ai-tag')).toHaveCount(0);
     await expect(libraryModal.locator('#wheel-library-ai-box')).toContainText('输入公共项后点“AI 推荐标签”');
+    await expect(libraryModal.locator('#wheel-library-name')).toHaveValue('');
+    await expect(libraryModal.locator('#wheel-library-selected-count')).toContainText('选中 0');
     // Re-run AI recommendation and allow user edits before adding.
     await libraryModal.locator('#wheel-library-name').fill('周末晨跑拉伸');
     await libraryModal.getByRole('button', { name: 'AI 推荐标签' }).click();

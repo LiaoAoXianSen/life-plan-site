@@ -1790,6 +1790,23 @@ const exerciseCards = (draft.exercises || []).map((exercise, exerciseIndex) => {
     window.closeBodyMetricModal = function closeBodyMetricModal() {
         document.getElementById('body-metric-modal')?.classList.remove('active');
         currentBodyMetricId = null;
+        // Clear form draft so next open starts clean unless reloaded by openBodyMetricModal.
+        [
+            'body-metric-weight',
+            'body-metric-bodyFat',
+            'body-metric-height',
+            'body-metric-chest',
+            'body-metric-waist',
+            'body-metric-hips',
+            'body-metric-arm',
+            'body-metric-thigh',
+            'body-metric-calf',
+            'body-metric-shoulder',
+            'body-metric-note'
+        ].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
     };
 
     window.saveBodyMetric = function saveBodyMetric() {
