@@ -2487,6 +2487,51 @@ test('tag wheel can spin a single selected tag directly', async ({ page }) => {
     expect(stored.wheelHistory[0].resultName).toBe('煮面');
 });
 
+test('tag management can edit a tag once without repeated prompts', async ({ page }) => {
+    const data = createEmptyData({
+        wheels: [
+            {
+                id: 'tag-wheel-edit',
+                name: '标签盘',
+                mode: 'tag',
+                tagIds: ['tag-home'],
+                items: []
+            }
+        ],
+        wheelTags: [
+            { id: 'tag-home', name: '在家', color: '#2f7d6d', weight: 1, enabled: true }
+        ],
+        wheelLibraryItems: [
+            { id: 'item-noodle', name: '煮面', weight: 1, enabled: true, tagIds: ['tag-home'] }
+        ],
+        wheelHistory: []
+    });
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, data);
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '工具转盘' }).click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '标签管理' }).click();
+
+    const tagsModal = page.locator('#wheel-tags-modal');
+    await tagsModal.locator('[data-wheel-tag-id="tag-home"] button', { hasText: '修改' }).click();
+    await expect(tagsModal.locator('#wheel-tag-name')).toHaveValue('在家');
+    await tagsModal.locator('#wheel-tag-name').fill('宅家');
+    await tagsModal.locator('#wheel-tag-weight').fill('3');
+    await tagsModal.getByRole('button', { name: '保存修改' }).click();
+    await expect(tagsModal.locator('[data-wheel-tag-id="tag-home"]')).toContainText('宅家');
+    await expect(tagsModal.locator('#wheel-tag-name')).toHaveValue('');
+    await expect(tagsModal.getByRole('button', { name: '添加' })).toBeVisible();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelTags.find(tag => tag.id === 'tag-home')).toMatchObject({
+        name: '宅家',
+        weight: 3
+    });
+});
+
 test('tag wheel creation requires and saves selected tags', async ({ page }) => {
     const data = {
         records: [],

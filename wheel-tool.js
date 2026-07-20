@@ -10,6 +10,7 @@
     let wheelLibraryCopyTagFilter = '';
     let wheelLibraryTagFilter = '';
     let wheelActionMenuOpen = false;
+    let editingWheelTagId = null;
     const wheelSelectedLibraryItemIds = new Set();
     const wheelLibraryQuickTagIds = new Set();
     let wheelDragState = null;
@@ -1033,6 +1034,10 @@
     }
 
     function renderTagsPanel() {
+        const editingTag = editingWheelTagId
+            ? data.wheelTags.find(tag => tag.id === editingWheelTagId)
+            : null;
+        if (editingWheelTagId && !editingTag) editingWheelTagId = null;
         return `
             <div class="wheel-panel-head">
                 <div>
@@ -1041,21 +1046,23 @@
                 </div>
             </div>
             <div class="wheel-inline-form tags-form">
-                <input id="wheel-tag-name" placeholder="标签名称">
-                <input id="wheel-tag-weight" type="number" min="1" value="1">
-                <input id="wheel-tag-color" type="color" value="#216e4e">
-                <button class="btn btn-primary" onclick="addWheelTag()">添加</button>
+                <input id="wheel-tag-name" placeholder="标签名称" value="${safeHtml(editingTag?.name || '')}">
+                <input id="wheel-tag-weight" type="number" min="1" value="${safeHtml(editingTag?.weight ?? 1)}">
+                <input id="wheel-tag-color" type="color" value="${safeHtml(editingTag?.color || '#216e4e')}">
+                <button class="btn btn-primary" onclick="saveWheelTagForm()">${editingTag ? '保存修改' : '添加'}</button>
+                ${editingTag ? '<button class="btn btn-secondary" onclick="cancelEditWheelTag()">取消</button>' : ''}
             </div>
+            ${editingTag ? `<div class="wheel-hint">正在修改：${safeHtml(editingTag.name)}</div>` : ''}
             <div class="wheel-list">
                 ${data.wheelTags.map(tag => {
                     const items = getTagItemPool(tag.id);
                     return `
-                        <div class="wheel-row" data-wheel-tag-id="${safeHtml(tag.id)}">
+                        <div class="wheel-row ${editingWheelTagId === tag.id ? 'selected' : ''}" data-wheel-tag-id="${safeHtml(tag.id)}">
                             <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
                             <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${items.length} 个公共项 · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
                             <button class="wheel-mini-btn primary" ${items.length && tag.enabled !== false ? '' : 'disabled'} onclick="spinDirectTag(${safeJsArg(tag.id)})">只转这个标签</button>
                             <button class="wheel-mini-btn" ${items.length && tag.enabled !== false ? '' : 'disabled'} onclick="previewTagStage(${safeJsArg(tag.id)})">先看这个标签池</button>
-                            <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">修改</button>
+                            <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">${editingWheelTagId === tag.id ? '编辑中' : '修改'}</button>
                             <button class="wheel-mini-btn" onclick="toggleWheelTagEnabled(${safeJsArg(tag.id)})">${tag.enabled === false ? '启用' : '停用'}</button>
                             <button class="wheel-mini-btn danger" onclick="deleteWheelTag(${safeJsArg(tag.id)})">删除</button>
                         </div>
@@ -1717,32 +1724,52 @@
         renderWheelPage();
     };
 
-    window.addWheelTag = function addWheelTag() {
+    window.saveWheelTagForm = function saveWheelTagForm() {
         const name = document.getElementById('wheel-tag-name')?.value.trim();
         const weight = Math.max(1, Number(document.getElementById('wheel-tag-weight')?.value) || 1);
         const color = document.getElementById('wheel-tag-color')?.value || palette[data.wheelTags.length % palette.length];
         if (!name) return alert('请输入标签名称');
+        if (editingWheelTagId) {
+            const tag = data.wheelTags.find(item => item.id === editingWheelTagId);
+            if (!tag) {
+                editingWheelTagId = null;
+                return alert('找不到要修改的标签');
+            }
+            if (data.wheelTags.some(item => item.id !== tag.id && normalizeName(item.name) === normalizeName(name))) {
+                return alert('已经有同名标签');
+            }
+            tag.name = name;
+            tag.weight = weight;
+            tag.color = safeColor(color, tag.color || '#216e4e');
+            tag.updatedAt = now();
+            editingWheelTagId = null;
+            persist();
+            renderWheelPage();
+            return;
+        }
         if (data.wheelTags.some(tag => normalizeName(tag.name) === normalizeName(name))) return alert('已经有同名标签');
-        data.wheelTags.push({ id: id(), name, color, weight, enabled: true, createdAt: now(), updatedAt: now() });
+        data.wheelTags.push({ id: id(), name, color: safeColor(color, '#216e4e'), weight, enabled: true, createdAt: now(), updatedAt: now() });
         persist();
         renderWheelPage();
+    };
+
+    window.addWheelTag = function addWheelTag() {
+        window.saveWheelTagForm();
     };
 
     window.editWheelTag = function editWheelTag(tagId) {
         const tag = data.wheelTags.find(item => item.id === tagId);
         if (!tag) return;
-        const name = prompt('标签名称', tag.name);
-        if (name === null) return;
-        const trimmed = name.trim();
-        if (!trimmed) return alert('名称不能为空');
-        if (data.wheelTags.some(item => item.id !== tag.id && normalizeName(item.name) === normalizeName(trimmed))) return alert('已经有同名标签');
-        const weight = prompt('标签权重', tag.weight);
-        if (weight === null) return;
-        tag.name = trimmed;
-        tag.weight = Math.max(1, Number(weight) || 1);
-        tag.updatedAt = now();
-        persist();
+        editingWheelTagId = tag.id;
         renderWheelPage();
+        document.getElementById('wheel-tags-modal')?.classList.add('active');
+        document.getElementById('wheel-tag-name')?.focus();
+    };
+
+    window.cancelEditWheelTag = function cancelEditWheelTag() {
+        editingWheelTagId = null;
+        renderWheelPage();
+        document.getElementById('wheel-tags-modal')?.classList.add('active');
     };
 
     window.toggleWheelTagEnabled = function toggleWheelTagEnabled(tagId) {
@@ -1766,6 +1793,7 @@
                 wheel.tagIds = (wheel.tagIds || []).filter(id => id !== tagId);
             } else delete wheel.tagIds;
         });
+        if (editingWheelTagId === tagId) editingWheelTagId = null;
         if (typeof markDeletedItem === 'function') markDeletedItem('wheelTags', tagId, { name: tag.name });
         persist();
         renderWheelPage();
