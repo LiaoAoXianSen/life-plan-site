@@ -1003,23 +1003,20 @@
                 </label>
                 <div class="wheel-library-bulk-actions">
                     <label class="wheel-check-row wheel-select-all-row">
-                        <input type="checkbox" ${allVisibleSelected ? 'checked' : ''} ${filteredItems.length ? '' : 'disabled'} onchange="toggleAllWheelLibrarySelection(this.checked)">
-                        <span>选中 ${selectedVisibleCount}/${filteredItems.length}</span>
+                        <input type="checkbox" id="wheel-library-select-all" ${allVisibleSelected ? 'checked' : ''} ${filteredItems.length ? '' : 'disabled'} onchange="toggleAllWheelLibrarySelection(this.checked)">
+                        <span id="wheel-library-selected-count">选中 ${selectedVisibleCount}/${filteredItems.length}</span>
                     </label>
-                    <select id="wheel-library-batch-tag" ${data.wheelTags.length ? '' : 'disabled'}>
-                        <option value="">批量打标签</option>
-                        ${tagOptions}
-                    </select>
-                    <button class="wheel-mini-btn primary" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('add')">加标签</button>
-                    <button class="wheel-mini-btn" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('remove')">去标签</button>
-                    <button class="wheel-mini-btn" ${selectedTotalCount ? '' : 'disabled'} onclick="batchToggleWheelLibraryItems(true)">批量启用</button>
-                    <button class="wheel-mini-btn" ${selectedTotalCount ? '' : 'disabled'} onclick="batchToggleWheelLibraryItems(false)">批量停用</button>
-                    <button class="wheel-mini-btn danger" ${selectedTotalCount ? '' : 'disabled'} onclick="batchDeleteWheelLibraryItems()">批量删除</button>
+                    <button class="wheel-mini-btn primary" data-library-bulk="tag-add" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('add')">加标签</button>
+                    <button class="wheel-mini-btn" data-library-bulk="tag-remove" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('remove')">去标签</button>
+                    <button class="wheel-mini-btn" data-library-bulk="enable" ${selectedTotalCount ? '' : 'disabled'} onclick="batchToggleWheelLibraryItems(true)">批量启用</button>
+                    <button class="wheel-mini-btn" data-library-bulk="disable" ${selectedTotalCount ? '' : 'disabled'} onclick="batchToggleWheelLibraryItems(false)">批量停用</button>
+                    <button class="wheel-mini-btn danger" data-library-bulk="delete" ${selectedTotalCount ? '' : 'disabled'} onclick="batchDeleteWheelLibraryItems()">批量删除</button>
                 </div>
             </div>
-            <div class="wheel-list">
+            <div class="wheel-hint compact">批量加/去标签会使用上方“快速选择标签”里勾选的多个标签。</div>
+            <div class="wheel-list" id="wheel-library-list">
                 ${filteredItems.map(item => `
-                    <div class="wheel-row library ${selectedIds.has(item.id) ? 'selected' : ''}">
+                    <div class="wheel-row library ${selectedIds.has(item.id) ? 'selected' : ''}" data-library-item-id="${safeHtml(item.id)}">
                         <label class="wheel-library-select">
                             <input type="checkbox" aria-label="选择${safeHtml(item.name)}" ${selectedIds.has(item.id) ? 'checked' : ''} onchange="toggleWheelLibrarySelection(${safeJsArg(item.id)}, this.checked)">
                         </label>
@@ -1607,10 +1604,39 @@
         alert(`已导入公共项 ${added} 项${skipped.length ? `，跳过重复：${skipped.join('、')}` : ''}`);
     };
 
+    function updateWheelLibrarySelectionUi() {
+        const filteredItems = getFilteredLibraryItemsForManage();
+        const selectedIds = new Set(getSelectedLibraryItemIds());
+        const selectedVisibleCount = filteredItems.filter(item => selectedIds.has(item.id)).length;
+        const selectedTotalCount = selectedIds.size;
+        const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
+        const countEl = document.getElementById('wheel-library-selected-count');
+        if (countEl) countEl.textContent = `选中 ${selectedVisibleCount}/${filteredItems.length}`;
+        const selectAll = document.getElementById('wheel-library-select-all');
+        if (selectAll) {
+            selectAll.disabled = !filteredItems.length;
+            selectAll.checked = allVisibleSelected;
+            selectAll.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected;
+        }
+        document.querySelectorAll('#wheel-library-list .wheel-row.library').forEach(row => {
+            const itemId = row.getAttribute('data-library-item-id');
+            const checked = selectedIds.has(itemId);
+            row.classList.toggle('selected', checked);
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            if (checkbox) checkbox.checked = checked;
+        });
+        const hasTags = data.wheelTags.length > 0;
+        document.querySelectorAll('[data-library-bulk]').forEach(btn => {
+            const needsTags = btn.getAttribute('data-library-bulk') === 'tag-add'
+                || btn.getAttribute('data-library-bulk') === 'tag-remove';
+            btn.disabled = !selectedTotalCount || (needsTags && !hasTags);
+        });
+    }
+
     window.toggleWheelLibrarySelection = function toggleWheelLibrarySelection(itemId, checked) {
         if (checked) wheelSelectedLibraryItemIds.add(itemId);
         else wheelSelectedLibraryItemIds.delete(itemId);
-        renderWheelPage();
+        updateWheelLibrarySelectionUi();
     };
 
     window.toggleAllWheelLibrarySelection = function toggleAllWheelLibrarySelection(checked) {
@@ -1618,34 +1644,47 @@
             if (checked) wheelSelectedLibraryItemIds.add(item.id);
             else wheelSelectedLibraryItemIds.delete(item.id);
         });
-        renderWheelPage();
+        updateWheelLibrarySelectionUi();
     };
 
     window.applyWheelLibraryBatchTag = function applyWheelLibraryBatchTag(action = 'add') {
-        const tagId = document.getElementById('wheel-library-batch-tag')?.value || '';
-        const tag = data.wheelTags.find(item => item.id === tagId);
+        const tagIds = getWheelLibraryBatchSelectedTagIds();
         const selectedIds = getSelectedLibraryItemIds();
-        if (!tag) return alert('请选择要批量处理的标签');
         if (!selectedIds.length) return alert('请先勾选公共项');
+        if (!tagIds.length) return alert('请先在上方“快速选择标签”里勾选至少一个标签');
         let changed = 0;
+        let blockedOnlyTag = 0;
         selectedIds.forEach(itemId => {
             const item = data.wheelLibraryItems.find(entry => entry.id === itemId);
             if (!item) return;
             const set = new Set(item.tagIds || []);
-            if (action === 'remove') {
-                if (!set.has(tagId)) return;
-                if (set.size <= 1) return;
-                set.delete(tagId);
-            } else {
+            let itemChanged = false;
+            tagIds.forEach(tagId => {
+                if (action === 'remove') {
+                    if (!set.has(tagId)) return;
+                    if (set.size <= 1) {
+                        blockedOnlyTag += 1;
+                        return;
+                    }
+                    set.delete(tagId);
+                    itemChanged = true;
+                    return;
+                }
                 if (set.has(tagId)) return;
                 set.add(tagId);
-            }
+                itemChanged = true;
+            });
+            if (!itemChanged) return;
             item.tagIds = uniqueTagIds(Array.from(set));
             item.updatedAt = now();
-            changed++;
+            changed += 1;
         });
-        if (!changed && action === 'remove') return alert('没有可移除的标签；公共项至少要保留一个标签');
-        if (!changed) return alert('选中的公共项已经包含这个标签');
+        if (!changed && action === 'remove') {
+            return alert(blockedOnlyTag
+                ? '没有可移除的标签；公共项至少要保留一个标签'
+                : '选中的公共项都不包含这些标签');
+        }
+        if (!changed) return alert('选中的公共项已经包含这些标签');
         persist();
         renderWheelPage();
     };

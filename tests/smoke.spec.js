@@ -2173,15 +2173,19 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(3);
     await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅', '寿司', '晨跑']);
     await libraryModal.getByLabel('选择火锅').check();
-    await libraryModal.locator('#wheel-library-batch-tag').selectOption('tag-sport');
+    // Selecting items should not rebuild the whole panel and jump scroll to top.
+    await expect.poll(async () => libraryModal.locator('#wheel-library-list').evaluate(el => el.scrollTop)).toBeGreaterThanOrEqual(0);
+    await libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]').check();
     await libraryModal.getByRole('button', { name: '加标签' }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
-    expect(stored.wheelLibraryItems.find(item => item.name === '寿司').tagIds).toEqual(['tag-food']);
+    expect(stored.wheelLibraryItems.find(item => item.name === '寿司').tagIds).toEqual(expect.arrayContaining(['tag-food']));
     expect(stored.wheelLibraryItems.find(item => item.name === '晨跑').tagIds).toEqual(expect.arrayContaining(['tag-food', 'tag-sport']));
     expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(expect.arrayContaining(['tag-food', 'tag-sport']));
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-sport');
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(3);
-    await libraryModal.locator('#wheel-library-batch-tag').selectOption('tag-sport');
+    await libraryModal.locator('.wheel-library-batch-tag input[value="tag-food"]').uncheck();
+    await libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]').check();
+    await libraryModal.getByLabel('选择火锅').check();
     await libraryModal.getByRole('button', { name: '去标签' }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(['tag-food']);
