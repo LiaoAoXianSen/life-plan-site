@@ -987,9 +987,9 @@
             </div>
             <div class="form-group">
                 <label>多行选项</label>
-                <textarea id="wheel-batch-text" rows="8" placeholder="每行一个选项，可写：名称,权重&#10;火锅,10&#10;烧烤,5&#10;麦当劳"></textarea>
+                <textarea id="wheel-batch-text" rows="8" placeholder="每行一个选项：名称 或 名称,权重（仅末尾纯数字）&#10;火锅,10&#10;烧烤,5&#10;麦当劳&#10;麦当劳,肯德基,3"></textarea>
             </div>
-            <div class="sync-status">权重不填默认 1；重复名称会自动跳过。</div>
+            <div class="sync-status">仅末尾纯数字可当权重，不填默认 1；重复名称会自动跳过。</div>
             <div class="modal-action-row">
                 <button class="btn btn-secondary" onclick="closeWheelBatchModal()">取消</button>
                 <button class="btn btn-primary" onclick="applyWheelBatchText()">确认添加</button>

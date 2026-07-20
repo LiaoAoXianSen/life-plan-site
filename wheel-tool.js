@@ -117,16 +117,38 @@
         return lines;
     }
 
+    function isTrailingWeightToken(value = '') {
+        const text = String(value || '').trim();
+        if (!text) return false;
+        // Only a pure trailing number (optional %) can be weight; reject signs/exponents/text.
+        const match = text.match(/^(\d+(?:\.\d+)?)%?$/);
+        if (!match) return false;
+        const numeric = Number(match[1]);
+        return Number.isFinite(numeric);
+    }
+
     function parseWeightedLines(text) {
         return String(text || '').split(/\r?\n/)
             .map(line => line.trim())
             .filter(Boolean)
             .map(line => {
-                const parts = line.split(/[,，\t]/);
-                const name = (parts.shift() || '').trim();
-                const weight = Math.max(1, Math.round(Number((parts.shift() || '').replace('%', '').trim()) || 1));
-                const tagText = parts.join(',').trim();
-                return { name, weight, tagText };
+                // Only peel a trailing weight; keep the original name punctuation intact.
+                // Weight is valid only when the line ends with: separator + pure number (optional %).
+                // Examples:
+                //   火锅            -> name=火锅, weight=1
+                //   火锅,10         -> name=火锅, weight=10
+                //   麦当劳,肯德基,3 -> name=麦当劳,肯德基, weight=3
+                //   周末晨跑,2,运动 -> name=周末晨跑,2,运动, weight=1
+                //   站起来走动，拉伸一下 -> keeps Chinese commas, weight=1
+                const weightMatch = line.match(/^(.*?)[,，\t]\s*(\d+(?:\.\d+)?)%?\s*$/);
+                if (weightMatch) {
+                    const name = weightMatch[1].trim();
+                    const weightToken = weightMatch[2];
+                    if (name && isTrailingWeightToken(weightToken)) {
+                        return { name, weight: ensureWheelWeight(weightToken) };
+                    }
+                }
+                return { name: line, weight: 1 };
             })
             .filter(item => item.name);
     }
@@ -498,6 +520,14 @@
             if (!existing.has(itemId)) wheelSelectedLibraryItemIds.delete(itemId);
         });
         return Array.from(wheelSelectedLibraryItemIds);
+    }
+
+    function formatLibrarySelectionCount(selectedTotalCount, selectedVisibleCount, filteredCount) {
+        // Always show total selected count used by bulk actions; also show current filter view.
+        if (wheelLibraryTagFilter && selectedTotalCount !== selectedVisibleCount) {
+            return `选中 ${selectedTotalCount}（当前筛选 ${selectedVisibleCount}/${filteredCount}）`;
+        }
+        return `选中 ${selectedTotalCount}/${filteredCount}`;
     }
 
     function getWheelPanelMarkup(panel = currentWheelPanel) {
@@ -963,7 +993,7 @@
         const selectedVisibleCount = filteredItems.filter(item => selectedIds.has(item.id)).length;
         const selectedTotalCount = selectedIds.size;
         const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
-        const tagOptions = data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}">${safeHtml(tag.name)}</option>`).join('');
+        const selectionCountText = formatLibrarySelectionCount(selectedTotalCount, selectedVisibleCount, filteredItems.length);
         const validQuickTagIds = new Set(data.wheelTags.map(tag => tag.id));
         Array.from(wheelLibraryQuickTagIds).forEach(tagId => {
             if (!validQuickTagIds.has(tagId)) wheelLibraryQuickTagIds.delete(tagId);
@@ -989,16 +1019,16 @@
                 <button class="btn btn-primary" onclick="addWheelLibraryItem()">添加</button>
             </div>
             <div class="wheel-library-batch-box">
-                <textarea id="wheel-library-batch-text" rows="4" placeholder="每行一个公共项：名称,权重，也可继续写行内标签&#10;咖啡店学习,1&#10;周末晨跑,2,运动/户外"></textarea>
+                <textarea id="wheel-library-batch-text" rows="4" placeholder="每行一个公共项：名称 或 名称,权重&#10;咖啡店学习&#10;周末晨跑,2&#10;麦当劳,肯德基,3"></textarea>
                 <div class="wheel-library-batch-side">
                     <button class="btn btn-secondary" onclick="importWheelLibraryBatchFromTextarea()">导入多行公共项</button>
-                    <div class="wheel-hint">下方勾选的标签会自动加到单个添加和本次导入的公共项。</div>
+                    <div class="wheel-hint">批量只认末尾纯数字权重；标签请用下方勾选，不要写在行里。</div>
                 </div>
             </div>
             <div class="wheel-library-batch-tag-panel">
                 <div class="wheel-library-batch-tag-head">
                     <span>快速选择标签</span>
-                    <small>单个添加和批量导入共用；也可每行继续写标签</small>
+                    <small>单个添加和批量导入共用；批量文本不再解析行内标签</small>
                 </div>
                 <div class="wheel-library-batch-tags">
                     ${batchTagPicker || '<div class="empty-state compact">还没有标签，先在标签面板新增。</div>'}
@@ -1015,8 +1045,9 @@
                 <div class="wheel-library-bulk-actions">
                     <label class="wheel-check-row wheel-select-all-row">
                         <input type="checkbox" id="wheel-library-select-all" ${allVisibleSelected ? 'checked' : ''} ${filteredItems.length ? '' : 'disabled'} onchange="toggleAllWheelLibrarySelection(this.checked)">
-                        <span id="wheel-library-selected-count">选中 ${selectedVisibleCount}/${filteredItems.length}</span>
+                        <span id="wheel-library-selected-count">${safeHtml(selectionCountText)}</span>
                     </label>
+                    <button class="wheel-mini-btn" data-library-bulk="clear" ${selectedTotalCount ? '' : 'disabled'} onclick="clearWheelLibrarySelection()">清空勾选</button>
                     <button class="wheel-mini-btn primary" data-library-bulk="tag-add" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('add')">加标签</button>
                     <button class="wheel-mini-btn" data-library-bulk="tag-remove" ${selectedTotalCount && data.wheelTags.length ? '' : 'disabled'} onclick="applyWheelLibraryBatchTag('remove')">去标签</button>
                     <button class="wheel-mini-btn" data-library-bulk="enable" ${selectedTotalCount ? '' : 'disabled'} onclick="batchToggleWheelLibraryItems(true)">批量启用</button>
@@ -1024,7 +1055,7 @@
                     <button class="wheel-mini-btn danger" data-library-bulk="delete" ${selectedTotalCount ? '' : 'disabled'} onclick="batchDeleteWheelLibraryItems()">批量删除</button>
                 </div>
             </div>
-            <div class="wheel-hint compact">批量加/去标签会使用上方“快速选择标签”里勾选的多个标签。</div>
+            <div class="wheel-hint compact">批量操作按全部勾选项计数（跨筛选保留）；全选/取消全选只作用于当前筛选列表。</div>
             <div class="wheel-list" id="wheel-library-list">
                 ${filteredItems.map(item => `
                     <div class="wheel-row library ${selectedIds.has(item.id) ? 'selected' : ''}" data-library-item-id="${safeHtml(item.id)}">
@@ -1584,22 +1615,20 @@
 
     function importWheelLibraryItemsFromText(text, extraTagIds = []) {
         const seen = new Set(data.wheelLibraryItems.map(item => normalizeName(item.name)));
-        const extra = uniqueTagIds(extraTagIds);
+        const tagIds = uniqueTagIds(extraTagIds);
         let added = 0;
         const skipped = [];
+        if (!tagIds.length) {
+            return { added: 0, skipped: ['请先勾选至少一个标签'] };
+        }
         parseWeightedLines(text).forEach(item => {
             const key = normalizeName(item.name);
             if (seen.has(key)) {
                 skipped.push(item.name);
                 return;
             }
-            const tagIds = uniqueTagIds([...extra, ...ensureTagsByText(item.tagText)]);
-            if (!tagIds.length) {
-                skipped.push(`${item.name}(缺少标签)`);
-                return;
-            }
             seen.add(key);
-            data.wheelLibraryItems.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, tagIds, createdAt: now(), updatedAt: now() });
+            data.wheelLibraryItems.push({ id: id(), name: item.name, note: '', weight: item.weight, enabled: true, tagIds: [...tagIds], createdAt: now(), updatedAt: now() });
             added++;
         });
         return { added, skipped };
@@ -1618,11 +1647,20 @@
         const textarea = document.getElementById('wheel-library-batch-text');
         const text = textarea?.value.trim() || '';
         if (!text) return alert('请先在多行文本框里输入公共项');
-        const { added, skipped } = importWheelLibraryItemsFromText(text, getWheelLibraryBatchSelectedTagIds());
+        const selectedTagIds = getWheelLibraryBatchSelectedTagIds();
+        if (!selectedTagIds.length) return alert('请先在下方勾选至少一个标签');
+        const { added, skipped } = importWheelLibraryItemsFromText(text, selectedTagIds);
+        if (!added && skipped.length === 1 && skipped[0] === '请先勾选至少一个标签') {
+            return alert(skipped[0]);
+        }
         persist();
         if (textarea) textarea.value = '';
         renderWheelPage();
-        alert(`已导入公共项 ${added} 项${skipped.length ? `，跳过重复：${skipped.join('、')}` : ''}`);
+        if (!added) {
+            alert(skipped.length ? `没有导入成功：${skipped.join('、')}` : '没有导入成功');
+            return;
+        }
+        alert(`已导入公共项 ${added} 项${skipped.length ? `，跳过：${skipped.join('、')}` : ''}`);
     };
 
     function updateWheelLibrarySelectionUi() {
@@ -1632,7 +1670,7 @@
         const selectedTotalCount = selectedIds.size;
         const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
         const countEl = document.getElementById('wheel-library-selected-count');
-        if (countEl) countEl.textContent = `选中 ${selectedVisibleCount}/${filteredItems.length}`;
+        if (countEl) countEl.textContent = formatLibrarySelectionCount(selectedTotalCount, selectedVisibleCount, filteredItems.length);
         const selectAll = document.getElementById('wheel-library-select-all');
         if (selectAll) {
             selectAll.disabled = !filteredItems.length;
@@ -1648,8 +1686,8 @@
         });
         const hasTags = data.wheelTags.length > 0;
         document.querySelectorAll('[data-library-bulk]').forEach(btn => {
-            const needsTags = btn.getAttribute('data-library-bulk') === 'tag-add'
-                || btn.getAttribute('data-library-bulk') === 'tag-remove';
+            const action = btn.getAttribute('data-library-bulk');
+            const needsTags = action === 'tag-add' || action === 'tag-remove';
             btn.disabled = !selectedTotalCount || (needsTags && !hasTags);
         });
     }
@@ -1665,6 +1703,11 @@
             if (checked) wheelSelectedLibraryItemIds.add(item.id);
             else wheelSelectedLibraryItemIds.delete(item.id);
         });
+        updateWheelLibrarySelectionUi();
+    };
+
+    window.clearWheelLibrarySelection = function clearWheelLibrarySelection() {
+        wheelSelectedLibraryItemIds.clear();
         updateWheelLibrarySelectionUi();
     };
 
@@ -1731,9 +1774,14 @@
     window.batchDeleteWheelLibraryItems = function batchDeleteWheelLibraryItems() {
         const selectedIds = getSelectedLibraryItemIds();
         if (!selectedIds.length) return alert('请先勾选公共项');
-        if (!confirm(`确定删除选中的 ${selectedIds.length} 个公共项吗？普通转盘里已复制的私有项不会受影响。`)) return;
         const removeSet = new Set(selectedIds);
         const removed = data.wheelLibraryItems.filter(item => removeSet.has(item.id));
+        if (!removed.length) {
+            selectedIds.forEach(itemId => wheelSelectedLibraryItemIds.delete(itemId));
+            updateWheelLibrarySelectionUi();
+            return alert('勾选的公共项已不存在，已清空无效勾选');
+        }
+        if (!confirm(`确定删除选中的 ${removed.length} 个公共项吗？普通转盘里已复制的私有项不会受影响。`)) return;
         data.wheelLibraryItems = data.wheelLibraryItems.filter(item => !removeSet.has(item.id));
         selectedIds.forEach(itemId => wheelSelectedLibraryItemIds.delete(itemId));
         if (typeof markDeletedItem === 'function') {

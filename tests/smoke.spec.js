@@ -2187,26 +2187,36 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await libraryModal.locator('#wheel-library-weight').fill('4');
     await libraryModal.getByRole('button', { name: '添加', exact: true }).click();
     await expect(libraryModal.locator('#wheel-library-name')).toHaveValue('');
-    await libraryModal.locator('#wheel-library-batch-text').fill('晨跑,2,运动');
+    // Batch import only accepts trailing pure-number weight; tags come from checkbox only.
+    await libraryModal.locator('#wheel-library-batch-text').fill('晨跑,2\n周末晨跑,2,运动\n麦当劳,肯德基,3');
     page.once('dialog', dialog => {
-        expect(dialog.message()).toContain('已导入公共项 1 项');
+        expect(dialog.message()).toContain('已导入公共项 3 项');
         dialog.accept();
     });
     await libraryModal.getByRole('button', { name: '导入多行公共项' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems.find(item => item.name === '晨跑')?.weight).toBe(2);
+    // "周末晨跑,2,运动" keeps the whole line as name because last token is not a number.
+    expect(stored.wheelLibraryItems.find(item => item.name === '周末晨跑,2,运动')?.weight).toBe(1);
+    expect(stored.wheelLibraryItems.find(item => item.name === '麦当劳,肯德基')?.weight).toBe(3);
+    expect(stored.wheelLibraryItems.find(item => item.name === '晨跑')?.tagIds).toEqual(['tag-food']);
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
-    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(3);
-    await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅', '寿司', '晨跑']);
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(5);
+    await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅', '寿司', '晨跑', '周末晨跑,2,运动', '麦当劳,肯德基']);
     await libraryModal.getByLabel('选择火锅').check();
     // Selecting items should not rebuild the whole panel and jump scroll to top.
     await expect.poll(async () => libraryModal.locator('#wheel-library-list').evaluate(el => el.scrollTop)).toBeGreaterThanOrEqual(0);
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]').check();
     await libraryModal.getByRole('button', { name: '加标签' }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
-    expect(stored.wheelLibraryItems.find(item => item.name === '寿司').tagIds).toEqual(expect.arrayContaining(['tag-food']));
-    expect(stored.wheelLibraryItems.find(item => item.name === '晨跑').tagIds).toEqual(expect.arrayContaining(['tag-food', 'tag-sport']));
+    expect(stored.wheelLibraryItems.find(item => item.name === '寿司').tagIds).toEqual(['tag-food']);
+    // Only 火锅 was selected, so 晨跑 keeps the batch checkbox tags only.
+    expect(stored.wheelLibraryItems.find(item => item.name === '晨跑').tagIds).toEqual(['tag-food']);
     expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(expect.arrayContaining(['tag-food', 'tag-sport']));
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-sport');
-    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(3);
+    // Selection count should show total selected (across filters), not only current filter view.
+    await expect(libraryModal.locator('#wheel-library-selected-count')).toContainText('选中 1');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(2);
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-food"]').uncheck();
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]').check();
     await libraryModal.getByLabel('选择火锅').check();
@@ -2214,17 +2224,27 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(['tag-food']);
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
+    // Clear leftover cross-filter selection before the delete count assertion.
+    await libraryModal.getByRole('button', { name: '清空勾选' }).click();
     await libraryModal.getByLabel('选择寿司').check();
+    await libraryModal.getByLabel('选择晨跑').check();
+    await expect(libraryModal.locator('#wheel-library-selected-count')).toContainText('选中 2');
+    // Switch filter so UI visible count differs from bulk action count.
+    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-sport');
+    await expect(libraryModal.locator('#wheel-library-selected-count')).toContainText('选中 2（当前筛选');
+    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
     await libraryModal.getByRole('button', { name: '批量停用' }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.name === '寿司').enabled).toBe(false);
+    expect(stored.wheelLibraryItems.find(item => item.name === '晨跑').enabled).toBe(false);
     page.once('dialog', dialog => {
-        expect(dialog.message()).toContain('删除选中的');
+        expect(dialog.message()).toContain('删除选中的 2 个公共项');
         dialog.accept();
     });
     await libraryModal.getByRole('button', { name: '批量删除' }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.some(item => item.name === '寿司')).toBe(false);
+    expect(stored.wheelLibraryItems.some(item => item.name === '晨跑')).toBe(false);
     await libraryModal.locator('.close-btn').click();
 
     await page.locator('#wheel-action-menu-button').click();
