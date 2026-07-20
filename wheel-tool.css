@@ -601,12 +601,14 @@
 }
 
 .wheel-result-title {
-    margin: 8px 0 0;
+    margin: 8px auto 0;
+    max-width: 18em;
     color: var(--text);
-    font-size: clamp(36px, 6vw, 58px);
+    font-size: clamp(22px, 3.2vw, 30px);
     font-weight: 900;
-    line-height: 1.08;
+    line-height: 1.28;
     overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .wheel-result-note,
@@ -1614,7 +1616,8 @@
     }
 
     .wheel-result-title {
-        font-size: clamp(28px, 10vw, 40px);
+        font-size: clamp(20px, 6.2vw, 26px);
+        max-width: 14em;
     }
 
     .wheel-stage-stats,
