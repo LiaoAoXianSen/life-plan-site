@@ -1680,17 +1680,41 @@ test('AI local today plan can create actionable todos', async ({ page }) => {
     await page.getByRole('button', { name: '生成建议' }).click();
     await expect(page.locator('#ai-result-panel')).toContainText('完成 AI 接入方案');
 
+    // Can add only the first suggestion via per-item button.
     page.once('dialog', dialog => {
-        expect(dialog.message()).toContain('已加入待办');
+        expect(dialog.message()).toContain('已加入待办 1 项');
+        dialog.accept();
+    });
+    await page.locator('#ai-result-panel .ai-result-item').first().getByRole('button', { name: '加入待办' }).click();
+
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    let aiTodos = stored.todos.filter(todo => todo.sourceType === 'ai');
+    expect(aiTodos).toHaveLength(1);
+    expect(aiTodos[0].text).toContain('完成 AI 接入方案');
+    expect(aiTodos[0].planStartDate).toBeTruthy();
+
+    // Uncheck all, then batch button should refuse empty selection.
+    const checkboxes = page.locator('#ai-result-panel .ai-result-item input[type="checkbox"]');
+    const count = await checkboxes.count();
+    for (let i = 0; i < count; i += 1) {
+        await checkboxes.nth(i).uncheck();
+    }
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('请至少选择一条 AI 建议');
         dialog.accept();
     });
     await page.getByRole('button', { name: '加入今日待办' }).click();
 
-    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
-    const aiTodos = stored.todos.filter(todo => todo.sourceType === 'ai');
-    expect(aiTodos.length).toBeGreaterThan(0);
-    expect(aiTodos[0].text).toContain('完成 AI 接入方案');
-    expect(aiTodos[0].planStartDate).toBeTruthy();
+    // Check only the first and batch-add again (may create another todo with same text).
+    await checkboxes.first().check();
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已加入待办 1 项');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '加入今日待办' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    aiTodos = stored.todos.filter(todo => todo.sourceType === 'ai');
+    expect(aiTodos).toHaveLength(2);
 });
 
 test('AI local breakdown writes subtodos to the selected todo', async ({ page }) => {

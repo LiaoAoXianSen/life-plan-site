@@ -1911,16 +1911,25 @@
             };
         }
 
+        function getAiResultSingleActionLabel() {
+            if (currentAiMode === 'todoBreakdown') return '写入这条';
+            if (currentAiMode === 'ideaNext') return '转成待办';
+            return '加入待办';
+        }
+
         function renderEditableAiResultItem(item, index) {
             const isSubTask = currentAiMode === 'todoBreakdown';
             const urgency = TODO_URGENCY_META[item.urgency] ? item.urgency : 'medium';
             const titleLabel = isSubTask ? '子任务标题' : '待办标题';
             return `
                 <div class="ai-result-item ai-result-draft" data-index="${index}">
-                    <label class="ai-result-select">
-                        <input type="checkbox" id="${getAiResultSelectId('result', index)}" checked>
-                        <strong>${index + 1}. ${escapeHtml(item.text || '使用这条建议')}</strong>
-                    </label>
+                    <div class="ai-result-item-head">
+                        <label class="ai-result-select">
+                            <input type="checkbox" id="${getAiResultSelectId('result', index)}" checked>
+                            <strong>${index + 1}. ${escapeHtml(item.text || '使用这条建议')}</strong>
+                        </label>
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="applyAiResultItem(${index})">${escapeHtml(getAiResultSingleActionLabel())}</button>
+                    </div>
                     <label>
                         <span>${titleLabel}</span>
                         <input id="${getAiResultDraftId('text', index)}" value="${escapeHtml(item.text || '')}">
@@ -1997,10 +2006,13 @@
         function renderAiCaptureTodoDraft(item, index) {
             return `
                 <div class="ai-result-item ai-capture-todo-draft" data-index="${index}">
-                    <label class="ai-result-select">
-                        <input type="checkbox" id="${getAiResultSelectId('capture-todo', index)}" checked>
-                        <strong>创建这条待办</strong>
-                    </label>
+                    <div class="ai-result-item-head">
+                        <label class="ai-result-select">
+                            <input type="checkbox" id="${getAiResultSelectId('capture-todo', index)}" checked>
+                            <strong>创建这条待办</strong>
+                        </label>
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="applyAiCaptureTodo(${index})">只创建这条</button>
+                    </div>
                     <label>
                         <span>待办标题</span>
                         <input id="${getAiCaptureDraftId(`todo-text-${index}`)}" value="${escapeHtml(item.text || '')}">
@@ -2026,10 +2038,13 @@
         function renderDiaryAiTodoDraft(item, index) {
             return `
                 <div class="ai-result-item ai-capture-todo-draft" data-index="${index}">
-                    <label class="ai-result-select">
-                        <input type="checkbox" id="${getAiResultSelectId('diary-todo', index)}" checked>
-                        <strong>创建这条待办</strong>
-                    </label>
+                    <div class="ai-result-item-head">
+                        <label class="ai-result-select">
+                            <input type="checkbox" id="${getAiResultSelectId('diary-todo', index)}" checked>
+                            <strong>创建这条待办</strong>
+                        </label>
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="applyDiaryAiTodo(${index})">只创建这条</button>
+                    </div>
                     <label>
                         <span>待办标题</span>
                         <input id="${getDiaryAiDraftId(`todo-text-${index}`)}" value="${escapeHtml(item.text || '')}">
@@ -2151,22 +2166,33 @@
             return todosService.createTodoFromAiItem(item, overrides);
         }
 
-        function applyAiResult() {
+        function getAiResultItemsForApply(onlyIndex = null) {
+            if (!aiLastResult?.items?.length) return [];
+            if (onlyIndex == null) {
+                return getSelectedAiResultItems('result').map(({ item }) => item);
+            }
+            const source = aiLastResult.items[onlyIndex];
+            if (!source) return [];
+            const draftItem = getEditableAiResultItemDraft(source, onlyIndex);
+            return draftItem ? [draftItem] : [];
+        }
+
+        function applyAiResult(onlyIndex = null) {
             if (!aiLastResult?.items?.length) {
                 alert('没有可应用的 AI 建议');
                 return;
             }
             if (currentAiMode === 'todoBreakdown') {
-                applyAiResultToSelectedTodo();
+                applyAiResultToSelectedTodo(onlyIndex);
                 return;
             }
             if (currentAiMode === 'ideaNext') {
-                applyAiResultToSelectedIdea();
+                applyAiResultToSelectedIdea(onlyIndex);
                 return;
             }
-            const selectedItems = getSelectedAiResultItems('result').map(({ item }) => item);
+            const selectedItems = getAiResultItemsForApply(onlyIndex);
             if (!selectedItems.length) {
-                alert('请至少选择一条 AI 建议');
+                alert(onlyIndex == null ? '请至少选择一条 AI 建议' : '这条建议标题为空，无法加入');
                 return;
             }
             const todos = selectedItems.map(item => createTodoFromAiItem(item));
@@ -2178,15 +2204,19 @@
             alert(`已加入待办 ${todos.length} 项`);
         }
 
-        function applyAiResultToSelectedTodo() {
+        function applyAiResultItem(index) {
+            applyAiResult(index);
+        }
+
+        function applyAiResultToSelectedTodo(onlyIndex = null) {
             const todo = getSelectedAiTodo();
             if (!todo) {
                 alert('没有选中的待办');
                 return;
             }
-            const selectedItems = getSelectedAiResultItems('result').map(({ item }) => item);
+            const selectedItems = getAiResultItemsForApply(onlyIndex);
             if (!selectedItems.length) {
-                alert('请至少选择一条子任务建议');
+                alert(onlyIndex == null ? '请至少选择一条子任务建议' : '这条子任务标题为空，无法写入');
                 return;
             }
             if (!Array.isArray(todo.subTodos)) todo.subTodos = [];
@@ -2195,6 +2225,10 @@
                 .map(item => item.text)
                 .filter(text => text && !existing.has(text))
                 .map(text => ({ text, done: false }));
+            if (!additions.length) {
+                alert('没有新增子任务（可能已存在）');
+                return;
+            }
             todo.subTodos.push(...additions);
             if (aiLastResult.summary) {
                 todo.note = [todo.note || '', `AI 拆解：${aiLastResult.summary}`].filter(Boolean).join('\n\n');
@@ -2212,15 +2246,15 @@
             alert(`已写入子任务 ${additions.length} 项`);
         }
 
-        function applyAiResultToSelectedIdea() {
+        function applyAiResultToSelectedIdea(onlyIndex = null) {
             const idea = getSelectedAiIdea();
             if (!idea) {
                 alert('没有选中的灵感');
                 return;
             }
-            const selectedItems = getSelectedAiResultItems('result').map(({ item }) => item);
+            const selectedItems = getAiResultItemsForApply(onlyIndex);
             if (!selectedItems.length) {
-                alert('请至少选择一条行动建议');
+                alert(onlyIndex == null ? '请至少选择一条行动建议' : '这条建议标题为空，无法转成待办');
                 return;
             }
             const todos = selectedItems.map(item => {
@@ -2235,7 +2269,10 @@
             });
             idea.ideaTodoId = todos[0].id;
             idea.ideaStatus = '待实践';
-            idea.ideaNextAction = selectedItems.map(item => item.text).filter(Boolean).join('\n');
+            const nextLines = selectedItems.map(item => item.text).filter(Boolean);
+            idea.ideaNextAction = onlyIndex == null
+                ? nextLines.join('\n')
+                : [idea.ideaNextAction || '', ...nextLines].filter(Boolean).join('\n');
             idea.updatedAt = getLocalDateTimeStr();
             saveData();
             renderDashboard();
@@ -2312,14 +2349,30 @@
             }
         }
 
-        function applyAiCaptureTodos() {
+        function getAiCaptureTodoDraftByIndex(index) {
+            const item = aiLastResult?.items?.[index];
+            if (!item) return null;
+            const text = getAiCaptureDraftText(`todo-text-${index}`, item.text);
+            if (!text) return null;
+            return {
+                ...item,
+                text,
+                note: getAiCaptureDraftText(`todo-note-${index}`, item.note || ''),
+                group: getAiCaptureDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
+                dueDate: getAiCaptureDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
+            };
+        }
+
+        function applyAiCaptureTodos(onlyIndex = null) {
             if (!aiLastResult?.items?.length) {
                 alert('没有可创建的待办建议');
                 return;
             }
-            const draftItems = getAiCaptureTodoDrafts();
+            const draftItems = onlyIndex == null
+                ? getAiCaptureTodoDrafts()
+                : [getAiCaptureTodoDraftByIndex(onlyIndex)].filter(Boolean);
             if (!draftItems.length) {
-                alert('请至少选择一条待办并保留标题');
+                alert(onlyIndex == null ? '请至少选择一条待办并保留标题' : '这条待办标题为空，无法创建');
                 return;
             }
             const todos = draftItems.map(item => {
@@ -2330,6 +2383,10 @@
             data.todos.push(...todos);
             refreshAfterAiCapture();
             alert(`已创建待办 ${todos.length} 项`);
+        }
+
+        function applyAiCaptureTodo(index) {
+            applyAiCaptureTodos(index);
         }
 
         function applyAiCaptureToDiary() {
@@ -2437,7 +2494,21 @@
             alert(`已写入：${fieldKeys.join('、')}`);
         }
 
-        function applyDiaryAiTodos() {
+        function getDiaryAiTodoDraftByIndex(index) {
+            const item = aiLastResult?.items?.[index];
+            if (!item) return null;
+            const text = getDiaryAiDraftText(`todo-text-${index}`, item.text);
+            if (!text) return null;
+            return {
+                ...item,
+                text,
+                note: getDiaryAiDraftText(`todo-note-${index}`, item.note || ''),
+                group: getDiaryAiDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
+                dueDate: getDiaryAiDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
+            };
+        }
+
+        function applyDiaryAiTodos(onlyIndex = null) {
             const record = getDiaryAiTargetRecord();
             if (!record) {
                 alert('没有选中的日记');
@@ -2447,9 +2518,11 @@
                 alert('没有可创建的待办建议');
                 return;
             }
-            const draftItems = getDiaryAiTodoDrafts();
+            const draftItems = onlyIndex == null
+                ? getDiaryAiTodoDrafts()
+                : [getDiaryAiTodoDraftByIndex(onlyIndex)].filter(Boolean);
             if (!draftItems.length) {
-                alert('请至少选择一条待办并保留标题');
+                alert(onlyIndex == null ? '请至少选择一条待办并保留标题' : '这条待办标题为空，无法创建');
                 return;
             }
             const todos = draftItems.map(item => {
@@ -2468,6 +2541,10 @@
             refreshDiaryRecordAfterAi(record);
             renderTodoTable();
             alert(`已创建待办 ${todos.length} 项`);
+        }
+
+        function applyDiaryAiTodo(index) {
+            applyDiaryAiTodos(index);
         }
 
         function getItemUpdatedTime(item) {

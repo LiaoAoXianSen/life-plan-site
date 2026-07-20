@@ -361,6 +361,20 @@
         display: grid;
         gap: 7px;
     }
+    .ai-result-item-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+    }
+    .ai-result-item-head .ai-result-select {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .ai-result-item-head .btn {
+        flex: 0 0 auto;
+    }
     .ai-result-select {
         display: flex;
         align-items: flex-start;
