@@ -387,6 +387,50 @@
         line-height: 1.6;
         overflow-wrap: anywhere;
     }
+    .ai-result-draft {
+        gap: 8px;
+    }
+    .ai-result-draft label {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+    }
+    .ai-result-draft .ai-result-select {
+        display: flex;
+    }
+    .ai-result-draft label span {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 800;
+    }
+    .ai-result-draft input:not([type="checkbox"]),
+    .ai-result-draft textarea,
+    .ai-result-draft select {
+        width: 100%;
+        border: 1px solid #d8e4dc;
+        border-radius: 10px;
+        background: #fbfdfb;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.55;
+        padding: 8px 10px;
+        outline: none;
+    }
+    .ai-result-draft textarea {
+        resize: vertical;
+    }
+    .ai-result-draft input:not([type="checkbox"]):focus,
+    .ai-result-draft textarea:focus,
+    .ai-result-draft select:focus {
+        border-color: #8bb79a;
+        box-shadow: 0 0 0 3px rgba(139, 183, 154, .18);
+        background: #fff;
+    }
+    .ai-result-draft-meta {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 110px 150px;
+        gap: 8px;
+    }
     .ai-capture-section-list {
         display: grid;
         gap: 10px;
@@ -415,7 +459,7 @@
         overflow-wrap: anywhere;
     }
     .ai-capture-draft,
-    .ai-capture-todo-draft input,
+    .ai-capture-todo-draft input:not([type="checkbox"]),
     .ai-capture-todo-draft textarea {
         width: 100%;
         border: 1px solid #d8e4dc;
@@ -429,7 +473,7 @@
         resize: vertical;
     }
     .ai-capture-draft:focus,
-    .ai-capture-todo-draft input:focus,
+    .ai-capture-todo-draft input:not([type="checkbox"]):focus,
     .ai-capture-todo-draft textarea:focus {
         border-color: #8bb79a;
         box-shadow: 0 0 0 3px rgba(139, 183, 154, .18);
@@ -2549,6 +2593,7 @@
         .modal { padding: 18px; }
         .ai-result-head { flex-direction: column; align-items: stretch; }
         .ai-result-head .btn { width: 100%; }
+        .ai-result-draft-meta { grid-template-columns: 1fr; }
         .habit-wallet-card,
         .habit-shop-grid {
             grid-template-columns: 1fr;

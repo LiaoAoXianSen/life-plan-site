@@ -1864,23 +1864,19 @@
                 </div>
                 ${aiLastResult.items.length ? `
                     <div class="ai-result-list">
-                        ${aiLastResult.items.map((item, index) => `
-                            <div class="ai-result-item">
-                                <label class="ai-result-select">
-                                    <input type="checkbox" id="${getAiResultSelectId('result', index)}" checked>
-                                    <strong>${index + 1}. ${escapeHtml(item.text)}</strong>
-                                </label>
-                                ${item.note ? `<span>${escapeHtml(item.note)}</span>` : ''}
-                                <div class="todo-detail-meta">
-                                    ${renderTodoUrgencyBadge(item)}
-                                    ${item.group ? `<span>${escapeHtml(item.group)}</span>` : ''}
-                                    ${item.dueDate ? `<span>截止 ${escapeHtml(item.dueDate)}</span>` : ''}
-                                </div>
-                            </div>
-                        `).join('')}
+                        ${aiLastResult.items.map((item, index) => renderEditableAiResultItem(item, index)).join('')}
                     </div>
                 ` : '<div class="empty-state compact-empty">这次没有生成可落地的行动项</div>'}
             `;
+        }
+
+        function getAiResultDraftId(field, index) {
+            return `ai-result-draft-${field}-${index}`;
+        }
+
+        function getAiResultDraftText(field, index, fallback = '') {
+            const input = document.getElementById(getAiResultDraftId(field, index));
+            return String(input?.value ?? fallback ?? '').trim();
         }
 
         function getAiResultSelectId(scope, index) {
@@ -1894,8 +1890,65 @@
 
         function getSelectedAiResultItems(scope) {
             return (aiLastResult?.items || [])
-                .map((item, index) => isAiResultItemSelected(scope, index) ? { item, index } : null)
+                .map((item, index) => {
+                    if (!isAiResultItemSelected(scope, index)) return null;
+                    const draftItem = scope === 'result' ? getEditableAiResultItemDraft(item, index) : item;
+                    return draftItem ? { item: draftItem, index } : null;
+                })
                 .filter(Boolean);
+        }
+
+        function getEditableAiResultItemDraft(item, index) {
+            const text = getAiResultDraftText('text', index, item.text || '');
+            if (!text) return null;
+            return {
+                ...item,
+                text,
+                note: getAiResultDraftText('note', index, item.note || item.reason || ''),
+                group: getAiResultDraftText('group', index, item.group || '其他') || '其他',
+                urgency: getAiResultDraftText('urgency', index, item.urgency || 'medium') || 'medium',
+                dueDate: getAiResultDraftText('due', index, item.dueDate || '')
+            };
+        }
+
+        function renderEditableAiResultItem(item, index) {
+            const isSubTask = currentAiMode === 'todoBreakdown';
+            const urgency = TODO_URGENCY_META[item.urgency] ? item.urgency : 'medium';
+            const titleLabel = isSubTask ? '子任务标题' : '待办标题';
+            return `
+                <div class="ai-result-item ai-result-draft" data-index="${index}">
+                    <label class="ai-result-select">
+                        <input type="checkbox" id="${getAiResultSelectId('result', index)}" checked>
+                        <strong>${index + 1}. ${escapeHtml(item.text || '使用这条建议')}</strong>
+                    </label>
+                    <label>
+                        <span>${titleLabel}</span>
+                        <input id="${getAiResultDraftId('text', index)}" value="${escapeHtml(item.text || '')}">
+                    </label>
+                    <label>
+                        <span>备注</span>
+                        <textarea id="${getAiResultDraftId('note', index)}" rows="2">${escapeHtml(item.note || item.reason || '')}</textarea>
+                    </label>
+                    ${isSubTask ? '' : `
+                        <div class="ai-result-draft-meta">
+                            <label>
+                                <span>分组</span>
+                                <input id="${getAiResultDraftId('group', index)}" value="${escapeHtml(item.group || '其他')}">
+                            </label>
+                            <label>
+                                <span>优先级</span>
+                                <select id="${getAiResultDraftId('urgency', index)}">
+                                    ${Object.entries(TODO_URGENCY_META).map(([value, meta]) => `<option value="${escapeHtml(value)}" ${urgency === value ? 'selected' : ''}>${escapeHtml(meta.label)}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label>
+                                <span>截止</span>
+                                <input id="${getAiResultDraftId('due', index)}" type="date" value="${escapeHtml(item.dueDate || '')}">
+                            </label>
+                        </div>
+                    `}
+                </div>
+            `;
         }
 
         function getAiCaptureDraftId(key) {
