@@ -125,44 +125,63 @@
 
     function getWheelLabelPlan(count = 0) {
         if (count <= 8) {
-            return { mode: 'full', maxChars: 6, maxLines: 2, fontSize: 15, showStroke: true, shadow: true, numberPrefix: false };
+            return {
+                mode: 'full', maxChars: 6, maxLines: 2, fontSize: 15,
+                showStroke: true, shadow: true, layout: 'tangent', textColor: '#ffffff'
+            };
         }
-        if (count <= 16) {
-            return { mode: 'full', maxChars: 5, maxLines: 2, fontSize: 12, showStroke: true, shadow: false, numberPrefix: false };
+        if (count <= 18) {
+            return {
+                mode: 'full', maxChars: 5, maxLines: 2, fontSize: 12,
+                showStroke: true, shadow: false, layout: 'tangent', textColor: '#ffffff'
+            };
         }
-        if (count <= 36) {
-            return { mode: 'short', maxChars: 7, maxLines: 1, fontSize: 11, showStroke: false, shadow: false, numberPrefix: true };
+        if (count <= 40) {
+            return {
+                mode: 'radial', maxChars: 8, maxLines: 1, fontSize: 11,
+                showStroke: true, shadow: false, layout: 'radial', textColor: '#3a322c'
+            };
         }
         if (count <= 80) {
-            return { mode: 'short', maxChars: 5, maxLines: 1, fontSize: 10, showStroke: false, shadow: false, numberPrefix: true };
+            return {
+                mode: 'radial', maxChars: 7, maxLines: 1, fontSize: 10,
+                showStroke: true, shadow: false, layout: 'radial', textColor: '#3a322c'
+            };
         }
-        // Very dense wheels: number + very short text keeps the chart readable.
-        return { mode: 'dense', maxChars: 4, maxLines: 1, fontSize: 9, showStroke: false, shadow: false, numberPrefix: true };
+        // 100+ items: competitor-style radial "编号 短标题"
+        return {
+            mode: 'radial', maxChars: 6, maxLines: 1, fontSize: 9,
+            showStroke: true, shadow: false, layout: 'radial', textColor: '#3a322c'
+        };
     }
 
     function getWheelSliceColor(entry, index, count, selected = false) {
         if (selected) return '#fb5d57';
-        if (entry?.color) return entry.color;
-        if (count <= palette.length * 2) return palette[index % palette.length];
-        // Soft pastel spectrum for dense wheels (closer to common large-wheel UIs).
-        const hue = Math.round((index * 137.508) % 360);
-        return `hsl(${hue} 62% 72%)`;
+        if (count <= palette.length) return entry?.color || palette[index % palette.length];
+        // Soft contiguous pastels around the circle.
+        const hue = Math.round((index / Math.max(1, count)) * 360);
+        const sat = count >= 80 ? 52 : count >= 40 ? 56 : 60;
+        const light = count >= 80 ? 80 : count >= 40 ? 76 : 72;
+        return `hsl(${hue} ${sat}% ${light}%)`;
+    }
+
+    function cleanWheelLabelText(value = '') {
+        return String(value || '')
+            .trim()
+            .replace(/^[\d]+[\.、．\s]*/, '')
+            .replace(/\s+/g, '')
+            .replace(/[（(].*?[）)]/g, '')
+            .trim();
     }
 
     function formatWheelSliceLabel(entry, index, plan) {
         const raw = String(entry?.name || '').trim() || '未命名';
-        if (plan.mode === 'number') return [`${index + 1}`];
-        const compact = raw
-            .replace(/^[\d]+[\.、\s]*/, '')
-            .replace(/\s+/g, '')
-            .trim() || raw;
-        if (plan.mode === 'dense') {
+        const compact = cleanWheelLabelText(raw) || raw;
+        if (plan.layout === 'radial' || plan.mode === 'radial') {
             const short = compact.slice(0, plan.maxChars);
-            return [`${index + 1}.${short}${compact.length > plan.maxChars ? '…' : ''}`];
-        }
-        if (plan.numberPrefix) {
-            const short = compact.slice(0, plan.maxChars);
-            return [`${index + 1}.${short}${compact.length > plan.maxChars ? '…' : ''}`];
+            const title = `${short}${compact.length > plan.maxChars ? '…' : ''}`;
+            // One clean line: "12 站起来走动"
+            return [`${index + 1} ${title}`];
         }
         return splitWheelLabel(compact, plan.maxChars, plan.maxLines);
     }
@@ -181,29 +200,33 @@
         if (wheelRenderCache && wheelRenderCacheKey === key && wheelRenderCache.count === entries.length) {
             return wheelRenderCache;
         }
-        const size = 720;
+        // Higher resolution cache keeps dense labels sharper when scaled down.
+        const size = entries.length >= 48 ? 900 : 720;
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
         const cx = size / 2;
         const cy = size / 2;
-        const radius = size / 2 - 28;
+        const radius = size / 2 - (entries.length >= 48 ? 22 : 28);
         const count = entries.length;
         const plan = getWheelLabelPlan(count);
-        const innerRadius = Math.max(58, radius * (count >= 60 ? 0.2 : count >= 30 ? 0.24 : 0.28));
-        const labelRadius = innerRadius + (radius - innerRadius) * (
-            count <= 8 ? 0.52 : count <= 20 ? 0.58 : count <= 48 ? 0.64 : 0.7
-        );
+        const innerRadius = Math.max(54, radius * (count >= 80 ? 0.2 : count >= 40 ? 0.24 : count >= 20 ? 0.26 : 0.28));
+        // Radial labels sit in the outer band; tangent labels stay mid-band.
+        const labelRadius = plan.layout === 'radial'
+            ? innerRadius + (radius - innerRadius) * 0.62
+            : innerRadius + (radius - innerRadius) * (count <= 8 ? 0.52 : 0.58);
+        const radialTextMaxWidth = Math.max(36, radius - innerRadius - 18);
 
         ctx.clearRect(0, 0, size, size);
+        // Soft gray outer plate, closer to common wheel-app chrome.
         ctx.beginPath();
-        ctx.fillStyle = '#ffffff';
-        ctx.arc(cx, cy, radius + 12, 0, Math.PI * 2);
+        ctx.fillStyle = '#e8edf2';
+        ctx.arc(cx, cy, radius + 14, 0, Math.PI * 2);
         ctx.fill();
         ctx.beginPath();
-        ctx.fillStyle = '#f7f9fc';
-        ctx.arc(cx, cy, radius + 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#f8fafc';
+        ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2);
         ctx.fill();
 
         if (!count) {
@@ -226,49 +249,72 @@
             ctx.fillStyle = getWheelSliceColor(entry, index, count, false);
             ctx.fill();
             if (plan.showStroke) {
-                ctx.lineWidth = count <= 12 ? 2 : 1;
-                ctx.strokeStyle = 'rgba(255,255,255,.92)';
+                ctx.lineWidth = count <= 16 ? 2 : count <= 48 ? 1.1 : 0.7;
+                ctx.strokeStyle = count >= 36 ? 'rgba(255,255,255,.82)' : 'rgba(255,255,255,.92)';
                 ctx.stroke();
             }
 
             const lines = formatWheelSliceLabel(entry, index, plan);
             if (!lines.length) return;
-            const labelX = cx + Math.cos(mid) * labelRadius;
-            const labelY = cy + Math.sin(mid) * labelRadius;
+
             ctx.save();
-            ctx.translate(labelX, labelY);
-            let textAngle = mid;
-            if (textAngle > Math.PI / 2 && textAngle < Math.PI * 1.5) textAngle += Math.PI;
-            ctx.rotate(textAngle);
-            ctx.fillStyle = count >= 36 ? 'rgba(32, 38, 45, 0.88)' : '#ffffff';
-            if (plan.shadow) {
-                ctx.shadowColor = 'rgba(16, 23, 19, .14)';
-                ctx.shadowBlur = 8;
-            } else {
+            if (plan.layout === 'radial') {
+                // Competitor-style: one line along the ray, flipped on left half so it stays upright.
+                ctx.translate(cx, cy);
+                ctx.rotate(mid);
+                const flip = Math.cos(mid) < 0;
+                if (flip) ctx.rotate(Math.PI);
+                const x = flip ? -labelRadius : labelRadius;
+                ctx.fillStyle = plan.textColor || '#3a322c';
                 ctx.shadowBlur = 0;
+                ctx.font = `700 ${plan.fontSize}px Microsoft YaHei, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                // maxWidth keeps long titles from spilling into neighbors.
+                ctx.fillText(lines[0], x, 0, radialTextMaxWidth);
+            } else {
+                const labelX = cx + Math.cos(mid) * labelRadius;
+                const labelY = cy + Math.sin(mid) * labelRadius;
+                ctx.translate(labelX, labelY);
+                let textAngle = mid;
+                if (textAngle > Math.PI / 2 && textAngle < Math.PI * 1.5) textAngle += Math.PI;
+                ctx.rotate(textAngle);
+                ctx.fillStyle = plan.textColor || '#ffffff';
+                if (plan.shadow) {
+                    ctx.shadowColor = 'rgba(16, 23, 19, .14)';
+                    ctx.shadowBlur = 8;
+                } else {
+                    ctx.shadowBlur = 0;
+                }
+                ctx.font = `800 ${plan.fontSize}px Microsoft YaHei, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const lineHeight = plan.fontSize + 4;
+                const lineOffset = lines.length > 1 ? lineHeight / 2 : 0;
+                lines.forEach((line, lineIndex) => {
+                    ctx.fillText(line, 0, lineIndex * lineHeight - lineOffset);
+                });
             }
-            ctx.font = `800 ${plan.fontSize}px Microsoft YaHei, sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const lineHeight = plan.fontSize + 4;
-            const lineOffset = lines.length > 1 ? lineHeight / 2 : 0;
-            lines.forEach((line, lineIndex) => {
-                ctx.fillText(line, 0, lineIndex * lineHeight - lineOffset);
-            });
             ctx.restore();
         });
 
         // Outer ring
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(255,255,255,.95)';
-        ctx.lineWidth = 10;
+        ctx.strokeStyle = 'rgba(255,255,255,.98)';
+        ctx.lineWidth = count >= 48 ? 8 : 10;
         ctx.arc(cx, cy, radius + 1, 0, Math.PI * 2);
         ctx.stroke();
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(23,33,27,.06)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(120, 132, 146, .18)';
+        ctx.lineWidth = 3;
         ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2);
         ctx.stroke();
+
+        // Soft hole under the center hub so GO remains clean.
+        ctx.beginPath();
+        ctx.fillStyle = '#ffffff';
+        ctx.arc(cx, cy, innerRadius + 2, 0, Math.PI * 2);
+        ctx.fill();
 
         wheelRenderCache = { canvas, cx, cy, radius, innerRadius, count };
         wheelRenderCacheKey = key;
