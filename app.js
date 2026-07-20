@@ -1866,7 +1866,10 @@
                     <div class="ai-result-list">
                         ${aiLastResult.items.map((item, index) => `
                             <div class="ai-result-item">
-                                <strong>${index + 1}. ${escapeHtml(item.text)}</strong>
+                                <label class="ai-result-select">
+                                    <input type="checkbox" id="${getAiResultSelectId('result', index)}" checked>
+                                    <strong>${index + 1}. ${escapeHtml(item.text)}</strong>
+                                </label>
                                 ${item.note ? `<span>${escapeHtml(item.note)}</span>` : ''}
                                 <div class="todo-detail-meta">
                                     ${renderTodoUrgencyBadge(item)}
@@ -1878,6 +1881,21 @@
                     </div>
                 ` : '<div class="empty-state compact-empty">这次没有生成可落地的行动项</div>'}
             `;
+        }
+
+        function getAiResultSelectId(scope, index) {
+            return `ai-result-select-${scope}-${index}`;
+        }
+
+        function isAiResultItemSelected(scope, index) {
+            const checkbox = document.getElementById(getAiResultSelectId(scope, index));
+            return checkbox ? checkbox.checked : true;
+        }
+
+        function getSelectedAiResultItems(scope) {
+            return (aiLastResult?.items || [])
+                .map((item, index) => isAiResultItemSelected(scope, index) ? { item, index } : null)
+                .filter(Boolean);
         }
 
         function getAiCaptureDraftId(key) {
@@ -1926,6 +1944,10 @@
         function renderAiCaptureTodoDraft(item, index) {
             return `
                 <div class="ai-result-item ai-capture-todo-draft" data-index="${index}">
+                    <label class="ai-result-select">
+                        <input type="checkbox" id="${getAiResultSelectId('capture-todo', index)}" checked>
+                        <strong>创建这条待办</strong>
+                    </label>
                     <label>
                         <span>待办标题</span>
                         <input id="${getAiCaptureDraftId(`todo-text-${index}`)}" value="${escapeHtml(item.text || '')}">
@@ -1951,6 +1973,10 @@
         function renderDiaryAiTodoDraft(item, index) {
             return `
                 <div class="ai-result-item ai-capture-todo-draft" data-index="${index}">
+                    <label class="ai-result-select">
+                        <input type="checkbox" id="${getAiResultSelectId('diary-todo', index)}" checked>
+                        <strong>创建这条待办</strong>
+                    </label>
                     <label>
                         <span>待办标题</span>
                         <input id="${getDiaryAiDraftId(`todo-text-${index}`)}" value="${escapeHtml(item.text || '')}">
@@ -1975,6 +2001,7 @@
 
         function getAiCaptureTodoDrafts() {
             return (aiLastResult?.items || []).map((item, index) => {
+                if (!isAiResultItemSelected('capture-todo', index)) return null;
                 const text = getAiCaptureDraftText(`todo-text-${index}`, item.text);
                 if (!text) return null;
                 return {
@@ -1989,6 +2016,7 @@
 
         function getDiaryAiTodoDrafts() {
             return (aiLastResult?.items || []).map((item, index) => {
+                if (!isAiResultItemSelected('diary-todo', index)) return null;
                 const text = getDiaryAiDraftText(`todo-text-${index}`, item.text);
                 if (!text) return null;
                 return {
@@ -2083,7 +2111,12 @@
                 applyAiResultToSelectedIdea();
                 return;
             }
-            const todos = aiLastResult.items.map(item => createTodoFromAiItem(item));
+            const selectedItems = getSelectedAiResultItems('result').map(({ item }) => item);
+            if (!selectedItems.length) {
+                alert('请至少选择一条 AI 建议');
+                return;
+            }
+            const todos = selectedItems.map(item => createTodoFromAiItem(item));
             data.todos.push(...todos);
             saveData();
             renderDashboard();
@@ -2098,9 +2131,14 @@
                 alert('没有选中的待办');
                 return;
             }
+            const selectedItems = getSelectedAiResultItems('result').map(({ item }) => item);
+            if (!selectedItems.length) {
+                alert('请至少选择一条子任务建议');
+                return;
+            }
             if (!Array.isArray(todo.subTodos)) todo.subTodos = [];
             const existing = new Set(todo.subTodos.map(sub => sub.text));
-            const additions = aiLastResult.items
+            const additions = selectedItems
                 .map(item => item.text)
                 .filter(text => text && !existing.has(text))
                 .map(text => ({ text, done: false }));
@@ -2127,20 +2165,31 @@
                 alert('没有选中的灵感');
                 return;
             }
-            const first = aiLastResult.items[0];
-            const todo = createTodoFromAiItem(first, { dueDate: first.dueDate || getTodayStr() });
-            todo.sourceType = 'idea-ai';
-            data.todos.push(todo);
-            idea.ideaTodoId = todo.id;
+            const selectedItems = getSelectedAiResultItems('result').map(({ item }) => item);
+            if (!selectedItems.length) {
+                alert('请至少选择一条行动建议');
+                return;
+            }
+            const todos = selectedItems.map(item => {
+                const todo = createTodoFromAiItem(item, { dueDate: item.dueDate || getTodayStr() });
+                todo.sourceType = 'idea-ai';
+                return todo;
+            });
+            data.todos.push(...todos);
+            idea.todoIds = Array.isArray(idea.todoIds) ? idea.todoIds : [];
+            todos.forEach(todo => {
+                if (!idea.todoIds.includes(todo.id)) idea.todoIds.push(todo.id);
+            });
+            idea.ideaTodoId = todos[0].id;
             idea.ideaStatus = '待实践';
-            idea.ideaNextAction = first.text;
+            idea.ideaNextAction = selectedItems.map(item => item.text).filter(Boolean).join('\n');
             idea.updatedAt = getLocalDateTimeStr();
             saveData();
             renderDashboard();
             renderTodoTable();
             renderAllRecords();
             refreshKnowledgeViews();
-            alert('已转成关联待办，并把灵感状态更新为待实践');
+            alert(`已转成关联待办 ${todos.length} 项，并把灵感状态更新为待实践`);
         }
 
         function getAiCaptureContentForType(type) {
@@ -2217,7 +2266,7 @@
             }
             const draftItems = getAiCaptureTodoDrafts();
             if (!draftItems.length) {
-                alert('请至少保留一条待办标题');
+                alert('请至少选择一条待办并保留标题');
                 return;
             }
             const todos = draftItems.map(item => {
@@ -2347,7 +2396,7 @@
             }
             const draftItems = getDiaryAiTodoDrafts();
             if (!draftItems.length) {
-                alert('请至少保留一条待办标题');
+                alert('请至少选择一条待办并保留标题');
                 return;
             }
             const todos = draftItems.map(item => {

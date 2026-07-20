@@ -361,6 +361,21 @@
         display: grid;
         gap: 7px;
     }
+    .ai-result-select {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        min-width: 0;
+        cursor: pointer;
+    }
+    .ai-result-select input[type="checkbox"] {
+        width: 17px;
+        height: 17px;
+        margin: 2px 0 0;
+        accent-color: var(--accent);
+        flex: 0 0 auto;
+        cursor: pointer;
+    }
     .ai-result-item strong {
         color: var(--text);
         line-height: 1.45;
@@ -427,6 +442,9 @@
         display: grid;
         gap: 5px;
         min-width: 0;
+    }
+    .ai-capture-todo-draft .ai-result-select {
+        display: flex;
     }
     .ai-capture-todo-draft label span {
         font-size: 12px;
