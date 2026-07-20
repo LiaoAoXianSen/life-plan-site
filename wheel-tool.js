@@ -18,6 +18,8 @@
     let wheelLibraryAiStatus = '';
     let wheelLibraryAiRunning = false;
     let wheelDragState = null;
+    let wheelRenderCache = null;
+    let wheelRenderCacheKey = '';
 
     function createWheelStageState() {
         return {
@@ -109,7 +111,7 @@
 
     function splitWheelLabel(value, maxCharsPerLine = 4, maxLines = 2) {
         const text = String(value || '').trim();
-        if (!text) return [''];
+        if (!text || maxLines <= 0 || maxCharsPerLine <= 0) return [];
         const lines = [];
         for (let index = 0; index < text.length && lines.length < maxLines; index += maxCharsPerLine) {
             lines.push(text.slice(index, index + maxCharsPerLine));
@@ -119,6 +121,158 @@
             lines[lastIndex] = `${lines[lastIndex].slice(0, Math.max(1, maxCharsPerLine - 1))}…`;
         }
         return lines;
+    }
+
+    function getWheelLabelPlan(count = 0) {
+        if (count <= 8) {
+            return { mode: 'full', maxChars: 6, maxLines: 2, fontSize: 15, showStroke: true, shadow: true, numberPrefix: false };
+        }
+        if (count <= 16) {
+            return { mode: 'full', maxChars: 5, maxLines: 2, fontSize: 12, showStroke: true, shadow: false, numberPrefix: false };
+        }
+        if (count <= 36) {
+            return { mode: 'short', maxChars: 7, maxLines: 1, fontSize: 11, showStroke: false, shadow: false, numberPrefix: true };
+        }
+        if (count <= 80) {
+            return { mode: 'short', maxChars: 5, maxLines: 1, fontSize: 10, showStroke: false, shadow: false, numberPrefix: true };
+        }
+        // Very dense wheels: number + very short text keeps the chart readable.
+        return { mode: 'dense', maxChars: 4, maxLines: 1, fontSize: 9, showStroke: false, shadow: false, numberPrefix: true };
+    }
+
+    function getWheelSliceColor(entry, index, count, selected = false) {
+        if (selected) return '#fb5d57';
+        if (entry?.color) return entry.color;
+        if (count <= palette.length * 2) return palette[index % palette.length];
+        // Soft pastel spectrum for dense wheels (closer to common large-wheel UIs).
+        const hue = Math.round((index * 137.508) % 360);
+        return `hsl(${hue} 62% 72%)`;
+    }
+
+    function formatWheelSliceLabel(entry, index, plan) {
+        const raw = String(entry?.name || '').trim() || '未命名';
+        if (plan.mode === 'number') return [`${index + 1}`];
+        const compact = raw
+            .replace(/^[\d]+[\.、\s]*/, '')
+            .replace(/\s+/g, '')
+            .trim() || raw;
+        if (plan.mode === 'dense') {
+            const short = compact.slice(0, plan.maxChars);
+            return [`${index + 1}.${short}${compact.length > plan.maxChars ? '…' : ''}`];
+        }
+        if (plan.numberPrefix) {
+            const short = compact.slice(0, plan.maxChars);
+            return [`${index + 1}.${short}${compact.length > plan.maxChars ? '…' : ''}`];
+        }
+        return splitWheelLabel(compact, plan.maxChars, plan.maxLines);
+    }
+
+    function invalidateWheelRenderCache() {
+        wheelRenderCache = null;
+        wheelRenderCacheKey = '';
+    }
+
+    function getWheelEntriesCacheKey(entries = []) {
+        return entries.map(entry => `${entry.id || ''}|${entry.name || ''}|${entry.color || ''}|${entry.weight || 1}`).join('||');
+    }
+
+    function buildWheelRenderCache(entries = []) {
+        const key = getWheelEntriesCacheKey(entries);
+        if (wheelRenderCache && wheelRenderCacheKey === key && wheelRenderCache.count === entries.length) {
+            return wheelRenderCache;
+        }
+        const size = 720;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const cx = size / 2;
+        const cy = size / 2;
+        const radius = size / 2 - 28;
+        const count = entries.length;
+        const plan = getWheelLabelPlan(count);
+        const innerRadius = Math.max(58, radius * (count >= 60 ? 0.2 : count >= 30 ? 0.24 : 0.28));
+        const labelRadius = innerRadius + (radius - innerRadius) * (
+            count <= 8 ? 0.52 : count <= 20 ? 0.58 : count <= 48 ? 0.64 : 0.7
+        );
+
+        ctx.clearRect(0, 0, size, size);
+        ctx.beginPath();
+        ctx.fillStyle = '#ffffff';
+        ctx.arc(cx, cy, radius + 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.fillStyle = '#f7f9fc';
+        ctx.arc(cx, cy, radius + 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (!count) {
+            wheelRenderCache = { canvas, cx, cy, radius, innerRadius, count: 0 };
+            wheelRenderCacheKey = key;
+            return wheelRenderCache;
+        }
+
+        const slice = (Math.PI * 2) / count;
+        entries.forEach((entry, index) => {
+            // Keep the same angle basis as spin math: 0deg at right, 270deg at top pointer.
+            const start = index * slice;
+            const end = start + slice;
+            const mid = start + slice / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(start) * innerRadius, cy + Math.sin(start) * innerRadius);
+            ctx.arc(cx, cy, radius, start, end);
+            ctx.arc(cx, cy, innerRadius, end, start, true);
+            ctx.closePath();
+            ctx.fillStyle = getWheelSliceColor(entry, index, count, false);
+            ctx.fill();
+            if (plan.showStroke) {
+                ctx.lineWidth = count <= 12 ? 2 : 1;
+                ctx.strokeStyle = 'rgba(255,255,255,.92)';
+                ctx.stroke();
+            }
+
+            const lines = formatWheelSliceLabel(entry, index, plan);
+            if (!lines.length) return;
+            const labelX = cx + Math.cos(mid) * labelRadius;
+            const labelY = cy + Math.sin(mid) * labelRadius;
+            ctx.save();
+            ctx.translate(labelX, labelY);
+            let textAngle = mid;
+            if (textAngle > Math.PI / 2 && textAngle < Math.PI * 1.5) textAngle += Math.PI;
+            ctx.rotate(textAngle);
+            ctx.fillStyle = count >= 36 ? 'rgba(32, 38, 45, 0.88)' : '#ffffff';
+            if (plan.shadow) {
+                ctx.shadowColor = 'rgba(16, 23, 19, .14)';
+                ctx.shadowBlur = 8;
+            } else {
+                ctx.shadowBlur = 0;
+            }
+            ctx.font = `800 ${plan.fontSize}px Microsoft YaHei, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const lineHeight = plan.fontSize + 4;
+            const lineOffset = lines.length > 1 ? lineHeight / 2 : 0;
+            lines.forEach((line, lineIndex) => {
+                ctx.fillText(line, 0, lineIndex * lineHeight - lineOffset);
+            });
+            ctx.restore();
+        });
+
+        // Outer ring
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255,255,255,.95)';
+        ctx.lineWidth = 10;
+        ctx.arc(cx, cy, radius + 1, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(23,33,27,.06)';
+        ctx.lineWidth = 2;
+        ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2);
+        ctx.stroke();
+
+        wheelRenderCache = { canvas, cx, cy, radius, innerRadius, count };
+        wheelRenderCacheKey = key;
+        return wheelRenderCache;
     }
 
     function isTrailingWeightToken(value = '') {
@@ -648,18 +802,22 @@
         const height = canvas.height;
         const cx = width / 2;
         const cy = height / 2;
-        const radius = Math.min(width, height) / 2 - 20;
-        const innerRadius = Math.max(52, radius * 0.28);
         ctx.clearRect(0, 0, width, height);
+
+        const cache = buildWheelRenderCache(entries);
+        const drawScale = Math.min(width, height) / cache.canvas.width;
+        const drawSize = cache.canvas.width * drawScale;
+        const radius = cache.radius * drawScale;
+        const innerRadius = cache.innerRadius * drawScale;
 
         if (!entries.length) {
             ctx.beginPath();
             ctx.fillStyle = '#eef2f7';
-            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.arc(cx, cy, Math.min(width, height) / 2 - 20, 0, Math.PI * 2);
             ctx.fill();
             ctx.beginPath();
             ctx.fillStyle = '#ffffff';
-            ctx.arc(cx, cy, innerRadius, 0, Math.PI * 2);
+            ctx.arc(cx, cy, Math.max(52, (Math.min(width, height) / 2 - 20) * 0.28), 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#647269';
             ctx.font = '700 18px Microsoft YaHei, sans-serif';
@@ -669,67 +827,28 @@
             return;
         }
 
-        const slice = Math.PI * 2 / entries.length;
-        const rotation = wheelRotation * Math.PI / 180;
-        const labelRadius = innerRadius + (radius - innerRadius) * (entries.length <= 6 ? 0.5 : entries.length <= 12 ? 0.56 : 0.6);
+        // Rotate the pre-rendered wheel image instead of redrawing every slice/text each frame.
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate((wheelRotation * Math.PI) / 180);
+        ctx.drawImage(cache.canvas, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+        ctx.restore();
 
-        ctx.beginPath();
-        ctx.fillStyle = '#ffffff';
-        ctx.arc(cx, cy, radius + 10, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.fillStyle = '#f7f9fc';
-        ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        entries.forEach((entry, index) => {
-            const start = rotation + index * slice;
+        if (selectedIndex >= 0 && selectedIndex < entries.length) {
+            const slice = (Math.PI * 2) / entries.length;
+            const start = (wheelRotation * Math.PI) / 180 + selectedIndex * slice;
             const end = start + slice;
-            const mid = start + slice / 2;
             ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(start) * innerRadius, cy + Math.sin(start) * innerRadius);
             ctx.arc(cx, cy, radius, start, end);
             ctx.arc(cx, cy, innerRadius, end, start, true);
             ctx.closePath();
-            ctx.fillStyle = selectedIndex === index ? '#fb5d57' : (entry.color || palette[index % palette.length]);
+            ctx.fillStyle = 'rgba(251, 93, 87, 0.28)';
             ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = 'rgba(255,255,255,.92)';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(251, 93, 87, 0.95)';
             ctx.stroke();
-
-            const lines = splitWheelLabel(entry.name, entries.length <= 4 ? 4 : entries.length <= 10 ? 5 : 6, 2);
-            const labelX = cx + Math.cos(mid) * labelRadius;
-            const labelY = cy + Math.sin(mid) * labelRadius;
-            ctx.save();
-            ctx.translate(labelX, labelY);
-            let textAngle = mid;
-            if (textAngle > Math.PI / 2 && textAngle < Math.PI * 1.5) textAngle += Math.PI;
-            ctx.rotate(textAngle);
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = 'rgba(16, 23, 19, .14)';
-            ctx.shadowBlur = 10;
-            ctx.font = entries.length <= 4 ? '800 17px Microsoft YaHei, sans-serif' : entries.length <= 10 ? '800 14px Microsoft YaHei, sans-serif' : '800 12px Microsoft YaHei, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const lineHeight = entries.length <= 10 ? 18 : 16;
-            const lineOffset = lines.length > 1 ? lineHeight / 2 : 0;
-            lines.forEach((line, lineIndex) => {
-                ctx.fillText(line, 0, lineIndex * lineHeight - lineOffset);
-            });
-            ctx.restore();
-        });
-
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(255,255,255,.95)';
-        ctx.lineWidth = 10;
-        ctx.arc(cx, cy, radius + 1, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(23,33,27,.06)';
-        ctx.lineWidth = 2;
-        ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2);
-        ctx.stroke();
+        }
 
         ctx.beginPath();
         ctx.fillStyle = '#ffffff';
@@ -2370,14 +2489,21 @@
     function animateSpin(entries, selectedIndex, done) {
         if (wheelSpinning) return;
         wheelSpinning = true;
+        // Warm cache once before the animation loop.
+        buildWheelRenderCache(entries);
         const start = wheelRotation;
         const slice = 360 / Math.max(1, entries.length);
         const desired = 270 - (selectedIndex * slice + slice / 2);
         const normalizedStart = ((start % 360) + 360) % 360;
         const delta = ((desired - normalizedStart) + 360) % 360;
-        const target = start + 1800 + delta;
+        // Dense wheels still look lively with fewer full turns and slightly shorter spin.
+        const extraTurns = entries.length >= 80 ? 1080 : entries.length >= 36 ? 1440 : 1800;
+        const target = start + extraTurns + delta;
         const startTime = performance.now();
-        const duration = Number(window.__wheelSpinDurationMs) || 3600;
+        const baseDuration = Number(window.__wheelSpinDurationMs) || 3600;
+        const duration = Number(window.__wheelSpinDurationMs)
+            ? baseDuration
+            : (entries.length >= 80 ? 2600 : entries.length >= 36 ? 3000 : baseDuration);
         function tick(time) {
             const progress = Math.min(1, (time - startTime) / duration);
             const eased = 1 - Math.pow(1 - progress, 2.4);
@@ -2385,7 +2511,7 @@
             drawWheelCanvas(entries, progress === 1 ? selectedIndex : -1);
             if (progress < 1) requestAnimationFrame(tick);
             else {
-                wheelRotation %= 360;
+                wheelRotation = ((wheelRotation % 360) + 360) % 360;
                 wheelSpinning = false;
                 done();
             }
