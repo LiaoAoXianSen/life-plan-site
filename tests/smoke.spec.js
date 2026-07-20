@@ -2444,6 +2444,85 @@ test('tag wheel two-stage spin can be converted to a todo', async ({ page }) => 
     expect(linkedTodo.sourceType).toBe('wheel');
 });
 
+test('wheel list modal filters by mode and can open edit delete', async ({ page }) => {
+    const data = createEmptyData({
+        wheels: [
+            {
+                id: 'wheel-normal-a',
+                name: '普通盘A',
+                mode: 'normal',
+                items: [{ id: 'item-a', name: '喝茶', weight: 1, enabled: true }],
+                createdAt: '2026-07-06 10:00',
+                updatedAt: '2026-07-06 10:00'
+            },
+            {
+                id: 'wheel-normal-b',
+                name: '普通盘B',
+                mode: 'normal',
+                items: [{ id: 'item-b', name: '散步', weight: 1, enabled: true }],
+                createdAt: '2026-07-06 11:00',
+                updatedAt: '2026-07-06 11:00'
+            },
+            {
+                id: 'wheel-tag-a',
+                name: '标签盘A',
+                mode: 'tag',
+                tagIds: ['tag-food'],
+                createdAt: '2026-07-06 12:00',
+                updatedAt: '2026-07-06 12:00'
+            }
+        ],
+        wheelTags: [
+            { id: 'tag-food', name: '美食', color: '#e86c52', weight: 1, enabled: true }
+        ],
+        wheelLibraryItems: [
+            { id: 'library-hotpot', name: '火锅', weight: 1, enabled: true, tagIds: ['tag-food'] }
+        ],
+        wheelHistory: []
+    });
+
+    await page.goto('/');
+    await page.evaluate(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), data);
+    await page.reload();
+    await page.locator('.nav-item', { hasText: '工具转盘' }).click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+
+    const listModal = page.locator('#wheel-list-modal');
+    await expect(listModal).toHaveClass(/active/);
+    await expect(listModal.locator('.wheel-list-card')).toHaveCount(2);
+    await expect(listModal.locator('.wheel-list-card-title strong')).toHaveText(['普通盘B', '普通盘A']);
+
+    await listModal.locator('#wheel-list-mode-filter').getByRole('button', { name: '标签' }).click();
+    await expect(listModal.locator('.wheel-list-card')).toHaveCount(1);
+    await expect(listModal.locator('.wheel-list-card-title strong')).toHaveText(['标签盘A']);
+
+    await listModal.locator('#wheel-list-mode-filter').getByRole('button', { name: '普通' }).click();
+    await listModal.locator('.wheel-list-card', { hasText: '普通盘B' }).getByRole('button', { name: '打开' }).click();
+    await expect(listModal).not.toHaveClass(/active/);
+    await expect(page.locator('#wheel-selector')).toHaveValue('wheel-normal-b');
+
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    await listModal.locator('.wheel-list-card', { hasText: '普通盘A' }).getByRole('button', { name: '修改' }).click();
+    await expect(listModal).not.toHaveClass(/active/);
+    await expect(page.locator('#wheel-items-modal')).toHaveClass(/active/);
+    await expect(page.locator('#wheel-selector')).toHaveValue('wheel-normal-a');
+    await page.locator('#wheel-items-modal .close-btn').click();
+
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('删除转盘');
+        dialog.accept();
+    });
+    await listModal.locator('.wheel-list-card', { hasText: '普通盘B' }).getByRole('button', { name: '删除' }).click();
+    await expect(listModal.locator('.wheel-list-card')).toHaveCount(1);
+    await expect(listModal.locator('.wheel-list-card-title strong')).toHaveText(['普通盘A']);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheels.some(wheel => wheel.id === 'wheel-normal-b')).toBe(false);
+});
+
 test('normal wheel creation supports multiple items and batch textarea', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), createEmptyData({

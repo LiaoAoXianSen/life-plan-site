@@ -9,6 +9,7 @@
     let wheelBatchTarget = 'panel';
     let wheelLibraryCopyTagFilter = '';
     let wheelLibraryTagFilter = '';
+    let wheelListModeFilter = 'normal';
     let wheelActionMenuOpen = false;
     let editingWheelTagId = null;
     const wheelSelectedLibraryItemIds = new Set();
@@ -552,6 +553,78 @@
                 renderWheelModalBody(panel);
             }
         });
+        if (document.getElementById('wheel-list-modal')?.classList.contains('active')) {
+            renderWheelListModalBody();
+        }
+    }
+
+    function getWheelCandidateCount(wheel) {
+        if (!wheel) return 0;
+        if (wheel.mode === 'tag') {
+            return uniqueTagIds(wheel.tagIds || []).reduce((sum, tagId) => sum + getTagItemPool(tagId).length, 0);
+        }
+        return (wheel.items || []).filter(item => item.enabled !== false).length;
+    }
+
+    function renderWheelListModalBody() {
+        const body = document.getElementById('wheel-list-modal-body');
+        if (!body) return;
+        body.innerHTML = renderWheelListPanel();
+    }
+
+    function renderWheelListPanel() {
+        const mode = wheelListModeFilter === 'tag' ? 'tag' : 'normal';
+        const wheels = data.wheels
+            .filter(wheel => (wheel.mode || 'normal') === mode)
+            .slice()
+            .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+        return `
+            <div class="wheel-list-toolbar">
+                <div class="segmented wheel-list-mode-filter" id="wheel-list-mode-filter">
+                    <button type="button" class="${mode === 'normal' ? 'active' : ''}" onclick="setWheelListModeFilter('normal')">普通</button>
+                    <button type="button" class="${mode === 'tag' ? 'active' : ''}" onclick="setWheelListModeFilter('tag')">标签</button>
+                </div>
+                <button class="btn btn-secondary" type="button" onclick="openWheelCreateModalFromList()">新建转盘</button>
+            </div>
+            <div class="wheel-list-stack">
+                ${wheels.map(wheel => {
+                    const selected = wheel.id === currentWheelId;
+                    const candidateCount = getWheelCandidateCount(wheel);
+                    const historyCount = countWheelHistory(wheel.id);
+                    const modeLabel = wheel.mode === 'tag' ? '标签' : '普通';
+                    const extra = wheel.mode === 'tag'
+                        ? `${(wheel.tagIds || []).length} 个标签 · ${candidateCount} 个候选`
+                        : `${candidateCount} 个选项`;
+                    return `
+                        <article class="wheel-list-card ${selected ? 'selected' : ''}" data-wheel-id="${safeHtml(wheel.id)}">
+                            <div class="wheel-list-card-main">
+                                <div class="wheel-list-card-title">
+                                    <strong>${safeHtml(wheel.name || '未命名转盘')}</strong>
+                                    ${selected ? '<span class="wheel-list-badge current">当前</span>' : ''}
+                                </div>
+                                <div class="wheel-list-card-meta">
+                                    <span class="wheel-list-badge">${modeLabel}</span>
+                                    <span>${safeHtml(extra)}</span>
+                                    <span>${historyCount} 条记录</span>
+                                </div>
+                            </div>
+                            <div class="wheel-list-card-actions">
+                                <button class="wheel-mini-btn primary" type="button" onclick="openWheelFromList(${safeJsArg(wheel.id)})">打开</button>
+                                <button class="wheel-mini-btn" type="button" onclick="editWheelFromList(${safeJsArg(wheel.id)})">修改</button>
+                                <button class="wheel-mini-btn" type="button" onclick="renameWheelFromList(${safeJsArg(wheel.id)})">重命名</button>
+                                <button class="wheel-mini-btn danger" type="button" onclick="deleteWheelFromList(${safeJsArg(wheel.id)})">删除</button>
+                            </div>
+                        </article>
+                    `;
+                }).join('') || `
+                    <div class="empty-state">
+                        <strong>这一类还没有转盘</strong>
+                        <div class="wheel-hint">${mode === 'tag' ? '先新建一个标签盘。' : '先新建一个普通盘。'}</div>
+                        <button class="btn btn-primary" type="button" onclick="openWheelCreateModalFromList()">新建转盘</button>
+                    </div>
+                `}
+            </div>
+        `;
     }
 
     function renderWheelActionMenu() {
@@ -1235,6 +1308,56 @@
 
     window.closeWheelPanelModal = function closeWheelPanelModal(panel) {
         document.getElementById(`wheel-${panel}-modal`)?.classList.remove('active');
+    };
+
+    window.openWheelListModal = function openWheelListModal() {
+        wheelListModeFilter = currentWheelMode === 'tag' ? 'tag' : 'normal';
+        closeWheelActionMenu();
+        renderWheelListModalBody();
+        document.getElementById('wheel-list-modal')?.classList.add('active');
+    };
+
+    window.closeWheelListModal = function closeWheelListModal() {
+        document.getElementById('wheel-list-modal')?.classList.remove('active');
+    };
+
+    window.setWheelListModeFilter = function setWheelListModeFilter(mode = 'normal') {
+        wheelListModeFilter = mode === 'tag' ? 'tag' : 'normal';
+        renderWheelListModalBody();
+    };
+
+    window.openWheelCreateModalFromList = function openWheelCreateModalFromList() {
+        closeWheelListModal();
+        openWheelCreateModal(wheelListModeFilter);
+    };
+
+    window.openWheelFromList = function openWheelFromList(wheelId) {
+        const wheel = data.wheels.find(item => item.id === wheelId);
+        if (!wheel) return;
+        window.selectWheel(wheelId);
+        closeWheelListModal();
+    };
+
+    window.editWheelFromList = function editWheelFromList(wheelId) {
+        const wheel = data.wheels.find(item => item.id === wheelId);
+        if (!wheel) return;
+        window.selectWheel(wheelId);
+        closeWheelListModal();
+        setWheelPanel('items');
+    };
+
+    window.renameWheelFromList = function renameWheelFromList(wheelId) {
+        window.renameWheel(wheelId);
+        if (document.getElementById('wheel-list-modal')?.classList.contains('active')) {
+            renderWheelListModalBody();
+        }
+    };
+
+    window.deleteWheelFromList = function deleteWheelFromList(wheelId) {
+        window.deleteWheel(wheelId);
+        if (document.getElementById('wheel-list-modal')?.classList.contains('active')) {
+            renderWheelListModalBody();
+        }
     };
 
     window.toggleWheelActionMenu = function toggleWheelActionMenu(event) {

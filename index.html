@@ -540,6 +540,7 @@
                         <div class="wheel-action-menu-wrap">
                             <button id="wheel-action-menu-button" class="btn btn-secondary wheel-action-menu-button" type="button" onclick="toggleWheelActionMenu(event)" aria-haspopup="true" aria-expanded="false">管理</button>
                             <div id="wheel-action-menu" class="wheel-action-menu" hidden>
+                                <button type="button" onclick="closeWheelActionMenu(); openWheelListModal()">转盘列表</button>
                                 <button type="button" onclick="closeWheelActionMenu(); openWheelCreateModal()">新建转盘</button>
                                 <button type="button" onclick="closeWheelActionMenu(); setWheelPanel('items')">修改当前盘</button>
                                 <button type="button" onclick="closeWheelActionMenu(); setWheelPanel('library')">公共项库</button>
@@ -994,6 +995,19 @@
                 <button class="btn btn-secondary" onclick="closeWheelBatchModal()">取消</button>
                 <button class="btn btn-primary" onclick="applyWheelBatchText()">确认添加</button>
             </div>
+        </div>
+    </div>
+
+    <div id="wheel-list-modal" class="modal-overlay">
+        <div class="modal modal-lg wheel-manage-modal">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title">转盘列表</div>
+                    <div class="wheel-hint">切到哪种，下面就只看哪种。可打开、修改或删除。</div>
+                </div>
+                <button class="close-btn" onclick="closeWheelListModal()">×</button>
+            </div>
+            <div id="wheel-list-modal-body"></div>
         </div>
     </div>
 
