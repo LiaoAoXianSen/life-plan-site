@@ -6193,6 +6193,9 @@
                 return;
             }
             if (preset === 'no-due') {
+                // Floating pool requires no due date and no plan range.
+                planStartEl.value = '';
+                planEndEl.value = '';
                 dueEl.value = '';
             }
         }
@@ -8073,7 +8076,14 @@
                 'fitness-library-modal': typeof closeExerciseLibraryModal === 'function' ? closeExerciseLibraryModal : null,
                 'fitness-library-item-modal': typeof closeExerciseLibraryItemModal === 'function' ? closeExerciseLibraryItemModal : null,
                 'ai-settings-modal': closeAiSettings,
-                'ai-assistant-modal': closeAiAssistant
+                'ai-assistant-modal': closeAiAssistant,
+                'wheel-create-modal': typeof closeWheelCreateModal === 'function' ? closeWheelCreateModal : null,
+                'wheel-batch-modal': typeof closeWheelBatchModal === 'function' ? closeWheelBatchModal : null,
+                'wheel-list-modal': typeof closeWheelListModal === 'function' ? closeWheelListModal : null,
+                'wheel-items-modal': typeof closeWheelPanelModal === 'function' ? () => closeWheelPanelModal('items') : null,
+                'wheel-library-modal': typeof closeWheelPanelModal === 'function' ? () => closeWheelPanelModal('library') : null,
+                'wheel-tags-modal': typeof closeWheelPanelModal === 'function' ? () => closeWheelPanelModal('tags') : null,
+                'wheel-history-modal': typeof closeWheelPanelModal === 'function' ? () => closeWheelPanelModal('history') : null
             };
 
             const closeFn = closeMap[activeModal.id];

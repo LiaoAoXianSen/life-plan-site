@@ -2013,6 +2013,50 @@ test('todo detail supports completion, notes and checkable subtodos in view mode
     expect(todo.subTodos[0].done).toBe(true);
 });
 
+test('todo no-due preset clears plan start, plan end and due date', async ({ page }) => {
+    const data = createEmptyData({
+        todos: [{
+            id: 'todo-planned',
+            text: '有计划的待办',
+            note: '',
+            done: false,
+            dueDate: '2026-07-21',
+            planStartDate: '2026-07-20',
+            planEndDate: '2026-07-22',
+            urgency: 'medium',
+            group: '其他',
+            subTodos: [],
+            sessions: [],
+            createdAt: '2026-07-20 10:00',
+            updatedAt: '2026-07-20 10:00'
+        }]
+    });
+
+    await page.goto('/');
+    await page.evaluate(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), data);
+    await page.reload();
+    await page.locator('[data-page-target="todos"]').click();
+    await page.locator('.todo-title-cell', { hasText: '有计划的待办' }).click();
+
+    const modal = page.locator('#todo-detail-modal');
+    await modal.getByRole('button', { name: '编辑' }).click();
+    await expect(modal.locator('#todo-detail-plan-start')).toHaveValue('2026-07-20');
+    await expect(modal.locator('#todo-detail-plan-end')).toHaveValue('2026-07-22');
+    await expect(modal.locator('#todo-detail-date')).toHaveValue('2026-07-21');
+
+    await modal.getByRole('button', { name: '无截止', exact: true }).click();
+    await expect(modal.locator('#todo-detail-plan-start')).toHaveValue('');
+    await expect(modal.locator('#todo-detail-plan-end')).toHaveValue('');
+    await expect(modal.locator('#todo-detail-date')).toHaveValue('');
+
+    await modal.getByRole('button', { name: '保存' }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const todo = stored.todos.find(item => item.id === 'todo-planned');
+    expect(todo.planStartDate).toBe('');
+    expect(todo.planEndDate).toBe('');
+    expect(todo.dueDate).toBe('');
+});
+
 test('verified ideas are listed after active ideas by default', async ({ page }) => {
     const data = createEmptyData({
         records: [
@@ -2186,7 +2230,17 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await libraryModal.getByRole('button', { name: 'AI 推荐标签' }).click();
     await expect(libraryModal.locator('.wheel-library-ai-tag')).toContainText(['运动']);
     await expect(libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]')).toBeChecked();
-    // User can uncheck AI suggestion before adding.
+    // Closing the library modal should clear transient AI recommendations.
+    await libraryModal.locator('.close-btn').click();
+    await expect(libraryModal).not.toHaveClass(/active/);
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
+    await expect(libraryModal.locator('.wheel-library-ai-tag')).toHaveCount(0);
+    await expect(libraryModal.locator('#wheel-library-ai-box')).toContainText('输入公共项后点“AI 推荐标签”');
+    // Re-run AI recommendation and allow user edits before adding.
+    await libraryModal.locator('#wheel-library-name').fill('周末晨跑拉伸');
+    await libraryModal.getByRole('button', { name: 'AI 推荐标签' }).click();
+    await expect(libraryModal.locator('.wheel-library-ai-tag')).toContainText(['运动']);
     await libraryModal.locator('.wheel-library-ai-tag', { hasText: '运动' }).locator('input').uncheck();
     await expect(libraryModal.locator('.wheel-library-batch-tag input[value="tag-sport"]')).not.toBeChecked();
     await libraryModal.locator('.wheel-library-batch-tag input[value="tag-food"]').check();

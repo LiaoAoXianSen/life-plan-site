@@ -1306,8 +1306,24 @@
         openWheelPanelModal(panel);
     };
 
+    function resetWheelLibraryAiState() {
+        wheelLibraryAiSuggestions = [];
+        wheelLibraryAiStatus = '';
+        wheelLibraryAiRunning = false;
+    }
+
+    function resetWheelPanelTransientState(panel = '') {
+        if (panel === 'library' || !panel) {
+            resetWheelLibraryAiState();
+        }
+        if (panel === 'tags' || !panel) {
+            editingWheelTagId = null;
+        }
+    }
+
     window.closeWheelPanelModal = function closeWheelPanelModal(panel) {
         document.getElementById(`wheel-${panel}-modal`)?.classList.remove('active');
+        resetWheelPanelTransientState(panel);
     };
 
     window.openWheelListModal = function openWheelListModal() {
@@ -1319,6 +1335,8 @@
 
     window.closeWheelListModal = function closeWheelListModal() {
         document.getElementById('wheel-list-modal')?.classList.remove('active');
+        // Keep filter aligned with current stage mode next time the list opens.
+        wheelListModeFilter = currentWheelMode === 'tag' ? 'tag' : 'normal';
     };
 
     window.setWheelListModeFilter = function setWheelListModeFilter(mode = 'normal') {
@@ -1514,6 +1532,10 @@
 
     window.closeWheelCreateModal = function closeWheelCreateModal() {
         document.getElementById('wheel-create-modal')?.classList.remove('active');
+        wheelCreateItemsDraft = [{ name: '', weight: 1 }];
+        wheelCreateMode = currentWheelMode === 'tag' ? 'tag' : 'normal';
+        const nameInput = document.getElementById('wheel-create-name');
+        if (nameInput) nameInput.value = '';
     };
 
     window.setWheelCreateMode = function setWheelCreateMode(mode) {
@@ -1678,6 +1700,9 @@
 
     window.closeWheelBatchModal = function closeWheelBatchModal() {
         document.getElementById('wheel-batch-modal')?.classList.remove('active');
+        const textarea = document.getElementById('wheel-batch-text');
+        if (textarea) textarea.value = '';
+        wheelBatchTarget = 'panel';
     };
 
     window.applyWheelBatchText = function applyWheelBatchText() {
@@ -2444,8 +2469,8 @@
         const items = setTagItemsStage(tag, wheel.id);
         if (!tag || !items?.length) return alert('这个标签下没有可抽公共项');
         currentWheelResultId = null;
-        document.getElementById('wheel-tags-modal')?.classList.remove('active');
-        document.getElementById('wheel-items-modal')?.classList.remove('active');
+        closeWheelPanelModal('tags');
+        closeWheelPanelModal('items');
         renderWheelPage();
         const stageItems = getStageEntries(wheel);
         const result = weightedPick(stageItems);
@@ -2474,8 +2499,8 @@
         const items = setTagItemsStage(tag, wheel.id);
         if (!tag || !items?.length) return alert('这个标签下没有可抽公共项');
         currentWheelResultId = null;
-        document.getElementById('wheel-tags-modal')?.classList.remove('active');
-        document.getElementById('wheel-items-modal')?.classList.remove('active');
+        closeWheelPanelModal('tags');
+        closeWheelPanelModal('items');
         renderWheelPage();
     };
 
