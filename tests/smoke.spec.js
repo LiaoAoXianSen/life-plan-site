@@ -2520,20 +2520,35 @@ test('tag management can edit a tag once without repeated prompts', async ({ pag
     await page.locator('#wheel-action-menu').getByRole('button', { name: '标签管理' }).click();
 
     const tagsModal = page.locator('#wheel-tags-modal');
+    await expect(tagsModal.locator('[data-wheel-tag-id="tag-home"] .wheel-tag-color-chip')).toContainText('#2f7d6d');
     await tagsModal.locator('[data-wheel-tag-id="tag-home"] button', { hasText: '修改' }).click();
     await expect(tagsModal.locator('#wheel-tag-name')).toHaveValue('在家');
     await tagsModal.locator('#wheel-tag-name').fill('宅家');
     await tagsModal.locator('#wheel-tag-weight').fill('3');
+    await tagsModal.locator('#wheel-tag-color').fill('#ff6b6b');
     await tagsModal.getByRole('button', { name: '保存修改' }).click();
     await expect(tagsModal.locator('[data-wheel-tag-id="tag-home"]')).toContainText('宅家');
+    await expect(tagsModal.locator('[data-wheel-tag-id="tag-home"] .wheel-tag-color-chip')).toContainText('#ff6b6b');
     await expect(tagsModal.locator('#wheel-tag-name')).toHaveValue('');
     await expect(tagsModal.getByRole('button', { name: '添加' })).toBeVisible();
+
+    // New tags should get a random palette color, not always the same green.
+    await tagsModal.locator('#wheel-tag-name').fill('新标签A');
+    await tagsModal.getByRole('button', { name: '添加' }).click();
+    await tagsModal.locator('#wheel-tag-name').fill('新标签B');
+    await tagsModal.getByRole('button', { name: '添加' }).click();
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelTags.find(tag => tag.id === 'tag-home')).toMatchObject({
         name: '宅家',
-        weight: 3
+        weight: 3,
+        color: '#ff6b6b'
     });
+    const createdColors = stored.wheelTags
+        .filter(tag => tag.name === '新标签A' || tag.name === '新标签B')
+        .map(tag => tag.color);
+    expect(createdColors).toHaveLength(2);
+    expect(createdColors.every(color => /^#[0-9a-fA-F]{6}$/.test(color))).toBe(true);
 });
 
 test('tag wheel creation requires and saves selected tags', async ({ page }) => {

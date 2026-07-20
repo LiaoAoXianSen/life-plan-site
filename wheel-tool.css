@@ -1074,7 +1074,62 @@
 }
 
 .wheel-inline-form.tags-form {
-    grid-template-columns: minmax(130px, 1fr) 74px 58px auto;
+    grid-template-columns: minmax(130px, 1fr) 74px minmax(120px, 150px) auto auto;
+    align-items: center;
+}
+
+.wheel-tag-color-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 6px 10px;
+    border: 1px solid rgba(220, 228, 236, 0.96);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.96);
+}
+
+.wheel-tag-color-field input[type="color"] {
+    width: 34px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.wheel-tag-color-field span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 850;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.wheel-tag-color-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 0 8px 0 6px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--tag-color, #216e4e) 28%, white);
+    background: color-mix(in srgb, var(--tag-color, #216e4e) 12%, white);
+    flex: 0 0 auto;
+}
+
+.wheel-tag-color-chip i {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.wheel-tag-color-chip em {
+    font-style: normal;
+    color: #4d5d55;
+    font-size: 11px;
+    font-weight: 850;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .wheel-play-mode-tabs {
@@ -1276,11 +1331,12 @@
 }
 
 .wheel-color-dot {
-    width: 13px;
-    height: 13px;
+    width: 16px;
+    height: 16px;
     border-radius: 99px;
     flex: 0 0 auto;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
 .wheel-mini-btn {

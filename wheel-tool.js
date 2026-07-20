@@ -36,6 +36,17 @@
         return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
     }
 
+    function pickRandomTagColor(exclude = []) {
+        const used = new Set(
+            (Array.isArray(exclude) ? exclude : [])
+                .map(item => String(item || '').toLowerCase())
+                .filter(Boolean)
+        );
+        const unused = palette.filter(color => !used.has(String(color).toLowerCase()));
+        const pool = unused.length ? unused : palette;
+        return pool[Math.floor(Math.random() * pool.length)] || '#216e4e';
+    }
+
     function now() {
         return typeof getLocalDateTimeStr === 'function' ? getLocalDateTimeStr() : new Date().toISOString();
     }
@@ -1035,17 +1046,22 @@
             ? data.wheelTags.find(tag => tag.id === editingWheelTagId)
             : null;
         if (editingWheelTagId && !editingTag) editingWheelTagId = null;
+        const formColor = editingTag?.color
+            || pickRandomTagColor(data.wheelTags.map(tag => tag.color));
         return `
             <div class="wheel-panel-head">
                 <div>
                     <div class="card-title">标签管理</div>
-                    <div class="wheel-hint">标签只有名称、颜色和权重。也可以在这里单独转某个标签。</div>
+                    <div class="wheel-hint">新建标签会随机给颜色，也可手动改。右侧会显示颜色块。</div>
                 </div>
             </div>
             <div class="wheel-inline-form tags-form">
                 <input id="wheel-tag-name" placeholder="标签名称" value="${safeHtml(editingTag?.name || '')}">
                 <input id="wheel-tag-weight" type="number" min="1" value="${safeHtml(editingTag?.weight ?? 1)}">
-                <input id="wheel-tag-color" type="color" value="${safeHtml(editingTag?.color || '#216e4e')}">
+                <label class="wheel-tag-color-field" title="标签颜色">
+                    <input id="wheel-tag-color" type="color" value="${safeHtml(formColor)}" oninput="document.getElementById('wheel-tag-color-label').textContent = this.value">
+                    <span id="wheel-tag-color-label">${safeHtml(formColor)}</span>
+                </label>
                 <button class="btn btn-primary" onclick="saveWheelTagForm()">${editingTag ? '保存修改' : '添加'}</button>
                 ${editingTag ? '<button class="btn btn-secondary" onclick="cancelEditWheelTag()">取消</button>' : ''}
             </div>
@@ -1053,10 +1069,15 @@
             <div class="wheel-list">
                 ${data.wheelTags.map(tag => {
                     const items = getTagItemPool(tag.id);
+                    const color = safeColor(tag.color);
                     return `
                         <div class="wheel-row ${editingWheelTagId === tag.id ? 'selected' : ''}" data-wheel-tag-id="${safeHtml(tag.id)}">
-                            <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
+                            <span class="wheel-color-dot" style="background:${color}"></span>
                             <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${items.length} 个公共项 · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
+                            <span class="wheel-tag-color-chip" style="--tag-color:${color}" title="${safeHtml(color)}">
+                                <i style="background:${color}"></i>
+                                <em>${safeHtml(color)}</em>
+                            </span>
                             <button class="wheel-mini-btn primary" ${items.length && tag.enabled !== false ? '' : 'disabled'} onclick="spinDirectTag(${safeJsArg(tag.id)})">只转这个标签</button>
                             <button class="wheel-mini-btn" ${items.length && tag.enabled !== false ? '' : 'disabled'} onclick="previewTagStage(${safeJsArg(tag.id)})">先看这个标签池</button>
                             <button class="wheel-mini-btn" onclick="editWheelTag(${safeJsArg(tag.id)})">${editingWheelTagId === tag.id ? '编辑中' : '修改'}</button>
@@ -1766,7 +1787,8 @@
     window.saveWheelTagForm = function saveWheelTagForm() {
         const name = document.getElementById('wheel-tag-name')?.value.trim();
         const weight = Math.max(1, Number(document.getElementById('wheel-tag-weight')?.value) || 1);
-        const color = document.getElementById('wheel-tag-color')?.value || palette[data.wheelTags.length % palette.length];
+        const randomColor = pickRandomTagColor(data.wheelTags.map(tag => tag.color));
+        const color = document.getElementById('wheel-tag-color')?.value || randomColor;
         if (!name) return alert('请输入标签名称');
         if (editingWheelTagId) {
             const tag = data.wheelTags.find(item => item.id === editingWheelTagId);
@@ -1779,17 +1801,27 @@
             }
             tag.name = name;
             tag.weight = weight;
-            tag.color = safeColor(color, tag.color || '#216e4e');
+            tag.color = safeColor(color, tag.color || randomColor);
             tag.updatedAt = now();
             editingWheelTagId = null;
             persist();
             renderWheelPage();
+            document.getElementById('wheel-tags-modal')?.classList.add('active');
             return;
         }
         if (data.wheelTags.some(tag => normalizeName(tag.name) === normalizeName(name))) return alert('已经有同名标签');
-        data.wheelTags.push({ id: id(), name, color: safeColor(color, '#216e4e'), weight, enabled: true, createdAt: now(), updatedAt: now() });
+        data.wheelTags.push({
+            id: id(),
+            name,
+            color: safeColor(color, randomColor),
+            weight,
+            enabled: true,
+            createdAt: now(),
+            updatedAt: now()
+        });
         persist();
         renderWheelPage();
+        document.getElementById('wheel-tags-modal')?.classList.add('active');
     };
 
     window.addWheelTag = function addWheelTag() {
