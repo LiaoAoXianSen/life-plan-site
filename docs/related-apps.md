@@ -15,7 +15,8 @@
 | 大转盘 | **`D:\project\wheel-app`**（正式线） | 仍有 `wheel-tool.js` 内嵌页 | `/apps/wheel-app/data.json` |
 | 大转盘旧原生 | `D:\project\spin-wheel-app`（归档/勿当正线） | 无 | 无云同步，备份格式不兼容 |
 | 同步底座 | `D:\project\app-sync-kit` | 本站 vendor 了 browser bundle | 多 path 共用同一 endpoint |
-| 健身 / 习惯 / Core | 尚未独立建仓 | 仍在本站 | 规划中，见第 4 节 |
+| 健身 / Core | 尚未独立建仓 | 仍在本站 | 规划中，见第 4 节 |
+| 习惯 / 元气打卡 | **`D:\project\yuanqidaka`**（已有 Android App） | 本站旧习惯页待重做为 PC 习惯中心 | `/apps/habit-app/data.json`（规划/协议已建） |
 
 **大转盘正式独立 App 就是 `D:\project\wheel-app`，不是 `spin-wheel-app`。**
 
@@ -92,10 +93,10 @@ npm run dev
 |---|---|---|---|---|
 | wheel | `D:\project\wheel-app` | `/apps/wheel-app/data.json` | `wheels*` 四集合 | **已有** |
 | fitness | `D:\project\fitness-app`（建议） | `/apps/fitness-app/data.json` | `fitnessPlans` / `fitnessWorkouts` / `bodyMetrics` / `exerciseLibrary` | 未建；本站已有 `fitness-*.js/css` |
-| habit | `D:\project\habit-app`（建议） | `/apps/habit-app/data.json` | `habits` / `checkins` / ledger / rewards / currencies | 未建；本站已有 `habit-*.js/css` |
+| habit | `D:\project\yuanqidaka`（已有 Android App）；如需 Web/Capacitor 独立壳再另建 `D:\project\habit-app` | `/apps/habit-app/data.json` | `habits` / records / ledger / rewards / currencies / milestones / overdue | App 已有；本站旧习惯页待重做为 PC 习惯中心；协议见 `app-sync-kit/docs/habit-app-schema.md` |
 | life-plan-core | 本仓瘦身或新仓 | `/life-plan.json` | records / todos / goals / materials / AI 等 | 仍为本站主体 |
 
-推荐落地顺序：转盘收尾（文档/内嵌策略）→ fitness-app → habit-app → core 瘦身。
+推荐落地顺序：转盘收尾（文档/内嵌策略）→ 习惯协议/PC 习惯中心 → yuanqidaka 同步迁移 → fitness-app → core 瘦身。
 
 参考模板：直接照抄 `wheel-app` 的 monorepo + Capacitor + `app-sync-kit` adapter 模式。
 
@@ -107,7 +108,8 @@ npm run dev
 2. **不要**把 `spin-wheel-app` 的 SQLite/备份格式当成云同步 schema。  
 3. 双端都写转盘时：统一 `/apps/wheel-app/data.json`，依赖合并与 tombstone；本站主文档里仍可能嵌有转盘字段（历史双写），迁移时注意冲突。  
 4. 跨 App 联动（转盘结果 → 待办）目前只在本站完整存在；独立 App 默认不做强耦合。  
-5. 更新本文件时机：新建/废弃 sibling App、变更云 path、或正式移除本站内嵌转盘时。
+5. 习惯系统以 `D:\project\yuanqidaka` 的现有 App 体验为移动端参考，但同步数据标准以 `D:\project\app-sync-kit\docs\habit-app-schema.md` 为准；本站重做的是 PC 习惯中心，不要求和 App 长得一样。
+6. 更新本文件时机：新建/废弃 sibling App、变更云 path、或正式移除本站内嵌转盘时。
 
 ---
 
@@ -116,5 +118,7 @@ npm run dev
 - 本站功能索引（含内嵌转盘 API）：`docs/project-feature-index.md` §14  
 - App 化 UI 方向：`docs/life-plan-app-redesign.md`（文中已点名 `D:/project/wheel-app`）  
 - 问题跟踪（同步/转盘项）：`docs/project-issue-tracker.md`  
+- 习惯系统重做方案：`docs/habit-system-redesign.md`
+- 习惯同步协议：`D:\project\app-sync-kit\docs\habit-app-schema.md`
 - 独立转盘仓内文档：`D:\project\wheel-app\docs\`（architecture、phase-1-plan 等）  
 - 独立转盘 README：`D:\project\wheel-app\README.md`
