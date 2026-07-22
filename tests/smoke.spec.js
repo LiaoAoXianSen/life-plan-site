@@ -2281,6 +2281,7 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('流水指向缺失习惯');
     await expect(panel).toContainText('habitLedger');
     await expect(panel).toContainText('habit-app JSON 预览');
+    await expect(panel).toContainText('预览指纹');
     await expect(panel).toContainText('<img src=x');
     await expect(panel.locator('img')).toHaveCount(0);
     await expect(panel.locator('svg')).toHaveCount(0);
