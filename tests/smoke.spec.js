@@ -2233,6 +2233,7 @@ test('verified ideas are listed after active ideas by default', async ({ page })
 
 test('habit diagnostics preview is read-only and escapes legacy data', async ({ page }) => {
     const today = '2026-07-22';
+    await page.clock.setFixedTime(new Date('2026-07-22T10:00:00+08:00'));
     const data = createEmptyData({
         habits: [
             {
@@ -2250,7 +2251,7 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
         ],
         checkins: [
             { id: 'checkin-1', habitId: 'habit-1', date: today, checkinAt: `${today} 08:00`, createdAt: `${today} 08:00` },
-            { id: 'orphan-checkin', habitId: 'missing-habit', date: today, checkinAt: `${today} 09:00`, createdAt: `${today} 09:00` }
+            { id: 'checkin-2', habitId: 'habit-1', date: today, checkinAt: `${today} 09:00`, createdAt: `${today} 09:00` }
         ],
         habitPointLedger: [
             { id: 'ledger-1', habitId: 'habit-1', amount: 1, currency: '金币', type: 'checkin', note: '<svg onload="window.__habitXss=1"></svg>' },
@@ -2279,10 +2280,22 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('habitRecords');
     await expect(panel).toContainText('流水指向缺失习惯');
     await expect(panel).toContainText('habitLedger');
+    await expect(panel).toContainText('habit-app JSON 预览');
     await expect(panel).toContainText('<img src=x');
     await expect(panel.locator('img')).toHaveCount(0);
     await expect(panel.locator('svg')).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => window.__habitXss)).toBe(0);
+
+    const previewText = await panel.locator('#habit-snapshot-preview-json').inputValue();
+    const snapshot = JSON.parse(previewText);
+    expect(snapshot.readOnlyPreview).toBe(true);
+    expect(snapshot.habits).toHaveLength(1);
+    expect(snapshot.habitRecords).toHaveLength(2);
+    expect(snapshot.habitLedger).toHaveLength(2);
+    expect(snapshot.habitCurrencies.some(item => item.name === '金币')).toBe(true);
+    expect(snapshot.habits[0].id).toBe('life-plan/habits/habit-1');
+    expect(snapshot.habitRecords[0].habitId).toBe('life-plan/habits/habit-1');
+    expect(snapshot.habits[0].name).toContain('<img src=x');
 
     const after = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     expect(after).toBe(before);

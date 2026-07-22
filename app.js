@@ -6819,7 +6819,9 @@
             const container = document.getElementById('habit-diagnostics-panel');
             if (!container) return;
             const diagnostics = habitService.buildLegacyHabitDiagnostics(data);
+            const snapshotPreview = habitService.buildHabitAppSnapshotPreview(data);
             const summary = diagnostics.summary || {};
+            const snapshotSummary = snapshotPreview.summary || {};
             const balances = (summary.walletBalances || [])
                 .map(item => `${item.amount} ${item.currency}`)
                 .join(' · ') || `0 ${HABIT_DEFAULT_CURRENCY}`;
@@ -6861,6 +6863,16 @@
                         <div class="habit-mapping-list">
                             ${(diagnostics.mappingPreview || []).map(renderHabitMappingPreviewRow).join('')}
                         </div>
+                    </section>
+                    <section class="habit-diagnostics-card habit-snapshot-preview-card">
+                        <div class="habit-snapshot-head">
+                            <div>
+                                <div class="habit-shop-title">habit-app JSON 预览</div>
+                                <div class="habit-snapshot-meta">只读输出 · ${escapeHtml(snapshotSummary.habits || 0)} habits · ${escapeHtml(snapshotSummary.habitRecords || 0)} records · ${escapeHtml(snapshotSummary.habitLedger || 0)} ledger</div>
+                            </div>
+                            <span>Phase 2 Preview</span>
+                        </div>
+                        <textarea id="habit-snapshot-preview-json" class="habit-snapshot-preview" readonly spellcheck="false">${escapeHtml(snapshotPreview.jsonText || '')}</textarea>
                     </section>
                 </div>
             `;

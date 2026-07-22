@@ -92,6 +92,15 @@
         return normalizeId(item?.collection || item?.type || item?.entity || item?.entityType || item?.kind);
     }
 
+    function stableRemoteId(collection, id, fallbackIndex) {
+        const raw = normalizeId(id) || `row-${fallbackIndex + 1}`;
+        return `life-plan/${collection}/${encodeURIComponent(raw)}`;
+    }
+
+    function compactObject(value) {
+        return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ''));
+    }
+
     function create(options = {}) {
         const defaultCurrency = options.defaultCurrency || DEFAULT_CURRENCY;
         const getTodayStr = typeof options.getTodayStr === 'function' ? options.getTodayStr : fallbackTodayStr;
@@ -110,6 +119,171 @@
             return Array.from(balances.entries())
                 .sort(([a], [b]) => a.localeCompare(b, 'zh-Hans-CN'))
                 .map(([currency, amount]) => ({ currency, amount }));
+        }
+
+        function getSourceRef(collection, item, index) {
+            return compactObject({
+                app: 'life-plan-site',
+                collection,
+                id: normalizeId(item?.id) || `row-${index + 1}`
+            });
+        }
+
+        function getGroupId(tag) {
+            return stableRemoteId('groups', normalizeId(tag) || '未分组', 0);
+        }
+
+        function getCurrencyId(currency) {
+            return stableRemoteId('currencies', normalizeCurrency(currency, defaultCurrency), 0);
+        }
+
+        function getLegacyDate(item) {
+            return normalizeId(item?.date || item?.startDate || item?.createdAt || item?.updatedAt).slice(0, 10);
+        }
+
+        function buildHabitAppSnapshotPreview(source = {}) {
+            const habits = asArray(source.habits);
+            const checkins = asArray(source.checkins);
+            const ledger = asArray(source.habitPointLedger);
+            const rewards = asArray(source.habitRewards);
+            const legacyCurrencies = asArray(source.habitCurrencies);
+            const deletedItems = asArray(source.deletedItems);
+            const currencyNames = new Set([normalizeCurrency(defaultCurrency, DEFAULT_CURRENCY)]);
+
+            legacyCurrencies.forEach(item => currencyNames.add(normalizeCurrency(item?.name || item?.currency || item?.id, defaultCurrency)));
+            habits.forEach(item => {
+                [item?.rewardCurrency, item?.penaltyCurrency, item?.breakPenaltyCurrency].forEach(value => currencyNames.add(normalizeCurrency(value, defaultCurrency)));
+            });
+            rewards.forEach(item => currencyNames.add(normalizeCurrency(item?.currency, defaultCurrency)));
+            ledger.forEach(item => currencyNames.add(normalizeCurrency(item?.currency, defaultCurrency)));
+
+            const groups = Array.from(new Set(habits.map(item => normalizeId(item?.tag) || '未分组')))
+                .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+                .map((tag, index) => compactObject({
+                    id: getGroupId(tag),
+                    name: tag,
+                    sortOrder: index,
+                    source: { app: 'life-plan-site', collection: 'habits.tag', id: tag }
+                }));
+
+            const snapshot = {
+                schemaVersion: 1,
+                generatedAt: new Date().toISOString(),
+                readOnlyPreview: true,
+                habits: habits.map((item, index) => {
+                    const currency = normalizeCurrency(item?.rewardCurrency || item?.penaltyCurrency, defaultCurrency);
+                    return compactObject({
+                        id: stableRemoteId('habits', item?.id, index),
+                        name: item?.name || '未命名习惯',
+                        status: item?.archived ? 'archived' : 'active',
+                        groupId: getGroupId(item?.tag),
+                        tag: item?.tag || '未分组',
+                        rule: item?.rule || 'daily',
+                        targetCount: getHabitTargetCount(item),
+                        timesPerDay: item?.timesPerDay,
+                        weekdays: item?.weekdays,
+                        startDate: item?.startDate,
+                        endDate: item?.endDate,
+                        noteMode: item?.noteMode,
+                        rewardPoints: item?.rewardPoints,
+                        penaltyPoints: item?.penaltyPoints,
+                        currencyId: getCurrencyId(currency),
+                        currency,
+                        createdAt: item?.createdAt,
+                        updatedAt: item?.updatedAt,
+                        source: getSourceRef('habits', item, index)
+                    });
+                }),
+                habitGroups: groups,
+                habitRecords: checkins.map((item, index) => {
+                    const habitId = normalizeId(item?.habitId);
+                    return compactObject({
+                        id: stableRemoteId('checkins', item?.id || `${habitId}-${item?.date || index}`, index),
+                        habitId: habitId ? stableRemoteId('habits', habitId, 0) : undefined,
+                        recordType: item?.recordType || item?.type || 'normal',
+                        date: item?.date || getLegacyDate(item),
+                        count: Number.isFinite(Number(item?.count)) ? Number(item.count) : 1,
+                        note: item?.note,
+                        createdAt: item?.createdAt || item?.checkinAt,
+                        updatedAt: item?.updatedAt || item?.createdAt || item?.checkinAt,
+                        source: getSourceRef('checkins', item, index)
+                    });
+                }),
+                habitRewards: rewards.map((item, index) => {
+                    const currency = normalizeCurrency(item?.currency, defaultCurrency);
+                    return compactObject({
+                        id: stableRemoteId('rewards', item?.id, index),
+                        name: item?.name || '未命名心愿',
+                        cost: parseAmount(item?.cost).valid ? parseAmount(item.cost).value : 0,
+                        currencyId: getCurrencyId(currency),
+                        currency,
+                        stock: item?.stock,
+                        redeemedCount: item?.redeemedCount,
+                        note: item?.note,
+                        createdAt: item?.createdAt,
+                        updatedAt: item?.updatedAt,
+                        source: getSourceRef('habitRewards', item, index)
+                    });
+                }),
+                habitRewardRecords: [],
+                habitFineRecords: [],
+                habitLedger: ledger.map((item, index) => {
+                    const amount = parseAmount(item?.amount);
+                    const currency = normalizeCurrency(item?.currency, defaultCurrency);
+                    const habitId = normalizeId(item?.habitId);
+                    const rewardId = normalizeId(item?.rewardId);
+                    return compactObject({
+                        id: stableRemoteId('ledger', item?.id, index),
+                        amount: amount.valid ? amount.value : 0,
+                        amountRaw: amount.valid ? undefined : String(item?.amount ?? ''),
+                        type: item?.type || 'adjust',
+                        currencyId: getCurrencyId(currency),
+                        currency,
+                        habitId: habitId ? stableRemoteId('habits', habitId, 0) : undefined,
+                        rewardId: rewardId ? stableRemoteId('rewards', rewardId, 0) : undefined,
+                        sourceId: normalizeId(item?.sourceId || item?.checkinId || item?.rewardRecordId || item?.id),
+                        note: item?.note,
+                        createdAt: item?.createdAt || item?.date,
+                        updatedAt: item?.updatedAt || item?.createdAt || item?.date,
+                        source: getSourceRef('habitPointLedger', item, index)
+                    });
+                }),
+                habitCurrencies: Array.from(currencyNames)
+                    .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+                    .map((name, index) => compactObject({
+                        id: getCurrencyId(name),
+                        name,
+                        isDefault: name === defaultCurrency,
+                        sortOrder: index,
+                        source: { app: 'life-plan-site', collection: 'habitCurrencies', id: name }
+                    })),
+                habitMilestones: [],
+                habitMilestoneClaims: [],
+                habitOverdueEvents: [],
+                habitMoodNotes: [],
+                habitTimeTasks: [],
+                deletedItems: deletedItems.map((item, index) => {
+                    const kind = getDeletedKind(item) || 'unknown';
+                    const targetId = normalizeId(item?.itemId || item?.targetId || item?.entityId || item?.id);
+                    return compactObject({
+                        id: stableRemoteId('deletedItems', `${kind}/${targetId || index + 1}`, index),
+                        targetCollection: kind,
+                        targetId,
+                        deletedAt: item?.deletedAt || item?.updatedAt || item?.createdAt,
+                        source: getSourceRef('deletedItems', item, index)
+                    });
+                })
+            };
+
+            return {
+                generatedAt: snapshot.generatedAt,
+                readOnly: true,
+                summary: Object.fromEntries(Object.entries(snapshot)
+                    .filter(([, value]) => Array.isArray(value))
+                    .map(([key, value]) => [key, value.length])),
+                snapshot,
+                jsonText: JSON.stringify(snapshot, null, 2)
+            };
         }
 
         function buildLegacyHabitDiagnostics(source = {}) {
@@ -305,7 +479,8 @@
         }
 
         return {
-            buildLegacyHabitDiagnostics
+            buildLegacyHabitDiagnostics,
+            buildHabitAppSnapshotPreview
         };
     }
 
