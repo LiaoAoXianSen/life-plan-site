@@ -531,6 +531,24 @@
         color: var(--muted);
         font-weight: 700;
     }
+    .ai-capture-todo-draft.is-existing {
+        border-color: #f0d9a8;
+        background: linear-gradient(180deg, rgba(255, 248, 230, .95), rgba(255,255,255,.92));
+    }
+    .ai-existing-hint {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255, 241, 214, .9);
+        color: #8a5a00;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
     @media (max-width: 720px) {
         .ai-capture-todo-dates {
             grid-template-columns: 1fr;

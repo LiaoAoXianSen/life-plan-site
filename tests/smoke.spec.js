@@ -1956,6 +1956,25 @@ test('AI diary analysis splits weekend plans and keeps editable dates', async ({
     // Unedited second item should keep AI-resolved weekend range, not collapse to empty.
     expect(mattress.planEndDate).toBeTruthy();
     expect(mattress.planStartDate <= mattress.planEndDate).toBeTruthy();
+    expect(declutter.sourceRecordId).toBe('diary-weekend-record');
+    expect(declutter.sourceMatchKey).toBeTruthy();
+
+    // Re-run analysis: similar items should be marked as already created and unchecked by default.
+    await page.getByRole('button', { name: '生成建议' }).click();
+    await expect(page.locator('#ai-result-panel')).toContainText('与已有待办相似');
+    await expect(page.locator('#ai-result-panel')).toContainText('已创建：');
+    await expect(page.locator('#ai-result-select-diary-todo-0')).not.toBeChecked();
+    await expect(page.locator('#ai-result-select-diary-todo-1')).not.toBeChecked();
+
+    const todoCountBefore = stored.todos.length;
+    page.once('dialog', dialog => {
+        // bulk create with nothing selected
+        expect(dialog.message()).toMatch(/请至少选择|没有可创建|标题为空/);
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '创建这些待办' }).click();
+    const afterSkip = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(afterSkip.todos.length).toBe(todoCountBefore);
 });
 
 test('AI chat capture drafts can be edited before writing', async ({ page }) => {

@@ -540,6 +540,15 @@
             openSnapshotModal();
         }
 
+        function normalizeTodoTextKeyLocal(value = '') {
+            if (todosService?.normalizeTodoTextKey) return todosService.normalizeTodoTextKey(value);
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[（(].*?[）)]/g, '')
+                .replace(/[\s\u3000"'“”‘’`~!@#$%^&*+=|\\/?:;,.，。！？、·…\-_/<>\[\]{}]+/g, '')
+                .trim();
+        }
+
         function normalizeDataShape(target = data) {
             if (!target || typeof target !== 'object') return data;
             ['records','todos','habits','checkins','habitPointLedger','habitRewards','habitCurrencies','templates','goals','deletedItems','materials','bodyMetrics','fitnessPlans','fitnessWorkouts','exerciseLibrary','wheels','wheelTags','wheelLibraryItems','wheelHistory'].forEach(key => {
@@ -557,6 +566,11 @@
                 if (typeof t.dueDate !== 'string') t.dueDate = '';
                 if (typeof t.planStartDate !== 'string') t.planStartDate = '';
                 if (typeof t.planEndDate !== 'string') t.planEndDate = '';
+                if (typeof t.sourceType !== 'string') t.sourceType = '';
+                if (typeof t.sourceRecordId !== 'string') t.sourceRecordId = '';
+                if (typeof t.sourceMatchKey !== 'string' || !t.sourceMatchKey) {
+                    t.sourceMatchKey = normalizeTodoTextKeyLocal(t.text || '');
+                }
                 t.sessions.forEach(session => {
                     if (!session.id) session.id = genId();
                     if (typeof session.date !== 'string') session.date = '';
@@ -2108,16 +2122,58 @@
             `;
         }
 
+        function getDiaryAiExistingMatch(item = {}, record = null) {
+            const target = record || getDiaryAiTargetRecord();
+            if (!target || !item?.text) return null;
+            const linkedIds = Array.isArray(target.todoIds) ? target.todoIds : [];
+            const linkedTodos = data.todos.filter(todo => linkedIds.includes(todo.id));
+            const sourceTodos = data.todos.filter(todo => todo.sourceRecordId === target.id || todo.sourceType === 'diary-ai');
+            const candidates = [];
+            const seen = new Set();
+            [...linkedTodos, ...sourceTodos, ...data.todos].forEach(todo => {
+                if (!todo?.id || seen.has(todo.id)) return;
+                seen.add(todo.id);
+                candidates.push(todo);
+            });
+            return todosService.findMatchingTodo(candidates, {
+                text: item.text,
+                sourceMatchKey: item.sourceMatchKey || item.matchKey || item.text,
+                planStartDate: item.planStartDate || '',
+                dueDate: item.dueDate || '',
+                sourceRecordId: target.id
+            }, {
+                sourceRecordId: target.id,
+                linkedTodoIds: linkedIds,
+                threshold: 0.72
+            });
+        }
+
+        function formatDiaryAiExistingMatchHint(match) {
+            if (!match?.todo) return '';
+            const todo = match.todo;
+            const status = todo.done ? '已完成' : '未完成';
+            const dateLabel = formatTodoDueDate(todo) || getTodoPlanLabel(todo) || '';
+            const scoreLabel = match.score >= 0.95 ? '高度相似' : '疑似相同';
+            return `已创建：${todo.text || '未命名待办'}（${status}${dateLabel ? ` · ${dateLabel}` : ''} · ${scoreLabel}）`;
+        }
+
         function renderDiaryAiTodoDraft(item, index) {
+            const match = getDiaryAiExistingMatch(item);
+            const checked = match ? '' : 'checked';
+            const existingClass = match ? ' is-existing' : '';
+            const existingHint = match
+                ? `<div class="ai-existing-hint"><span>${escapeHtml(formatDiaryAiExistingMatchHint(match))}</span><button type="button" class="btn btn-secondary todo-mini-btn" onclick="openTodoDetail(${escapeJsArg(match.todo.id)})">查看已有</button></div>`
+                : '';
             return `
-                <div class="ai-result-item ai-capture-todo-draft" data-index="${index}">
+                <div class="ai-result-item ai-capture-todo-draft${existingClass}" data-index="${index}">
                     <div class="ai-result-item-head">
                         <label class="ai-result-select">
-                            <input type="checkbox" id="${getAiResultSelectId('diary-todo', index)}" checked>
-                            <strong>创建这条待办</strong>
+                            <input type="checkbox" id="${getAiResultSelectId('diary-todo', index)}" ${checked}>
+                            <strong>${match ? '已创建（可再勾选重建）' : '创建这条待办'}</strong>
                         </label>
-                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="applyDiaryAiTodo(${index})">只创建这条</button>
+                        <button type="button" class="btn btn-secondary todo-mini-btn" onclick="applyDiaryAiTodo(${index})">${match ? '仍创建这条' : '只创建这条'}</button>
                     </div>
+                    ${existingHint}
                     <label>
                         <span>待办标题</span>
                         <input id="${getDiaryAiDraftId(`todo-text-${index}`)}" value="${escapeHtml(item.text || '')}">
@@ -2196,11 +2252,13 @@
                 { key: 'smallJoy', label: '小确幸', value: diary.smallJoy, action: '写入小确幸' }
             ].filter(section => section.value);
             const todoCount = aiLastResult.items?.length || 0;
+            const existingCount = (aiLastResult.items || []).filter(item => getDiaryAiExistingMatch(item)).length;
             return `
                 <div class="ai-result-head">
                     <div>
                         <div class="ai-result-title">${escapeHtml(aiLastResult.title)}</div>
                         ${aiLastResult.summary ? `<div class="ai-result-summary">${escapeHtml(aiLastResult.summary)}</div>` : ''}
+                        ${existingCount ? `<div class="ai-result-summary">其中 ${existingCount} 条与已有待办相似，默认不重复创建；需要时可手动勾选。</div>` : ''}
                     </div>
                 </div>
                 ${sections.length ? `
@@ -2594,9 +2652,21 @@
                 alert(onlyIndex == null ? '请至少选择一条待办并保留标题' : '这条待办标题为空，无法创建');
                 return;
             }
+
+            const duplicateCount = draftItems.filter(item => getDiaryAiExistingMatch(item, record)).length;
+            if (duplicateCount > 0) {
+                const message = duplicateCount === draftItems.length
+                    ? `选中的 ${duplicateCount} 条都与已有待办相似。仍要再创建一遍吗？`
+                    : `选中项里有 ${duplicateCount} 条与已有待办相似。确定继续创建选中的 ${draftItems.length} 条吗？`;
+                if (!confirm(message)) return;
+            }
+
             const todos = draftItems.map(item => {
-                const todo = createTodoFromAiItem(item);
-                todo.sourceType = 'diary-ai';
+                const todo = createTodoFromAiItem(item, {
+                    sourceType: 'diary-ai',
+                    sourceRecordId: record.id,
+                    sourceMatchKey: item.sourceMatchKey || item.text
+                });
                 todo.note = [todo.note, `来源日记：${record.title || record.startDate || '未命名日记'}`].filter(Boolean).join('\n\n');
                 return todo;
             });
@@ -2609,6 +2679,7 @@
             saveData();
             refreshDiaryRecordAfterAi(record);
             renderTodoTable();
+            renderAiResultPanel();
             alert(`已创建待办 ${todos.length} 项`);
         }
 

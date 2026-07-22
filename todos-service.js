@@ -97,9 +97,110 @@
             return { planStartDate: start, planEndDate: end, isValid: !(start && end && start > end) };
         }
 
+        function normalizeTodoTextKey(value = '') {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[（(].*?[）)]/g, '')
+                .replace(/^(推进|补上|验证灵感|待办|任务)[:：\s]*/u, '')
+                .replace(/^(做一下|去做|准备|需要|打算|计划|想要|想|再|先|去)/u, '')
+                .replace(/[\s\u3000"'“”‘’`~!@#$%^&*+=|\\/?:;,.，。！？、·…\-_/<>\[\]{}]+/g, '')
+                .trim();
+        }
+
+        function getTodoTextBigrams(key = '') {
+            const text = String(key || '');
+            if (!text) return [];
+            if (text.length === 1) return [text];
+            const grams = [];
+            for (let i = 0; i < text.length - 1; i += 1) grams.push(text.slice(i, i + 2));
+            return grams;
+        }
+
+        function scoreTodoTextSimilarity(a = '', b = '') {
+            const left = normalizeTodoTextKey(a);
+            const right = normalizeTodoTextKey(b);
+            if (!left || !right) return 0;
+            if (left === right) return 1;
+            if (left.includes(right) || right.includes(left)) {
+                const shorter = Math.min(left.length, right.length);
+                const longer = Math.max(left.length, right.length);
+                return Math.min(0.98, 0.72 + (shorter / longer) * 0.26);
+            }
+            const leftGrams = getTodoTextBigrams(left);
+            const rightGrams = getTodoTextBigrams(right);
+            if (!leftGrams.length || !rightGrams.length) return 0;
+            const rightCount = new Map();
+            rightGrams.forEach(gram => rightCount.set(gram, (rightCount.get(gram) || 0) + 1));
+            let overlap = 0;
+            leftGrams.forEach(gram => {
+                const count = rightCount.get(gram) || 0;
+                if (count > 0) {
+                    overlap += 1;
+                    rightCount.set(gram, count - 1);
+                }
+            });
+            return (2 * overlap) / (leftGrams.length + rightGrams.length);
+        }
+
+        function findMatchingTodo(candidates = [], item = {}, options = {}) {
+            const list = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
+            if (!list.length) return null;
+            const text = String(item?.text || '').trim();
+            const matchKey = normalizeTodoTextKey(item?.sourceMatchKey || item?.matchKey || text);
+            if (!text && !matchKey) return null;
+            const threshold = Number(options.threshold);
+            const minScore = Number.isFinite(threshold) ? threshold : 0.72;
+            const preferSourceId = String(options.sourceRecordId || item?.sourceRecordId || '').trim();
+            let best = null;
+
+            list.forEach(todo => {
+                let score = 0;
+                let reason = '';
+                const todoKey = normalizeTodoTextKey(todo.sourceMatchKey || todo.text || '');
+                if (preferSourceId && todo.sourceRecordId === preferSourceId && matchKey && todoKey === matchKey) {
+                    score = 1;
+                    reason = 'same-source-key';
+                } else if (matchKey && todoKey === matchKey) {
+                    score = 0.99;
+                    reason = 'exact-key';
+                } else {
+                    score = scoreTodoTextSimilarity(text || matchKey, todo.text || '');
+                    if (todo.sourceMatchKey) {
+                        score = Math.max(score, scoreTodoTextSimilarity(text || matchKey, todo.sourceMatchKey));
+                    }
+                    reason = score >= 0.9 ? 'near-text' : 'similar-text';
+                }
+
+                // Soft boost when plan windows overlap or share the same day.
+                const itemStart = item.planStartDate || item.dueDate || '';
+                const todoStart = todo.planStartDate || todo.dueDate || '';
+                if (itemStart && todoStart && itemStart === todoStart && score >= 0.55) {
+                    score = Math.min(1, score + 0.08);
+                }
+
+                if (preferSourceId && todo.sourceRecordId === preferSourceId && score >= 0.55) {
+                    score = Math.min(1, score + 0.06);
+                }
+                if (Array.isArray(options.linkedTodoIds) && options.linkedTodoIds.includes(todo.id) && score >= 0.55) {
+                    score = Math.min(1, score + 0.05);
+                }
+
+                if (score < minScore) return;
+                if (!best || score > best.score) {
+                    best = { todo, score, reason };
+                }
+            });
+            return best;
+        }
+
         function createTodoFromAiItem(item, overrides = {}) {
             const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
             const pickDate = (key, fallback = '') => {
+                if (has(overrides, key)) return String(overrides[key] || '').trim();
+                if (has(item, key)) return String(item[key] || '').trim();
+                return fallback;
+            };
+            const pickText = (key, fallback = '') => {
                 if (has(overrides, key)) return String(overrides[key] || '').trim();
                 if (has(item, key)) return String(item[key] || '').trim();
                 return fallback;
@@ -111,10 +212,14 @@
             if (!planStartDate && planEndDate) planStartDate = planEndDate;
             if (!dueDate && planEndDate) dueDate = planEndDate;
             // Keep empty dates empty so fuzzy weekend plans are not forced onto today.
+            const text = pickText('text', item.text || '');
+            const sourceMatchKey = normalizeTodoTextKey(
+                pickText('sourceMatchKey', item.sourceMatchKey || item.matchKey || text)
+            );
             const stamp = getNowLocal();
             return {
                 id: genId(),
-                text: item.text,
+                text,
                 note: item.note || item.reason || '',
                 done: false,
                 dueDate,
@@ -128,7 +233,9 @@
                 createdAt: stamp,
                 updatedAt: stamp,
                 completedAt: '',
-                sourceType: 'ai'
+                sourceType: pickText('sourceType', item.sourceType || 'ai') || 'ai',
+                sourceRecordId: pickText('sourceRecordId', item.sourceRecordId || ''),
+                sourceMatchKey
             };
         }
 
@@ -144,6 +251,9 @@
             toggleTodoDone,
             syncDoneFromSubTodos,
             normalizeTodoDateRange,
+            normalizeTodoTextKey,
+            scoreTodoTextSimilarity,
+            findMatchingTodo,
             createTodoFromAiItem
         };
     }
