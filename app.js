@@ -6830,7 +6830,7 @@
                 { label: '心愿', value: summary.habitRewards || 0, note: 'habitRewards' },
                 { label: '今日达标', value: `${summary.doneToday || 0}/${summary.dueToday || 0}`, note: `${summary.partialToday || 0} 条进行中` },
                 { label: '近 7 天打卡', value: summary.recentCheckins || 0, note: '含多次记录' },
-                { label: '旧 Tombstone', value: summary.deletedItems || 0, note: `习惯 ${summary.deletedHabitItems || 0} · 打卡 ${summary.deletedCheckinItems || 0}` },
+                { label: '全部 Tombstone', value: summary.deletedItems || 0, note: `其中习惯 ${summary.deletedHabitItems || 0} · 打卡 ${summary.deletedCheckinItems || 0}` },
                 { label: '钱包预览', value: balances, note: '仅按旧流水汇总' }
             ];
             const issueLevelRank = { danger: 0, warning: 1, info: 2 };
