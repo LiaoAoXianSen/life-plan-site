@@ -1777,8 +1777,11 @@
                 base.instruction = [
                     '分析 selectedDiary，不要自动替用户下结论太满。',
                     '返回 diary.review：适合写入日记“复盘”的 2-5 句中文。',
-                    '返回 diary.tomorrow：适合写入“明日重点”的 1-3 条短句。',
-                    '可选 diary.oneLine/improve/thinking/smallJoy；items 返回 0-3 个需要用户确认创建的待办。',
+                    '返回 diary.tomorrow：适合写入“明日重点”的 1-3 条短句；若文中明确是周末/下周安排，明日重点可概括这些打算，不要硬改成今天。',
+                    '可选 diary.oneLine/improve/thinking/smallJoy；items 返回 0-4 个需要用户确认创建的待办。',
+                    '日记里若有多个独立打算（例如“一个…另一个…”/列表），必须拆成多条 items。',
+                    '相对时间必须换算成 YYYY-MM-DD：周末/本周末=最近周六到周日；下周末=再下一组周六日；明天/后天/周X 同理。禁止把“周末”默认成今天。',
+                    'items 尽量填 planStartDate/planEndDate；模糊时段 dueDate 可等于 planEndDate；完全无时间则日期留空让用户改。',
                     '所有写入都需要用户点击确认，所以建议要可编辑、短、具体。'
                 ].join('\n');
             } else if (currentAiMode === 'chatCapture') {
@@ -1787,7 +1790,8 @@
                     '把 userInput 当作用户随口对话，不要要求格式。',
                     '先修正明显错别字、标点和语序，返回 capture.cleanText。',
                     '判断适合放到哪里：待办、工作记录、日记、日计划、灵感碎片。',
-                    '适合创建待办的内容放到 items，items 必须短、可执行。',
+                    '适合创建待办的内容放到 items，items 必须短、可执行；多个打算拆多条。',
+                    'items 的相对时间（周末/明天/下周X）换算成 planStartDate/planEndDate/dueDate，禁止无依据默认今天。',
                     '适合追加到日记的内容放到 capture.diaryText。',
                     '适合工作记录的内容放到 capture.workText。',
                     '适合计划/明日重点的内容放到 capture.planText。',
@@ -1823,6 +1827,27 @@
             return aiService.generateLocalAiResult(payload);
         }
 
+        function refineAiResultDates(result, mode = currentAiMode) {
+            if (!result || !Array.isArray(result.items) || !result.items.length) return result;
+            if (mode !== 'diaryReview' && mode !== 'chatCapture') return result;
+            const today = getTodayStr();
+            result.items = result.items.map(item => {
+                const refined = aiService.applyResolvedDatesToItem(item, today, {
+                    fallbackDate: '',
+                    preferResolved: true,
+                    stripDateFromText: false
+                });
+                if (refined.planStartDate && !refined.planEndDate) refined.planEndDate = refined.planStartDate;
+                if (!refined.dueDate && refined.planEndDate) refined.dueDate = refined.planEndDate;
+                if (!refined.planStartDate && refined.dueDate) {
+                    refined.planStartDate = refined.dueDate;
+                    refined.planEndDate = refined.dueDate;
+                }
+                return refined;
+            });
+            return result;
+        }
+
         async function runAiAssistant() {
             if (isAiAssistantRunning) return;
             setAiAssistantRunning(true);
@@ -1830,14 +1855,17 @@
                 const payload = buildAiPayload();
                 const useRemote = isRemoteAiReady();
                 updateAiSettingsStatus(useRemote ? '正在请求远程 AI...' : '远程 AI 未配置或配置不完整，正在使用本地规则生成建议...');
-                aiLastResult = useRemote
-                    ? await requestRemoteAi(payload)
-                    : generateLocalAiResult(payload);
+                aiLastResult = refineAiResultDates(
+                    useRemote
+                        ? await requestRemoteAi(payload)
+                        : generateLocalAiResult(payload),
+                    currentAiMode
+                );
                 renderAiResultPanel();
                 updateAiSettingsStatus(useRemote ? 'AI 建议已生成。' : '本地规则建议已生成。需要远程 AI 时，请从页面侧栏的 AI 设置完成配置。');
             } catch (err) {
                 try {
-                    const localResult = generateLocalAiResult(buildAiPayload());
+                    const localResult = refineAiResultDates(generateLocalAiResult(buildAiPayload()), currentAiMode);
                     aiLastResult = localResult;
                     renderAiResultPanel();
                     updateAiSettingsStatus(`远程 AI 报错：${err.message || '请求失败'}\n已改用本地规则生成建议。`, true);
@@ -1916,13 +1944,18 @@
         function getEditableAiResultItemDraft(item, index) {
             const text = getAiResultDraftText('text', index, item.text || '');
             if (!text) return null;
+            const planStartDate = getAiResultDraftText('plan-start', index, item.planStartDate || '');
+            const planEndDate = getAiResultDraftText('plan-end', index, item.planEndDate || planStartDate || '');
+            const dueDate = getAiResultDraftText('due', index, item.dueDate || planEndDate || '');
             return {
                 ...item,
                 text,
                 note: getAiResultDraftText('note', index, item.note || item.reason || ''),
                 group: getAiResultDraftText('group', index, item.group || '其他') || '其他',
                 urgency: getAiResultDraftText('urgency', index, item.urgency || 'medium') || 'medium',
-                dueDate: getAiResultDraftText('due', index, item.dueDate || '')
+                planStartDate,
+                planEndDate: planEndDate || planStartDate,
+                dueDate
             };
         }
 
@@ -1930,6 +1963,27 @@
             if (currentAiMode === 'todoBreakdown') return '写入这条';
             if (currentAiMode === 'ideaNext') return '转成待办';
             return '加入待办';
+        }
+
+        function renderAiTodoDateFields(planStartId, planEndId, dueId, item = {}) {
+            const hint = item.dateHint ? `<div class="ai-date-hint">识别时间：${escapeHtml(item.dateHint)}</div>` : '';
+            return `
+                <div class="ai-capture-todo-dates">
+                    <label>
+                        <span>计划开始</span>
+                        <input id="${planStartId}" type="date" value="${escapeHtml(item.planStartDate || '')}">
+                    </label>
+                    <label>
+                        <span>计划结束</span>
+                        <input id="${planEndId}" type="date" value="${escapeHtml(item.planEndDate || item.planStartDate || '')}">
+                    </label>
+                    <label>
+                        <span>截止</span>
+                        <input id="${dueId}" type="date" value="${escapeHtml(item.dueDate || item.planEndDate || '')}">
+                    </label>
+                </div>
+                ${hint}
+            `;
         }
 
         function renderEditableAiResultItem(item, index) {
@@ -1965,11 +2019,13 @@
                                     ${Object.entries(TODO_URGENCY_META).map(([value, meta]) => `<option value="${escapeHtml(value)}" ${urgency === value ? 'selected' : ''}>${escapeHtml(meta.label)}</option>`).join('')}
                                 </select>
                             </label>
-                            <label>
-                                <span>截止</span>
-                                <input id="${getAiResultDraftId('due', index)}" type="date" value="${escapeHtml(item.dueDate || '')}">
-                            </label>
                         </div>
+                        ${renderAiTodoDateFields(
+                            getAiResultDraftId('plan-start', index),
+                            getAiResultDraftId('plan-end', index),
+                            getAiResultDraftId('due', index),
+                            item
+                        )}
                     `}
                 </div>
             `;
@@ -2041,11 +2097,13 @@
                             <span>分组</span>
                             <input id="${getAiCaptureDraftId(`todo-group-${index}`)}" value="${escapeHtml(item.group || '其他')}">
                         </label>
-                        <label>
-                            <span>截止</span>
-                            <input id="${getAiCaptureDraftId(`todo-due-${index}`)}" type="date" value="${escapeHtml(item.dueDate || getTodayStr())}">
-                        </label>
                     </div>
+                    ${renderAiTodoDateFields(
+                        getAiCaptureDraftId(`todo-plan-start-${index}`),
+                        getAiCaptureDraftId(`todo-plan-end-${index}`),
+                        getAiCaptureDraftId(`todo-due-${index}`),
+                        item
+                    )}
                 </div>
             `;
         }
@@ -2073,11 +2131,13 @@
                             <span>分组</span>
                             <input id="${getDiaryAiDraftId(`todo-group-${index}`)}" value="${escapeHtml(item.group || '其他')}">
                         </label>
-                        <label>
-                            <span>截止</span>
-                            <input id="${getDiaryAiDraftId(`todo-due-${index}`)}" type="date" value="${escapeHtml(item.dueDate || getTodayStr())}">
-                        </label>
                     </div>
+                    ${renderAiTodoDateFields(
+                        getDiaryAiDraftId(`todo-plan-start-${index}`),
+                        getDiaryAiDraftId(`todo-plan-end-${index}`),
+                        getDiaryAiDraftId(`todo-due-${index}`),
+                        item
+                    )}
                 </div>
             `;
         }
@@ -2085,30 +2145,14 @@
         function getAiCaptureTodoDrafts() {
             return (aiLastResult?.items || []).map((item, index) => {
                 if (!isAiResultItemSelected('capture-todo', index)) return null;
-                const text = getAiCaptureDraftText(`todo-text-${index}`, item.text);
-                if (!text) return null;
-                return {
-                    ...item,
-                    text,
-                    note: getAiCaptureDraftText(`todo-note-${index}`, item.note || ''),
-                    group: getAiCaptureDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
-                    dueDate: getAiCaptureDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
-                };
+                return getAiCaptureTodoDraftByIndex(index);
             }).filter(Boolean);
         }
 
         function getDiaryAiTodoDrafts() {
             return (aiLastResult?.items || []).map((item, index) => {
                 if (!isAiResultItemSelected('diary-todo', index)) return null;
-                const text = getDiaryAiDraftText(`todo-text-${index}`, item.text);
-                if (!text) return null;
-                return {
-                    ...item,
-                    text,
-                    note: getDiaryAiDraftText(`todo-note-${index}`, item.note || ''),
-                    group: getDiaryAiDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
-                    dueDate: getDiaryAiDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
-                };
+                return getDiaryAiTodoDraftByIndex(index);
             }).filter(Boolean);
         }
 
@@ -2369,12 +2413,17 @@
             if (!item) return null;
             const text = getAiCaptureDraftText(`todo-text-${index}`, item.text);
             if (!text) return null;
+            const planStartDate = getAiCaptureDraftText(`todo-plan-start-${index}`, item.planStartDate || '');
+            const planEndDate = getAiCaptureDraftText(`todo-plan-end-${index}`, item.planEndDate || planStartDate || '');
+            const dueDate = getAiCaptureDraftText(`todo-due-${index}`, item.dueDate || planEndDate || '');
             return {
                 ...item,
                 text,
                 note: getAiCaptureDraftText(`todo-note-${index}`, item.note || ''),
                 group: getAiCaptureDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
-                dueDate: getAiCaptureDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
+                planStartDate,
+                planEndDate: planEndDate || planStartDate,
+                dueDate
             };
         }
 
@@ -2514,12 +2563,17 @@
             if (!item) return null;
             const text = getDiaryAiDraftText(`todo-text-${index}`, item.text);
             if (!text) return null;
+            const planStartDate = getDiaryAiDraftText(`todo-plan-start-${index}`, item.planStartDate || '');
+            const planEndDate = getDiaryAiDraftText(`todo-plan-end-${index}`, item.planEndDate || planStartDate || '');
+            const dueDate = getDiaryAiDraftText(`todo-due-${index}`, item.dueDate || planEndDate || '');
             return {
                 ...item,
                 text,
                 note: getDiaryAiDraftText(`todo-note-${index}`, item.note || ''),
                 group: getDiaryAiDraftText(`todo-group-${index}`, item.group || '其他') || '其他',
-                dueDate: getDiaryAiDraftText(`todo-due-${index}`, item.dueDate || getTodayStr()) || getTodayStr()
+                planStartDate,
+                planEndDate: planEndDate || planStartDate,
+                dueDate
             };
         }
 

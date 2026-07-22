@@ -98,16 +98,26 @@
         }
 
         function createTodoFromAiItem(item, overrides = {}) {
-            const today = getTodayStr();
-            const planStartDate = overrides.planStartDate ?? item.planStartDate ?? today;
-            const planEndDate = overrides.planEndDate ?? item.planEndDate ?? planStartDate;
+            const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+            const pickDate = (key, fallback = '') => {
+                if (has(overrides, key)) return String(overrides[key] || '').trim();
+                if (has(item, key)) return String(item[key] || '').trim();
+                return fallback;
+            };
+            let planStartDate = pickDate('planStartDate');
+            let planEndDate = pickDate('planEndDate');
+            let dueDate = pickDate('dueDate');
+            if (planStartDate && !planEndDate) planEndDate = planStartDate;
+            if (!planStartDate && planEndDate) planStartDate = planEndDate;
+            if (!dueDate && planEndDate) dueDate = planEndDate;
+            // Keep empty dates empty so fuzzy weekend plans are not forced onto today.
             const stamp = getNowLocal();
             return {
                 id: genId(),
                 text: item.text,
                 note: item.note || item.reason || '',
                 done: false,
-                dueDate: overrides.dueDate ?? item.dueDate ?? today,
+                dueDate,
                 planStartDate,
                 planEndDate,
                 urgency: urgencyMeta[item.urgency] ? item.urgency : 'medium',

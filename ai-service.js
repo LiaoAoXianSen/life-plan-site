@@ -86,10 +86,20 @@
                     planStartDate: normalizeText(item?.planStartDate),
                     planEndDate: normalizeText(item?.planEndDate),
                     reason: normalizeText(item?.reason),
+                    dateHint: normalizeText(item?.dateHint || item?.when || item?.dateLabel),
                     subTodos: Array.isArray(item?.subTodos)
                         ? item.subTodos.map(sub => ({ text: normalizeText(sub?.text || sub), done: !!sub?.done })).filter(sub => sub.text)
                         : []
                 }))
+                .map(item => {
+                    if (item.planStartDate && !item.planEndDate) item.planEndDate = item.planStartDate;
+                    if (!item.planStartDate && item.dueDate) {
+                        item.planStartDate = item.dueDate;
+                        item.planEndDate = item.dueDate;
+                    }
+                    if (!item.dueDate && item.planEndDate) item.dueDate = item.planEndDate;
+                    return item;
+                })
                 .filter(item => item.text);
             return normalized;
         }
@@ -120,11 +130,13 @@
                             '你是一个个人规划应用里的 AI 助手。',
                             '请只返回严格 JSON，不要 Markdown。',
                             'JSON 字段：title 字符串，summary 字符串，items 数组，可选 diary 对象，可选 capture 对象，可选 tags 数组。',
-                            'items 每项字段：text 字符串，note 字符串，可选 urgency/group/dueDate/planStartDate/planEndDate/subTodos/reason。',
+                            'items 每项字段：text 字符串，note 字符串，可选 urgency/group/dueDate/planStartDate/planEndDate/subTodos/reason/dateHint。',
+                            '日期规则：出现“周末/本周末/这个周末”时，planStartDate/planEndDate 填最近周六到周日；“下周末”填再下一组周六日；“明天/后天/下周X”换算成具体 YYYY-MM-DD，禁止默认塞今天。',
+                            '若只有模糊时间没有硬截止，可只填 planStartDate/planEndDate，dueDate 可与 planEndDate 相同；完全无时间则日期字段留空，让用户编辑。',
                             'diary 可选字段：oneLine/review/tomorrow/improve/thinking/smallJoy，均为字符串。',
                             'capture 可选字段：cleanText、diaryText、workText、planText、ideaText、suggestedTargets。',
                             '当 mode 为 wheelTagSuggest 时：items 可为空；tags 返回 1-5 个推荐标签，字段 name/reason；name 必须来自 context.existingTags，禁止自造标签。',
-                            '建议必须具体、短、可执行。'
+                            '建议必须具体、短、可执行；多个独立打算要拆成多条 items。'
                         ].join('\n')
                     },
                     {
@@ -178,27 +190,278 @@
                 .filter(Boolean);
         }
 
+        function weekdayIndexFromToken(token = '') {
+            const map = {
+                日: 0, 天: 0, 七: 0,
+                一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6
+            };
+            return map[String(token || '').trim()];
+        }
+
+        function nextWeekdayDate(today, weekday, { allowToday = true } = {}) {
+            const current = new Date(`${today}T00:00:00`).getDay();
+            let delta = (weekday - current + 7) % 7;
+            if (delta === 0 && !allowToday) delta = 7;
+            return addDays(today, delta);
+        }
+
+        function upcomingWeekendRange(today, { next = false } = {}) {
+            const day = new Date(`${today}T00:00:00`).getDay();
+            // Nearest/current weekend: if already Sat/Sun, use remaining weekend days.
+            let thisSaturday;
+            if (day === 6) thisSaturday = today;
+            else if (day === 0) thisSaturday = addDays(today, -1);
+            else thisSaturday = nextWeekdayDate(today, 6, { allowToday: true });
+            if (next) {
+                const nextSaturday = addDays(thisSaturday, 7);
+                return { start: nextSaturday, end: addDays(nextSaturday, 1), label: '下周末' };
+            }
+            if (day === 0) return { start: today, end: today, label: '本周末' };
+            return { start: thisSaturday, end: addDays(thisSaturday, 1), label: '本周末' };
+        }
+
+        function stripMatchedDatePhrase(text, match) {
+            if (!match) return cleanCaptureText(text);
+            const raw = String(text || '');
+            const start = Math.max(0, match.index || 0);
+            const end = start + String(match[0] || '').length;
+            return cleanCaptureText(`${raw.slice(0, start)} ${raw.slice(end)}`)
+                .replace(/^[:：,，、\s]+/, '')
+                .replace(/[（(]\s*[）)]/g, '')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+        }
+
+        function resolveRelativeDateRange(text = '', today = getTodayStr()) {
+            const source = String(text || '');
+            if (!source.trim()) return null;
+
+            const patterns = [
+                {
+                    re: /(下下?个?周末|下周末|这个周末|这周末|本周末|周末)/,
+                    resolve: (match) => {
+                        const token = match[1];
+                        const next = /下/.test(token) && !/这个|这周|本周/.test(token);
+                        const range = upcomingWeekendRange(today, { next });
+                        return { ...range, label: next ? '下周末' : '本周末' };
+                    }
+                },
+                {
+                    re: /(今天|今日)/,
+                    resolve: () => ({ start: today, end: today, label: '今天' })
+                },
+                {
+                    re: /(明天|明日)/,
+                    resolve: () => {
+                        const date = addDays(today, 1);
+                        return { start: date, end: date, label: '明天' };
+                    }
+                },
+                {
+                    re: /(后天)/,
+                    resolve: () => {
+                        const date = addDays(today, 2);
+                        return { start: date, end: date, label: '后天' };
+                    }
+                },
+                {
+                    re: /(大后天)/,
+                    resolve: () => {
+                        const date = addDays(today, 3);
+                        return { start: date, end: date, label: '大后天' };
+                    }
+                },
+                {
+                    re: /(下下周|下周|这周|本周)?[周星期]([一二三四五六日天])/,
+                    resolve: (match) => {
+                        const prefix = match[1] || '';
+                        const weekday = weekdayIndexFromToken(match[2]);
+                        if (weekday == null) return null;
+                        let date;
+                        if (/下下周/.test(prefix)) {
+                            const first = nextWeekdayDate(today, weekday, { allowToday: false, minDaysAhead: 1 });
+                            date = addDays(first, 7);
+                        } else if (/下周/.test(prefix)) {
+                            // Next week's that weekday (always after this week's same day).
+                            const thisWeekSame = nextWeekdayDate(today, weekday, { allowToday: true });
+                            date = addDays(thisWeekSame, 7);
+                        } else {
+                            date = nextWeekdayDate(today, weekday, { allowToday: true });
+                        }
+                        return { start: date, end: date, label: match[0] };
+                    }
+                }
+            ];
+
+            for (const pattern of patterns) {
+                const match = source.match(pattern.re);
+                if (!match) continue;
+                const resolved = pattern.resolve(match);
+                if (!resolved?.start) continue;
+                return {
+                    planStartDate: resolved.start,
+                    planEndDate: resolved.end || resolved.start,
+                    dueDate: resolved.end || resolved.start,
+                    label: resolved.label || match[0],
+                    matched: match[0],
+                    textWithoutDate: stripMatchedDatePhrase(source, match)
+                };
+            }
+            return null;
+        }
+
+        function applyResolvedDatesToItem(item = {}, today = getTodayStr(), options = {}) {
+            const sourceText = [item.text, item.note, item.reason].filter(Boolean).join(' ');
+            const resolved = resolveRelativeDateRange(sourceText, today);
+            const fallbackDate = options.fallbackDate || '';
+            const preferResolved = !!options.preferResolved;
+            if (resolved) {
+                const shouldOverride = preferResolved
+                    || !item.dueDate
+                    || item.dueDate === today
+                    || item.planStartDate === today;
+                if (shouldOverride) {
+                    return {
+                        ...item,
+                        dueDate: resolved.dueDate,
+                        planStartDate: resolved.planStartDate,
+                        planEndDate: resolved.planEndDate,
+                        dateHint: resolved.label,
+                        text: options.stripDateFromText && resolved.textWithoutDate
+                            ? resolved.textWithoutDate.slice(0, 80) || item.text
+                            : item.text
+                    };
+                }
+            }
+            if (!item.dueDate && !item.planStartDate && fallbackDate) {
+                return {
+                    ...item,
+                    dueDate: fallbackDate,
+                    planStartDate: fallbackDate,
+                    planEndDate: fallbackDate
+                };
+            }
+            if (item.planStartDate && !item.planEndDate) {
+                return { ...item, planEndDate: item.planStartDate };
+            }
+            if (!item.planStartDate && item.dueDate) {
+                return { ...item, planStartDate: item.dueDate, planEndDate: item.dueDate };
+            }
+            return item;
+        }
+
+        function cleanActionText(text = '') {
+            return cleanCaptureText(text)
+                .replace(/^(还要|需要|打算|计划|想要|想|准备|准备去|记一个|顺手记个|一个是|另一个是|另外一个是|还有一个是|一是|二是)/, '')
+                .replace(/^(就是|先|再|去)/, '')
+                .replace(/[，,]?\s*(?:因为|由于).+$/, '')
+                .replace(/[，,]?\s*实在不行.+$/, '')
+                .replace(/[。；;！!？?\s]+$/g, '')
+                .trim();
+        }
+
+        function extractDiaryActionItems(content = '', today = getTodayStr(), options = {}) {
+            const plain = cleanCaptureText(String(content || '').replace(/^#\s+/gm, ''));
+            if (!plain) return [];
+            const sharedRange = resolveRelativeDateRange(plain, today);
+            const items = [];
+            const stampSharedDates = (item) => {
+                if (!sharedRange) return item;
+                if (item.planStartDate || item.dueDate) return item;
+                return {
+                    ...item,
+                    planStartDate: sharedRange.planStartDate,
+                    planEndDate: sharedRange.planEndDate,
+                    dueDate: sharedRange.dueDate,
+                    dateHint: item.dateHint || sharedRange.label
+                };
+            };
+            const addItem = (rawText, extraNote = '') => {
+                let cleaned = cleanActionText(rawText).slice(0, 80);
+                if (!cleaned || cleaned.length < 2) return;
+                // Drop leading shared time phrases already applied to dates.
+                cleaned = cleaned
+                    .replace(/^(这个周末|这周末|本周末|下周末|周末|今天|明天|后天)[，,、\s]*/, '')
+                    .trim() || cleaned;
+                if (items.some(item => item.text === cleaned)) return;
+                if (/^(今天|明天|周末|这个周末|本周末)/.test(cleaned) && cleaned.length <= 6) return;
+                const base = {
+                    text: cleaned,
+                    note: extraNote || '',
+                    group: '其他',
+                    urgency: 'medium',
+                    dueDate: '',
+                    planStartDate: '',
+                    planEndDate: ''
+                };
+                const resolved = applyResolvedDatesToItem(base, today, {
+                    fallbackDate: options.fallbackDate || '',
+                    preferResolved: true,
+                    stripDateFromText: false
+                });
+                items.push(stampSharedDates(resolved));
+            };
+
+            // Explicit "一个…另一个…" / "一是…二是…" pairs.
+            const pairPatterns = [
+                /一个(?:就是|是)?([^。；;\n]+?)(?:[，,]?\s*)(?:另一个|另外一个|还有一个)(?:就是|是)?([^。；;\n]+)/,
+                /一是([^。；;\n]+?)(?:[，,]?\s*)二是([^。；;\n]+)/
+            ];
+            for (const re of pairPatterns) {
+                const match = plain.match(re);
+                if (match) {
+                    addItem(match[1], options.sourceNote || '');
+                    addItem(match[2], options.sourceNote || '');
+                    if (items.length) return items.slice(0, 5);
+                }
+            }
+
+            // Numbered / bullet style lines.
+            plain.split('\n').forEach(line => {
+                const bullet = line.match(/^\s*(?:[-*•]|\d+[\.、\)）])\s*(.+)$/);
+                if (bullet) addItem(bullet[1], options.sourceNote || '');
+            });
+            if (items.length) return items.slice(0, 5);
+
+            // Intent-bearing sentences with relative time or action verbs.
+            getCaptureSentences(plain)
+                .filter(sentence => {
+                    if (sentence.length > 100) return false;
+                    const hasTime = /(今天|明天|后天|周末|下周|这周|本周|周[一二三四五六日天]|星期[一二三四五六日天])/.test(sentence);
+                    const hasAction = /(断舍离|整理|打扫|处理|完成|推进|检查|修复|提交|收拾|清洗|重装|更换|翻新|准备|打算|计划|要做|去做)/.test(sentence);
+                    return hasTime || hasAction;
+                })
+                .slice(0, 5)
+                .forEach(sentence => addItem(sentence, options.sourceNote || ''));
+
+            return items.slice(0, 5);
+        }
+
         function extractCaptureTodoItems(cleanText, today) {
             const items = [];
             const addItem = text => {
                 const clean = cleanCaptureText(text).replace(/^[:：,，、\s]+/, '').slice(0, 80);
                 if (clean && !items.some(item => item.text === clean)) {
-                    items.push({
+                    const base = {
                         text: clean,
                         note: `来自 AI 对话整理：${cleanText.slice(0, 160)}`,
                         group: '其他',
                         urgency: 'medium',
-                        dueDate: today,
-                        planStartDate: today,
-                        planEndDate: today
-                    });
+                        dueDate: '',
+                        planStartDate: '',
+                        planEndDate: ''
+                    };
+                    items.push(applyResolvedDatesToItem(base, today, {
+                        fallbackDate: today,
+                        preferResolved: true
+                    }));
                 }
             };
             const todoPattern = /(?:待办|任务|todo)[：:\s]+([^。；;！!？?\n]+)/ig;
             let match;
             while ((match = todoPattern.exec(cleanText))) addItem(match[1]);
             getCaptureSentences(cleanText)
-                .filter(sentence => /(检查|处理|完成|推进|整理|修复|提交|上传|复盘)/.test(sentence) && sentence.length <= 90)
+                .filter(sentence => /(检查|处理|完成|推进|整理|修复|提交|上传|复盘|断舍离)/.test(sentence) && sentence.length <= 90)
                 .slice(0, 3)
                 .forEach(sentence => addItem(sentence.replace(/^(还要|需要|记一个|顺手记个|明天|今天)/, '').trim()));
             return items.slice(0, 5);
@@ -323,15 +586,49 @@
                 const fields = diary.fields || {};
                 const plain = String(diary.content || '').replace(/^#\s+/gm, '').replace(/\n{2,}/g, '\n').trim();
                 const firstLine = fields.oneLine || plain.split('\n').map(line => line.trim()).find(Boolean) || diary.title || '今天值得被认真复盘';
+                const sourceNote = `来自日记「${diary.title || diary.startDate || ''}」的 AI 分析`;
+                const extractedItems = extractDiaryActionItems(
+                    [plain, payload.userInput || ''].filter(Boolean).join('\n'),
+                    today,
+                    { sourceNote }
+                );
                 const review = [
                     fields.review || `今天的核心线索是：${firstLine}`,
                     fields.improve ? `可改进处：${fields.improve}` : '可以把今天最卡的一点拆小，明天先做一个能完成的版本。',
+                    extractedItems.length
+                        ? `日记里提到的可执行打算：${extractedItems.map(item => item.text).join('；')}`
+                        : '',
                     payload.userInput ? `你的补充要求：${payload.userInput}` : ''
                 ].filter(Boolean).join('\n');
-                const tomorrowFocus = fields.tomorrow || `明天先推进：${firstLine.slice(0, 42)}`;
+                const tomorrowFocus = fields.tomorrow
+                    || (extractedItems.length
+                        ? extractedItems.slice(0, 2).map(item => {
+                            const when = item.dateHint || (item.planStartDate && item.planStartDate !== tomorrow ? item.planStartDate : '');
+                            return when ? `${when}：${item.text}` : item.text;
+                        }).join('\n')
+                        : `明天先推进：${firstLine.slice(0, 42)}`);
+                const items = extractedItems.length
+                    ? extractedItems.map(item => ({
+                        ...item,
+                        note: item.note || sourceNote,
+                        group: item.group || '其他',
+                        urgency: item.urgency || 'medium'
+                    }))
+                    : [{
+                        text: tomorrowFocus.replace(/^明天先推进[:：]\s*/, '').split('\n')[0].slice(0, 60) || '推进明日重点',
+                        note: sourceNote,
+                        group: '其他',
+                        urgency: 'medium',
+                        dueDate: tomorrow,
+                        planStartDate: tomorrow,
+                        planEndDate: tomorrow,
+                        dateHint: '明天'
+                    }];
                 return normalizeAiResult({
                     title: `日记分析：${diary.title || diary.startDate || '未命名日记'}`,
-                    summary: '本地规则已整理出可确认写入的复盘、明日重点和一个行动建议。',
+                    summary: extractedItems.length > 1
+                        ? `本地规则识别出 ${items.length} 个打算，并尽量按文中时间落计划区间；写入前仍可改标题和日期。`
+                        : '本地规则已整理出可确认写入的复盘、明日重点和行动建议。',
                     diary: {
                         oneLine: fields.oneLine || firstLine.slice(0, 60),
                         review,
@@ -339,15 +636,7 @@
                         improve: fields.improve || '把最重要的动作缩小到明天可以直接开始。',
                         thinking: fields.thinking || ''
                     },
-                    items: [{
-                        text: tomorrowFocus.replace(/^明天先推进[:：]\s*/, '').slice(0, 60) || '推进明日重点',
-                        note: `来自日记「${diary.title || diary.startDate || ''}」的 AI 分析`,
-                        group: '其他',
-                        urgency: 'medium',
-                        dueDate: tomorrow,
-                        planStartDate: tomorrow,
-                        planEndDate: tomorrow
-                    }]
+                    items
                 });
             }
             if (payload.mode === 'todoBreakdown') {
@@ -423,6 +712,9 @@
             normalizeAiResult,
             cleanCaptureText,
             getCaptureSentences,
+            resolveRelativeDateRange,
+            applyResolvedDatesToItem,
+            extractDiaryActionItems,
             extractCaptureTodoItems,
             generateLocalCaptureResult,
             generateLocalWheelTagSuggest,

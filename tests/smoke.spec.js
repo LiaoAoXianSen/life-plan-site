@@ -1818,6 +1818,9 @@ test('AI diary analysis writes review and todos only after confirmation', async 
     await page.locator('#ai-capture-draft-diary-tomorrow').fill('编辑后的明日重点：先验证写入后的内容可回读。');
     await page.locator('#ai-capture-draft-diary-todo-text-0').fill('编辑后的待办：确认日记 AI 可写前编辑');
     await page.locator('#ai-capture-draft-diary-todo-note-0').fill('先改草稿再落库，避免直接写入原文');
+    await page.locator('#ai-capture-draft-diary-todo-plan-start-0').fill('2026-07-10');
+    await page.locator('#ai-capture-draft-diary-todo-plan-end-0').fill('2026-07-11');
+    await page.locator('#ai-capture-draft-diary-todo-due-0').fill('2026-07-11');
 
     let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.records[0].content).not.toContain('今天的核心线索');
@@ -1846,7 +1849,113 @@ test('AI diary analysis writes review and todos only after confirmation', async 
     const updatedDiary = stored.records.find(record => record.id === 'diary-ai-record');
     expect(todo.text).toContain('编辑后的待办');
     expect(todo.note).toContain('先改草稿再落库');
+    expect(todo.planStartDate).toBe('2026-07-10');
+    expect(todo.planEndDate).toBe('2026-07-11');
+    expect(todo.dueDate).toBe('2026-07-11');
     expect(updatedDiary.todoIds).toContain(todo.id);
+});
+
+test('AI diary analysis splits weekend plans and keeps editable dates', async ({ page }) => {
+    const data = createEmptyData({
+        records: [
+            {
+                id: 'diary-weekend-record',
+                type: '日记',
+                title: '周末打算',
+                content: [
+                    '# 正文',
+                    '这个周末有两个打算嘛，一个就是做一下断舍离，实在不行就开着空调做，另一个就是把床垫子都重新整一下，因为感觉有点儿快变形了。',
+                    '',
+                    '# 今日一句话',
+                    '把家务集中到周末',
+                    '',
+                    '# 高兴',
+                    '',
+                    '',
+                    '# 思考',
+                    '',
+                    '',
+                    '# 小确幸',
+                    '',
+                    '',
+                    '# 待改进',
+                    '',
+                    '',
+                    '# 复盘',
+                    '',
+                    '',
+                    '# 明日重点',
+                    ''
+                ].join('\n'),
+                startDate: '2026-07-22',
+                endDate: '2026-07-22',
+                recordTime: '21:10',
+                templateId: 'builtin-diary-daily-review',
+                todoIds: [],
+                createdAt: '2026-07-22 21:10',
+                updatedAt: '2026-07-22 21:10'
+            }
+        ]
+    });
+
+    await page.goto('/');
+    await page.evaluate(value => {
+        localStorage.removeItem('lifePlanAiConfig');
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, data);
+    await page.reload();
+    await page.getByRole('button', { name: 'AI 今日计划' }).click();
+    await page.getByRole('button', { name: '日记分析' }).click();
+    await page.getByRole('button', { name: '生成建议' }).click();
+
+    await expect(page.locator('#ai-result-panel')).toContainText('建议待办');
+    await expect(page.locator('#ai-capture-draft-diary-todo-text-0')).toHaveValue(/断舍离/);
+    await expect(page.locator('#ai-capture-draft-diary-todo-text-1')).toHaveValue(/床垫/);
+    await expect(page.locator('#ai-result-panel')).toContainText('识别时间：本周末');
+
+    const planStart0 = page.locator('#ai-capture-draft-diary-todo-plan-start-0');
+    const planEnd0 = page.locator('#ai-capture-draft-diary-todo-plan-end-0');
+    await expect(planStart0).not.toHaveValue('');
+    const startValue = await planStart0.inputValue();
+    const endValue = await planEnd0.inputValue();
+    expect(startValue <= endValue).toBeTruthy();
+    // Should not force "today" when diary says weekend; on 2026-07-22 (Wed) weekend is 25-26.
+    const todayStr = await page.evaluate(() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    });
+    if (todayStr === '2026-07-22') {
+        await expect(planStart0).toHaveValue('2026-07-25');
+        await expect(planEnd0).toHaveValue('2026-07-26');
+    }
+
+    await page.locator('#ai-capture-draft-diary-todo-text-0').fill('断舍离（可编辑）');
+    await page.locator('#ai-capture-draft-diary-todo-plan-start-0').fill('2026-07-26');
+    await page.locator('#ai-capture-draft-diary-todo-plan-end-0').fill('2026-07-26');
+    await page.locator('#ai-capture-draft-diary-todo-due-0').fill('2026-07-26');
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('已创建待办');
+        dialog.accept();
+    });
+    await page.getByRole('button', { name: '创建这些待办' }).click();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const diaryTodos = stored.todos.filter(item => item.sourceType === 'diary-ai');
+    expect(diaryTodos.length).toBeGreaterThanOrEqual(2);
+    const declutter = diaryTodos.find(item => item.text.includes('断舍离'));
+    const mattress = diaryTodos.find(item => item.text.includes('床垫'));
+    expect(declutter).toBeTruthy();
+    expect(mattress).toBeTruthy();
+    expect(declutter.planStartDate).toBe('2026-07-26');
+    expect(declutter.dueDate).toBe('2026-07-26');
+    expect(mattress.planStartDate).toBeTruthy();
+    // Unedited second item should keep AI-resolved weekend range, not collapse to empty.
+    expect(mattress.planEndDate).toBeTruthy();
+    expect(mattress.planStartDate <= mattress.planEndDate).toBeTruthy();
 });
 
 test('AI chat capture drafts can be edited before writing', async ({ page }) => {
