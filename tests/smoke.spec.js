@@ -2231,6 +2231,63 @@ test('verified ideas are listed after active ideas by default', async ({ page })
     await expect(page.locator('.idea-card h3')).toHaveText(['仍需推进的较旧灵感']);
 });
 
+test('habit diagnostics preview is read-only and escapes legacy data', async ({ page }) => {
+    const today = '2026-07-22';
+    const data = createEmptyData({
+        habits: [
+            {
+                id: 'habit-1',
+                name: '<img src=x onerror="window.__habitXss=1"> 安全习惯',
+                tag: '学习',
+                rule: 'daily',
+                timesPerDay: 1,
+                startDate: today,
+                noteMode: 'never',
+                rewardPoints: 1,
+                rewardCurrency: '金币',
+                penaltyPoints: 0
+            }
+        ],
+        checkins: [
+            { id: 'checkin-1', habitId: 'habit-1', date: today, checkinAt: `${today} 08:00`, createdAt: `${today} 08:00` },
+            { id: 'orphan-checkin', habitId: 'missing-habit', date: today, checkinAt: `${today} 09:00`, createdAt: `${today} 09:00` }
+        ],
+        habitPointLedger: [
+            { id: 'ledger-1', habitId: 'habit-1', amount: 1, currency: '金币', type: 'checkin', note: '<svg onload="window.__habitXss=1"></svg>' },
+            { id: 'ledger-orphan', habitId: '<img src=x onerror="window.__habitXss=1">', amount: 3, currency: '', type: 'adjust', note: 'orphan' }
+        ],
+        habitRewards: [
+            { id: 'reward-1', name: '<img src=x onerror="window.__habitXss=1"> 安全心愿', cost: 10, currency: '金币' }
+        ],
+        habitCurrencies: [{ id: 'currency-1', name: '金币' }]
+    });
+
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        window.__habitXss = 0;
+    }, data);
+
+    await page.goto('/');
+    await page.locator('[data-page-target="habits"]').click();
+    const before = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+
+    await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
+    const panel = page.locator('#habit-diagnostics-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('只读诊断');
+    await expect(panel).toContainText('旧习惯');
+    await expect(panel).toContainText('habitRecords');
+    await expect(panel).toContainText('流水指向缺失习惯');
+    await expect(panel).toContainText('habitLedger');
+    await expect(panel).toContainText('<img src=x');
+    await expect(panel.locator('img')).toHaveCount(0);
+    await expect(panel.locator('svg')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.__habitXss)).toBe(0);
+
+    const after = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+    expect(after).toBe(before);
+});
+
 test('habit checkins only award configured currencies', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('lifePlanData'));

@@ -413,6 +413,7 @@
                         <button data-habit-view="library" onclick="setHabitView('library', this)">习惯库</button>
                         <button data-habit-view="wallet" onclick="setHabitView('wallet', this)">钱包</button>
                         <button data-habit-view="analysis" onclick="setHabitView('analysis', this)">分析</button>
+                        <button data-habit-view="diagnostics" onclick="setHabitView('diagnostics', this)">诊断</button>
                     </div>
                     <div class="habit-center-toolbar-actions">
                         <input type="date" id="habit-makeup-date" onchange="renderHabitMakeupPanel()">
@@ -502,6 +503,16 @@
                         <button class="btn btn-secondary" onclick="editCurrentHabit()">编辑规则</button>
                         <button class="btn btn-danger" onclick="deleteCurrentHabit()">删除习惯</button>
                     </div>
+                </div>
+
+                <div id="habit-view-diagnostics" class="habit-view">
+                    <div class="habit-section-head">
+                        <div>
+                            <div class="section-title">数据诊断</div>
+                            <div class="habit-section-sub">只读检查旧 habits / checkins / 钱包字段，并预览未来 habit-app 映射数量。</div>
+                        </div>
+                    </div>
+                    <div id="habit-diagnostics-panel"></div>
                 </div>
             </div>
         </div>
@@ -1886,6 +1897,7 @@
 
     <script src="./habit-engine.js"></script>
     <script src="./habit-ui.js"></script>
+    <script src="./habit-service.js"></script>
     <script src="./fitness-service.js"></script>
     <script src="./fitness-ui.js"></script>
     <script src="./vendor/app-sync-kit.browser.global.js"></script>

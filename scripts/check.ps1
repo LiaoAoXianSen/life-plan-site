@@ -8,6 +8,7 @@ try {
     node --check .\app.js
     node --check .\habit-engine.js
     node --check .\habit-ui.js
+    node --check .\habit-service.js
     node --check .\fitness-service.js
     node --check .\fitness-ui.js
     node --check .\wheel-tool.js

@@ -130,6 +130,13 @@
             getHash: value => getDataHash(value),
             getNowLocal: () => getLocalDateTimeStr()
         });
+        const habitService = window.LifePlanHabitService.create({
+            getTodayStr: () => getTodayStr(),
+            addDays: (date, amount) => addDays(date, amount),
+            isHabitDueOnDate: (habit, date) => isHabitDueOnDate(habit, date),
+            getHabitTargetCount: habit => getHabitTargetCount(habit),
+            defaultCurrency: HABIT_DEFAULT_CURRENCY
+        });
         const builtInTemplates = [
             {
                 id: 'builtin-diary-daily-review',
@@ -6593,7 +6600,7 @@
                 btn.classList.toggle('active', btn.dataset.habitView === view);
             });
             if (button) button.classList.add('active');
-            ['today', 'makeup', 'library', 'wallet', 'analysis'].forEach(name => {
+            ['today', 'makeup', 'library', 'wallet', 'analysis', 'diagnostics'].forEach(name => {
                 const panel = document.getElementById(`habit-view-${name}`);
                 if (panel) panel.classList.toggle('active', view === name);
             });
@@ -6602,7 +6609,7 @@
         }
 
         function renderHabitPage() {
-            if (!['today', 'makeup', 'library', 'wallet', 'analysis'].includes(currentHabitView)) currentHabitView = 'today';
+            if (!['today', 'makeup', 'library', 'wallet', 'analysis', 'diagnostics'].includes(currentHabitView)) currentHabitView = 'today';
             if (!currentHabitId && data.habits.length > 0) currentHabitId = data.habits[0].id;
             const tab = document.querySelector(`#habit-view-tabs button[data-habit-view="${currentHabitView}"]`);
             setHabitView(currentHabitView, tab);
@@ -6620,6 +6627,7 @@
                 if (currentHabitId) renderHeatmap();
                 renderHabitMatrix();
             }
+            if (currentHabitView === 'diagnostics') renderHabitDiagnosticsPanel();
         }
 
         function updateHabitToolbarVisibility() {
@@ -6803,6 +6811,106 @@
                             </div>
                         `;
                     }).join('')}
+                </div>
+            `;
+        }
+
+        function renderHabitDiagnosticsPanel() {
+            const container = document.getElementById('habit-diagnostics-panel');
+            if (!container) return;
+            const diagnostics = habitService.buildLegacyHabitDiagnostics(data);
+            const summary = diagnostics.summary || {};
+            const balances = (summary.walletBalances || [])
+                .map(item => `${item.amount} ${item.currency}`)
+                .join(' · ') || `0 ${HABIT_DEFAULT_CURRENCY}`;
+            const metrics = [
+                { label: '旧习惯', value: summary.habits || 0, note: 'data.habits' },
+                { label: '旧打卡', value: summary.checkins || 0, note: 'data.checkins' },
+                { label: '钱包流水', value: summary.habitPointLedger || 0, note: 'habitPointLedger' },
+                { label: '心愿', value: summary.habitRewards || 0, note: 'habitRewards' },
+                { label: '今日达标', value: `${summary.doneToday || 0}/${summary.dueToday || 0}`, note: `${summary.partialToday || 0} 条进行中` },
+                { label: '近 7 天打卡', value: summary.recentCheckins || 0, note: '含多次记录' },
+                { label: '旧 Tombstone', value: summary.deletedItems || 0, note: `习惯 ${summary.deletedHabitItems || 0} · 打卡 ${summary.deletedCheckinItems || 0}` },
+                { label: '钱包预览', value: balances, note: '仅按旧流水汇总' }
+            ];
+            const issueLevelRank = { danger: 0, warning: 1, info: 2 };
+            const issues = [...(diagnostics.issues || [])].sort((a, b) => (issueLevelRank[a.severity] ?? 3) - (issueLevelRank[b.severity] ?? 3));
+
+            container.innerHTML = `
+                <div class="habit-diagnostics-guard">
+                    <div>
+                        <strong>只读诊断，不会保存、不上传、不生成 habit-app 云文件。</strong>
+                        <span>当前权威仍是 ${escapeHtml(diagnostics.authority || 'lifePlanData')}；这里先检查迁移/同步前的历史数据风险。</span>
+                    </div>
+                    <span class="habit-diagnostics-pill">Phase 2 Preview</span>
+                </div>
+                <div class="habit-diagnostics-grid">
+                    ${metrics.map(item => renderHabitDiagnosticsMetric(item)).join('')}
+                </div>
+                <div class="habit-diagnostics-layout">
+                    <section class="habit-diagnostics-card">
+                        <div class="habit-shop-title">风险检查</div>
+                        ${issues.length ? `
+                            <div class="habit-diagnostics-issue-list">
+                                ${issues.map(renderHabitDiagnosticsIssue).join('')}
+                            </div>
+                        ` : '<div class="habit-diagnostics-ok">当前没有发现重复 ID、孤儿引用、异常金额或未来打卡。</div>'}
+                    </section>
+                    <section class="habit-diagnostics-card">
+                        <div class="habit-shop-title">habit-app 映射预览</div>
+                        <div class="habit-mapping-list">
+                            ${(diagnostics.mappingPreview || []).map(renderHabitMappingPreviewRow).join('')}
+                        </div>
+                    </section>
+                </div>
+            `;
+        }
+
+        function renderHabitDiagnosticsMetric(item) {
+            return `
+                <div class="habit-diagnostics-metric">
+                    <span>${escapeHtml(item.label)}</span>
+                    <strong>${escapeHtml(item.value)}</strong>
+                    <em>${escapeHtml(item.note || '')}</em>
+                </div>
+            `;
+        }
+
+        function renderHabitDiagnosticsIssue(issue) {
+            const severity = ['danger', 'warning', 'info'].includes(issue.severity) ? issue.severity : 'info';
+            const details = (issue.details || []).map(renderHabitDiagnosticsIssueDetail).join('');
+            return `
+                <article class="habit-diagnostics-issue is-${severity}">
+                    <div class="habit-diagnostics-issue-head">
+                        <strong>${escapeHtml(issue.label)}</strong>
+                        <span>${escapeHtml(issue.count || 0)} 项</span>
+                    </div>
+                    ${issue.hint ? `<p>${escapeHtml(issue.hint)}</p>` : ''}
+                    ${details ? `<div class="habit-diagnostics-detail-list">${details}</div>` : ''}
+                    ${issue.hiddenCount > 0 ? `<div class="habit-diagnostics-more">还有 ${escapeHtml(issue.hiddenCount)} 项未展开</div>` : ''}
+                </article>
+            `;
+        }
+
+        function renderHabitDiagnosticsIssueDetail(detail) {
+            const parts = Object.entries(detail || {})
+                .filter(([, value]) => value !== undefined && value !== null && value !== '')
+                .map(([key, value]) => `<span><b>${escapeHtml(key)}</b>${escapeHtml(value)}</span>`)
+                .join('');
+            return `<div class="habit-diagnostics-detail">${parts || '<span>无详细字段</span>'}</div>`;
+        }
+
+        function renderHabitMappingPreviewRow(item) {
+            return `
+                <div class="habit-mapping-row">
+                    <div>
+                        <strong>${escapeHtml(item.legacy)}</strong>
+                        <span>${escapeHtml(item.note || '')}</span>
+                    </div>
+                    <div class="habit-mapping-target">
+                        <em>${escapeHtml(item.target)}</em>
+                        <b>${escapeHtml(item.count || 0)}</b>
+                    </div>
                 </div>
             `;
         }
