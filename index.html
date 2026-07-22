@@ -378,8 +378,11 @@
 
         <!-- 习惯打卡页 -->
         <div id="page-habits" class="page">
-            <div class="page-header">
-                <div class="page-title">习惯打卡</div>
+            <div class="page-header habit-center-header">
+                <div>
+                    <div class="page-title">习惯中心</div>
+                    <div class="page-subtitle">PC 端负责执行、补卡审计、习惯库、钱包和分析；数据暂沿用 life 旧字段。</div>
+                </div>
                 <div class="page-actions">
                     <button class="btn btn-secondary" onclick="openHabitCurrencyModal()">币种管理</button>
                     <button class="btn btn-secondary" onclick="openHabitPointAdjustModal()">调整积分</button>
@@ -387,27 +390,93 @@
                     <button class="btn btn-primary" onclick="openHabitModal()">+ 新建习惯</button>
                 </div>
             </div>
-            
-            <div class="card">
-                <div class="calendar-toolbar">
-                    <div class="segmented" id="habit-view-tabs">
-                        <button class="active" onclick="setHabitView('year', this)">年度热力图</button>
-                        <button onclick="setHabitView('matrix', this)">习惯矩阵</button>
-                    </div>
-                    <select class="year-select" id="habit-matrix-days" onchange="renderHabitMatrix()" style="max-width:150px;">
-                        <option value="14">近14天</option>
-                        <option value="30" selected>近30天</option>
-                        <option value="60">近60天</option>
-                    </select>
+
+            <div class="habit-center-hero">
+                <div class="habit-center-title-block">
+                    <div class="habit-center-eyebrow">Habit operations</div>
+                    <h2>今天先执行，历史在补卡页处理，规则和钱包集中管理。</h2>
+                    <p>这是 Phase 1：只重排 PC 端驾驶舱，不迁移数据、不启用独立 habit 云文件。</p>
                 </div>
-                <div class="habit-tabs" id="habit-tabs"></div>
-                
-                <div id="habit-view-year" class="habit-view active">
+                <div class="habit-center-sync-note">
+                    <strong>同步规划</strong>
+                    <span>后续统一接入 `/apps/habit-app/data.json`，当前仍以 life 旧习惯数据为权威。</span>
+                </div>
+            </div>
+
+            <div class="habit-kpi-grid" id="habit-kpi-grid"></div>
+
+            <div class="card habit-center-card">
+                <div class="habit-center-toolbar">
+                    <div class="segmented habit-center-tabs" id="habit-view-tabs">
+                        <button class="active" data-habit-view="today" onclick="setHabitView('today', this)">今日</button>
+                        <button data-habit-view="makeup" onclick="setHabitView('makeup', this)">补卡</button>
+                        <button data-habit-view="library" onclick="setHabitView('library', this)">习惯库</button>
+                        <button data-habit-view="wallet" onclick="setHabitView('wallet', this)">钱包</button>
+                        <button data-habit-view="analysis" onclick="setHabitView('analysis', this)">分析</button>
+                    </div>
+                    <div class="habit-center-toolbar-actions">
+                        <input type="date" id="habit-makeup-date" onchange="renderHabitMakeupPanel()">
+                        <select class="year-select" id="habit-matrix-days" onchange="renderHabitMatrix()" style="max-width:150px;">
+                            <option value="14">近14天</option>
+                            <option value="30" selected>近30天</option>
+                            <option value="60">近60天</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="habit-view-today" class="habit-view active">
+                    <div class="habit-section-head">
+                        <div>
+                            <div class="section-title">今日执行</div>
+                            <div class="habit-section-sub">保留原来的快速打卡、备注、再记一次、撤销和减少次数。</div>
+                        </div>
+                    </div>
+                    <div id="habit-center-today"></div>
+                </div>
+
+                <div id="habit-view-makeup" class="habit-view">
+                    <div class="habit-section-head">
+                        <div>
+                            <div class="section-title">补卡审计</div>
+                            <div class="habit-section-sub">选择日期后查看当天应做的习惯，可补卡、备注补卡或减少次数。</div>
+                        </div>
+                    </div>
+                    <div id="habit-makeup-panel"></div>
+                </div>
+
+                <div id="habit-view-library" class="habit-view">
+                    <div class="habit-section-head">
+                        <div>
+                            <div class="section-title">习惯库</div>
+                            <div class="habit-section-sub">PC 端集中管理规则、奖励、今日状态和历史操作。</div>
+                        </div>
+                        <button class="btn btn-primary" onclick="openHabitModal()">+ 新建习惯</button>
+                    </div>
+                    <div id="habit-library-panel"></div>
+                </div>
+
+                <div id="habit-view-wallet" class="habit-view">
+                    <div class="habit-section-head">
+                        <div>
+                            <div class="section-title">钱包与心愿</div>
+                            <div class="habit-section-sub">复用原积分、心愿兑换、近期流水、扣分结算能力。</div>
+                        </div>
+                    </div>
+                    <div class="habit-rewards-panel" id="habit-rewards-panel"></div>
+                </div>
+
+                <div id="habit-view-analysis" class="habit-view">
+                    <div class="habit-section-head">
+                        <div>
+                            <div class="section-title">分析</div>
+                            <div class="habit-section-sub">热力图和矩阵保留，但不再作为默认入口。</div>
+                        </div>
+                    </div>
+                    <div class="habit-tabs" id="habit-tabs"></div>
                     <div class="heatmap-header">
                         <div style="font-size: 14px; font-weight: 500;" id="current-habit-name">选择习惯查看热力图</div>
                         <select class="year-select" id="year-select" onchange="renderHeatmap()"></select>
                     </div>
-
                     <div class="heatmap-container">
                         <div class="heatmap-wrapper">
                             <div class="weekday-labels">
@@ -417,42 +486,24 @@
                             <div class="heatmap-labels" id="heatmap-months"></div>
                         </div>
                     </div>
-
                     <div class="stats-grid" id="habit-stats">
-                        <div class="stat-card">
-                            <div class="stat-value">-</div>
-                            <div class="stat-label">累计打卡</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value">-</div>
-                            <div class="stat-label">当前连续</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value">-</div>
-                            <div class="stat-label">最长连续</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value">-</div>
-                            <div class="stat-label">本月完成率</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value">-</div>
-                            <div class="stat-label">本年完成率</div>
-                        </div>
+                        <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">累计打卡</div></div>
+                        <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">当前连续</div></div>
+                        <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">最长连续</div></div>
+                        <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">本月完成率</div></div>
+                        <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">本年完成率</div></div>
                     </div>
                     <div class="habit-checkin-history" id="habit-checkin-history"></div>
-                </div>
-
-                <div id="habit-view-matrix" class="habit-view">
+                    <div class="habit-analysis-matrix-head">
+                        <div class="habit-shop-title">近期矩阵</div>
+                    </div>
                     <div class="habit-matrix" id="habit-matrix"></div>
-                </div>
-
-                <div id="habit-detail-actions" style="text-align: right; margin-top: 16px;">
-                    <button class="btn btn-secondary" onclick="editCurrentHabit()">编辑规则</button>
-                    <button class="btn btn-danger" onclick="deleteCurrentHabit()">删除习惯</button>
+                    <div id="habit-detail-actions" class="habit-detail-actions">
+                        <button class="btn btn-secondary" onclick="editCurrentHabit()">编辑规则</button>
+                        <button class="btn btn-danger" onclick="deleteCurrentHabit()">删除习惯</button>
+                    </div>
                 </div>
             </div>
-            <div class="habit-rewards-panel" id="habit-rewards-panel"></div>
         </div>
 
         <!-- 运动健身页 -->

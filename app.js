@@ -32,7 +32,7 @@
         let recordCursorDate = getTodayStr();
         let dashboardTimelineRangeDays = 30;
         let recordListRangeDays = 30;
-        let currentHabitView = 'year';
+        let currentHabitView = 'today';
         let currentStructuredTemplateId = '';
         let currentTemplateFields = {};
         let currentPreviewRecordId = null;
@@ -421,8 +421,8 @@
             initYearSelect();
             if (data.habits.length > 0) {
                 currentHabitId = data.habits[0].id;
-                renderHeatmap();
             }
+            renderHabitPage();
             renderHabitRewards();
             renderHabitCurrencyOptions();
             settleYesterdayHabitPenalties();
@@ -1146,17 +1146,12 @@
             renderDashboard();
             renderAllRecords();
             renderTodoTable();
-            renderHabitTabs();
-            renderHabitRewards();
+            renderHabitPage();
             renderHabitCurrencyOptions();
             renderGoalList();
             renderWheelPage();
             if (typeof renderFitnessPage === 'function') renderFitnessPage();
             refreshKnowledgeViews();
-            if (currentHabitId) {
-                renderHeatmap();
-                if (currentHabitView === 'matrix') renderHabitMatrix();
-            }
         }
 
         function loadSyncConfig() {
@@ -3993,7 +3988,7 @@
             if (pageName === 'tags') renderTagCenter();
             if (pageName === 'search') renderGlobalSearch();
             if (pageName === 'todos') renderTodoTable();
-            if (pageName === 'habits') { renderHabitTabs(); renderHabitRewards(); if(currentHabitId) renderHeatmap(); if(currentHabitView === 'matrix') renderHabitMatrix(); }
+            if (pageName === 'habits') renderHabitPage();
             if (pageName === 'fitness') {
                 if (typeof renderFitnessPage === 'function') renderFitnessPage();
             }
@@ -4577,11 +4572,9 @@
 
         function focusHabitFromSchedule(habitId) {
             currentHabitId = habitId;
+            currentHabitView = 'analysis';
             const navEl = Array.from(document.querySelectorAll('.nav-item')).find(el => el.textContent.includes('习惯打卡'));
             switchPage('habits', navEl);
-            renderHabitTabs();
-            if (currentHabitView === 'matrix') renderHabitMatrix();
-            else renderHeatmap();
         }
 
         function renderTimeline() {
@@ -6596,16 +6589,222 @@
         // ================== 习惯打卡 ==================
         function setHabitView(view, button) {
             currentHabitView = view;
-            document.querySelectorAll('#habit-view-tabs button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('#habit-view-tabs button').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.habitView === view);
+            });
             if (button) button.classList.add('active');
-            document.getElementById('habit-view-year').classList.toggle('active', view === 'year');
-            document.getElementById('habit-view-matrix').classList.toggle('active', view === 'matrix');
-            const habitTabsEl = document.getElementById('habit-tabs');
-            if (habitTabsEl) habitTabsEl.style.display = view === 'year' ? 'flex' : 'none';
-            const habitActionsEl = document.getElementById('habit-detail-actions');
-            if (habitActionsEl) habitActionsEl.style.display = view === 'year' ? 'block' : 'none';
-            if (view === 'matrix') renderHabitMatrix();
-            if (view === 'year' && currentHabitId) renderHeatmap();
+            ['today', 'makeup', 'library', 'wallet', 'analysis'].forEach(name => {
+                const panel = document.getElementById(`habit-view-${name}`);
+                if (panel) panel.classList.toggle('active', view === name);
+            });
+            updateHabitToolbarVisibility();
+            renderHabitCurrentView();
+        }
+
+        function renderHabitPage() {
+            if (!['today', 'makeup', 'library', 'wallet', 'analysis'].includes(currentHabitView)) currentHabitView = 'today';
+            if (!currentHabitId && data.habits.length > 0) currentHabitId = data.habits[0].id;
+            const tab = document.querySelector(`#habit-view-tabs button[data-habit-view="${currentHabitView}"]`);
+            setHabitView(currentHabitView, tab);
+            renderHabitKpis();
+        }
+
+        function renderHabitCurrentView() {
+            renderHabitKpis();
+            if (currentHabitView === 'today') renderHabitCenterToday();
+            if (currentHabitView === 'makeup') renderHabitMakeupPanel();
+            if (currentHabitView === 'library') renderHabitLibraryPanel();
+            if (currentHabitView === 'wallet') renderHabitRewards();
+            if (currentHabitView === 'analysis') {
+                renderHabitTabs();
+                if (currentHabitId) renderHeatmap();
+                renderHabitMatrix();
+            }
+        }
+
+        function updateHabitToolbarVisibility() {
+            const makeupDate = document.getElementById('habit-makeup-date');
+            if (makeupDate) {
+                if (!makeupDate.value) makeupDate.value = getTodayStr();
+                makeupDate.style.display = currentHabitView === 'makeup' ? 'block' : 'none';
+            }
+            const matrixDays = document.getElementById('habit-matrix-days');
+            if (matrixDays) matrixDays.style.display = currentHabitView === 'analysis' ? 'block' : 'none';
+        }
+
+        function getHabitDayStatus(habit, date) {
+            const targetCount = getHabitTargetCount(habit);
+            const doneCount = getCheckinCount(habit.id, date);
+            return {
+                targetCount,
+                doneCount,
+                isDone: doneCount >= targetCount,
+                isStarted: doneCount > 0,
+                due: isHabitDueOnDate(habit, date)
+            };
+        }
+
+        function renderHabitKpis() {
+            const container = document.getElementById('habit-kpi-grid');
+            if (!container) return;
+            const today = getTodayStr();
+            const dueHabits = data.habits.filter(habit => isHabitDueOnDate(habit, today));
+            const doneHabits = dueHabits.filter(habit => getCheckinCount(habit.id, today) >= getHabitTargetCount(habit));
+            const partialHabits = dueHabits.filter(habit => {
+                const count = getCheckinCount(habit.id, today);
+                return count > 0 && count < getHabitTargetCount(habit);
+            });
+            const balances = getHabitPointBalances();
+            const balanceText = Object.entries(balances)
+                .sort(([a], [b]) => a.localeCompare(b, 'zh-Hans-CN'))
+                .map(([currency, value]) => `${value} ${currency}`)
+                .join(' · ') || `0 ${HABIT_DEFAULT_CURRENCY}`;
+            const lastSevenDates = Array.from({ length: 7 }, (_, index) => addDays(today, -index));
+            const recentCheckins = data.checkins.filter(item => lastSevenDates.includes(item.date)).length;
+            const missedYesterday = data.habits.filter(habit => {
+                const date = addDays(today, -1);
+                return isHabitDueOnDate(habit, date) && getCheckinCount(habit.id, date) < getHabitTargetCount(habit);
+            }).length;
+            container.innerHTML = `
+                <div class="habit-kpi-card"><span>今日达标</span><strong>${doneHabits.length}/${dueHabits.length}</strong><em>${partialHabits.length ? `${partialHabits.length} 条进行中` : '没有半途卡住'}</em></div>
+                <div class="habit-kpi-card"><span>习惯库</span><strong>${data.habits.length}</strong><em>${dueHabits.length} 条今日应做</em></div>
+                <div class="habit-kpi-card"><span>近 7 天打卡</span><strong>${recentCheckins}</strong><em>含多次打卡</em></div>
+                <div class="habit-kpi-card"><span>昨日待处理</span><strong>${missedYesterday}</strong><em>可到补卡页审计</em></div>
+                <div class="habit-kpi-card wide"><span>钱包余额</span><strong>${escapeHtml(balanceText)}</strong><em>当前仍来自旧 habitPointLedger</em></div>
+            `;
+        }
+
+        function renderHabitCenterToday() {
+            const container = document.getElementById('habit-center-today');
+            if (!container) return;
+            const today = getTodayStr();
+            const todayHabits = data.habits.filter(h => isHabitDueOnDate(h, today));
+            if (todayHabits.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="padding:18px 14px;">今日暂无安排的习惯</div>';
+                return;
+            }
+            container.innerHTML = `<div class="habit-quick-list">${todayHabits.map(habit => renderHabitActionCard(habit, today, { compact: false })).join('')}</div>`;
+        }
+
+        function renderHabitActionCard(habit, date, { compact = false } = {}) {
+            const status = getHabitDayStatus(habit, date);
+            const latestCheckin = getLatestHabitCheckin(habit.id, date);
+            const latestTime = latestCheckin ? getCheckinClockTime(latestCheckin) : '';
+            const latestNote = getCheckinNoteSummary(latestCheckin?.note, 34);
+            const statusClass = status.doneCount === 0 ? 'is-pending' : (status.isDone ? 'is-done' : 'is-active');
+            const statusText = status.doneCount === 0
+                ? '待开始'
+                : (status.isDone ? '已达标' : `进行中 ${status.doneCount}/${status.targetCount}`);
+            const rewardMeta = habit.randomReward
+                ? (Math.max(0, parseInt(habit.rewardMin ?? habit.rewardPoints ?? 0, 10) || 0) > 0 || Math.max(0, parseInt(habit.rewardMax ?? habit.rewardPoints ?? 0, 10) || 0) > 0
+                    ? { text: `+${habit.rewardMin ?? habit.rewardPoints ?? 0}-${habit.rewardMax ?? habit.rewardPoints ?? 0} ${normalizeHabitCurrency(habit.rewardCurrency)}`, className: 'is-points' }
+                    : null)
+                : (Math.max(0, parseInt(habit.rewardPoints ?? 0, 10) || 0) > 0
+                    ? { text: `+${habit.rewardPoints} ${normalizeHabitCurrency(habit.rewardCurrency)}`, className: 'is-points' }
+                    : null);
+            const infoParts = [
+                { text: getHabitRuleText(habit) },
+                { text: `${status.doneCount}/${status.targetCount}` },
+                { text: latestTime || '未记录' },
+                rewardMeta,
+                habit.penaltyPoints > 0 ? { text: `漏打 -${habit.penaltyPoints}`, className: 'is-penalty' } : null
+            ].filter(Boolean);
+            const noteModeArg = escapeJsArg(latestCheckin ? 'edit' : 'create');
+            return `
+                <article class="habit-quick-card ${compact ? 'compact' : ''} ${status.isStarted ? 'done' : ''} ${status.targetCount > 1 ? 'multi' : ''}">
+                    <div class="habit-quick-head">
+                        <div class="habit-quick-main">
+                            <div class="habit-quick-title-row">
+                                <div class="habit-quick-title">${escapeHtml(habit.name)}</div>
+                                <span class="habit-quick-tag">${escapeHtml(habit.tag || '习惯')}</span>
+                                <span class="habit-quick-status ${statusClass}">${escapeHtml(statusText)}</span>
+                            </div>
+                            <div class="habit-quick-meta">${infoParts.map(part => `<span class="${part.className || ''}">${escapeHtml(part.text)}</span>`).join('')}</div>
+                            ${latestNote ? `<div class="habit-quick-note-inline">备注：${escapeHtml(latestNote)}</div>` : ''}
+                        </div>
+                        <div class="habit-quick-actions ${compact ? 'compact' : ''}">
+                            <button class="habit-quick-btn primary" onclick="habitActionCheckin(${escapeJsArg(habit.id)}, ${escapeJsArg(date)})">${status.targetCount > 1 && status.doneCount > 0 ? '再记一次' : '打卡'}</button>
+                            <button class="habit-quick-btn secondary" onclick="openHabitNoteModal({ habitId: ${escapeJsArg(habit.id)}, date: ${escapeJsArg(date)}, mode: ${noteModeArg} })">备注</button>
+                            ${status.doneCount > 0 ? `<button class="habit-quick-btn ghost" onclick="habitActionDecrease(${escapeJsArg(habit.id)}, ${escapeJsArg(date)})">${status.targetCount === 1 ? '撤销' : '-1'}</button>` : ''}
+                        </div>
+                    </div>
+                </article>
+            `;
+        }
+
+        function habitActionCheckin(habitId, date) {
+            const habit = data.habits.find(h => h.id === habitId);
+            if (!habit) return;
+            if (date === getTodayStr()) {
+                quickHabitCheckin(habitId);
+                return;
+            }
+            toggleCheckin(habitId, date);
+            refreshHabitCheckinViews();
+        }
+
+        function habitActionDecrease(habitId, date) {
+            const habit = data.habits.find(h => h.id === habitId);
+            if (!habit) return;
+            if (date === getTodayStr() && getHabitTargetCount(habit) === 1) {
+                quickUndoHabitCheckin(habitId);
+            } else {
+                decreaseCheckin(habitId, date);
+                refreshHabitCheckinViews();
+            }
+        }
+
+        function renderHabitMakeupPanel() {
+            const container = document.getElementById('habit-makeup-panel');
+            if (!container) return;
+            const dateInput = document.getElementById('habit-makeup-date');
+            const date = dateInput?.value || getTodayStr();
+            if (dateInput && !dateInput.value) dateInput.value = date;
+            const dueHabits = data.habits.filter(habit => isHabitDueOnDate(habit, date));
+            if (date > getTodayStr()) {
+                container.innerHTML = '<div class="empty-state">不能补未来日期，换一个日期看看。</div>';
+                return;
+            }
+            if (dueHabits.length === 0) {
+                container.innerHTML = '<div class="empty-state">这一天没有按规则应完成的习惯。</div>';
+                return;
+            }
+            container.innerHTML = `<div class="habit-quick-list">${dueHabits.map(habit => renderHabitActionCard(habit, date, { compact: true })).join('')}</div>`;
+        }
+
+        function renderHabitLibraryPanel() {
+            const container = document.getElementById('habit-library-panel');
+            if (!container) return;
+            if (data.habits.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无习惯，先新建一个习惯。</div>';
+                return;
+            }
+            const today = getTodayStr();
+            container.innerHTML = `
+                <div class="habit-library-table">
+                    <div class="habit-library-row head">
+                        <span>名称</span><span>规则</span><span>今日</span><span>连续</span><span>最后操作</span><span>操作</span>
+                    </div>
+                    ${data.habits.map(habit => {
+                        const status = getHabitDayStatus(habit, today);
+                        const latest = [...data.checkins].filter(item => item.habitId === habit.id).sort((a, b) => (b.checkinAt || b.createdAt || '').localeCompare(a.checkinAt || a.createdAt || ''))[0];
+                        const streak = getHabitStreakEndingOn(habit, today);
+                        return `
+                            <div class="habit-library-row">
+                                <div class="habit-library-name"><strong>${escapeHtml(habit.name)}</strong><em>${escapeHtml(habit.tag || '习惯')}</em></div>
+                                <span>${escapeHtml(getHabitRuleText(habit))} · ${status.targetCount}次/天</span>
+                                <span>${status.doneCount}/${status.targetCount}</span>
+                                <span>${streak} 天</span>
+                                <span>${latest ? escapeHtml(formatStoredDateTime(latest.checkinAt || latest.createdAt || latest.date)) : '暂无'}</span>
+                                <div class="habit-library-actions">
+                                    <button class="btn btn-secondary" onclick="currentHabitId=${escapeJsArg(habit.id)}; editCurrentHabit();">编辑</button>
+                                    <button class="btn btn-danger" onclick="currentHabitId=${escapeJsArg(habit.id)}; deleteCurrentHabit();">删除</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
         }
 
         function renderHabitMatrix() {
@@ -6646,11 +6845,11 @@
 
             container.innerHTML = data.habits.map(h => `
                 <div class="habit-tab tag-${toSafeClassName(h.tag, 'habit-tag')} ${currentHabitId === h.id ? 'active' : ''}"
-                    onclick="currentHabitId=${escapeJsArg(h.id)}; renderHeatmap(); renderHabitTabs(); if(currentHabitView === 'matrix') renderHabitMatrix();">
+                    onclick="currentHabitId=${escapeJsArg(h.id)}; renderHeatmap(); renderHabitTabs(); if(currentHabitView === 'analysis') renderHabitMatrix();">
                     ${escapeHtml(h.name)}
                 </div>
             `).join('');
-            container.style.display = currentHabitView === 'year' ? 'flex' : 'none';
+            container.style.display = currentHabitView === 'analysis' ? 'flex' : 'none';
         }
 
         function renderHabitRewards() {
@@ -6804,6 +7003,7 @@
             });
             saveData();
             renderHabitRewards();
+            renderHabitKpis();
         }
 
         function openHabitPointAdjustModal() {
@@ -7331,6 +7531,7 @@
             renderHabitMatrix();
             renderHabitRewards();
             if (currentHabitId) renderHeatmap();
+            renderHabitCurrentView();
         }
 
         function openHabitNoteModal({ habitId, date = getTodayStr(), mode = 'create', checkinId = '' } = {}) {
@@ -7452,7 +7653,7 @@
             touchHabit(habit, now);
             saveData();
             renderHabitRewards();
-            if (currentHabitView === 'matrix') renderHabitMatrix();
+            if (currentHabitView === 'analysis') renderHabitMatrix();
             renderAllRecords();
         }
 
@@ -7471,7 +7672,7 @@
             
             saveData();
             renderHabitRewards();
-            if (currentHabitView === 'matrix') renderHabitMatrix();
+            if (currentHabitView === 'analysis') renderHabitMatrix();
             renderAllRecords();
         }
 
