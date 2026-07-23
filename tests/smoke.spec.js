@@ -2284,7 +2284,7 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('预览指纹');
     await expect(panel).toContainText('本地双写前置');
     await expect(panel).toContainText('打卡 / 取消打卡');
-    await expect(panel).toContainText('待接入');
+    await expect(panel).toContainText('已接入');
     await expect(panel).toContainText('远端上传关闭');
     await expect(panel).toContainText('本地 habit-app 镜像');
     await expect(panel).toContainText('从当前旧数据重建本地镜像');
@@ -2310,8 +2310,9 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
         return service.buildHabitDualWriteReadiness(source);
     });
     expect(readiness.remoteUploadEnabled).toBe(false);
-    expect(readiness.summary.writePathPending).toBeGreaterThan(0);
-    expect(readiness.summary.writePathEnabled).toBeGreaterThan(0);
+    expect(readiness.summary.writePathEnabled).toBe(readiness.summary.writePathTotal);
+    expect(readiness.summary.writePathPending).toBe(0);
+    expect(readiness.writePaths.every(item => item.dualWrite === 'enabled')).toBe(true);
     expect(readiness.writePaths.some(item => item.fn === 'toggleCheckin' && item.dualWrite === 'enabled')).toBe(true);
     expect(['prepared', 'partial', 'blocked', 'ready']).toContain(readiness.status);
 

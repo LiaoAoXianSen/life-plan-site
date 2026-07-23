@@ -393,8 +393,8 @@
                     legacyTargets: ['checkins', 'habits.updatedAt'],
                     snapshotTargets: ['habitRecords', 'habits'],
                     priority: 2,
-                    dualWrite: 'pending',
-                    note: '仅更新备注文本时也要同步 snapshot 的 updatedAt。'
+                    dualWrite: 'enabled',
+                    note: '仅更新备注文本时也重建本地镜像；新建备注打卡走 append-checkin。'
                 },
                 {
                     id: 'save-habit',
@@ -403,8 +403,8 @@
                     legacyTargets: ['habits', 'habitCurrencies'],
                     snapshotTargets: ['habits', 'habitGroups', 'habitCurrencies'],
                     priority: 1,
-                    dualWrite: 'pending',
-                    note: '规则、标签、奖励与扣分配置变更。'
+                    dualWrite: 'enabled',
+                    note: '规则、标签、奖励与扣分配置变更；本地镜像全量重建。'
                 },
                 {
                     id: 'delete-habit',
@@ -413,8 +413,8 @@
                     legacyTargets: ['habits', 'checkins', 'deletedItems', 'records'],
                     snapshotTargets: ['habits', 'habitRecords', 'deletedItems'],
                     priority: 2,
-                    dualWrite: 'pending',
-                    note: '旧路径仍会硬删历史；双写阶段需同时写 tombstone。'
+                    dualWrite: 'enabled',
+                    note: '旧路径仍会硬删历史；本地镜像同步重建 tombstone 预览。'
                 },
                 {
                     id: 'save-reward',
@@ -423,8 +423,8 @@
                     legacyTargets: ['habitRewards', 'habitCurrencies'],
                     snapshotTargets: ['habitRewards', 'habitCurrencies'],
                     priority: 2,
-                    dualWrite: 'pending',
-                    note: '心愿商品入库。'
+                    dualWrite: 'enabled',
+                    note: '心愿商品入库；本地镜像全量重建。'
                 },
                 {
                     id: 'redeem-reward',
@@ -433,8 +433,8 @@
                     legacyTargets: ['habitRewards', 'habitPointLedger'],
                     snapshotTargets: ['habitRewards', 'habitLedger', 'habitRewardRecords'],
                     priority: 1,
-                    dualWrite: 'pending',
-                    note: '扣库存、写兑换流水；需 deterministic sourceId。'
+                    dualWrite: 'enabled',
+                    note: '扣库存、写兑换流水；本地镜像全量重建，不上传云端。'
                 },
                 {
                     id: 'adjust-points',
@@ -443,8 +443,8 @@
                     legacyTargets: ['habitPointLedger', 'habitCurrencies'],
                     snapshotTargets: ['habitLedger', 'habitCurrencies'],
                     priority: 2,
-                    dualWrite: 'pending',
-                    note: '钱包手动调整。'
+                    dualWrite: 'enabled',
+                    note: '钱包手动调整；本地镜像全量重建。'
                 },
                 {
                     id: 'settle-penalties',
@@ -453,8 +453,8 @@
                     legacyTargets: ['habitPointLedger'],
                     snapshotTargets: ['habitLedger', 'habitFineRecords', 'habitOverdueEvents'],
                     priority: 2,
-                    dualWrite: 'pending',
-                    note: 'miss/break 罚款；后续要避免双端重复结算。'
+                    dualWrite: 'enabled',
+                    note: 'miss/break 罚款；有变更时重建本地镜像，后续仍要避免双端重复结算。'
                 },
                 {
                     id: 'manage-currency',
@@ -463,8 +463,8 @@
                     legacyTargets: ['habitCurrencies'],
                     snapshotTargets: ['habitCurrencies'],
                     priority: 3,
-                    dualWrite: 'pending',
-                    note: '新增/规范化币种名称。'
+                    dualWrite: 'enabled',
+                    note: '新增/规范化币种名称；本地镜像全量重建。'
                 }
             ];
         }
@@ -538,19 +538,26 @@
                 },
                 blockers,
                 writePaths,
-                nextActions: enabledPaths.length
+                nextActions: enabledPaths.length === writePaths.length
                 ? [
-                    '打卡相关写路径已会重建 localStorage.habitAppData，仍不上传 /apps/habit-app/data.json。',
-                    '继续接入 saveHabit、redeemHabitReward、saveHabitPointAdjust 等剩余写路径。',
-                    '每个新写路径接入后校验 habitRecords / habitLedger 数量与余额一致性。',
-                    '全部本地写路径稳定后，再引入独立 habitSyncConfig。'
+                    '全部写路径已会重建 localStorage.habitAppData，仍不上传 /apps/habit-app/data.json。',
+                    '下一步补一致性校验面板：records / ledger 数量与余额。',
+                    '本地双写稳定后，再引入独立 habitSyncConfig 与远端 path。',
+                    '远端同步前继续保持 Worker 无业务合并逻辑。'
                 ]
-                : [
-                    '保持只读预览与诊断，不上传 /apps/habit-app/data.json。',
-                    '优先接入 toggleCheckin、decreaseCheckin、appendHabitCheckin 的本地双写。',
-                    '每个写路径接入后校验 habitRecords / habitLedger 数量与余额一致性。',
-                    '全部本地写路径稳定后，再引入独立 habitSyncConfig。'
-                ]
+                : (enabledPaths.length
+                    ? [
+                        '部分写路径已会重建 localStorage.habitAppData，仍不上传 /apps/habit-app/data.json。',
+                        '继续接入剩余写路径。',
+                        '每个新写路径接入后校验 habitRecords / habitLedger 数量与余额一致性。',
+                        '全部本地写路径稳定后，再引入独立 habitSyncConfig。'
+                    ]
+                    : [
+                        '保持只读预览与诊断，不上传 /apps/habit-app/data.json。',
+                        '优先接入 toggleCheckin、decreaseCheckin、appendHabitCheckin 的本地双写。',
+                        '每个写路径接入后校验 habitRecords / habitLedger 数量与余额一致性。',
+                        '全部本地写路径稳定后，再引入独立 habitSyncConfig。'
+                    ])
             };
         }
 

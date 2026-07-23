@@ -7284,6 +7284,7 @@
                 updatedAt: now
             });
             saveData();
+            dualWriteHabitAppLocalMirror('save-reward');
             closeHabitRewardModal();
             renderHabitCurrencyOptions();
             renderHabitRewards();
@@ -7313,6 +7314,7 @@
                 note: `兑换「${reward.name}」`
             });
             saveData();
+            dualWriteHabitAppLocalMirror('redeem-reward');
             renderHabitRewards();
             renderHabitKpis();
         }
@@ -7347,6 +7349,7 @@
                 note
             });
             saveData();
+            dualWriteHabitAppLocalMirror('adjust-points');
             closeHabitPointAdjustModal();
             renderHabitCurrencyOptions();
             renderHabitRewards();
@@ -7484,6 +7487,7 @@
             const name = ensureHabitCurrency(input?.value);
             if (!name) return;
             saveData();
+            dualWriteHabitAppLocalMirror('manage-currency');
             renderHabitCurrencyOptions();
             if (input) input.value = '';
         }
@@ -7809,6 +7813,7 @@
             });
             if (changed) {
                 saveData();
+                dualWriteHabitAppLocalMirror('settle-penalties');
                 renderHabitRewards();
                 renderTodayHabits();
             }
@@ -7903,6 +7908,7 @@
             }
             touchHabit(habit, now);
             saveData();
+            dualWriteHabitAppLocalMirror(context.mode === 'edit' ? 'edit-checkin-note' : 'append-checkin');
             closeHabitNoteModal();
             refreshHabitCheckinViews();
         }
@@ -8521,6 +8527,7 @@
             }
 
             saveData();
+            dualWriteHabitAppLocalMirror('save-habit');
             closeHabitModal();
             renderHabitCurrencyOptions();
             renderHabitTabs();
@@ -8548,6 +8555,7 @@
             
             currentHabitId = data.habits.length > 0 ? data.habits[0].id : null;
             saveData();
+            dualWriteHabitAppLocalMirror('delete-habit');
             renderHabitTabs();
             renderHabitRewards();
             renderHeatmap();
