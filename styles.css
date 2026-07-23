@@ -1564,11 +1564,24 @@
         align-items: center;
         margin-top: 12px;
     }
-    .habit-local-mirror-actions span {
+    .habit-local-mirror-actions span,
+    .habit-sync-actions span {
         color: var(--muted);
         font-size: 12px;
         line-height: 1.5;
         font-weight: 750;
+    }
+    .habit-sync-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .habit-sync-actions .btn[disabled] {
+        opacity: .55;
+        cursor: not-allowed;
+        transform: none;
     }
     .habit-consistency-grid,
     .habit-consistency-balance-list {

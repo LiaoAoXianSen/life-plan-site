@@ -1377,8 +1377,11 @@
             const mirrorHash = habitAppLocalMirror ? getHabitAppDataHash(habitAppLocalMirror) : '';
             return {
                 remotePath: habitSyncConfig.remotePath || '/apps/habit-app/data.json',
+                endpointConfigured: !!syncConfig.webdavUrl,
                 autoSync: !!habitSyncConfig.autoSync,
                 remoteUploadEnabled: !!habitSyncConfig.remoteUploadEnabled,
+                manualPullEnabled: !!(syncConfig.webdavUrl && habitSyncConfig.remotePath),
+                manualPushEnabled: !!(syncConfig.webdavUrl && habitSyncConfig.remoteUploadEnabled && habitAppLocalMirror),
                 dirty: !!habitSyncState.dirty,
                 lastLocalHash: habitSyncState.lastLocalHash || '',
                 lastLocalHashShort: (habitSyncState.lastLocalHash || '').slice(0, 12),
@@ -1387,15 +1390,41 @@
                 lastRemoteHash: habitSyncState.lastRemoteHash || '',
                 lastRemoteHashShort: (habitSyncState.lastRemoteHash || '').slice(0, 12),
                 lastSyncAt: habitSyncState.lastSyncAt || '',
+                lastPullAt: habitSyncState.lastPullAt || '',
+                lastPushAt: habitSyncState.lastPushAt || '',
                 lastRebuildAt: habitSyncState.lastRebuildAt || '',
                 lastRebuildReason: habitSyncState.lastRebuildReason || '',
                 mergeReady: typeof syncService.mergeHabitSnapshots === 'function',
                 hashReady: typeof syncService.getHabitDataHash === 'function',
-                phase: 'phase-5-scaffold',
+                phase: 'phase-5-manual-sync-skeleton',
                 statusLabel: habitSyncConfig.remoteUploadEnabled
-                    ? '远端上传已开启'
+                    ? '远端上传可手动触发'
                     : '远端上传关闭，仅本地脚手架'
             };
+        }
+
+        async function runHabitManualSyncSkeleton(direction = 'pull') {
+            const mode = ['pull', 'push', 'both'].includes(direction) ? direction : 'pull';
+            ensureHabitAppLocalMirrorForDiagnostics();
+            const scaffold = getHabitSyncScaffoldSummary();
+            if (!scaffold.endpointConfigured) {
+                alert('请先在统一同步设置里填写 Cloudflare Worker / WebDAV 中转地址。');
+                return false;
+            }
+            if (mode !== 'pull' && !habitSyncConfig.remoteUploadEnabled) {
+                alert('habit 远端上传仍是关闭状态。当前只允许本地镜像和手动同步骨架检查，不会上传 /apps/habit-app/data.json。');
+                return false;
+            }
+            const now = getLocalDateTimeStr();
+            habitSyncState.lastSyncAt = now;
+            if (mode === 'pull') habitSyncState.lastPullAt = now;
+            if (mode === 'push') habitSyncState.lastPushAt = now;
+            habitSyncState.lastLocalHash = getHabitLegacySourceHash();
+            habitSyncState.lastRemoteHash = '';
+            saveHabitSyncState();
+            renderHabitDiagnosticsPanel();
+            alert(`habit 手动同步骨架已记录：${mode}。当前版本不会发起网络请求。`);
+            return true;
         }
 
         function applySyncSettingsToForm() {
@@ -7120,11 +7149,18 @@
                                     </div>
                                     <div class="habit-dualwrite-next">
                                         <div>配置键：habitAppSyncConfig / habitAppSyncState</div>
+                                        <div>统一中转地址：${scaffold.endpointConfigured ? '已配置' : '未配置'}</div>
                                         <div>旧数据 hash：${escapeHtml(scaffold.lastLocalHashShort || '无')}</div>
                                         <div>镜像 hash：${escapeHtml(scaffold.mirrorHashShort || '无')}</div>
                                         <div>merge/hash 能力：${scaffold.mergeReady && scaffold.hashReady ? '已接入 sync-service' : '未就绪'}</div>
                                         <div>上次远端同步：${escapeHtml(scaffold.lastSyncAt || '尚未启用')}</div>
-                                        <div>当前阶段：本地 merge/hash 已就绪，仍不发起网络请求。</div>
+                                        <div>当前阶段：手动同步骨架已就绪，但默认不会上传，也不会自动发起网络请求。</div>
+                                    </div>
+                                    <div class="habit-sync-actions">
+                                        <button type="button" class="btn btn-secondary" onclick="runHabitManualSyncSkeleton('pull')">手动检查云端（骨架）</button>
+                                        <button type="button" class="btn btn-secondary" onclick="runHabitManualSyncSkeleton('both')">手动合并预检（骨架）</button>
+                                        <button type="button" class="btn btn-danger" ${scaffold.manualPushEnabled ? '' : 'disabled'} onclick="runHabitManualSyncSkeleton('push')">手动上传 habit-app（未开启）</button>
+                                        <span>上传按钮必须显式开启 remoteUploadEnabled 后才可用。</span>
                                     </div>
                                 </div>
                             `;

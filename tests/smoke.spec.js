@@ -2357,6 +2357,9 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('habit 同步脚手架');
     await expect(panel).toContainText('/apps/habit-app/data.json');
     await expect(panel).toContainText('merge/hash 能力：已接入 sync-service');
+    await expect(panel).toContainText('手动检查云端（骨架）');
+    await expect(panel).toContainText('手动合并预检（骨架）');
+    await expect(panel.getByRole('button', { name: '手动上传 habit-app（未开启）' })).toBeDisabled();
     await expect(panel).toContainText('从当前旧数据重建本地镜像');
     await expect(panel).toContainText('本地镜像与旧数据一致');
     await expect(panel).toContainText('数量、余额与 sourceHash 当前一致');
