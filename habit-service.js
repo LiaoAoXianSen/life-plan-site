@@ -354,6 +354,116 @@
             };
         }
 
+        function formatWalletBalanceMap(balances) {
+            const map = new Map();
+            asArray(balances).forEach(item => {
+                const currency = normalizeCurrency(item?.currency, defaultCurrency);
+                const amount = parseAmount(item?.amount);
+                if (!amount.valid) return;
+                map.set(currency, (map.get(currency) || 0) + amount.value);
+            });
+            return map;
+        }
+
+        function buildHabitDualWriteConsistency(source = {}, mirror = null, expectedSourceHash = '') {
+            const slice = getHabitLegacySourceSlice(source);
+            const mirrorSummary = summarizeHabitAppLocalMirror(mirror, expectedSourceHash);
+            const comparisons = [
+                {
+                    id: 'habits',
+                    label: '习惯',
+                    legacy: slice.habits.length,
+                    mirror: mirrorSummary.summary.habits || 0
+                },
+                {
+                    id: 'records',
+                    label: '打卡/记录',
+                    legacy: slice.checkins.length,
+                    mirror: mirrorSummary.summary.habitRecords || 0
+                },
+                {
+                    id: 'ledger',
+                    label: '钱包流水',
+                    legacy: slice.habitPointLedger.length,
+                    mirror: mirrorSummary.summary.habitLedger || 0
+                },
+                {
+                    id: 'rewards',
+                    label: '心愿',
+                    legacy: slice.habitRewards.length,
+                    mirror: mirrorSummary.summary.habitRewards || 0
+                },
+                {
+                    id: 'deletedItems',
+                    label: 'Tombstone',
+                    legacy: slice.deletedItems.length,
+                    mirror: mirrorSummary.summary.deletedItems || 0
+                }
+            ].map(item => ({
+                ...item,
+                matched: item.legacy === item.mirror,
+                delta: item.mirror - item.legacy
+            }));
+
+            const legacyBalances = formatWalletBalanceMap(getWalletBalances(slice.habitPointLedger));
+            const mirrorBalances = formatWalletBalanceMap(getWalletBalances(asArray(mirror?.habitLedger)));
+            const currencyNames = Array.from(new Set([
+                ...legacyBalances.keys(),
+                ...mirrorBalances.keys()
+            ])).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+            const balances = currencyNames.map(currency => {
+                const legacy = legacyBalances.get(currency) || 0;
+                const mirrorAmount = mirrorBalances.get(currency) || 0;
+                return {
+                    currency,
+                    legacy,
+                    mirror: mirrorAmount,
+                    matched: legacy === mirrorAmount,
+                    delta: mirrorAmount - legacy
+                };
+            });
+
+            const mismatches = [
+                ...comparisons.filter(item => !item.matched).map(item => `${item.label}不一致`),
+                ...balances.filter(item => !item.matched).map(item => `${item.currency}余额不一致`)
+            ];
+            if (mirrorSummary.exists && !mirrorSummary.matchesSource) {
+                mismatches.unshift('sourceHash 未对齐旧数据');
+            }
+            if (!mirrorSummary.exists) {
+                mismatches.unshift('本地镜像不存在');
+            }
+
+            let status = 'matched';
+            let statusLabel = '本地镜像与旧数据一致';
+            if (!mirrorSummary.exists) {
+                status = 'missing';
+                statusLabel = '尚未生成本地镜像';
+            } else if (mismatches.length) {
+                status = 'drifted';
+                statusLabel = '本地镜像与旧数据不一致';
+            }
+
+            return {
+                generatedAt: new Date().toISOString(),
+                readOnly: true,
+                remoteUploadEnabled: false,
+                status,
+                statusLabel,
+                mirror: mirrorSummary,
+                comparisons,
+                balances,
+                mismatches,
+                summary: {
+                    comparisonTotal: comparisons.length,
+                    comparisonMatched: comparisons.filter(item => item.matched).length,
+                    balanceTotal: balances.length,
+                    balanceMatched: balances.filter(item => item.matched).length,
+                    mismatchCount: mismatches.length
+                }
+            };
+        }
+
         function getHabitDualWritePathInventory() {
             return [
                 {
@@ -759,6 +869,7 @@
             buildHabitAppSnapshotPreview,
             buildHabitAppLocalMirror,
             summarizeHabitAppLocalMirror,
+            buildHabitDualWriteConsistency,
             getHabitLegacySourceSlice,
             getHabitDualWritePathInventory,
             buildHabitDualWriteReadiness

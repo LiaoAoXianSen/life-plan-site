@@ -388,7 +388,7 @@ UI 不直接拼旧字段，为迁移 snapshot 做准备。
 
 下一步应该优先做：
 
-1. 给本地双写补更细的一致性校验面板：`habitRecords` / `habitLedger` 数量、余额、sourceHash 对比。
-2. 视需要把全量重建改成写路径增量 patch，降低频繁操作成本。
-3. 等本地双写稳定后，再接入独立 `habitSyncConfig` 与 `/apps/habit-app/data.json` 上传下载。
+1. 视需要把全量重建改成写路径增量 patch，降低频繁操作成本。
+2. 等本地双写与一致性面板稳定后，再接入独立 `habitSyncConfig` 与 `/apps/habit-app/data.json` 上传下载。
+3. 远端同步仍保持 Worker 无业务合并逻辑。
 4. 最后再对 `yuanqidaka` 做 Room sync migration。

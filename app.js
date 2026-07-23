@@ -6911,11 +6911,12 @@
             const diagnostics = habitService.buildLegacyHabitDiagnostics(data);
             const readiness = habitService.buildHabitDualWriteReadiness(data, diagnostics);
             const snapshotPreview = habitService.buildHabitAppSnapshotPreview(data);
-            const mirrorSummary = getHabitAppLocalMirrorSummary();
+            const snapshotSourceHash = getHabitLegacySourceHash();
+            const consistency = habitService.buildHabitDualWriteConsistency(data, habitAppLocalMirror, snapshotSourceHash);
+            const mirrorSummary = consistency.mirror || getHabitAppLocalMirrorSummary();
             const summary = diagnostics.summary || {};
             const readinessSummary = readiness.summary || {};
             const snapshotSummary = snapshotPreview.summary || {};
-            const snapshotSourceHash = getHabitLegacySourceHash();
             const balances = (summary.walletBalances || [])
                 .map(item => `${item.amount} ${item.currency}`)
                 .join(' · ') || `0 ${HABIT_DEFAULT_CURRENCY}`;
@@ -6936,12 +6937,12 @@
                 : (readiness.status === 'ready'
                     ? 'is-ready'
                     : (readiness.status === 'partial' ? 'is-partial' : 'is-prepared'));
-            const mirrorStatusLabel = !mirrorSummary.exists
+            const mirrorStatusLabel = consistency.statusLabel || (!mirrorSummary.exists
                 ? '尚未生成本地镜像'
-                : (mirrorSummary.matchesSource ? '本地镜像已对齐旧数据' : '本地镜像落后于旧数据');
-            const mirrorStatusClass = !mirrorSummary.exists
-                ? 'is-blocked'
-                : (mirrorSummary.matchesSource ? 'is-ready' : 'is-prepared');
+                : (mirrorSummary.matchesSource ? '本地镜像已对齐旧数据' : '本地镜像落后于旧数据'));
+            const mirrorStatusClass = consistency.status === 'matched'
+                ? 'is-ready'
+                : (consistency.status === 'missing' ? 'is-blocked' : 'is-prepared');
             const mirrorMeta = mirrorSummary.exists
                 ? `localStorage.habitAppData · 指纹 ${escapeHtml(mirrorSummary.sourceHashShort || '无')} · ${escapeHtml(mirrorSummary.summary.habits || 0)} habits · ${escapeHtml(mirrorSummary.summary.habitRecords || 0)} records · ${escapeHtml(mirrorSummary.summary.habitLedger || 0)} ledger`
                 : '仅本地重建，不上传 /apps/habit-app/data.json';
@@ -7004,6 +7005,26 @@
                             <button type="button" class="btn btn-secondary" onclick="rebuildHabitAppLocalMirrorFromDiagnostics()">从当前旧数据重建本地镜像</button>
                             <span>不会触达 Worker / WebDAV，也不会修改 lifePlanData。</span>
                         </div>
+                        <div class="habit-consistency-grid">
+                            ${(consistency.comparisons || []).map(renderHabitConsistencyRow).join('')}
+                        </div>
+                        ${(consistency.balances || []).length ? `
+                            <div class="habit-consistency-balance-list">
+                                ${(consistency.balances || []).map(renderHabitConsistencyBalanceRow).join('')}
+                            </div>
+                        ` : '<div class="habit-diagnostics-ok">当前没有钱包余额可对比。</div>'}
+                        ${(consistency.mismatches || []).length ? `
+                            <div class="habit-diagnostics-issue-list">
+                                ${(consistency.mismatches || []).map(item => `
+                                    <article class="habit-diagnostics-issue is-warning">
+                                        <div class="habit-diagnostics-issue-head">
+                                            <strong>${escapeHtml(item)}</strong>
+                                            <span>不一致</span>
+                                        </div>
+                                    </article>
+                                `).join('')}
+                            </div>
+                        ` : '<div class="habit-diagnostics-ok">数量、余额与 sourceHash 当前一致。</div>'}
                         <div class="habit-dualwrite-next">
                             <div>上次重建：${escapeHtml(mirrorSummary.rebuiltAt || habitAppLocalMirrorMeta.lastRebuildAt || '尚未重建')}</div>
                             <div>原因：${escapeHtml(mirrorSummary.reason || habitAppLocalMirrorMeta.lastRebuildReason || '无')}</div>
@@ -7114,6 +7135,30 @@
                         <em>${escapeHtml(targets)}</em>
                     </div>
                     <b>${escapeHtml(statusLabel)}</b>
+                </div>
+            `;
+        }
+
+        function renderHabitConsistencyRow(item) {
+            const matched = !!item.matched;
+            return `
+                <div class="habit-consistency-row ${matched ? 'is-matched' : 'is-drifted'}">
+                    <strong>${escapeHtml(item.label || item.id || '对比项')}</strong>
+                    <span>旧 ${escapeHtml(item.legacy || 0)}</span>
+                    <span>镜像 ${escapeHtml(item.mirror || 0)}</span>
+                    <b>${matched ? '一致' : `差 ${escapeHtml(item.delta || 0)}`}</b>
+                </div>
+            `;
+        }
+
+        function renderHabitConsistencyBalanceRow(item) {
+            const matched = !!item.matched;
+            return `
+                <div class="habit-consistency-balance-row ${matched ? 'is-matched' : 'is-drifted'}">
+                    <strong>${escapeHtml(item.currency || HABIT_DEFAULT_CURRENCY)}</strong>
+                    <span>旧 ${escapeHtml(item.legacy || 0)}</span>
+                    <span>镜像 ${escapeHtml(item.mirror || 0)}</span>
+                    <b>${matched ? '余额一致' : `差 ${escapeHtml(item.delta || 0)}`}</b>
                 </div>
             `;
         }

@@ -2318,7 +2318,11 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
 
     page.once('dialog', dialog => dialog.accept());
     await panel.getByRole('button', { name: '从当前旧数据重建本地镜像' }).click();
-    await expect(panel).toContainText('本地镜像已对齐旧数据');
+    await expect(panel).toContainText('本地镜像与旧数据一致');
+    await expect(panel).toContainText('数量、余额与 sourceHash 当前一致');
+    await expect(panel).toContainText('打卡/记录');
+    await expect(panel).toContainText('旧 2');
+    await expect(panel).toContainText('镜像 2');
 
     const mirror = await page.evaluate(() => JSON.parse(localStorage.getItem('habitAppData')));
     expect(mirror.localMirror).toBe(true);
@@ -2327,6 +2331,16 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     expect(mirror.habitRecords).toHaveLength(2);
     expect(mirror.habitLedger).toHaveLength(2);
     expect(mirror.mirror?.sourceHash).toBeTruthy();
+
+    const consistency = await page.evaluate(() => {
+        const source = JSON.parse(localStorage.getItem('lifePlanData'));
+        const mirrorData = JSON.parse(localStorage.getItem('habitAppData'));
+        const service = window.LifePlanHabitService.create({});
+        const sourceHash = service.summarizeHabitAppLocalMirror(mirrorData).sourceHash;
+        return service.buildHabitDualWriteConsistency(source, mirrorData, sourceHash);
+    });
+    expect(consistency.status).toBe('matched');
+    expect(consistency.summary.mismatchCount).toBe(0);
 
     const after = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     expect(after).toBe(before);
