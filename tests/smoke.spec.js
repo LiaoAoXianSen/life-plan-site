@@ -2275,7 +2275,7 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
     const panel = page.locator('#habit-diagnostics-panel');
     await expect(panel).toBeVisible();
-    await expect(panel).toContainText('只读诊断');
+    await expect(panel).toContainText('诊断页默认只读');
     await expect(panel).toContainText('旧习惯');
     await expect(panel).toContainText('habitRecords');
     await expect(panel).toContainText('流水指向缺失习惯');
@@ -2286,6 +2286,8 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('打卡 / 取消打卡');
     await expect(panel).toContainText('待接入');
     await expect(panel).toContainText('远端上传关闭');
+    await expect(panel).toContainText('本地 habit-app 镜像');
+    await expect(panel).toContainText('从当前旧数据重建本地镜像');
     await expect(panel).toContainText('<img src=x');
     await expect(panel.locator('img')).toHaveCount(0);
     await expect(panel.locator('svg')).toHaveCount(0);
@@ -2311,6 +2313,18 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     expect(readiness.summary.writePathPending).toBeGreaterThan(0);
     expect(readiness.writePaths.some(item => item.fn === 'toggleCheckin')).toBe(true);
     expect(readiness.status === 'prepared' || readiness.status === 'blocked').toBe(true);
+
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '从当前旧数据重建本地镜像' }).click();
+    await expect(panel).toContainText('本地镜像已对齐旧数据');
+
+    const mirror = await page.evaluate(() => JSON.parse(localStorage.getItem('habitAppData')));
+    expect(mirror.localMirror).toBe(true);
+    expect(mirror.remoteUploadEnabled).toBe(false);
+    expect(mirror.habits).toHaveLength(1);
+    expect(mirror.habitRecords).toHaveLength(2);
+    expect(mirror.habitLedger).toHaveLength(2);
+    expect(mirror.mirror?.sourceHash).toBeTruthy();
 
     const after = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     expect(after).toBe(before);

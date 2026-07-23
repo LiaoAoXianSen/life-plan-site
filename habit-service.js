@@ -141,14 +141,35 @@
             return normalizeId(item?.date || item?.startDate || item?.createdAt || item?.updatedAt).slice(0, 10);
         }
 
-        function buildHabitAppSnapshotPreview(source = {}) {
-            const habits = asArray(source.habits);
-            const checkins = asArray(source.checkins);
-            const ledger = asArray(source.habitPointLedger);
-            const rewards = asArray(source.habitRewards);
-            const legacyCurrencies = asArray(source.habitCurrencies);
-            const deletedItems = asArray(source.deletedItems);
+        function getHabitLegacySourceSlice(source = {}) {
+            return {
+                habits: asArray(source.habits),
+                checkins: asArray(source.checkins),
+                habitPointLedger: asArray(source.habitPointLedger),
+                habitRewards: asArray(source.habitRewards),
+                habitCurrencies: asArray(source.habitCurrencies),
+                deletedItems: asArray(source.deletedItems)
+            };
+        }
+
+        function getHabitSnapshotCollectionSummary(snapshot = {}) {
+            return Object.fromEntries(Object.entries(snapshot)
+                .filter(([, value]) => Array.isArray(value))
+                .map(([key, value]) => [key, value.length]));
+        }
+
+        function buildHabitAppSnapshot(source = {}, options = {}) {
+            const slice = getHabitLegacySourceSlice(source);
+            const habits = slice.habits;
+            const checkins = slice.checkins;
+            const ledger = slice.habitPointLedger;
+            const rewards = slice.habitRewards;
+            const legacyCurrencies = slice.habitCurrencies;
+            const deletedItems = slice.deletedItems;
             const currencyNames = new Set([normalizeCurrency(defaultCurrency, DEFAULT_CURRENCY)]);
+            const mode = options.mode === 'local-mirror' ? 'local-mirror' : 'preview';
+            const generatedAt = options.generatedAt || new Date().toISOString();
+            const sourceHash = normalizeId(options.sourceHash);
 
             legacyCurrencies.forEach(item => currencyNames.add(normalizeCurrency(item?.name || item?.currency || item?.id, defaultCurrency)));
             habits.forEach(item => {
@@ -168,8 +189,7 @@
 
             const snapshot = {
                 schemaVersion: 1,
-                generatedAt: new Date().toISOString(),
-                readOnlyPreview: true,
+                generatedAt,
                 habits: habits.map((item, index) => {
                     const currency = normalizeCurrency(item?.rewardCurrency || item?.penaltyCurrency, defaultCurrency);
                     return compactObject({
@@ -275,14 +295,62 @@
                 })
             };
 
+            if (mode === 'preview') {
+                snapshot.readOnlyPreview = true;
+            } else {
+                snapshot.localMirror = true;
+                snapshot.remoteUploadEnabled = false;
+                snapshot.mirror = compactObject({
+                    mode: 'local-only',
+                    reason: options.reason || 'manual-rebuild',
+                    rebuiltAt: generatedAt,
+                    sourceHash: sourceHash || undefined,
+                    dualWriteEnabledPaths: asArray(options.dualWriteEnabledPaths)
+                });
+            }
+
+            return snapshot;
+        }
+
+        function buildHabitAppSnapshotPreview(source = {}, options = {}) {
+            const snapshot = buildHabitAppSnapshot(source, { ...options, mode: 'preview' });
             return {
                 generatedAt: snapshot.generatedAt,
                 readOnly: true,
-                summary: Object.fromEntries(Object.entries(snapshot)
-                    .filter(([, value]) => Array.isArray(value))
-                    .map(([key, value]) => [key, value.length])),
+                summary: getHabitSnapshotCollectionSummary(snapshot),
                 snapshot,
                 jsonText: JSON.stringify(snapshot, null, 2)
+            };
+        }
+
+        function buildHabitAppLocalMirror(source = {}, options = {}) {
+            const snapshot = buildHabitAppSnapshot(source, { ...options, mode: 'local-mirror' });
+            return {
+                generatedAt: snapshot.generatedAt,
+                readOnly: false,
+                remoteUploadEnabled: false,
+                summary: getHabitSnapshotCollectionSummary(snapshot),
+                snapshot,
+                jsonText: JSON.stringify(snapshot, null, 2)
+            };
+        }
+
+        function summarizeHabitAppLocalMirror(mirror = null, expectedSourceHash = '') {
+            const snapshot = mirror && typeof mirror === 'object' ? mirror : null;
+            const summary = snapshot ? getHabitSnapshotCollectionSummary(snapshot) : {};
+            const storedSourceHash = normalizeId(snapshot?.mirror?.sourceHash || snapshot?.sourceHash);
+            const expected = normalizeId(expectedSourceHash);
+            return {
+                exists: !!snapshot,
+                generatedAt: snapshot?.generatedAt || '',
+                rebuiltAt: snapshot?.mirror?.rebuiltAt || snapshot?.generatedAt || '',
+                reason: snapshot?.mirror?.reason || '',
+                sourceHash: storedSourceHash,
+                sourceHashShort: storedSourceHash ? storedSourceHash.slice(0, 12) : '',
+                matchesSource: !!(expected && storedSourceHash && expected === storedSourceHash),
+                remoteUploadEnabled: snapshot?.remoteUploadEnabled === true,
+                localMirror: snapshot?.localMirror === true,
+                summary
             };
         }
 
@@ -662,7 +730,11 @@
 
         return {
             buildLegacyHabitDiagnostics,
+            buildHabitAppSnapshot,
             buildHabitAppSnapshotPreview,
+            buildHabitAppLocalMirror,
+            summarizeHabitAppLocalMirror,
+            getHabitLegacySourceSlice,
             getHabitDualWritePathInventory,
             buildHabitDualWriteReadiness
         };

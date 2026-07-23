@@ -113,7 +113,15 @@
         let hasUnreliableLocalSave = false;
         let localSaveWarning = '';
         const CRITICAL_FAILURE_LOG_KEY = 'lifePlanCriticalFailures';
+        const HABIT_APP_LOCAL_MIRROR_KEY = 'habitAppData';
         const MAX_CRITICAL_FAILURES = 5;
+        let habitAppLocalMirror = null;
+        let habitAppLocalMirrorMeta = {
+            dirty: false,
+            lastRebuildAt: '',
+            lastRebuildReason: '',
+            lastError: ''
+        };
         const syncService = window.LifePlanSyncService.create({
             appSyncKit: () => window.AppSyncKit,
             fetchImpl: (...args) => fetch(...args),
@@ -460,6 +468,78 @@
             loadSyncConfig();
             loadWheelSyncConfig();
             loadAiConfig();
+            loadHabitAppLocalMirror();
+        }
+
+        function getHabitLegacySourceHash(source = data) {
+            const slice = habitService.getHabitLegacySourceSlice
+                ? habitService.getHabitLegacySourceSlice(source)
+                : {
+                    habits: source.habits || [],
+                    checkins: source.checkins || [],
+                    habitPointLedger: source.habitPointLedger || [],
+                    habitRewards: source.habitRewards || [],
+                    habitCurrencies: source.habitCurrencies || [],
+                    deletedItems: source.deletedItems || []
+                };
+            return getDataHash(slice);
+        }
+
+        function loadHabitAppLocalMirror() {
+            try {
+                const saved = localStorage.getItem(HABIT_APP_LOCAL_MIRROR_KEY);
+                habitAppLocalMirror = saved ? JSON.parse(saved) : null;
+                habitAppLocalMirrorMeta.lastError = '';
+            } catch (err) {
+                habitAppLocalMirror = null;
+                habitAppLocalMirrorMeta.lastError = err?.message || String(err);
+                console.warn('habit-app 本地镜像读取失败', err);
+            }
+            return habitAppLocalMirror;
+        }
+
+        function getHabitAppLocalMirrorSummary() {
+            return habitService.summarizeHabitAppLocalMirror(
+                habitAppLocalMirror,
+                getHabitLegacySourceHash()
+            );
+        }
+
+        function saveHabitAppLocalMirror(snapshot, meta = {}) {
+            if (!snapshot || typeof snapshot !== 'object') return false;
+            const payload = {
+                ...snapshot,
+                localMirror: true,
+                remoteUploadEnabled: false
+            };
+            if (!persistLocalValue(HABIT_APP_LOCAL_MIRROR_KEY, JSON.stringify(payload), 'habit-app 本地镜像')) {
+                habitAppLocalMirrorMeta.lastError = '本地镜像写入失败';
+                return false;
+            }
+            habitAppLocalMirror = payload;
+            habitAppLocalMirrorMeta.dirty = false;
+            habitAppLocalMirrorMeta.lastRebuildAt = payload.mirror?.rebuiltAt || payload.generatedAt || getLocalDateTimeStr();
+            habitAppLocalMirrorMeta.lastRebuildReason = meta.reason || payload.mirror?.reason || '';
+            habitAppLocalMirrorMeta.lastError = '';
+            return true;
+        }
+
+        function rebuildHabitAppLocalMirror(reason = 'manual-rebuild', options = {}) {
+            const sourceHash = getHabitLegacySourceHash();
+            const built = habitService.buildHabitAppLocalMirror(data, {
+                reason,
+                sourceHash,
+                generatedAt: new Date().toISOString(),
+                dualWriteEnabledPaths: habitService.getHabitDualWritePathInventory()
+                    .filter(item => item.dualWrite === 'enabled')
+                    .map(item => item.id)
+            });
+            const saved = saveHabitAppLocalMirror(built.snapshot, { reason });
+            if (!saved) return null;
+            if (options.renderDiagnostics && currentHabitView === 'diagnostics') {
+                renderHabitDiagnosticsPanel();
+            }
+            return built;
         }
 
         function renderLocalSaveWarning() {
@@ -6821,17 +6901,11 @@
             const diagnostics = habitService.buildLegacyHabitDiagnostics(data);
             const readiness = habitService.buildHabitDualWriteReadiness(data, diagnostics);
             const snapshotPreview = habitService.buildHabitAppSnapshotPreview(data);
+            const mirrorSummary = getHabitAppLocalMirrorSummary();
             const summary = diagnostics.summary || {};
             const readinessSummary = readiness.summary || {};
             const snapshotSummary = snapshotPreview.summary || {};
-            const snapshotSourceHash = getDataHash({
-                habits: data.habits || [],
-                checkins: data.checkins || [],
-                habitPointLedger: data.habitPointLedger || [],
-                habitRewards: data.habitRewards || [],
-                habitCurrencies: data.habitCurrencies || [],
-                deletedItems: data.deletedItems || []
-            });
+            const snapshotSourceHash = getHabitLegacySourceHash();
             const balances = (summary.walletBalances || [])
                 .map(item => `${item.amount} ${item.currency}`)
                 .join(' · ') || `0 ${HABIT_DEFAULT_CURRENCY}`;
@@ -6850,11 +6924,20 @@
             const readinessStatusClass = readiness.status === 'blocked'
                 ? 'is-blocked'
                 : (readiness.status === 'ready' ? 'is-ready' : 'is-prepared');
+            const mirrorStatusLabel = !mirrorSummary.exists
+                ? '尚未生成本地镜像'
+                : (mirrorSummary.matchesSource ? '本地镜像已对齐旧数据' : '本地镜像落后于旧数据');
+            const mirrorStatusClass = !mirrorSummary.exists
+                ? 'is-blocked'
+                : (mirrorSummary.matchesSource ? 'is-ready' : 'is-prepared');
+            const mirrorMeta = mirrorSummary.exists
+                ? `localStorage.habitAppData · 指纹 ${escapeHtml(mirrorSummary.sourceHashShort || '无')} · ${escapeHtml(mirrorSummary.summary.habits || 0)} habits · ${escapeHtml(mirrorSummary.summary.habitRecords || 0)} records · ${escapeHtml(mirrorSummary.summary.habitLedger || 0)} ledger`
+                : '仅本地重建，不上传 /apps/habit-app/data.json';
 
             container.innerHTML = `
                 <div class="habit-diagnostics-guard">
                     <div>
-                        <strong>只读诊断，不会保存、不上传、不生成 habit-app 云文件。</strong>
+                        <strong>诊断页默认只读；本地镜像重建只写 localStorage.habitAppData，不上传云端。</strong>
                         <span>当前权威仍是 ${escapeHtml(diagnostics.authority || 'lifePlanData')}；这里先检查迁移/同步前的历史数据风险，并展示 Phase 4 本地双写前置状态。</span>
                     </div>
                     <span class="habit-diagnostics-pill">Phase 4 Readiness</span>
@@ -6897,6 +6980,25 @@
                             ${(readiness.nextActions || []).map(item => `<div>${escapeHtml(item)}</div>`).join('')}
                         </div>
                     </section>
+                    <section class="habit-diagnostics-card habit-local-mirror-card">
+                        <div class="habit-snapshot-head">
+                            <div>
+                                <div class="habit-shop-title">本地 habit-app 镜像</div>
+                                <div class="habit-snapshot-meta">${mirrorMeta}</div>
+                            </div>
+                            <span class="habit-dualwrite-status ${mirrorStatusClass}">${escapeHtml(mirrorStatusLabel)}</span>
+                        </div>
+                        <div class="habit-local-mirror-actions">
+                            <button type="button" class="btn btn-secondary" onclick="rebuildHabitAppLocalMirrorFromDiagnostics()">从当前旧数据重建本地镜像</button>
+                            <span>不会触达 Worker / WebDAV，也不会修改 lifePlanData。</span>
+                        </div>
+                        <div class="habit-dualwrite-next">
+                            <div>上次重建：${escapeHtml(mirrorSummary.rebuiltAt || habitAppLocalMirrorMeta.lastRebuildAt || '尚未重建')}</div>
+                            <div>原因：${escapeHtml(mirrorSummary.reason || habitAppLocalMirrorMeta.lastRebuildReason || '无')}</div>
+                            <div>当前旧数据指纹：${escapeHtml(snapshotSourceHash.slice(0, 12))}</div>
+                            ${habitAppLocalMirrorMeta.lastError ? `<div>最近错误：${escapeHtml(habitAppLocalMirrorMeta.lastError)}</div>` : ''}
+                        </div>
+                    </section>
                     <section class="habit-diagnostics-card habit-snapshot-preview-card">
                         <div class="habit-snapshot-head">
                             <div>
@@ -6909,6 +7011,15 @@
                     </section>
                 </div>
             `;
+        }
+
+        function rebuildHabitAppLocalMirrorFromDiagnostics() {
+            const built = rebuildHabitAppLocalMirror('diagnostics-manual-rebuild', { renderDiagnostics: true });
+            if (!built) {
+                alert('本地 habit-app 镜像重建失败，请检查浏览器本地存储权限。');
+                return;
+            }
+            alert(`已重建本地镜像：${built.summary.habits || 0} habits · ${built.summary.habitRecords || 0} records · ${built.summary.habitLedger || 0} ledger`);
         }
 
         function renderHabitDiagnosticsMetric(item) {

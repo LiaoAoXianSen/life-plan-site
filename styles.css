@@ -1500,7 +1500,21 @@
         line-height: 1.45;
         font-weight: 800;
     }
-    .habit-dualwrite-card { grid-column: 1 / -1; }
+    .habit-dualwrite-card,
+    .habit-local-mirror-card { grid-column: 1 / -1; }
+    .habit-local-mirror-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 14px;
+        align-items: center;
+        margin-top: 12px;
+    }
+    .habit-local-mirror-actions span {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+        font-weight: 750;
+    }
     .habit-dualwrite-status {
         display: inline-flex;
         align-items: center;
