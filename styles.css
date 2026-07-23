@@ -1696,6 +1696,78 @@
     .habit-remote-risk.is-danger { border-color: #efc0ae; background: #fff5f1; }
     .habit-remote-risk.is-info { border-color: #c8ddd0; background: #f6fbf7; }
     .habit-remote-preview-ok { color: var(--accent); background: #f6fbf7; text-align: center; }
+    .habit-upload-guard {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+    }
+    .habit-upload-guard-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    .habit-upload-guard-head > div { min-width: 0; }
+    .habit-upload-guard-head strong,
+    .habit-upload-guard-head span { display: block; }
+    .habit-upload-guard-head > div > strong {
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 950;
+    }
+    .habit-upload-guard-head > div > span {
+        max-width: 72ch;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+        font-weight: 750;
+    }
+    .habit-upload-arm {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 11px 12px;
+        border: 1px solid #c7d9ce;
+        border-radius: 12px;
+        background: #f6fbf7;
+        cursor: pointer;
+    }
+    .habit-upload-arm.is-disabled { cursor: not-allowed; opacity: 0.65; }
+    .habit-upload-arm input {
+        width: 17px;
+        height: 17px;
+        margin: 2px 0 0;
+        accent-color: var(--accent);
+        flex: 0 0 auto;
+    }
+    .habit-upload-arm span,
+    .habit-upload-arm strong,
+    .habit-upload-arm small { display: block; }
+    .habit-upload-arm strong { color: var(--text); font-size: 12px; font-weight: 950; }
+    .habit-upload-arm small { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.5; font-weight: 750; }
+    .habit-upload-blockers,
+    .habit-upload-state-message,
+    .habit-upload-caveat {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+        line-height: 1.55;
+        font-weight: 750;
+    }
+    .habit-upload-blockers { border: 1px solid #efc0ae; background: #fff5f1; color: #7b2d17; }
+    .habit-upload-blockers strong,
+    .habit-upload-blockers span { display: block; }
+    .habit-upload-blockers span { margin-top: 3px; }
+    .habit-upload-state-message { border: 1px solid #c7d9ce; background: #f6fbf7; color: var(--text); }
+    .habit-upload-guard.is-blocked .habit-upload-state-message,
+    .habit-upload-guard.is-error .habit-upload-state-message,
+    .habit-upload-guard.is-uncertain .habit-upload-state-message { border-color: #efc0ae; background: #fff5f1; color: #7b2d17; }
+    .habit-upload-guard.is-cancelled .habit-upload-state-message { border-color: #ead3a1; background: #fffaf0; color: #704d0c; }
+    .habit-upload-caveat { background: var(--surface-soft); color: var(--muted); }
+    .habit-upload-caveat code { color: var(--accent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 850; }
     .habit-consistency-grid,
     .habit-consistency-balance-list {
         display: grid;

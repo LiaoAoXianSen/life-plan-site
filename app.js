@@ -167,6 +167,14 @@
             risks: []
         };
         let isHabitRemotePreviewRunning = false;
+        let isHabitRemoteUploadRunning = false;
+        let habitRemoteUploadState = {
+            status: 'idle',
+            attemptedAt: '',
+            message: '',
+            uploadedHash: '',
+            uploadedEtag: ''
+        };
         const syncService = window.LifePlanSyncService.create({
             appSyncKit: () => window.AppSyncKit,
             fetchImpl: (...args) => fetch(...args),
@@ -1371,14 +1379,14 @@
             } catch (err) {
                 console.warn('habit-app 同步配置读取失败', err);
             }
-            habitSyncConfig.remotePath = habitSyncConfig.remotePath || '/apps/habit-app/data.json';
+            habitSyncConfig.remotePath = '/apps/habit-app/data.json';
             habitSyncConfig.autoSync = false;
             habitSyncConfig.remoteUploadEnabled = false;
             saveHabitSyncConfigToLocal();
         }
 
         function saveHabitSyncConfigToLocal() {
-            habitSyncConfig.remotePath = habitSyncConfig.remotePath || '/apps/habit-app/data.json';
+            habitSyncConfig.remotePath = '/apps/habit-app/data.json';
             habitSyncConfig.autoSync = false;
             habitSyncConfig.remoteUploadEnabled = false;
             persistLocalValue('habitAppSyncConfig', JSON.stringify(habitSyncConfig), 'habit-app 同步配置');
@@ -1450,13 +1458,6 @@
             const risks = [];
             const missing = HABIT_REMOTE_PREVIEW_COLLECTIONS.filter(key => !(key in raw));
             const invalid = HABIT_REMOTE_PREVIEW_COLLECTIONS.filter(key => key in raw && !Array.isArray(raw[key]));
-            if (!Number.isFinite(Number(raw.schemaVersion))) {
-                risks.push({
-                    severity: 'warning',
-                    title: '云端 schemaVersion 缺失或无效',
-                    detail: '预检会按 schemaVersion 1 规范化，但不会保存规范化结果。'
-                });
-            }
             if (missing.length) {
                 const criticalMissing = missing.some(key => ['habits', 'habitRecords', 'habitLedger'].includes(key));
                 risks.push({
@@ -1520,7 +1521,12 @@
                 autoSync: !!habitSyncConfig.autoSync,
                 remoteUploadEnabled: !!habitSyncConfig.remoteUploadEnabled,
                 manualPullEnabled: !!(syncConfig.webdavUrl && habitSyncConfig.remotePath),
-                manualPushEnabled: !!(syncConfig.webdavUrl && habitSyncConfig.remoteUploadEnabled && habitAppLocalMirror),
+                manualPushEnabled: !!(syncConfig.webdavUrl
+                    && habitSyncConfig.remoteUploadEnabled
+                    && habitAppLocalMirror
+                    && habitRemotePreviewState.status === 'missing'
+                    && !isHabitRemotePreviewRunning
+                    && !isHabitRemoteUploadRunning),
                 dirty: !!habitSyncState.dirty,
                 lastLocalHash: habitSyncState.lastLocalHash || '',
                 lastLocalHashShort: (habitSyncState.lastLocalHash || '').slice(0, 12),
@@ -1535,16 +1541,91 @@
                 lastRebuildReason: habitSyncState.lastRebuildReason || '',
                 mergeReady: typeof syncService.mergeHabitSnapshots === 'function',
                 hashReady: typeof syncService.getHabitDataHash === 'function',
-                phase: 'phase-5-readonly-remote-preview',
+                phase: 'phase-6-protected-first-upload',
                 statusLabel: habitSyncConfig.remoteUploadEnabled
                     ? '远端上传可手动触发'
-                    : '远端上传关闭，仅只读预检'
+                    : (habitRemotePreviewState.status === 'missing'
+                        ? '首次创建等待本次授权'
+                        : '远端上传关闭，仅只读预检')
+            };
+        }
+
+        function getHabitProtectedUploadReadiness(snapshot = null, sourceHash = '') {
+            const scaffold = getHabitSyncScaffoldSummary();
+            const diagnostics = habitService.buildLegacyHabitDiagnostics(data);
+            const readiness = habitService.buildHabitDualWriteReadiness(data, diagnostics);
+            const resolvedSourceHash = sourceHash || getHabitLegacySourceHash();
+            const consistency = habitService.buildHabitDualWriteConsistency(data, habitAppLocalMirror, resolvedSourceHash);
+            const canonical = snapshot || (habitAppLocalMirror ? syncService.getHabitSnapshot(habitAppLocalMirror) : null);
+            const blockers = [];
+            if (!scaffold.endpointConfigured) blockers.push('统一同步地址尚未配置');
+            if (scaffold.remotePath !== '/apps/habit-app/data.json') blockers.push('habit 云端路径不是固定安全路径');
+            if (syncConfig.useAppSyncKitProvider) blockers.push('当前 provider 不支持条件创建');
+            const habitAdapter = window.AppSyncKit?.habitAppAdapter || window.AppSyncKit?.adapters?.habitApp;
+            if (!habitAdapter?.normalizeData || !habitAdapter?.merge || !habitAdapter?.getHash) blockers.push('app-sync-kit habit adapter 尚未加载');
+            if (readiness.status !== 'ready') blockers.push(readiness.statusLabel || '本地双写前置未就绪');
+            if (consistency.status !== 'matched' || (consistency.mismatches || []).length) blockers.push('本地镜像与旧数据不一致');
+            if ((data.checkins || []).some(item => !String(item?.id || '').trim())) blockers.push('存在缺少稳定 ID 的打卡记录');
+            if ((data.habitPointLedger || []).some(item => !String(item?.id || '').trim())) blockers.push('存在缺少稳定 ID 的钱包流水');
+            if ((data.habitRewards || []).some(item => !String(item?.id || '').trim())) blockers.push('存在缺少稳定 ID 的心愿');
+            if ((data.habits || []).some(item => !['daily', 'weekly-fixed'].includes(item?.rule || 'daily'))) {
+                blockers.push('存在当前 canonical schema 无法无损表达的周期规则');
+            }
+            if ((data.habits || []).some(item => item?.randomReward === true)) blockers.push('存在当前 canonical schema 无法无损表达的随机奖励');
+            if ((data.habits || []).some(item => item?.breakPenaltyMode && item.breakPenaltyMode !== 'none')) {
+                blockers.push('存在当前 canonical schema 无法无损表达的断签扣分规则');
+            }
+            if ((data.habits || []).some(item => (item?.milestoneRewards || []).some(milestone => Number(milestone?.penaltyAmount || 0) > 0))) {
+                blockers.push('存在当前 canonical schema 无法无损表达的里程碑扣分');
+            }
+            if ((data.habitPointLedger || []).some(item => item?.type === 'milestone')) blockers.push('历史里程碑奖励尚未生成 claim，需先补迁移映射');
+            if ((data.habitPointLedger || []).some(item => ['miss', 'break'].includes(item?.type))) blockers.push('历史漏打/断签扣分尚未生成 overdue 事件，需先补迁移映射');
+            const invalidHabitTombstones = (data.deletedItems || []).filter(item => {
+                const kind = String(item?.collection || item?.type || item?.entity || item?.entityType || item?.kind || '').trim();
+                if (!['habits', 'habit', 'checkins', 'checkin', 'habitPointLedger', 'habitRewards', 'habitCurrencies'].includes(kind)) return false;
+                return !String(item?.itemId || item?.targetId || item?.entityId || item?.id || '').trim()
+                    || !String(item?.deletedAt || item?.updatedAt || item?.createdAt || '').trim();
+            });
+            if (invalidHabitTombstones.length) blockers.push('存在无法规范化的习惯删除标记');
+            if (canonical) {
+                HABIT_REMOTE_PREVIEW_COLLECTIONS.forEach(collection => {
+                    const ids = new Set();
+                    const duplicate = (canonical[collection] || []).some(item => {
+                        const id = String(item?.id || '').trim();
+                        if (!id) return false;
+                        if (ids.has(id)) return true;
+                        ids.add(id);
+                        return false;
+                    });
+                    if (duplicate) blockers.push(`${collection} 存在重复规范 ID`);
+                });
+                const ledgerKeys = new Set();
+                const duplicateLedgerKey = (canonical.habitLedger || []).some(item => {
+                    if (!item?.sourceId) return false;
+                    const key = `${item.type || 'adjust'}:${item.sourceId}:${item.currencyId || item.currency || HABIT_DEFAULT_CURRENCY}`;
+                    if (ledgerKeys.has(key)) return true;
+                    ledgerKeys.add(key);
+                    return false;
+                });
+                if (duplicateLedgerKey) blockers.push('钱包流水存在重复幂等键');
+            }
+            return {
+                ready: blockers.length === 0,
+                blockers: Array.from(new Set(blockers)),
+                diagnostics,
+                readiness,
+                consistency,
+                sourceHash: resolvedSourceHash
             };
         }
 
         async function previewHabitRemotePull(mode = 'pull') {
             const previewMode = mode === 'merge' || mode === 'both' ? 'merge' : 'pull';
-            if (isHabitRemotePreviewRunning) return false;
+            if (isHabitRemotePreviewRunning || isHabitRemoteUploadRunning) return false;
+            habitSyncConfig.remoteUploadEnabled = false;
+            if (habitRemoteUploadState.status === 'armed') {
+                habitRemoteUploadState = { ...habitRemoteUploadState, status: 'idle', message: '' };
+            }
             ensureHabitAppLocalMirrorForDiagnostics();
             const scaffold = getHabitSyncScaffoldSummary();
             if (!scaffold.endpointConfigured) {
@@ -1631,10 +1712,249 @@
             }
         }
 
+        function setHabitRemoteUploadArmed(armed) {
+            const scaffold = getHabitSyncScaffoldSummary();
+            const uploadReadiness = getHabitProtectedUploadReadiness();
+            const canArm = habitRemotePreviewState.status === 'missing'
+                && scaffold.endpointConfigured
+                && !!habitAppLocalMirror
+                && uploadReadiness.ready
+                && !isHabitRemotePreviewRunning
+                && !isHabitRemoteUploadRunning;
+            habitSyncConfig.remoteUploadEnabled = !!armed && canArm;
+            habitRemoteUploadState = {
+                ...habitRemoteUploadState,
+                status: habitSyncConfig.remoteUploadEnabled ? 'armed' : 'idle',
+                attemptedAt: habitSyncConfig.remoteUploadEnabled ? getLocalDateTimeStr() : habitRemoteUploadState.attemptedAt,
+                message: habitSyncConfig.remoteUploadEnabled
+                    ? '本次会话已解锁首次上传；执行前仍会重建镜像、复查云端并再次确认。'
+                    : ''
+            };
+            renderHabitDiagnosticsPanel();
+            return habitSyncConfig.remoteUploadEnabled;
+        }
+
+        async function runProtectedHabitFirstUpload() {
+            if (isHabitRemoteUploadRunning || isHabitRemotePreviewRunning) return false;
+            const scaffold = getHabitSyncScaffoldSummary();
+            if (!habitSyncConfig.remoteUploadEnabled || habitRemotePreviewState.status !== 'missing') {
+                habitSyncConfig.remoteUploadEnabled = false;
+                habitRemoteUploadState = {
+                    ...habitRemoteUploadState,
+                    status: 'blocked',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: '首次上传未解锁，或最近一次检查不再是 404。请重新检查云端并勾选本次会话授权。'
+                };
+                renderHabitDiagnosticsPanel();
+                return false;
+            }
+            if (!scaffold.endpointConfigured) {
+                habitSyncConfig.remoteUploadEnabled = false;
+                habitRemoteUploadState = {
+                    ...habitRemoteUploadState,
+                    status: 'error',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: '统一同步地址尚未配置；请使用现有云同步设置，不需要填写第二套 habit 地址。'
+                };
+                renderHabitDiagnosticsPanel();
+                return false;
+            }
+            if (syncConfig.useAppSyncKitProvider) {
+                habitSyncConfig.remoteUploadEnabled = false;
+                habitRemoteUploadState = {
+                    ...habitRemoteUploadState,
+                    status: 'blocked',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: '当前 AppSyncKit provider 无法保证 create-only 条件写入；请使用现有 Worker 直连模式完成首次上传。'
+                };
+                renderHabitDiagnosticsPanel();
+                return false;
+            }
+
+            isHabitRemoteUploadRunning = true;
+            let putAttempted = false;
+            habitRemoteUploadState = {
+                status: 'validating',
+                attemptedAt: getLocalDateTimeStr(),
+                message: '正在重建本地镜像并复查云端…',
+                uploadedHash: '',
+                uploadedEtag: ''
+            };
+            renderHabitDiagnosticsPanel();
+            try {
+                const built = rebuildHabitAppLocalMirror('protected-first-upload-preflight');
+                if (!built || !habitAppLocalMirror) {
+                    throw new Error('本地 habit-app 镜像重建失败，已停止上传');
+                }
+                const sourceHash = getHabitLegacySourceHash();
+                const consistency = habitService.buildHabitDualWriteConsistency(data, habitAppLocalMirror, sourceHash);
+                if (consistency.status !== 'matched' || (consistency.mismatches || []).length) {
+                    throw new Error(`本地镜像一致性检查未通过：${(consistency.mismatches || []).join('；') || consistency.statusLabel || consistency.status}`);
+                }
+                const canonicalSnapshot = syncService.getHabitSnapshot(habitAppLocalMirror);
+                const uploadReadiness = getHabitProtectedUploadReadiness(canonicalSnapshot, sourceHash);
+                if (!uploadReadiness.ready) {
+                    throw new Error(`上传前置检查未通过：${uploadReadiness.blockers.join('；')}`);
+                }
+                const local = getHabitRemotePreviewModel(canonicalSnapshot);
+                const frozenMirrorHash = local.hash;
+                const finalRemote = await syncService.pullJson(
+                    { ...syncConfig, remotePath: scaffold.remotePath },
+                    scaffold.remotePath,
+                    value => value,
+                    value => syncService.getHabitDataHash(value)
+                );
+                if (finalRemote) {
+                    const schemaRisks = getHabitRemoteSchemaRisks(finalRemote.data);
+                    const remote = getHabitRemotePreviewModel(finalRemote.data, finalRemote.hash);
+                    const merged = getHabitRemotePreviewModel(syncService.mergeHabitSnapshots(local.snapshot, remote.snapshot));
+                    habitRemotePreviewState = {
+                        ...habitRemotePreviewState,
+                        status: 'ready',
+                        mode: 'race-recheck',
+                        local,
+                        remote: { ...remote, etag: finalRemote.etag || '' },
+                        merged,
+                        hashesMatch: local.hash === remote.hash,
+                        error: '',
+                        risks: getHabitRemoteMergeRisks(local, remote, merged, schemaRisks)
+                    };
+                    habitRemoteUploadState = {
+                        ...habitRemoteUploadState,
+                        status: 'blocked',
+                        message: '最终复查时发现云端文件已经存在，已停止首次上传，绝不会覆盖。请先检查新的合并预览。'
+                    };
+                    return false;
+                }
+
+                const confirmed = confirm(
+                    `最终确认：将创建 ${scaffold.remotePath}\n\n`
+                    + `${local.counts.habits} habits · ${local.counts.records} records · ${local.counts.ledger} ledger\n`
+                    + `hash ${local.hashShort}\n\n`
+                    + '客户端会带条件创建并在写入后回读核验。当前 KV 条件检查不是严格原子操作，请不要同时在另一台设备创建该文件。确认继续吗？'
+                );
+                if (!confirmed) {
+                    habitRemoteUploadState = {
+                        ...habitRemoteUploadState,
+                        status: 'cancelled',
+                        message: '已取消首次上传；本地镜像已完成安全重建，云端未写入。'
+                    };
+                    return false;
+                }
+
+                const liveSourceHash = getHabitLegacySourceHash();
+                const liveMirrorHash = habitAppLocalMirror ? getHabitAppDataHash(habitAppLocalMirror) : '';
+                const liveReadiness = getHabitProtectedUploadReadiness(
+                    habitAppLocalMirror ? syncService.getHabitSnapshot(habitAppLocalMirror) : null,
+                    liveSourceHash
+                );
+                if (liveSourceHash !== sourceHash || liveMirrorHash !== frozenMirrorHash || !liveReadiness.ready) {
+                    habitRemoteUploadState = {
+                        ...habitRemoteUploadState,
+                        status: 'blocked',
+                        message: '确认期间本地习惯数据或镜像发生变化，已停止上传。请重新检查云端。'
+                    };
+                    return false;
+                }
+
+                habitRemoteUploadState = {
+                    ...habitRemoteUploadState,
+                    status: 'uploading',
+                    message: '正在以 create-only 条件创建云端 habit 文件…'
+                };
+                renderHabitDiagnosticsPanel();
+                putAttempted = true;
+                const result = await syncService.pushJson(
+                    { ...syncConfig, remotePath: scaffold.remotePath },
+                    scaffold.remotePath,
+                    local.snapshot,
+                    'habit-app',
+                    { ifNoneMatch: '*' }
+                );
+                let verification;
+                try {
+                    verification = await syncService.pullJson(
+                        { ...syncConfig, remotePath: scaffold.remotePath },
+                        scaffold.remotePath,
+                        value => syncService.getHabitSnapshot(value),
+                        value => syncService.getHabitDataHash(value)
+                    );
+                } catch (err) {
+                    err.habitUploadVerificationFailed = true;
+                    throw err;
+                }
+                if (!verification || verification.hash !== local.hash) {
+                    const verificationError = new Error(verification
+                        ? `回读 hash 不一致：本地 ${local.hashShort}，云端 ${(verification.hash || '').slice(0, 12) || '无'}`
+                        : '写入后回读仍未找到云端文件');
+                    verificationError.habitUploadVerificationFailed = true;
+                    throw verificationError;
+                }
+                const now = new Date().toISOString();
+                habitSyncState.dirty = false;
+                habitSyncState.lastLocalHash = sourceHash;
+                habitSyncState.lastRemoteHash = local.hash;
+                if (verification.etag || result?.etag) habitSyncState.lastRemoteEtag = verification.etag || result.etag;
+                habitSyncState.lastPushAt = now;
+                habitSyncState.lastSyncAt = now;
+                saveHabitSyncState();
+                habitRemotePreviewState = {
+                    status: 'ready',
+                    mode: 'first-upload',
+                    requestedAt: getLocalDateTimeStr(),
+                    remotePath: scaffold.remotePath,
+                    error: '',
+                    local,
+                    remote: { ...local, etag: verification.etag || result?.etag || '' },
+                    merged: local,
+                    hashesMatch: true,
+                    risks: []
+                };
+                habitRemoteUploadState = {
+                    status: 'success',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: `云端 habit 文件已创建并回读核验一致；hash ${local.hashShort}。本次上传授权已自动关闭。`,
+                    uploadedHash: local.hash,
+                    uploadedEtag: verification.etag || result?.etag || ''
+                };
+                return true;
+            } catch (err) {
+                const conditionalConflict = err?.status === 412;
+                const uncertain = putAttempted && !conditionalConflict;
+                if (conditionalConflict || uncertain) {
+                    habitRemotePreviewState = {
+                        ...habitRemotePreviewState,
+                        status: 'idle',
+                        requestedAt: '',
+                        error: '',
+                        local: null,
+                        remote: null,
+                        merged: null,
+                        hashesMatch: false,
+                        risks: []
+                    };
+                }
+                habitRemoteUploadState = {
+                    ...habitRemoteUploadState,
+                    status: conditionalConflict ? 'blocked' : (uncertain ? 'uncertain' : 'error'),
+                    message: conditionalConflict
+                        ? '服务器拒绝 create-only PUT：云端文件已被其他设备创建，未发生覆盖。请重新检查云端。'
+                        : (uncertain
+                            ? `PUT 已发出，但无法确认最终云端内容：${err?.message || String(err)}。不会自动重试，请重新手动检查云端。`
+                            : `首次上传失败：${err?.message || String(err)}`)
+                };
+                return false;
+            } finally {
+                isHabitRemoteUploadRunning = false;
+                habitSyncConfig.remoteUploadEnabled = false;
+                saveHabitSyncConfigToLocal();
+                renderHabitDiagnosticsPanel();
+            }
+        }
+
         async function runHabitManualSyncSkeleton(direction = 'pull') {
             if (direction === 'push') {
-                alert('habit 远端上传仍是关闭状态。当前只允许 GET 只读预检，不会 PUT /apps/habit-app/data.json。');
-                return false;
+                return runProtectedHabitFirstUpload();
             }
             return previewHabitRemotePull(direction === 'both' ? 'merge' : 'pull');
         }
@@ -7341,6 +7661,69 @@
             `;
         }
 
+        function renderHabitProtectedUploadGuard() {
+            const state = habitRemoteUploadState || { status: 'idle', message: '' };
+            const previewMissing = habitRemotePreviewState.status === 'missing';
+            if (!previewMissing && state.status === 'idle') return '';
+            const uploadReadiness = getHabitProtectedUploadReadiness();
+            const statusLabels = {
+                idle: '等待授权',
+                armed: '本次已授权',
+                validating: '正在复核',
+                uploading: '正在创建',
+                success: '创建并核验成功',
+                blocked: '已安全停止',
+                cancelled: '已取消',
+                error: '创建前检查失败',
+                uncertain: '结果待核验'
+            };
+            const statusClasses = {
+                idle: 'is-prepared',
+                armed: 'is-ready',
+                validating: 'is-partial',
+                uploading: 'is-partial',
+                success: 'is-ready',
+                blocked: 'is-blocked',
+                cancelled: 'is-prepared',
+                error: 'is-blocked',
+                uncertain: 'is-blocked'
+            };
+            const active = ['validating', 'uploading'].includes(state.status);
+            const canToggle = previewMissing && uploadReadiness.ready && !active && !isHabitRemotePreviewRunning;
+            const statusRole = ['blocked', 'error', 'uncertain'].includes(state.status) ? 'alert' : 'status';
+            return `
+                <div class="habit-upload-guard is-${escapeHtml(state.status || 'idle')}" role="${statusRole}" aria-live="polite">
+                    <div class="habit-upload-guard-head">
+                        <div>
+                            <strong>受保护首次创建</strong>
+                            <span>直接复用现有统一同步地址；无需手动新增第二套 Sync 配置，也不会修改 /life-plan.json。</span>
+                        </div>
+                        <span class="habit-dualwrite-status ${statusClasses[state.status] || 'is-prepared'}">${escapeHtml(statusLabels[state.status] || statusLabels.idle)}</span>
+                    </div>
+                    ${previewMissing ? `
+                        <label class="habit-upload-arm ${canToggle ? '' : 'is-disabled'}">
+                            <input type="checkbox"
+                                ${habitSyncConfig.remoteUploadEnabled ? 'checked' : ''}
+                                ${canToggle ? '' : 'disabled'}
+                                onchange="setHabitRemoteUploadArmed(this.checked)">
+                            <span>
+                                <strong>复用现有统一同步地址并授权本次首次创建</strong>
+                                <small>只对当前页面会话生效；任何成功、失败或取消都会自动关闭。</small>
+                            </span>
+                        </label>
+                    ` : ''}
+                    ${uploadReadiness.blockers.length ? `
+                        <div class="habit-upload-blockers">
+                            <strong>当前不能上传</strong>
+                            <span>${escapeHtml(uploadReadiness.blockers.join('；'))}</span>
+                        </div>
+                    ` : ''}
+                    ${state.message ? `<div class="habit-upload-state-message">${escapeHtml(state.message)}</div>` : ''}
+                    <div class="habit-upload-caveat">上传动作会重建本地镜像、再次 GET、单次发送 <code>If-None-Match: *</code>，并在 PUT 后回读 hash。现有 Cloudflare KV 条件检查并非严格原子锁，请勿让两台设备同时执行首次创建。</div>
+                </div>
+            `;
+        }
+
         function renderHabitDiagnosticsPanel() {
             const container = document.getElementById('habit-diagnostics-panel');
             if (!container) return;
@@ -7440,6 +7823,10 @@
                         </div>
                         ${(() => {
                             const scaffold = getHabitSyncScaffoldSummary();
+                            const actionLocked = isHabitRemotePreviewRunning || isHabitRemoteUploadRunning;
+                            const uploadButtonLabel = habitRemotePreviewState.status === 'missing'
+                                ? (isHabitRemoteUploadRunning ? '正在创建云端 habit 文件…' : '创建云端 habit 文件')
+                                : '手动上传 habit-app（未开启）';
                             return `
                                 <div class="habit-sync-scaffold">
                                     <div class="habit-snapshot-head">
@@ -7456,15 +7843,16 @@
                                         <div>镜像 hash：${escapeHtml(scaffold.mirrorHashShort || '无')}</div>
                                         <div>merge/hash 能力：${scaffold.mergeReady && scaffold.hashReady ? '已接入 sync-service' : '未就绪'}</div>
                                         <div>上次远端同步：${escapeHtml(scaffold.lastSyncAt || '尚未启用')}</div>
-                                        <div>当前阶段：只允许手动 GET 预检；不会覆盖本地数据，也不会上传。</div>
+                                        <div>当前阶段：GET 预检后可进行一次性受保护首次创建；旧 lifePlanData 仍保持权威。</div>
                                     </div>
                                     <div class="habit-sync-actions">
-                                        <button type="button" class="btn btn-secondary" ${isHabitRemotePreviewRunning ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('pull')">${isHabitRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
-                                        <button type="button" class="btn btn-secondary" ${isHabitRemotePreviewRunning ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('both')">手动合并预检</button>
-                                        <button type="button" class="btn btn-danger" ${scaffold.manualPushEnabled ? '' : 'disabled'} onclick="runHabitManualSyncSkeleton('push')">手动上传 habit-app（未开启）</button>
-                                        <span>上传保持关闭；本阶段只会读取云端文件。</span>
+                                        <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('pull')">${isHabitRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
+                                        <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('both')">手动合并预检</button>
+                                        <button type="button" class="btn btn-danger" ${scaffold.manualPushEnabled ? '' : 'disabled'} onclick="runHabitManualSyncSkeleton('push')">${escapeHtml(uploadButtonLabel)}</button>
+                                        <span>不新增 endpoint；上传授权只在当前页面内存中存在。</span>
                                     </div>
                                     ${renderHabitRemotePreviewPanel()}
+                                    ${renderHabitProtectedUploadGuard()}
                                 </div>
                             `;
                         })()}
@@ -8498,6 +8886,7 @@
 
             const habit = data.habits.find(h => h.id === habitId);
             reverseHabitCheckinReward(habit, existing);
+            markDeletedItem('checkins', existing.id, { reason: 'manual-decrease', habitId });
             data.checkins = data.checkins.filter(c => c.id !== existing.id);
             touchHabit(habit);
             

@@ -2,6 +2,23 @@
 
 ## 2026-07-23
 
+- Started the protected first-upload phase after the user clarified the final PC + mobile shared-authority goal and delegated next-step judgment.
+- Chose a session-only, explicit-confirmation remote bootstrap; development tests will intercept fake endpoints and will not touch the user's real cloud file.
+- Confirmed the sync service supports create-only conditional PUT with `If-None-Match: *`; started mapping the guarded state machine and test interception requirements.
+- Recorded the user's clarification that no manual habit sync configuration was performed or should be required; the existing unified endpoint remains the sole URL source.
+- Read the uploaded screenshot and confirmed the real shared endpoint currently returns 404 at the habit path.
+- Integrated the read-only protocol review: current Worker KV cannot guarantee atomic create-only behavior, provider mode ignores conditional options, and legacy tombstone normalization can target the wrong ID.
+- Decided to add canonical tombstones, stricter local-data gates, a final GET, one conditional PUT, and a post-upload GET/hash verification; the UI will describe this as guarded verification rather than absolute atomic protection.
+- Completed the protected first-upload implementation and canonical habit-schema conversion, including adapter-domain hashing in `app-sync-kit`.
+- Re-ran the targeted habit suite after correcting the hash-domain assertion; all 9 selected tests passed.
+- Added and passed a tenth regression proving lossy legacy rules such as `monthly-count` disable session authorization and issue zero PUT requests.
+- Visually inspected the default read-only, session-armed, and successful verified-upload states at desktop width; the existing UI hierarchy and safety caveats remain readable.
+- Ran `app-sync-kit` full verification successfully, including typecheck, build, browser/WebDAV/life-plan/wheel/habit behavior suites.
+- The first final site check exposed three pre-existing adapter tie regressions after refreshing the vendor bundle; fixed the source adapter so equal or missing timestamps preserve local data, with remote diary text kept as a conflict copy.
+- Rebuilt and copied the browser bundle, confirmed matching SHA-256 hashes, passed the three focused merge tests, and then passed all 63 Playwright smoke tests through `scripts/check.ps1`.
+- Generated the clean runtime package `D:\project\life-plan-site\life-plan-site-runtime-20260723-112056.zip`; the five-package retention policy removed `life-plan-site-runtime-20260722-105654.zip`.
+- Committed the `app-sync-kit` adapter/hash fixes as `9152121 Harden adapter sync decisions` and pushed `main` (including the two previously local habit/wheel commits) to `origin/main`.
+
 - Read the habit migration handoff and confirmed the current task is a read-only remote pull/merge preview.
 - Loaded the project workflow, persistent planning, product UI, and memory append instructions.
 - Checked the worktree; only the pre-existing untracked `.zcode/` directory is present.

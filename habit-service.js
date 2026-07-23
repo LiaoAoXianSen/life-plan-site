@@ -97,6 +97,11 @@
         return `life-plan/${collection}/${encodeURIComponent(raw)}`;
     }
 
+    function keepOrBuildRemoteId(collection, id, fallbackIndex) {
+        const raw = normalizeId(id);
+        return raw.startsWith('life-plan/') ? raw : stableRemoteId(collection, raw, fallbackIndex);
+    }
+
     function compactObject(value) {
         return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ''));
     }
@@ -130,15 +135,53 @@
         }
 
         function getGroupId(tag) {
-            return stableRemoteId('groups', normalizeId(tag) || '未分组', 0);
+            const name = normalizeId(tag);
+            return !name || name === '未分组' ? 'default' : stableRemoteId('groups', name, 0);
         }
 
         function getCurrencyId(currency) {
-            return stableRemoteId('currencies', normalizeCurrency(currency, defaultCurrency), 0);
+            const name = normalizeCurrency(currency, defaultCurrency);
+            return name === defaultCurrency ? 'default' : stableRemoteId('currencies', name, 0);
         }
 
         function getLegacyDate(item) {
             return normalizeId(item?.date || item?.startDate || item?.createdAt || item?.updatedAt).slice(0, 10);
+        }
+
+        function getCanonicalRepeatUnit(rule) {
+            if (rule === 'daily') return 'daily';
+            if (rule === 'weekly-fixed' || rule === 'weekly-count') return 'weekly';
+            return 'any';
+        }
+
+        function getCanonicalWeekdays(values) {
+            return Array.from(new Set(asArray(values).map(value => {
+                const day = parseInt(value, 10);
+                if (!Number.isFinite(day) || day < 0 || day > 7) return 0;
+                return day === 0 ? 7 : day;
+            }).filter(day => day >= 1 && day <= 7))).sort((a, b) => a - b);
+        }
+
+        function getCanonicalRecordType(item) {
+            const explicit = normalizeId(item?.recordType || item?.type);
+            if (['normal', 'makeup', 'exempt', 'overdue_break', 'streak_reward', 'target_reward', 'manual_reward', 'reverse', 'adjust'].includes(explicit)) return explicit;
+            const recordDate = getLegacyDate(item);
+            const createdDate = normalizeId(item?.createdAt || item?.checkinAt || item?.updatedAt).slice(0, 10);
+            return recordDate && createdDate && recordDate < createdDate ? 'makeup' : 'normal';
+        }
+
+        function getCanonicalLedgerType(type) {
+            const mappings = {
+                milestone: 'streak_reward',
+                redeem: 'reward_redeem',
+                miss: 'fine',
+                break: 'fine',
+                'reverse-penalty': 'reverse'
+            };
+            const mapped = mappings[type] || type || 'adjust';
+            return ['checkin', 'makeup', 'exempt', 'overdue_break', 'streak_reward', 'target_reward', 'reward_redeem', 'fine', 'adjust', 'reverse'].includes(mapped)
+                ? mapped
+                : 'adjust';
         }
 
         function getHabitLegacySourceSlice(source = {}) {
@@ -178,55 +221,127 @@
             rewards.forEach(item => currencyNames.add(normalizeCurrency(item?.currency, defaultCurrency)));
             ledger.forEach(item => currencyNames.add(normalizeCurrency(item?.currency, defaultCurrency)));
 
-            const groups = Array.from(new Set(habits.map(item => normalizeId(item?.tag) || '未分组')))
+            const groups = Array.from(new Set(habits.map(item => normalizeId(item?.tag)).filter(tag => tag && tag !== '未分组')))
                 .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
                 .map((tag, index) => compactObject({
                     id: getGroupId(tag),
                     name: tag,
-                    sortOrder: index,
+                    sort: index + 1,
                     source: { app: 'life-plan-site', collection: 'habits.tag', id: tag }
+                }));
+            groups.unshift({ id: 'default', name: '默认', sort: 0 });
+
+            const rewardRecords = ledger
+                .map((item, index) => ({ item, index }))
+                .filter(({ item }) => item?.type === 'redeem' && normalizeId(item?.rewardId))
+                .map(({ item, index }) => {
+                    const currency = normalizeCurrency(item?.currency, defaultCurrency);
+                    return compactObject({
+                        id: stableRemoteId('reward-records', item?.id, index),
+                        rewardId: keepOrBuildRemoteId('rewards', item.rewardId, 0),
+                        redeemedAt: item?.createdAt || item?.updatedAt || item?.date,
+                        amount: Math.abs(parseAmount(item?.amount).valid ? parseAmount(item.amount).value : 0),
+                        currencyId: getCurrencyId(currency),
+                        note: item?.note || '',
+                        ledgerId: stableRemoteId('ledger', item?.id, index),
+                        sourceKey: `life-plan:habitPointLedger:${normalizeId(item?.id) || index + 1}`,
+                        createdAt: item?.createdAt || item?.date,
+                        updatedAt: item?.updatedAt || item?.createdAt || item?.date
+                    });
+                });
+            const fineRecords = ledger
+                .map((item, index) => ({ item, index }))
+                .filter(({ item }) => ['miss', 'break'].includes(item?.type) && normalizeId(item?.habitId))
+                .map(({ item, index }) => {
+                    const currency = normalizeCurrency(item?.currency, defaultCurrency);
+                    return compactObject({
+                        id: stableRemoteId('fine-records', item?.id, index),
+                        habitId: keepOrBuildRemoteId('habits', item.habitId, 0),
+                        finedAt: item?.createdAt || item?.updatedAt || item?.date,
+                        amount: Math.abs(parseAmount(item?.amount).valid ? parseAmount(item.amount).value : 0),
+                        currencyId: getCurrencyId(currency),
+                        reason: item?.note || item?.type,
+                        ledgerId: stableRemoteId('ledger', item?.id, index),
+                        sourceKey: `life-plan:habitPointLedger:${normalizeId(item?.id) || index + 1}`,
+                        createdAt: item?.createdAt || item?.date,
+                        updatedAt: item?.updatedAt || item?.createdAt || item?.date
+                    });
+                });
+            const milestones = habits.flatMap((habit, habitIndex) => asArray(habit?.milestoneRewards)
+                .map((item, milestoneIndex) => ({ item, milestoneIndex }))
+                .filter(({ item }) => item?.enabled || Number(item?.rewardAmount || item?.amount || 0) > 0 || Number(item?.penaltyAmount || 0) > 0)
+                .map(({ item, milestoneIndex }) => {
+                    const days = Math.max(1, parseInt(item?.days || 1, 10) || 1);
+                    const currency = normalizeCurrency(item?.currency, defaultCurrency);
+                    return compactObject({
+                        id: stableRemoteId('milestones', `${normalizeId(habit?.id) || habitIndex + 1}:${days}`, milestoneIndex),
+                        habitId: keepOrBuildRemoteId('habits', habit?.id, habitIndex),
+                        targetDays: days,
+                        rewardAmount: Math.max(0, parseInt(item?.rewardAmount ?? item?.amount ?? 0, 10) || 0),
+                        currencyId: getCurrencyId(currency),
+                        sort: milestoneIndex,
+                        label: `${days}天`,
+                        createdAt: habit?.createdAt,
+                        updatedAt: habit?.updatedAt || habit?.createdAt
+                    });
                 }));
 
             const snapshot = {
                 schemaVersion: 1,
                 generatedAt,
                 habits: habits.map((item, index) => {
-                    const currency = normalizeCurrency(item?.rewardCurrency || item?.penaltyCurrency, defaultCurrency);
+                    const rewardCurrency = normalizeCurrency(item?.rewardCurrency, defaultCurrency);
+                    const fineCurrency = normalizeCurrency(item?.penaltyCurrency || item?.rewardCurrency, defaultCurrency);
+                    const latestCheckin = checkins
+                        .filter(entry => normalizeId(entry?.habitId) === normalizeId(item?.id))
+                        .sort((a, b) => normalizeId(b?.checkinAt || b?.createdAt || b?.updatedAt).localeCompare(normalizeId(a?.checkinAt || a?.createdAt || a?.updatedAt)))[0];
                     return compactObject({
                         id: stableRemoteId('habits', item?.id, index),
-                        name: item?.name || '未命名习惯',
+                        title: item?.name || '未命名习惯',
+                        description: item?.description || '',
                         status: item?.archived ? 'archived' : 'active',
+                        sort: index,
+                        icon: item?.icon || '✅',
+                        color: item?.color || '#6EA6E4',
                         groupId: getGroupId(item?.tag),
-                        tag: item?.tag || '未分组',
-                        rule: item?.rule || 'daily',
-                        targetCount: getHabitTargetCount(item),
-                        timesPerDay: item?.timesPerDay,
-                        weekdays: item?.weekdays,
-                        startDate: item?.startDate,
-                        endDate: item?.endDate,
-                        noteMode: item?.noteMode,
-                        rewardPoints: item?.rewardPoints,
-                        penaltyPoints: item?.penaltyPoints,
-                        currencyId: getCurrencyId(currency),
-                        currency,
+                        rewardAmount: Math.max(0, parseInt(item?.rewardPoints ?? 0, 10) || 0),
+                        rewardCurrencyId: getCurrencyId(rewardCurrency),
+                        fineAmount: Math.max(0, parseInt(item?.penaltyPoints ?? 0, 10) || 0),
+                        fineCurrencyId: getCurrencyId(fineCurrency),
+                        repeatUnit: getCanonicalRepeatUnit(item?.rule),
+                        weekdays: getCanonicalWeekdays(item?.weekdays),
+                        reminderTimes: asArray(item?.reminderTimes),
+                        targetCount: Math.max(0, parseInt(item?.goalCount ?? item?.count ?? 0, 10) || 0),
+                        targetRewardAmount: Math.max(0, parseInt(item?.targetRewardAmount ?? 0, 10) || 0),
+                        requiredCountPerDay: getHabitTargetCount(item),
+                        taskDurationSec: Math.max(0, parseInt(item?.taskDurationSec ?? 0, 10) || 0),
+                        lastCheckAt: latestCheckin?.checkinAt || latestCheckin?.createdAt,
                         createdAt: item?.createdAt,
-                        updatedAt: item?.updatedAt,
-                        source: getSourceRef('habits', item, index)
+                        updatedAt: item?.updatedAt || item?.createdAt
                     });
                 }),
                 habitGroups: groups,
                 habitRecords: checkins.map((item, index) => {
                     const habitId = normalizeId(item?.habitId);
+                    const habit = habits.find(entry => normalizeId(entry?.id) === habitId);
+                    const relatedLedger = ledger.find(entry => entry?.type === 'checkin' && normalizeId(entry?.sourceId) === normalizeId(item?.id));
+                    const currency = normalizeCurrency(relatedLedger?.currency || habit?.rewardCurrency, defaultCurrency);
+                    const recordTime = item?.checkinAt || item?.createdAt || item?.updatedAt || `${getLegacyDate(item)}T00:00:00`;
+                    const recordType = getCanonicalRecordType(item);
                     return compactObject({
                         id: stableRemoteId('checkins', item?.id || `${habitId}-${item?.date || index}`, index),
                         habitId: habitId ? stableRemoteId('habits', habitId, 0) : undefined,
-                        recordType: item?.recordType || item?.type || 'normal',
-                        date: item?.date || getLegacyDate(item),
-                        count: Number.isFinite(Number(item?.count)) ? Number(item.count) : 1,
-                        note: item?.note,
+                        recordTime,
+                        recordDate: item?.date || getLegacyDate(item),
+                        amount: Math.max(0, parseAmount(relatedLedger?.amount).valid ? parseAmount(relatedLedger.amount).value : 0),
+                        currencyId: getCurrencyId(currency),
+                        type: recordType,
+                        note: item?.note || '',
+                        countsAsCompletion: ['normal', 'makeup'].includes(recordType),
+                        countsForStreak: ['normal', 'makeup', 'exempt'].includes(recordType),
+                        sourceKey: `life-plan:checkins:${normalizeId(item?.id) || index + 1}`,
                         createdAt: item?.createdAt || item?.checkinAt,
-                        updatedAt: item?.updatedAt || item?.createdAt || item?.checkinAt,
-                        source: getSourceRef('checkins', item, index)
+                        updatedAt: item?.updatedAt || item?.createdAt || item?.checkinAt
                     });
                 }),
                 habitRewards: rewards.map((item, index) => {
@@ -234,38 +349,44 @@
                     return compactObject({
                         id: stableRemoteId('rewards', item?.id, index),
                         name: item?.name || '未命名心愿',
+                        description: item?.note || '',
                         cost: parseAmount(item?.cost).valid ? parseAmount(item.cost).value : 0,
                         currencyId: getCurrencyId(currency),
-                        currency,
+                        status: item?.archived ? 'archived' : 'active',
+                        sort: index,
+                        icon: item?.icon || '🎁',
+                        color: item?.color || '#6EA6E4',
                         stock: item?.stock,
                         redeemedCount: item?.redeemedCount,
-                        note: item?.note,
                         createdAt: item?.createdAt,
-                        updatedAt: item?.updatedAt,
-                        source: getSourceRef('habitRewards', item, index)
+                        updatedAt: item?.updatedAt || item?.createdAt
                     });
                 }),
-                habitRewardRecords: [],
-                habitFineRecords: [],
+                habitRewardRecords: rewardRecords,
+                habitFineRecords: fineRecords,
                 habitLedger: ledger.map((item, index) => {
                     const amount = parseAmount(item?.amount);
                     const currency = normalizeCurrency(item?.currency, defaultCurrency);
                     const habitId = normalizeId(item?.habitId);
                     const rewardId = normalizeId(item?.rewardId);
+                    const canonicalType = getCanonicalLedgerType(item?.type);
+                    const relatedRecordId = canonicalType === 'checkin' && item?.sourceId
+                        ? keepOrBuildRemoteId('checkins', item.sourceId, 0)
+                        : (canonicalType === 'reward_redeem'
+                            ? stableRemoteId('reward-records', item?.id, index)
+                            : (canonicalType === 'fine' ? stableRemoteId('fine-records', item?.id, index) : normalizeId(item?.sourceId || item?.id)));
                     return compactObject({
                         id: stableRemoteId('ledger', item?.id, index),
                         amount: amount.valid ? amount.value : 0,
-                        amountRaw: amount.valid ? undefined : String(item?.amount ?? ''),
-                        type: item?.type || 'adjust',
+                        type: canonicalType,
                         currencyId: getCurrencyId(currency),
-                        currency,
                         habitId: habitId ? stableRemoteId('habits', habitId, 0) : undefined,
                         rewardId: rewardId ? stableRemoteId('rewards', rewardId, 0) : undefined,
-                        sourceId: normalizeId(item?.sourceId || item?.checkinId || item?.rewardRecordId || item?.id),
-                        note: item?.note,
+                        sourceId: relatedRecordId,
+                        date: item?.date || getLegacyDate(item),
+                        note: item?.note || '',
                         createdAt: item?.createdAt || item?.date,
-                        updatedAt: item?.updatedAt || item?.createdAt || item?.date,
-                        source: getSourceRef('habitPointLedger', item, index)
+                        updatedAt: item?.updatedAt || item?.createdAt || item?.date
                     });
                 }),
                 habitCurrencies: Array.from(currencyNames)
@@ -273,26 +394,41 @@
                     .map((name, index) => compactObject({
                         id: getCurrencyId(name),
                         name,
-                        isDefault: name === defaultCurrency,
-                        sortOrder: index,
-                        source: { app: 'life-plan-site', collection: 'habitCurrencies', id: name }
+                        icon: name === defaultCurrency ? '🪙' : '',
+                        sort: name === defaultCurrency ? 0 : index + 1
                     })),
-                habitMilestones: [],
+                habitMilestones: milestones,
                 habitMilestoneClaims: [],
                 habitOverdueEvents: [],
                 habitMoodNotes: [],
                 habitTimeTasks: [],
                 deletedItems: deletedItems.map((item, index) => {
-                    const kind = getDeletedKind(item) || 'unknown';
+                    const kind = getDeletedKind(item);
                     const targetId = normalizeId(item?.itemId || item?.targetId || item?.entityId || item?.id);
+                    const mappings = {
+                        habit: ['habits', 'habits'],
+                        habits: ['habits', 'habits'],
+                        checkin: ['habitRecords', 'checkins'],
+                        checkins: ['habitRecords', 'checkins'],
+                        habitPointLedger: ['habitLedger', 'ledger'],
+                        habitRewards: ['habitRewards', 'rewards'],
+                        habitCurrencies: ['habitCurrencies', 'currencies']
+                    };
+                    const mapping = mappings[kind];
+                    const deletedAt = item?.deletedAt || item?.updatedAt || item?.createdAt;
+                    if (!mapping || !targetId || !deletedAt) return null;
+                    const [collection, remoteCollection] = mapping;
+                    const parentId = normalizeId(item?.habitId || item?.parentId);
                     return compactObject({
-                        id: stableRemoteId('deletedItems', `${kind}/${targetId || index + 1}`, index),
-                        targetCollection: kind,
-                        targetId,
-                        deletedAt: item?.deletedAt || item?.updatedAt || item?.createdAt,
+                        collection,
+                        id: keepOrBuildRemoteId(remoteCollection, targetId, index),
+                        deletedAt,
+                        parentId: parentId ? keepOrBuildRemoteId('habits', parentId, 0) : undefined,
+                        reason: item?.reason,
+                        name: item?.name,
                         source: getSourceRef('deletedItems', item, index)
                     });
-                })
+                }).filter(Boolean)
             };
 
             if (mode === 'preview') {
@@ -854,7 +990,7 @@
                     { legacy: 'habitPointLedger', target: 'habitLedger', count: ledger.length, note: '钱包流水；未来需补 deterministic sourceId' },
                     { legacy: 'habitRewards', target: 'habitRewards', count: rewards.length, note: '心愿、库存、兑换次数' },
                     { legacy: 'habitCurrencies', target: 'habitCurrencies', count: currencies.length, note: '当前仍以名称为主，后续映射 currencyId' },
-                    { legacy: 'deletedItems', target: 'deletedItems', count: deletedItems.length, note: '旧 tombstone，仅预览不上传' }
+                    { legacy: 'deletedItems', target: 'deletedItems', count: deletedItems.length, note: '仅习惯相关删除标记会转换为 canonical tombstone' }
                 ],
                 samples: {
                     habits: habits.slice(0, 5).map(item => ({ id: item.id || '', name: item.name || '', tag: item.tag || '' })),

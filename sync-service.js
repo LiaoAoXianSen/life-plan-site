@@ -79,8 +79,27 @@
 
         function normalizeHabitDeletedItem(item = {}) {
             if (!item || typeof item !== 'object') return null;
-            const collection = String(item.collection || item.targetCollection || item.type || item.entity || item.entityType || item.kind || '').trim();
-            const id = String(item.id || item.itemId || item.targetId || item.entityId || '').trim();
+            const rawCollection = String(item.collection || item.targetCollection || item.type || item.entity || item.entityType || item.kind || '').trim();
+            const collectionAliases = {
+                habit: 'habits',
+                checkin: 'habitRecords',
+                checkins: 'habitRecords',
+                habitPointLedger: 'habitLedger'
+            };
+            const collection = collectionAliases[rawCollection] || rawCollection;
+            let id = String(item.targetId || item.itemId || item.entityId || item.id || '').trim();
+            const legacyRemoteCollections = {
+                habit: 'habits',
+                habits: 'habits',
+                checkin: 'checkins',
+                checkins: 'checkins',
+                habitPointLedger: 'ledger',
+                habitRewards: 'rewards',
+                habitCurrencies: 'currencies'
+            };
+            if ((item.targetCollection || item.targetId) && id && !id.startsWith('life-plan/') && legacyRemoteCollections[rawCollection]) {
+                id = `life-plan/${legacyRemoteCollections[rawCollection]}/${encodeURIComponent(id)}`;
+            }
             const deletedAt = item.deletedAt || item.updatedAt || item.createdAt || '';
             if (!collection || !id || !deletedAt) return null;
             return {
@@ -93,8 +112,20 @@
             };
         }
 
+        function getHabitAdapter() {
+            const kit = getKit();
+            return kit?.habitAppAdapter || kit?.adapters?.habitApp || null;
+        }
+
         function getHabitSnapshot(source = {}) {
             const input = source && typeof source === 'object' ? source : {};
+            const adapter = getHabitAdapter();
+            if (adapter?.normalizeData) {
+                return adapter.normalizeData({
+                    ...input,
+                    deletedItems: asArray(input.deletedItems).map(normalizeHabitDeletedItem).filter(Boolean)
+                });
+            }
             const snapshot = {
                 schemaVersion: Number.isFinite(Number(input.schemaVersion)) ? Number(input.schemaVersion) : 1
             };
@@ -118,6 +149,8 @@
         }
 
         function getHabitDataHash(value = getHabitSnapshot()) {
+            const adapter = getHabitAdapter();
+            if (adapter?.getHash) return adapter.getHash(getHabitSnapshot(value));
             return getDataHash(getHabitHashPayload(value));
         }
 
@@ -208,6 +241,10 @@
         }
 
         function mergeHabitSnapshots(localSnapshot, remoteSnapshot) {
+            const adapter = getHabitAdapter();
+            if (adapter?.merge) {
+                return adapter.merge(getHabitSnapshot(localSnapshot || {}), getHabitSnapshot(remoteSnapshot || {}));
+            }
             const local = getHabitSnapshot(localSnapshot || {});
             const remote = getHabitSnapshot(remoteSnapshot || {});
             const deletionMap = buildHabitDeletionMap(local, remote);

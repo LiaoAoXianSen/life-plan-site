@@ -14,6 +14,16 @@
 - UI direction: keep the existing restrained diagnostics vocabulary, add an inline status region and compact comparison table beneath the actions, and avoid a modal or decorative motion for a state/reporting interaction.
 - Read-only review confirmed no reachable PUT path. It also caught that schema validation must cover all 13 collections from `sync-service.js`, including `habitMilestones`, `habitMoodNotes`, and `habitTimeTasks`; the final implementation now does so.
 - Entering diagnostics may still perform the existing one-time local mirror bootstrap. The stricter guarantee is that the remote GET result and merged preview are never persisted.
+- The end goal is a shared `/apps/habit-app/data.json` authority for PC and mobile, but the next safe increment is only remote bootstrap. Legacy `lifePlanData` must remain authoritative until bidirectional sync and mobile compatibility are proven.
+- User's live screenshot confirmed the remote habit file currently returns 404, making a guarded create-only first upload the safest next operation.
+- `sync-service.pushJson()` already forwards `ifNoneMatch` to the direct PUT request, so first creation can use `If-None-Match: *` and fail with HTTP 412 if another client creates the file after the final GET.
+- `pushJson()` may issue a best-effort MKCOL before PUT. The protected-upload test must allow that setup request but still assert exactly one habit-file PUT and require the conditional header.
+- Existing config loading forcibly resets `remoteUploadEnabled=false`; keep that durable behavior and use a session-only arming function rather than persisting an enabled upload flag.
+- User clarified they have not manually changed sync configuration for habit. This is expected: habit sync must reuse the existing shared `syncConfig.webdavUrl` and only supply its own relative path; do not add a second endpoint field or require edits to `/life-plan.json`.
+- The live screenshot shows the shared endpoint already resolves `GET /apps/habit-app/data.json` and currently returns `404`; no separate habit endpoint setup is needed.
+- `If-None-Match: *` is only a best-effort guard with the current Worker because Cloudflare KV performs a non-atomic `get` followed by `put`. The client must use a final GET, a single conditional PUT, and a post-PUT GET/hash verification, while avoiding any claim of strict atomic create-only semantics.
+- Legacy habit tombstones must be converted to canonical `{ collection, id, deletedAt }` entries. The previous `{ id: tombstone-id, targetCollection, targetId }` shape was normalized against the tombstone's own ID and could fail to suppress remote entities.
+- Protected upload must additionally block missing checkin IDs, unstable ledger IDs/source IDs, danger diagnostics, provider mode that drops conditional options, and local mirror drift.
 
 ## 2026-07-14
 

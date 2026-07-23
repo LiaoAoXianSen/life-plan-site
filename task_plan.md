@@ -6,6 +6,9 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 ## Current Goal (2026-07-23)
 Continue the habit migration by turning the diagnostic sync skeleton into a strictly read-only remote pull and merge preview for `/apps/habit-app/data.json`, without changing `lifePlanData`, `localStorage.habitAppData`, or issuing PUT requests.
 
+## Current Goal (2026-07-23, protected upload)
+Create the first remote habit snapshot safely: add a session-only upload arm, rebuild and validate the legacy-authoritative local mirror, re-GET the remote path immediately before upload, require explicit confirmation, then PUT only the verified local snapshot when the remote file is still absent.
+
 ## Phases
 
 1. Status: complete - Save the current workspace version and create a working branch without reverting existing user changes.
@@ -40,6 +43,11 @@ Continue the habit migration by turning the diagnostic sync skeleton into a stri
 30. Status: complete - Render the preview in the diagnostics UI while preserving existing product styles and disabled upload safeguards.
 31. Status: complete - Add targeted smoke coverage proving GET-only behavior and zero local data mutation.
 32. Status: complete - Run syntax/targeted/full validation, package a clean runtime zip, and append conversation memory.
+33. Status: complete - Inspect the existing push/ETag APIs and define the protected first-upload state machine and failure rules.
+34. Status: complete - Implement session-only arming, preflight rebuild/consistency checks, final remote recheck, and guarded first PUT.
+35. Status: complete - Add clear inline UI states for arm, confirmation, success, remote-race refusal, and errors.
+36. Status: complete - Add Playwright coverage proving unarmed uploads cannot PUT and an armed confirmed first upload performs exactly GET then PUT.
+37. Status: complete - Run targeted/full validation, visually inspect, package, commit, push, and append memory.
 
 ## Decisions
 
@@ -57,6 +65,8 @@ Continue the habit migration by turning the diagnostic sync skeleton into a stri
 - Sync settings should only expose fields that are actually used by the Cloudflare Worker sync path; unused WebDAV username/password fields should be removed and cleaned from old local config.
 - Wheel JSON restore remains an explicit overwrite action for now, but it must confirm the overwrite, create a restore-before snapshot, and leave current data untouched when canceled or when saving fails.
 - Habit remote preview remains strictly read-only: it may GET `/apps/habit-app/data.json`, but must not mutate legacy habit fields, `localStorage.habitAppData`, or remote data; `autoSync` and `remoteUploadEnabled` remain `false`.
+- The protected first-upload phase supersedes the permanent-false part only during an explicitly armed browser session: `remoteUploadEnabled` starts false, is never restored from storage, and automatically returns false after any upload attempt. No automatic upload or authority switch is introduced.
+- Habit bootstrap must reuse the already configured unified sync endpoint. The user should not have to enter or migrate a second habit-specific URL; only `/apps/habit-app/data.json` remains habit-specific.
 
 ## Errors Encountered
 
@@ -64,3 +74,4 @@ Continue the habit migration by turning the diagnostic sync skeleton into a stri
 |---|---|---|
 | Subagent spawn failed through local proxy on inherited `gpt-5.5` | First read-only explorer used inherited model | Restarted parallel explorers with `gpt-5.4-mini` and continued main-thread work |
 | GitHub HTTPS push failed from direct network | `git push origin master` failed with `Connection was reset` / `Couldn't connect to server`; `Test-NetConnection github.com -Port 443` also failed, while `ssh.github.com:443` was reachable but local SSH auth lacked a GitHub key | Detected local proxy service on `127.0.0.1:7897` and pushed with temporary per-command Git proxy: `git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin master`; do not change global Git config |
+| First final full site check reported 3 merge regressions | Latest `app-sync-kit` life-plan adapter used remote-wins `>=` ties, unlike the site's local-safe `>` fallback, so unstamped old backups could overwrite local items | Changed adapter ties to preserve local data, added life-plan adapter regression checks, rebuilt/copied the browser bundle, passed the 3 focused tests, then passed all 63 site tests |
