@@ -6987,9 +6987,15 @@
             `;
         }
 
+        function ensureHabitAppLocalMirrorForDiagnostics() {
+            if (habitAppLocalMirror) return false;
+            return !!rebuildHabitAppLocalMirror('diagnostics-auto-bootstrap');
+        }
+
         function renderHabitDiagnosticsPanel() {
             const container = document.getElementById('habit-diagnostics-panel');
             if (!container) return;
+            ensureHabitAppLocalMirrorForDiagnostics();
             const diagnostics = habitService.buildLegacyHabitDiagnostics(data);
             const readiness = habitService.buildHabitDualWriteReadiness(data, diagnostics);
             const snapshotPreview = habitService.buildHabitAppSnapshotPreview(data);

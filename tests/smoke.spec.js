@@ -2290,10 +2290,20 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('habit 同步脚手架');
     await expect(panel).toContainText('/apps/habit-app/data.json');
     await expect(panel).toContainText('从当前旧数据重建本地镜像');
+    await expect(panel).toContainText('本地镜像与旧数据一致');
+    await expect(panel).toContainText('数量、余额与 sourceHash 当前一致');
     await expect(panel).toContainText('<img src=x');
     await expect(panel.locator('img')).toHaveCount(0);
     await expect(panel.locator('svg')).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => window.__habitXss)).toBe(0);
+
+    const autoMirror = await page.evaluate(() => JSON.parse(localStorage.getItem('habitAppData') || 'null'));
+    expect(autoMirror).toBeTruthy();
+    expect(autoMirror.localMirror).toBe(true);
+    expect(autoMirror.remoteUploadEnabled).toBe(false);
+    expect(autoMirror.habits).toHaveLength(1);
+    expect(autoMirror.habitRecords).toHaveLength(2);
+    expect(autoMirror.mirror?.reason).toBe('diagnostics-auto-bootstrap');
 
     const previewText = await panel.locator('#habit-snapshot-preview-json').inputValue();
     const snapshot = JSON.parse(previewText);

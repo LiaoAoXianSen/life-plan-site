@@ -302,7 +302,8 @@ UI 不直接拼旧字段，为迁移 snapshot 做准备。
 
 - `habit-service.js` 提供 `getHabitDualWritePathInventory()`、`buildHabitDualWriteReadiness()`、`buildHabitAppLocalMirror()`。
 - 诊断页新增「本地双写前置」卡片：状态、阻塞项、11 条写路径清单、下一步动作。
-- 诊断页可手动重建 `localStorage.habitAppData` 本地镜像；标记 `localMirror: true`、`remoteUploadEnabled: false`。
+- 诊断页可手动重建 `localStorage.habitAppData` 本地镜像；若本地镜像不存在，打开诊断页时会自动 bootstrap 一次。
+- 本地镜像标记 `localMirror: true`、`remoteUploadEnabled: false`。
 - 全部 11 条写路径已 `dualWrite: enabled`：打卡、备注、习惯编辑/删除、心愿、兑换、积分调整、扣分结算、币种管理。
 - 当前策略是写成功后全量重建 `localStorage.habitAppData`，不是增量 patch，也不是云端上传。
 - 数据无 danger 且全部写路径已接入时状态为 `ready`；有 danger 时为 `blocked`。
