@@ -2287,6 +2287,8 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('已接入');
     await expect(panel).toContainText('远端上传关闭');
     await expect(panel).toContainText('本地 habit-app 镜像');
+    await expect(panel).toContainText('habit 同步脚手架');
+    await expect(panel).toContainText('/apps/habit-app/data.json');
     await expect(panel).toContainText('从当前旧数据重建本地镜像');
     await expect(panel).toContainText('<img src=x');
     await expect(panel.locator('img')).toHaveCount(0);
@@ -2341,6 +2343,16 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     });
     expect(consistency.status).toBe('matched');
     expect(consistency.summary.mismatchCount).toBe(0);
+
+    const syncScaffold = await page.evaluate(() => ({
+        config: JSON.parse(localStorage.getItem('habitAppSyncConfig') || 'null'),
+        state: JSON.parse(localStorage.getItem('habitAppSyncState') || 'null')
+    }));
+    expect(syncScaffold.config).toBeTruthy();
+    expect(syncScaffold.config.remotePath).toBe('/apps/habit-app/data.json');
+    expect(syncScaffold.config.remoteUploadEnabled).toBe(false);
+    expect(syncScaffold.config.autoSync).toBe(false);
+    expect(syncScaffold.state).toBeTruthy();
 
     const after = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     expect(after).toBe(before);

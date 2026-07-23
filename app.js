@@ -69,6 +69,11 @@
             remotePath: '/apps/wheel-app/data.json',
             autoSync: true
         };
+        let habitSyncConfig = {
+            remotePath: '/apps/habit-app/data.json',
+            autoSync: false,
+            remoteUploadEnabled: false
+        };
         let aiConfig = {
             endpointUrl: '',
             apiKey: '',
@@ -99,6 +104,18 @@
             lastPullAt: '',
             lastPushAt: '',
             lastConflictAt: ''
+        };
+        let habitSyncState = {
+            dirty: false,
+            lastLocalHash: '',
+            lastRemoteHash: '',
+            lastRemoteEtag: '',
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: '',
+            lastRebuildAt: '',
+            lastRebuildReason: ''
         };
         let suppressDirtyMark = false;
         let autoSyncTimer = null;
@@ -467,8 +484,10 @@
             }
             loadSyncConfig();
             loadWheelSyncConfig();
+            loadHabitSyncConfig();
             loadAiConfig();
             loadHabitAppLocalMirror();
+            loadHabitSyncState();
         }
 
         function getHabitLegacySourceHash(source = data) {
@@ -521,6 +540,11 @@
             habitAppLocalMirrorMeta.lastRebuildAt = payload.mirror?.rebuiltAt || payload.generatedAt || getLocalDateTimeStr();
             habitAppLocalMirrorMeta.lastRebuildReason = meta.reason || payload.mirror?.reason || '';
             habitAppLocalMirrorMeta.lastError = '';
+            habitSyncState.dirty = false;
+            habitSyncState.lastLocalHash = payload.mirror?.sourceHash || getHabitLegacySourceHash();
+            habitSyncState.lastRebuildAt = habitAppLocalMirrorMeta.lastRebuildAt;
+            habitSyncState.lastRebuildReason = habitAppLocalMirrorMeta.lastRebuildReason;
+            saveHabitSyncState();
             return true;
         }
 
@@ -1296,6 +1320,64 @@
         function saveWheelSyncConfigToLocal() {
             persistLocalValue('lifePlanWheelSyncConfig', JSON.stringify(wheelSyncConfig), '大转盘同步配置');
             applyWheelSyncSettingsToForm();
+        }
+
+        function loadHabitSyncConfig() {
+            try {
+                const saved = localStorage.getItem('habitAppSyncConfig');
+                if (saved) {
+                    habitSyncConfig = { ...habitSyncConfig, ...JSON.parse(saved) };
+                }
+            } catch (err) {
+                console.warn('habit-app 同步配置读取失败', err);
+            }
+            habitSyncConfig.remotePath = habitSyncConfig.remotePath || '/apps/habit-app/data.json';
+            habitSyncConfig.autoSync = false;
+            habitSyncConfig.remoteUploadEnabled = false;
+            saveHabitSyncConfigToLocal();
+        }
+
+        function saveHabitSyncConfigToLocal() {
+            habitSyncConfig.remotePath = habitSyncConfig.remotePath || '/apps/habit-app/data.json';
+            habitSyncConfig.autoSync = false;
+            habitSyncConfig.remoteUploadEnabled = false;
+            persistLocalValue('habitAppSyncConfig', JSON.stringify(habitSyncConfig), 'habit-app 同步配置');
+        }
+
+        function loadHabitSyncState() {
+            try {
+                const saved = localStorage.getItem('habitAppSyncState');
+                if (saved) habitSyncState = { ...habitSyncState, ...JSON.parse(saved) };
+            } catch (err) {
+                console.warn('habit-app 同步状态读取失败', err);
+            }
+            habitSyncState.lastLocalHash = habitSyncState.lastLocalHash || getHabitLegacySourceHash();
+            habitSyncState.lastRebuildAt = habitSyncState.lastRebuildAt || habitAppLocalMirrorMeta.lastRebuildAt || '';
+            habitSyncState.lastRebuildReason = habitSyncState.lastRebuildReason || habitAppLocalMirrorMeta.lastRebuildReason || '';
+        }
+
+        function saveHabitSyncState() {
+            habitSyncState.lastLocalHash = habitSyncState.lastLocalHash || getHabitLegacySourceHash();
+            persistLocalValue('habitAppSyncState', JSON.stringify(habitSyncState), 'habit-app 同步状态');
+        }
+
+        function getHabitSyncScaffoldSummary() {
+            return {
+                remotePath: habitSyncConfig.remotePath || '/apps/habit-app/data.json',
+                autoSync: !!habitSyncConfig.autoSync,
+                remoteUploadEnabled: !!habitSyncConfig.remoteUploadEnabled,
+                dirty: !!habitSyncState.dirty,
+                lastLocalHash: habitSyncState.lastLocalHash || '',
+                lastLocalHashShort: (habitSyncState.lastLocalHash || '').slice(0, 12),
+                lastRemoteHash: habitSyncState.lastRemoteHash || '',
+                lastSyncAt: habitSyncState.lastSyncAt || '',
+                lastRebuildAt: habitSyncState.lastRebuildAt || '',
+                lastRebuildReason: habitSyncState.lastRebuildReason || '',
+                phase: 'phase-5-scaffold',
+                statusLabel: habitSyncConfig.remoteUploadEnabled
+                    ? '远端上传已开启'
+                    : '远端上传关闭，仅本地脚手架'
+            };
         }
 
         function applySyncSettingsToForm() {
@@ -7001,6 +7083,26 @@
                             </div>
                             <span class="habit-dualwrite-status ${mirrorStatusClass}">${escapeHtml(mirrorStatusLabel)}</span>
                         </div>
+                        ${(() => {
+                            const scaffold = getHabitSyncScaffoldSummary();
+                            return `
+                                <div class="habit-sync-scaffold">
+                                    <div class="habit-snapshot-head">
+                                        <div>
+                                            <div class="habit-shop-title">habit 同步脚手架</div>
+                                            <div class="habit-snapshot-meta">path ${escapeHtml(scaffold.remotePath)} · autoSync ${scaffold.autoSync ? 'on' : 'off'} · upload ${scaffold.remoteUploadEnabled ? 'on' : 'off'}</div>
+                                        </div>
+                                        <span class="habit-dualwrite-status is-prepared">${escapeHtml(scaffold.statusLabel)}</span>
+                                    </div>
+                                    <div class="habit-dualwrite-next">
+                                        <div>配置键：habitAppSyncConfig / habitAppSyncState</div>
+                                        <div>本地 hash：${escapeHtml(scaffold.lastLocalHashShort || '无')}</div>
+                                        <div>上次远端同步：${escapeHtml(scaffold.lastSyncAt || '尚未启用')}</div>
+                                        <div>当前阶段：只落本地配置与状态，不发起网络请求。</div>
+                                    </div>
+                                </div>
+                            `;
+                        })()}
                         <div class="habit-local-mirror-actions">
                             <button type="button" class="btn btn-secondary" onclick="rebuildHabitAppLocalMirrorFromDiagnostics()">从当前旧数据重建本地镜像</button>
                             <span>不会触达 Worker / WebDAV，也不会修改 lifePlanData。</span>
