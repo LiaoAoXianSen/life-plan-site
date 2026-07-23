@@ -2865,6 +2865,8 @@
                 validating: 'is-partial',
                 uploading: 'is-partial',
                 success: 'is-ready',
+                synced: 'is-ready',
+                applied: 'is-ready',
                 blocked: 'is-blocked',
                 cancelled: 'is-prepared',
                 uncertain: 'is-blocked'
@@ -2872,19 +2874,21 @@
             const previewStatus = statusLabels[preview.status] || preview.status;
             const uploadStatus = statusLabels[upload.status] || upload.status;
             const localCounts = preview.local?.counts || getTodoRemotePreviewModel(todoAppLocalMirror || {}).counts;
+            const dirtyLabel = scaffold.dirty ? '有未同步本地改动' : '本地与最近云端基线一致';
+            const phaseLabel = previewMissing ? '首次创建' : (preview.hashesMatch ? '已对齐' : '可合并/回写');
             container.innerHTML = `
                 <div class="habit-diagnostics-guard">
                     <div>
-                        <strong>待办独立文件 · 受保护首次上传</strong>
-                        <span>当前权威仍是 lifePlanData.todos；本地镜像写 localStorage.todoAppData。这里可手动检查并创建 /apps/todo-app/data.json，不会覆盖已有云端文件，也不会改 /life-plan.json。</span>
+                        <strong>待办独立文件 · 手动受保护同步</strong>
+                        <span>当前权威仍是 lifePlanData.todos；本地镜像写 localStorage.todoAppData。支持首次创建、合并应用到 PC、以及 If-Match 条件回写。不会自动后台同步，也不会改 /life-plan.json。</span>
                     </div>
-                    <span class="habit-diagnostics-pill">Phase 4 Upload</span>
+                    <span class="habit-diagnostics-pill">${escapeHtml(phaseLabel)}</span>
                 </div>
                 <div class="habit-diagnostics-grid" style="margin-top:12px;">
                     <div class="habit-diagnostics-metric"><span>本地待办</span><strong>${escapeHtml(localCounts.todos || 0)}</strong><em>未完成 ${escapeHtml(localCounts.openTodos || 0)} · 完成 ${escapeHtml(localCounts.doneTodos || 0)}</em></div>
                     <div class="habit-diagnostics-metric"><span>Tombstone</span><strong>${escapeHtml(localCounts.tombstones || 0)}</strong><em>collection=todos</em></div>
                     <div class="habit-diagnostics-metric"><span>镜像状态</span><strong>${escapeHtml(consistency.statusLabel || mirrorSummary.statusLabel || (mirrorSummary.exists ? '已建立' : '未建立'))}</strong><em>${escapeHtml(mirrorSummary.sourceHashShort || scaffold.mirrorHashShort || '无指纹')}</em></div>
-                    <div class="habit-diagnostics-metric"><span>云端路径</span><strong style="font-size:13px;">${escapeHtml(scaffold.remotePath)}</strong><em>${scaffold.endpointConfigured ? '复用统一同步地址' : '未配置统一同步地址'}</em></div>
+                    <div class="habit-diagnostics-metric"><span>同步状态</span><strong>${escapeHtml(dirtyLabel)}</strong><em>${escapeHtml(scaffold.remotePath)} · ${scaffold.endpointConfigured ? '已配置地址' : '未配置地址'}</em></div>
                 </div>
                 <div class="habit-remote-preview" style="margin-top:14px;" aria-live="polite">
                     <div class="habit-remote-preview-head">
