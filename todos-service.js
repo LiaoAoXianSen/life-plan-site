@@ -525,6 +525,63 @@
             };
         }
 
+        function getTodoEntityTime(item) {
+            if (!item || typeof item !== 'object') return 0;
+            const raw = item.updatedAt || item.completedAt || item.createdAt || item.dueDate || '';
+            const time = new Date(raw).getTime();
+            return Number.isFinite(time) ? time : 0;
+        }
+
+        function buildTodoDeletionMap(local = {}, remote = {}) {
+            const map = new Map();
+            [...asArray(local.deletedItems), ...asArray(remote.deletedItems)].forEach((item, index) => {
+                const normalized = normalizeTodoDeletedItem(item, index);
+                if (!normalized) return;
+                const key = normalized.id;
+                const current = map.get(key);
+                if (!current || new Date(normalized.deletedAt || 0).getTime() >= new Date(current.deletedAt || 0).getTime()) {
+                    map.set(key, normalized);
+                }
+            });
+            return map;
+        }
+
+        function shouldKeepMergedTodo(item, deletionMap) {
+            const id = normalizeId(item?.id);
+            if (!id) return true;
+            const tombstone = deletionMap.get(id);
+            if (!tombstone) return true;
+            return getTodoEntityTime(item) > new Date(tombstone.deletedAt || 0).getTime();
+        }
+
+        function mergeTodoEntities(localItems = [], remoteItems = [], deletionMap = new Map()) {
+            const merged = new Map();
+            [...asArray(localItems), ...asArray(remoteItems)].forEach((item, index) => {
+                const normalized = normalizeTodoEntity(item, index);
+                if (!normalized) return;
+                const id = normalized.id;
+                const current = merged.get(id);
+                if (!current || getTodoEntityTime(normalized) >= getTodoEntityTime(current)) {
+                    merged.set(id, normalized);
+                }
+            });
+            return Array.from(merged.values()).filter(item => shouldKeepMergedTodo(item, deletionMap));
+        }
+
+        function mergeTodoSnapshots(localSnapshot, remoteSnapshot) {
+            const local = getTodoAppCanonicalSnapshot(localSnapshot || {});
+            const remote = getTodoAppCanonicalSnapshot(remoteSnapshot || {});
+            const deletionMap = buildTodoDeletionMap(local, remote);
+            const todos = mergeTodoEntities(local.todos, remote.todos, deletionMap);
+            const deletedItems = Array.from(deletionMap.values());
+            return {
+                schemaVersion: Math.max(local.schemaVersion || 1, remote.schemaVersion || 1),
+                generatedAt: new Date().toISOString(),
+                todos,
+                deletedItems
+            };
+        }
+
         function getTodoDualWritePathInventory() {
             return [
                 {
@@ -616,7 +673,8 @@
             summarizeTodoAppLocalMirror,
             buildTodoDualWriteConsistency,
             getTodoDualWritePathInventory,
-            getTodoSnapshotCollectionSummary
+            getTodoSnapshotCollectionSummary,
+            mergeTodoSnapshots
         };
     }
 

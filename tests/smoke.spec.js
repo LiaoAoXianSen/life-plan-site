@@ -3831,7 +3831,8 @@ test('todo protected first upload creates canonical file once and verifies it by
     const mirror = await page.evaluate(() => JSON.parse(localStorage.getItem('todoAppData') || 'null'));
     expect(mirror.localMirror).toBe(true);
     expect(mirror.remoteUploadEnabled).toBe(false);
-    await expect(createButton).toBeDisabled();
+    await expect(panel.getByRole('button', { name: '创建云端 todo 文件', exact: true })).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: '同步本地到云端', exact: true })).toBeVisible();
 });
 
 test('todo protected first upload stops when final GET finds an existing file', async ({ page }) => {
@@ -3916,6 +3917,219 @@ test('todo protected first upload stops when final GET finds an existing file', 
     expect(putCount).toBe(0);
     await expect(panel).toContainText('云端已存在');
     await expect(panel).toContainText('最终复查时发现云端文件已经存在');
+});
+
+test('todo cloud merge can be applied to PC legacy fields without uploading', async ({ page }) => {
+    const localData = createEmptyData({
+        todos: [
+            {
+                id: 'todo-shared',
+                text: '本地较新共享待办',
+                done: false,
+                group: '工作',
+                urgency: 'medium',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-20T08:00:00.000Z',
+                updatedAt: '2026-07-23T12:00:00.000Z'
+            },
+            {
+                id: 'todo-local-only',
+                text: '仅本地待办',
+                done: false,
+                group: '生活',
+                urgency: 'low',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-23T08:00:00.000Z',
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ],
+        deletedItems: []
+    });
+    const remotePayload = {
+        schemaVersion: 1,
+        generatedAt: '2026-07-23T11:00:00.000Z',
+        todos: [
+            {
+                id: 'todo-shared',
+                text: '云端较旧共享待办',
+                done: true,
+                group: '工作',
+                urgency: 'medium',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-20T08:00:00.000Z',
+                updatedAt: '2026-07-23T09:00:00.000Z'
+            },
+            {
+                id: 'todo-remote-only',
+                text: '仅云端待办',
+                done: false,
+                group: '学习',
+                urgency: 'high',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-23T10:00:00.000Z',
+                updatedAt: '2026-07-23T10:00:00.000Z'
+            }
+        ],
+        deletedItems: []
+    };
+    let putCount = 0;
+
+    await page.route('https://todo-merge-apply.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() === 'GET' && url.pathname === '/apps/todo-app/data.json') {
+            await route.fulfill({
+                status: 200,
+                headers: {
+                    ETag: '"todo-merge-v1"',
+                    'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag'
+                },
+                contentType: 'application/json',
+                body: JSON.stringify(remotePayload)
+            });
+            return;
+        }
+        if (request.method() === 'PUT') {
+            putCount += 1;
+            await route.fulfill({ status: 201, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://todo-merge-apply.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.removeItem('todoAppData');
+        localStorage.removeItem('todoAppSyncState');
+    }, localData);
+
+    await page.goto('/');
+    await page.locator('[data-page-target="todos"]').click();
+    const panel = page.locator('#todo-cloud-panel');
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel).toContainText('本地与云端存在差异，已生成合并预览');
+    await expect(panel.locator('.habit-remote-preview-table tbody tr', { hasText: '合并预览' })).toBeVisible();
+
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '应用云端合并结果到 PC', exact: true }).click();
+    await expect(panel.locator('.habit-upload-guard')).toContainText('已应用到 PC');
+    await expect(panel.locator('.habit-upload-guard')).toContainText('云端未写入');
+    expect(putCount).toBe(0);
+
+    const after = await page.evaluate(() => ({
+        life: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData') || 'null')
+    }));
+    const ids = after.life.todos.map(todo => todo.id).sort();
+    expect(ids).toEqual(['todo-local-only', 'todo-remote-only', 'todo-shared']);
+    expect(after.life.todos.find(todo => todo.id === 'todo-shared')?.text).toBe('本地较新共享待办');
+    expect(after.life.todos.find(todo => todo.id === 'todo-remote-only')?.text).toBe('仅云端待办');
+    expect(after.mirror.todos.map(todo => todo.id).sort()).toEqual(ids);
+});
+
+test('todo protected cloud sync uploads local changes when cloud baseline is unchanged', async ({ page }) => {
+    const localData = createEmptyData({
+        todos: [
+            {
+                id: 'todo-sync',
+                text: 'PC 待同步待办',
+                done: false,
+                group: '工作',
+                urgency: 'medium',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-23T08:00:00.000Z',
+                updatedAt: '2026-07-23T12:00:00.000Z'
+            }
+        ],
+        deletedItems: []
+    });
+    const remotePayload = {
+        schemaVersion: 1,
+        generatedAt: '2026-07-23T09:00:00.000Z',
+        todos: [
+            {
+                id: 'todo-sync',
+                text: '旧云端待办',
+                done: false,
+                group: '工作',
+                urgency: 'medium',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-23T08:00:00.000Z',
+                updatedAt: '2026-07-23T09:00:00.000Z'
+            }
+        ],
+        deletedItems: []
+    };
+    let putHeaders = null;
+    let uploadedPayload = null;
+    let getCount = 0;
+
+    await page.route('https://todo-existing-sync.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() === 'GET' && url.pathname === '/apps/todo-app/data.json') {
+            getCount += 1;
+            const body = uploadedPayload || remotePayload;
+            await route.fulfill({
+                status: 200,
+                headers: {
+                    ETag: getCount <= 2 ? '"todo-base-v1"' : '"todo-synced-v2"',
+                    'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag'
+                },
+                contentType: 'application/json',
+                body: JSON.stringify(body)
+            });
+            return;
+        }
+        if (request.method() === 'PUT' && url.pathname === '/apps/todo-app/data.json') {
+            putHeaders = request.headers();
+            uploadedPayload = JSON.parse(request.postData() || 'null');
+            await route.fulfill({
+                status: 200,
+                headers: {
+                    ETag: '"todo-synced-v2"',
+                    'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag'
+                },
+                body: ''
+            });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://todo-existing-sync.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.removeItem('todoAppData');
+        localStorage.removeItem('todoAppSyncState');
+    }, localData);
+
+    await page.goto('/');
+    // Seed lastRemoteHash by first checking cloud.
+    await page.locator('[data-page-target="todos"]').click();
+    const panel = page.locator('#todo-cloud-panel');
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel).toContainText('本地与云端存在差异，已生成合并预览');
+
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '同步本地到云端', exact: true }).click();
+    await expect(panel.locator('.habit-upload-guard')).toContainText('同步并核验成功');
+    expect(putHeaders['if-match'] || putHeaders['If-Match']).toBe('"todo-base-v1"');
+    expect(uploadedPayload.todos[0].text).toBe('PC 待同步待办');
+    expect(uploadedPayload.localMirror).toBeUndefined();
 });
 
 test('habit checkins only award configured currencies', async ({ page }) => {
