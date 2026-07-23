@@ -2,6 +2,9 @@
 
 ## 2026-07-23
 
+- Real-data verification screenshot exposed a false consistency blocker: legacy `deletedItems` counted all 284 application tombstones, while the habit mirror correctly contained only canonicalizable habit-related tombstones, producing `旧 284 / 镜像 0` despite habits, records, ledger, and balance matching.
+- The correction belongs in `buildHabitDualWriteConsistency()`: its legacy Tombstone count must use the same canonicalizable habit-tombstone predicate as `buildHabitAppSnapshot()`. The broader source hash may still include all deletions so any legacy source change triggers a safe mirror rebuild.
+
 - The handoff identifies `lifePlanData` as the current habit authority and `localStorage.habitAppData` as a fully rebuilt local mirror; this phase must never reverse-write mirror data into legacy fields.
 - The requested remote path is `/apps/habit-app/data.json`; the first live network capability is GET-only preview, with no PUT and no automatic save of merged data.
 - Existing untracked `.zcode/` content belongs to the user and must remain untouched.

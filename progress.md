@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Investigated the user's real diagnostics screenshot and identified the upload blocker as a tombstone comparison-scope bug, not a Sync URL, Worker, or actual mirror-data mismatch.
+- Extracted one shared legacy-to-canonical tombstone mapper and reused it for both snapshot construction and consistency counting, so the two sides now compare the same habit-only domain.
+- Added a regression with two unrelated tombstones plus one habit tombstone; the mirror keeps only the habit tombstone and consistency reports `1 / 1 matched`. The focused diagnostics test passed.
+- Ran the full `scripts/check.ps1` validation after the Tombstone scope correction; all 63 Playwright smoke tests passed.
+- Generated the corrected clean runtime package at `D:\project\life-plan-site\life-plan-site-runtime-20260723-113642.zip`; five-package retention removed `life-plan-site-runtime-20260722-112039.zip`.
+
 - Started the protected first-upload phase after the user clarified the final PC + mobile shared-authority goal and delegated next-step judgment.
 - Chose a session-only, explicit-confirmation remote bootstrap; development tests will intercept fake endpoints and will not touch the user's real cloud file.
 - Confirmed the sync service supports create-only conditional PUT with `If-None-Match: *`; started mapping the guarded state machine and test interception requirements.

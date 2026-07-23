@@ -184,6 +184,34 @@
                 : 'adjust';
         }
 
+        function mapHabitDeletedItem(item, index) {
+            const kind = getDeletedKind(item);
+            const targetId = normalizeId(item?.itemId || item?.targetId || item?.entityId || item?.id);
+            const mappings = {
+                habit: ['habits', 'habits'],
+                habits: ['habits', 'habits'],
+                checkin: ['habitRecords', 'checkins'],
+                checkins: ['habitRecords', 'checkins'],
+                habitPointLedger: ['habitLedger', 'ledger'],
+                habitRewards: ['habitRewards', 'rewards'],
+                habitCurrencies: ['habitCurrencies', 'currencies']
+            };
+            const mapping = mappings[kind];
+            const deletedAt = item?.deletedAt || item?.updatedAt || item?.createdAt;
+            if (!mapping || !targetId || !deletedAt) return null;
+            const [collection, remoteCollection] = mapping;
+            const parentId = normalizeId(item?.habitId || item?.parentId);
+            return compactObject({
+                collection,
+                id: keepOrBuildRemoteId(remoteCollection, targetId, index),
+                deletedAt,
+                parentId: parentId ? keepOrBuildRemoteId('habits', parentId, 0) : undefined,
+                reason: item?.reason,
+                name: item?.name,
+                source: getSourceRef('deletedItems', item, index)
+            });
+        }
+
         function getHabitLegacySourceSlice(source = {}) {
             return {
                 habits: asArray(source.habits),
@@ -402,33 +430,7 @@
                 habitOverdueEvents: [],
                 habitMoodNotes: [],
                 habitTimeTasks: [],
-                deletedItems: deletedItems.map((item, index) => {
-                    const kind = getDeletedKind(item);
-                    const targetId = normalizeId(item?.itemId || item?.targetId || item?.entityId || item?.id);
-                    const mappings = {
-                        habit: ['habits', 'habits'],
-                        habits: ['habits', 'habits'],
-                        checkin: ['habitRecords', 'checkins'],
-                        checkins: ['habitRecords', 'checkins'],
-                        habitPointLedger: ['habitLedger', 'ledger'],
-                        habitRewards: ['habitRewards', 'rewards'],
-                        habitCurrencies: ['habitCurrencies', 'currencies']
-                    };
-                    const mapping = mappings[kind];
-                    const deletedAt = item?.deletedAt || item?.updatedAt || item?.createdAt;
-                    if (!mapping || !targetId || !deletedAt) return null;
-                    const [collection, remoteCollection] = mapping;
-                    const parentId = normalizeId(item?.habitId || item?.parentId);
-                    return compactObject({
-                        collection,
-                        id: keepOrBuildRemoteId(remoteCollection, targetId, index),
-                        deletedAt,
-                        parentId: parentId ? keepOrBuildRemoteId('habits', parentId, 0) : undefined,
-                        reason: item?.reason,
-                        name: item?.name,
-                        source: getSourceRef('deletedItems', item, index)
-                    });
-                }).filter(Boolean)
+                deletedItems: deletedItems.map(mapHabitDeletedItem).filter(Boolean)
             };
 
             if (mode === 'preview') {
@@ -532,7 +534,7 @@
                 {
                     id: 'deletedItems',
                     label: 'Tombstone',
-                    legacy: slice.deletedItems.length,
+                    legacy: slice.deletedItems.map(mapHabitDeletedItem).filter(Boolean).length,
                     mirror: mirrorSummary.summary.deletedItems || 0
                 }
             ].map(item => ({

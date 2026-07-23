@@ -48,6 +48,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 35. Status: complete - Add clear inline UI states for arm, confirmation, success, remote-race refusal, and errors.
 36. Status: complete - Add Playwright coverage proving unarmed uploads cannot PUT and an armed confirmed first upload performs exactly GET then PUT.
 37. Status: complete - Run targeted/full validation, visually inspect, package, commit, push, and append memory.
+38. Status: complete - Correct the diagnostics consistency count so only canonicalizable habit tombstones are compared with the habit mirror.
+39. Status: complete - Add regression coverage for mixed habit and non-habit legacy tombstones and rerun targeted/full checks.
+40. Status: complete - Package the corrected runtime, commit, push, and append memory.
 
 ## Decisions
 

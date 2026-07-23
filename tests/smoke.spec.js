@@ -2406,7 +2406,12 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
         habitRewards: [
             { id: 'reward-1', name: '<img src=x onerror="window.__habitXss=1"> 安全心愿', cost: 10, currency: '金币' }
         ],
-        habitCurrencies: [{ id: 'currency-1', name: '金币' }]
+        habitCurrencies: [{ id: 'currency-1', name: '金币' }],
+        deletedItems: [
+            { collection: 'todos', id: 'deleted-todo', deletedAt: '2026-07-20T08:00:00.000Z' },
+            { collection: 'records', id: 'deleted-record', deletedAt: '2026-07-20T08:00:00.000Z' },
+            { collection: 'habits', id: 'deleted-habit', deletedAt: '2026-07-20T08:00:00.000Z' }
+        ]
     });
 
     await page.addInitScript(value => {
@@ -2494,6 +2499,11 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     expect(mirror.habits).toHaveLength(1);
     expect(mirror.habitRecords).toHaveLength(2);
     expect(mirror.habitLedger).toHaveLength(2);
+    expect(mirror.deletedItems).toHaveLength(1);
+    expect(mirror.deletedItems[0]).toMatchObject({
+        collection: 'habits',
+        id: 'life-plan/habits/deleted-habit'
+    });
     expect(mirror.mirror?.sourceHash).toBeTruthy();
 
     const consistency = await page.evaluate(() => {
@@ -2505,6 +2515,11 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     });
     expect(consistency.status).toBe('matched');
     expect(consistency.summary.mismatchCount).toBe(0);
+    expect(consistency.comparisons.find(item => item.id === 'deletedItems')).toMatchObject({
+        legacy: 1,
+        mirror: 1,
+        matched: true
+    });
 
     const syncScaffold = await page.evaluate(() => ({
         config: JSON.parse(localStorage.getItem('habitAppSyncConfig') || 'null'),
