@@ -2282,6 +2282,10 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('habitLedger');
     await expect(panel).toContainText('habit-app JSON 预览');
     await expect(panel).toContainText('预览指纹');
+    await expect(panel).toContainText('本地双写前置');
+    await expect(panel).toContainText('打卡 / 取消打卡');
+    await expect(panel).toContainText('待接入');
+    await expect(panel).toContainText('远端上传关闭');
     await expect(panel).toContainText('<img src=x');
     await expect(panel.locator('img')).toHaveCount(0);
     await expect(panel.locator('svg')).toHaveCount(0);
@@ -2297,6 +2301,16 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     expect(snapshot.habits[0].id).toBe('life-plan/habits/habit-1');
     expect(snapshot.habitRecords[0].habitId).toBe('life-plan/habits/habit-1');
     expect(snapshot.habits[0].name).toContain('<img src=x');
+
+    const readiness = await page.evaluate(() => {
+        const source = JSON.parse(localStorage.getItem('lifePlanData'));
+        const service = window.LifePlanHabitService.create({});
+        return service.buildHabitDualWriteReadiness(source);
+    });
+    expect(readiness.remoteUploadEnabled).toBe(false);
+    expect(readiness.summary.writePathPending).toBeGreaterThan(0);
+    expect(readiness.writePaths.some(item => item.fn === 'toggleCheckin')).toBe(true);
+    expect(readiness.status === 'prepared' || readiness.status === 'blocked').toBe(true);
 
     const after = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     expect(after).toBe(before);

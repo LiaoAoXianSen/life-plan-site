@@ -286,6 +286,188 @@
             };
         }
 
+        function getHabitDualWritePathInventory() {
+            return [
+                {
+                    id: 'toggle-checkin',
+                    label: '打卡 / 取消打卡',
+                    fn: 'toggleCheckin',
+                    legacyTargets: ['checkins', 'habitPointLedger', 'habits.updatedAt'],
+                    snapshotTargets: ['habitRecords', 'habitLedger', 'habits'],
+                    priority: 1,
+                    dualWrite: 'pending',
+                    note: '含每日 1 次切换与多次 +1；会触发奖励、里程碑和扣分冲销。'
+                },
+                {
+                    id: 'decrease-checkin',
+                    label: '减少一次打卡',
+                    fn: 'decreaseCheckin',
+                    legacyTargets: ['checkins', 'habitPointLedger', 'habits.updatedAt'],
+                    snapshotTargets: ['habitRecords', 'habitLedger', 'habits'],
+                    priority: 1,
+                    dualWrite: 'pending',
+                    note: '撤销最近一次打卡并反冲相关奖励。'
+                },
+                {
+                    id: 'append-checkin',
+                    label: '快速打卡 / 备注打卡',
+                    fn: 'appendHabitCheckin',
+                    legacyTargets: ['checkins', 'habitPointLedger', 'habits.updatedAt'],
+                    snapshotTargets: ['habitRecords', 'habitLedger', 'habits'],
+                    priority: 1,
+                    dualWrite: 'pending',
+                    note: '今日打卡、备注打卡与补卡共用入口。'
+                },
+                {
+                    id: 'edit-checkin-note',
+                    label: '编辑打卡备注',
+                    fn: 'submitHabitNoteModal',
+                    legacyTargets: ['checkins', 'habits.updatedAt'],
+                    snapshotTargets: ['habitRecords', 'habits'],
+                    priority: 2,
+                    dualWrite: 'pending',
+                    note: '仅更新备注文本时也要同步 snapshot 的 updatedAt。'
+                },
+                {
+                    id: 'save-habit',
+                    label: '新建 / 编辑习惯',
+                    fn: 'saveHabit',
+                    legacyTargets: ['habits', 'habitCurrencies'],
+                    snapshotTargets: ['habits', 'habitGroups', 'habitCurrencies'],
+                    priority: 1,
+                    dualWrite: 'pending',
+                    note: '规则、标签、奖励与扣分配置变更。'
+                },
+                {
+                    id: 'delete-habit',
+                    label: '删除习惯',
+                    fn: 'deleteCurrentHabit',
+                    legacyTargets: ['habits', 'checkins', 'deletedItems', 'records'],
+                    snapshotTargets: ['habits', 'habitRecords', 'deletedItems'],
+                    priority: 2,
+                    dualWrite: 'pending',
+                    note: '旧路径仍会硬删历史；双写阶段需同时写 tombstone。'
+                },
+                {
+                    id: 'save-reward',
+                    label: '新增心愿',
+                    fn: 'saveHabitReward',
+                    legacyTargets: ['habitRewards', 'habitCurrencies'],
+                    snapshotTargets: ['habitRewards', 'habitCurrencies'],
+                    priority: 2,
+                    dualWrite: 'pending',
+                    note: '心愿商品入库。'
+                },
+                {
+                    id: 'redeem-reward',
+                    label: '兑换心愿',
+                    fn: 'redeemHabitReward',
+                    legacyTargets: ['habitRewards', 'habitPointLedger'],
+                    snapshotTargets: ['habitRewards', 'habitLedger', 'habitRewardRecords'],
+                    priority: 1,
+                    dualWrite: 'pending',
+                    note: '扣库存、写兑换流水；需 deterministic sourceId。'
+                },
+                {
+                    id: 'adjust-points',
+                    label: '手动加减积分',
+                    fn: 'saveHabitPointAdjust',
+                    legacyTargets: ['habitPointLedger', 'habitCurrencies'],
+                    snapshotTargets: ['habitLedger', 'habitCurrencies'],
+                    priority: 2,
+                    dualWrite: 'pending',
+                    note: '钱包手动调整。'
+                },
+                {
+                    id: 'settle-penalties',
+                    label: '结算昨日扣分',
+                    fn: 'settleHabitPenaltiesThroughYesterday',
+                    legacyTargets: ['habitPointLedger'],
+                    snapshotTargets: ['habitLedger', 'habitFineRecords', 'habitOverdueEvents'],
+                    priority: 2,
+                    dualWrite: 'pending',
+                    note: 'miss/break 罚款；后续要避免双端重复结算。'
+                },
+                {
+                    id: 'manage-currency',
+                    label: '币种管理',
+                    fn: 'addHabitCurrencyFromModal',
+                    legacyTargets: ['habitCurrencies'],
+                    snapshotTargets: ['habitCurrencies'],
+                    priority: 3,
+                    dualWrite: 'pending',
+                    note: '新增/规范化币种名称。'
+                }
+            ];
+        }
+
+        function buildHabitDualWriteReadiness(source = {}, diagnostics = null) {
+            const report = diagnostics || buildLegacyHabitDiagnostics(source);
+            const issues = asArray(report.issues);
+            const dangerIssues = issues.filter(item => item?.severity === 'danger');
+            const warningIssues = issues.filter(item => item?.severity === 'warning');
+            const writePaths = getHabitDualWritePathInventory();
+            const pendingPaths = writePaths.filter(item => item.dualWrite !== 'enabled');
+            const enabledPaths = writePaths.filter(item => item.dualWrite === 'enabled');
+            const blockers = [];
+
+            if (dangerIssues.length) {
+                blockers.push({
+                    id: 'danger-diagnostics',
+                    label: '诊断页仍有高风险项',
+                    count: dangerIssues.length,
+                    details: dangerIssues.map(item => item.label),
+                    hint: '先处理重复 ID、孤儿打卡、异常金额等高风险问题，再开启本地双写。'
+                });
+            }
+
+            if (pendingPaths.length === writePaths.length) {
+                blockers.push({
+                    id: 'no-dual-write-hooks',
+                    label: '写路径尚未接入本地双写',
+                    count: pendingPaths.length,
+                    details: pendingPaths.slice(0, 6).map(item => item.label),
+                    hint: '按优先级逐个接入 toggleCheckin / decreaseCheckin / appendHabitCheckin 等写路径，不直接上传云端。'
+                });
+            }
+
+            let status = 'ready';
+            let statusLabel = '可开始本地双写';
+            if (dangerIssues.length) {
+                status = 'blocked';
+                statusLabel = '被高风险数据阻塞';
+            } else if (pendingPaths.length) {
+                status = 'prepared';
+                statusLabel = '前置检查通过，等待接入写路径';
+            }
+
+            return {
+                generatedAt: new Date().toISOString(),
+                readOnly: true,
+                phase: 'phase-4-local-dual-write',
+                remoteUploadEnabled: false,
+                authority: 'lifePlanData legacy habit fields',
+                status,
+                statusLabel,
+                summary: {
+                    writePathTotal: writePaths.length,
+                    writePathEnabled: enabledPaths.length,
+                    writePathPending: pendingPaths.length,
+                    dangerIssueCount: dangerIssues.length,
+                    warningIssueCount: warningIssues.length,
+                    blockerCount: blockers.length
+                },
+                blockers,
+                writePaths,
+                nextActions: [
+                    '保持只读预览与诊断，不上传 /apps/habit-app/data.json。',
+                    '优先接入 toggleCheckin、decreaseCheckin、appendHabitCheckin 的本地双写。',
+                    '每个写路径接入后校验 habitRecords / habitLedger 数量与余额一致性。',
+                    '全部本地写路径稳定后，再引入独立 habitSyncConfig。'
+                ]
+            };
+        }
+
         function buildLegacyHabitDiagnostics(source = {}) {
             const habits = asArray(source.habits);
             const checkins = asArray(source.checkins);
@@ -480,7 +662,9 @@
 
         return {
             buildLegacyHabitDiagnostics,
-            buildHabitAppSnapshotPreview
+            buildHabitAppSnapshotPreview,
+            getHabitDualWritePathInventory,
+            buildHabitDualWriteReadiness
         };
     }
 

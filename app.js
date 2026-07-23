@@ -6819,8 +6819,10 @@
             const container = document.getElementById('habit-diagnostics-panel');
             if (!container) return;
             const diagnostics = habitService.buildLegacyHabitDiagnostics(data);
+            const readiness = habitService.buildHabitDualWriteReadiness(data, diagnostics);
             const snapshotPreview = habitService.buildHabitAppSnapshotPreview(data);
             const summary = diagnostics.summary || {};
+            const readinessSummary = readiness.summary || {};
             const snapshotSummary = snapshotPreview.summary || {};
             const snapshotSourceHash = getDataHash({
                 habits: data.habits || [],
@@ -6845,14 +6847,17 @@
             ];
             const issueLevelRank = { danger: 0, warning: 1, info: 2 };
             const issues = [...(diagnostics.issues || [])].sort((a, b) => (issueLevelRank[a.severity] ?? 3) - (issueLevelRank[b.severity] ?? 3));
+            const readinessStatusClass = readiness.status === 'blocked'
+                ? 'is-blocked'
+                : (readiness.status === 'ready' ? 'is-ready' : 'is-prepared');
 
             container.innerHTML = `
                 <div class="habit-diagnostics-guard">
                     <div>
                         <strong>只读诊断，不会保存、不上传、不生成 habit-app 云文件。</strong>
-                        <span>当前权威仍是 ${escapeHtml(diagnostics.authority || 'lifePlanData')}；这里先检查迁移/同步前的历史数据风险。</span>
+                        <span>当前权威仍是 ${escapeHtml(diagnostics.authority || 'lifePlanData')}；这里先检查迁移/同步前的历史数据风险，并展示 Phase 4 本地双写前置状态。</span>
                     </div>
-                    <span class="habit-diagnostics-pill">Phase 2 Preview</span>
+                    <span class="habit-diagnostics-pill">Phase 4 Readiness</span>
                 </div>
                 <div class="habit-diagnostics-grid">
                     ${metrics.map(item => renderHabitDiagnosticsMetric(item)).join('')}
@@ -6872,13 +6877,33 @@
                             ${(diagnostics.mappingPreview || []).map(renderHabitMappingPreviewRow).join('')}
                         </div>
                     </section>
+                    <section class="habit-diagnostics-card habit-dualwrite-card">
+                        <div class="habit-snapshot-head">
+                            <div>
+                                <div class="habit-shop-title">本地双写前置</div>
+                                <div class="habit-snapshot-meta">远端上传关闭 · 已接入 ${escapeHtml(readinessSummary.writePathEnabled || 0)}/${escapeHtml(readinessSummary.writePathTotal || 0)} 写路径 · 阻塞 ${escapeHtml(readinessSummary.blockerCount || 0)}</div>
+                            </div>
+                            <span class="habit-dualwrite-status ${readinessStatusClass}">${escapeHtml(readiness.statusLabel || readiness.status || 'unknown')}</span>
+                        </div>
+                        ${(readiness.blockers || []).length ? `
+                            <div class="habit-diagnostics-issue-list">
+                                ${(readiness.blockers || []).map(renderHabitDualWriteBlocker).join('')}
+                            </div>
+                        ` : '<div class="habit-diagnostics-ok">没有高风险阻塞项；可以开始按写路径清单做本地双写。</div>'}
+                        <div class="habit-dualwrite-path-list">
+                            ${(readiness.writePaths || []).map(renderHabitDualWritePathRow).join('')}
+                        </div>
+                        <div class="habit-dualwrite-next">
+                            ${(readiness.nextActions || []).map(item => `<div>${escapeHtml(item)}</div>`).join('')}
+                        </div>
+                    </section>
                     <section class="habit-diagnostics-card habit-snapshot-preview-card">
                         <div class="habit-snapshot-head">
                             <div>
                                 <div class="habit-shop-title">habit-app JSON 预览</div>
                                 <div class="habit-snapshot-meta">只读输出 · 预览指纹 ${escapeHtml(snapshotSourceHash.slice(0, 12))} · ${escapeHtml(snapshotSummary.habits || 0)} habits · ${escapeHtml(snapshotSummary.habitRecords || 0)} records · ${escapeHtml(snapshotSummary.habitLedger || 0)} ledger</div>
                             </div>
-                            <span>Phase 2 Preview</span>
+                            <span>Phase 3 Preview</span>
                         </div>
                         <textarea id="habit-snapshot-preview-json" class="habit-snapshot-preview" readonly spellcheck="false">${escapeHtml(snapshotPreview.jsonText || '')}</textarea>
                     </section>
@@ -6931,6 +6956,41 @@
                         <em>${escapeHtml(item.target)}</em>
                         <b>${escapeHtml(item.count || 0)}</b>
                     </div>
+                </div>
+            `;
+        }
+
+        function renderHabitDualWriteBlocker(item) {
+            const details = (item.details || [])
+                .map(detail => `<span>${escapeHtml(detail)}</span>`)
+                .join('');
+            return `
+                <article class="habit-diagnostics-issue is-warning">
+                    <div class="habit-diagnostics-issue-head">
+                        <strong>${escapeHtml(item.label || '阻塞项')}</strong>
+                        <span>${escapeHtml(item.count || 0)} 项</span>
+                    </div>
+                    ${item.hint ? `<p>${escapeHtml(item.hint)}</p>` : ''}
+                    ${details ? `<div class="habit-diagnostics-detail-list"><div class="habit-diagnostics-detail">${details}</div></div>` : ''}
+                </article>
+            `;
+        }
+
+        function renderHabitDualWritePathRow(item) {
+            const status = item.dualWrite === 'enabled' ? 'enabled' : 'pending';
+            const statusLabel = status === 'enabled' ? '已接入' : '待接入';
+            const targets = [
+                ...(item.legacyTargets || []).map(target => `旧 ${target}`),
+                ...(item.snapshotTargets || []).map(target => `新 ${target}`)
+            ].join(' · ');
+            return `
+                <div class="habit-dualwrite-path-row is-${status}">
+                    <div>
+                        <strong>P${escapeHtml(item.priority || '-')} · ${escapeHtml(item.label || item.fn || '写路径')}</strong>
+                        <span>${escapeHtml(item.note || '')}</span>
+                        <em>${escapeHtml(targets)}</em>
+                    </div>
+                    <b>${escapeHtml(statusLabel)}</b>
                 </div>
             `;
         }
