@@ -168,6 +168,7 @@
         };
         let isHabitRemotePreviewRunning = false;
         let isHabitRemoteUploadRunning = false;
+        let isHabitRemoteApplyRunning = false;
         let habitRemoteUploadState = {
             status: 'idle',
             attemptedAt: '',
@@ -610,6 +611,240 @@
                 console.warn('habit-app 本地双写失败', reason);
                 return false;
             }
+            return true;
+        }
+
+        function decodeHabitRemoteId(value = '', collection = '') {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+            const prefixes = {
+                habits: 'life-plan/habits/',
+                habitRecords: 'life-plan/checkins/',
+                habitLedger: 'life-plan/ledger/',
+                habitRewards: 'life-plan/rewards/',
+                habitCurrencies: 'life-plan/currencies/',
+                habitRewardRecords: 'life-plan/reward-records/',
+                habitFineRecords: 'life-plan/fine-records/'
+            };
+            const prefix = prefixes[collection] || '';
+            if (prefix && raw.startsWith(prefix)) {
+                try {
+                    return decodeURIComponent(raw.slice(prefix.length));
+                } catch (err) {
+                    return raw.slice(prefix.length);
+                }
+            }
+            return raw;
+        }
+
+        function getHabitCurrencyNameFromSnapshot(snapshot = {}, currencyId = '') {
+            const raw = String(currencyId || '').trim();
+            if (!raw || raw === 'default') return HABIT_DEFAULT_CURRENCY;
+            const currency = (snapshot.habitCurrencies || []).find(item => item?.id === raw || item?.name === raw);
+            return normalizeHabitCurrency(currency?.name || decodeHabitRemoteId(raw, 'habitCurrencies') || raw);
+        }
+
+        function getHabitGroupNameFromSnapshot(snapshot = {}, groupId = '') {
+            const raw = String(groupId || '').trim();
+            if (!raw || raw === 'default') return '';
+            const group = (snapshot.habitGroups || []).find(item => item?.id === raw);
+            return String(group?.name || '').trim();
+        }
+
+        function getHabitLegacyDateFromRecord(record = {}) {
+            return String(record.recordDate || record.date || record.recordTime || record.createdAt || '').slice(0, 10);
+        }
+
+        function buildLegacyHabitDataFromSnapshot(snapshot = {}) {
+            const source = syncService.getHabitSnapshot(snapshot || {});
+            const habitIds = new Set((source.habits || []).map(item => item?.id).filter(Boolean));
+            const rewardIds = new Set((source.habitRewards || []).map(item => item?.id).filter(Boolean));
+            const deletedMap = new Map((source.deletedItems || [])
+                .filter(item => item?.collection && item?.id)
+                .map(item => [`${item.collection}:${item.id}`, item]));
+            const isDeleted = (collection, id) => !!id && deletedMap.has(`${collection}:${id}`);
+            const habits = (source.habits || [])
+                .filter(item => item?.id && !isDeleted('habits', item.id))
+                .map((item, index) => {
+                    const rewardCurrency = getHabitCurrencyNameFromSnapshot(source, item.rewardCurrencyId || item.currencyId);
+                    const fineCurrency = getHabitCurrencyNameFromSnapshot(source, item.fineCurrencyId || item.penaltyCurrencyId || item.rewardCurrencyId);
+                    const repeatUnit = String(item.repeatUnit || item.rule || 'daily');
+                    return {
+                        id: decodeHabitRemoteId(item.id, 'habits'),
+                        remoteId: item.id,
+                        name: item.title || item.name || '未命名习惯',
+                        description: item.description || '',
+                        tag: getHabitGroupNameFromSnapshot(source, item.groupId) || '未分组',
+                        rule: repeatUnit === 'weekly' ? 'weekly-fixed' : 'daily',
+                        weekdays: Array.isArray(item.weekdays) ? item.weekdays : [],
+                        timesPerDay: Math.max(1, parseInt(item.requiredCountPerDay ?? item.targetCount ?? 1, 10) || 1),
+                        goalCount: Math.max(0, parseInt(item.targetCount ?? 0, 10) || 0),
+                        targetRewardAmount: Math.max(0, parseInt(item.targetRewardAmount ?? 0, 10) || 0),
+                        taskDurationSec: Math.max(0, parseInt(item.taskDurationSec ?? 0, 10) || 0),
+                        reminderTimes: Array.isArray(item.reminderTimes) ? item.reminderTimes : [],
+                        lastCheckAt: item.lastCheckAt || '',
+                        startDate: item.startDate || String(item.createdAt || item.updatedAt || getTodayStr()).slice(0, 10),
+                        noteMode: item.noteMode || 'ask',
+                        rewardPoints: Math.max(0, parseInt(item.rewardAmount ?? 0, 10) || 0),
+                        rewardCurrency,
+                        penaltyPoints: Math.max(0, parseInt(item.fineAmount ?? item.penaltyAmount ?? 0, 10) || 0),
+                        penaltyCurrency: fineCurrency,
+                        randomReward: false,
+                        rewardMin: Math.max(0, parseInt(item.rewardAmount ?? 0, 10) || 0),
+                        rewardMax: Math.max(0, parseInt(item.rewardAmount ?? 0, 10) || 0),
+                        breakPenaltyMode: 'none',
+                        breakPenaltyPoints: 0,
+                        breakPenaltyCurrency: fineCurrency,
+                        milestoneRewards: (source.habitMilestones || [])
+                            .filter(milestone => milestone?.habitId === item.id && !isDeleted('habitMilestones', milestone.id))
+                            .sort((a, b) => (a.sort ?? index) - (b.sort ?? index))
+                            .map(milestone => ({
+                                days: Math.max(1, parseInt(milestone.targetDays ?? 1, 10) || 1),
+                                enabled: true,
+                                rewardAmount: Math.max(0, parseInt(milestone.rewardAmount ?? 0, 10) || 0),
+                                currency: getHabitCurrencyNameFromSnapshot(source, milestone.currencyId || item.rewardCurrencyId),
+                                penaltyAmount: 0,
+                                penaltyCurrency: fineCurrency
+                            })),
+                        archived: item.status === 'archived',
+                        icon: item.icon || '✅',
+                        color: item.color || '#6EA6E4',
+                        sort: Number.isFinite(Number(item.sort)) ? Number(item.sort) : index,
+                        createdAt: item.createdAt || getLocalDateTimeStr(),
+                        updatedAt: item.updatedAt || item.createdAt || getLocalDateTimeStr()
+                    };
+                });
+            const legacyHabitIds = new Set(habits.map(item => item.id));
+            const checkins = (source.habitRecords || [])
+                .filter(item => item?.id && item?.habitId && !isDeleted('habitRecords', item.id) && habitIds.has(item.habitId))
+                .map(item => {
+                    const habitId = decodeHabitRemoteId(item.habitId, 'habits');
+                    return {
+                        id: decodeHabitRemoteId(item.id, 'habitRecords'),
+                        remoteId: item.id,
+                        habitId,
+                        date: getHabitLegacyDateFromRecord(item),
+                        time: String(item.recordTime || item.createdAt || '').slice(11, 16),
+                        note: item.note || '',
+                        recordType: item.type || item.recordType || 'normal',
+                        amount: Number.isFinite(Number(item.amount)) ? Number(item.amount) : undefined,
+                        sourceKey: item.sourceKey || '',
+                        checkinAt: item.recordTime || item.checkinAt || item.createdAt || `${getHabitLegacyDateFromRecord(item)}T00:00:00`,
+                        createdAt: item.createdAt || item.recordTime || getLocalDateTimeStr(),
+                        updatedAt: item.updatedAt || item.createdAt || item.recordTime || getLocalDateTimeStr()
+                    };
+                })
+                .filter(item => item.id && legacyHabitIds.has(item.habitId));
+            const legacyRewardIds = new Set((source.habitRewards || [])
+                .filter(item => item?.id && !isDeleted('habitRewards', item.id))
+                .map(item => decodeHabitRemoteId(item.id, 'habitRewards')));
+            const habitRewards = (source.habitRewards || [])
+                .filter(item => item?.id && !isDeleted('habitRewards', item.id))
+                .map((item, index) => ({
+                    id: decodeHabitRemoteId(item.id, 'habitRewards'),
+                    remoteId: item.id,
+                    name: item.name || item.title || '未命名心愿',
+                    note: item.description || item.note || '',
+                    cost: Math.max(1, parseInt(item.cost ?? 1, 10) || 1),
+                    currency: getHabitCurrencyNameFromSnapshot(source, item.currencyId),
+                    archived: item.status === 'archived',
+                    icon: item.icon || '🎁',
+                    color: item.color || '#6EA6E4',
+                    stock: Math.max(0, parseInt(item.stock ?? 0, 10) || 0),
+                    redeemedCount: Math.max(0, parseInt(item.redeemedCount ?? 0, 10) || 0),
+                    sort: Number.isFinite(Number(item.sort)) ? Number(item.sort) : index,
+                    createdAt: item.createdAt || getLocalDateTimeStr(),
+                    updatedAt: item.updatedAt || item.createdAt || getLocalDateTimeStr()
+                }));
+            const habitPointLedger = (source.habitLedger || [])
+                .filter(item => item?.id && !isDeleted('habitLedger', item.id))
+                .map(item => {
+                    const canonicalType = String(item.type || 'adjust');
+                    const typeMap = {
+                        streak_reward: 'milestone',
+                        target_reward: 'milestone',
+                        reward_redeem: 'redeem',
+                        fine: 'miss'
+                    };
+                    const habitId = decodeHabitRemoteId(item.habitId, 'habits');
+                    const rewardId = decodeHabitRemoteId(item.rewardId, 'habitRewards');
+                    const sourceId = canonicalType === 'checkin' || canonicalType === 'makeup'
+                        ? decodeHabitRemoteId(item.sourceId, 'habitRecords')
+                        : decodeHabitRemoteId(item.sourceId, '');
+                    return {
+                        id: decodeHabitRemoteId(item.id, 'habitLedger'),
+                        remoteId: item.id,
+                        habitId: legacyHabitIds.has(habitId) ? habitId : '',
+                        rewardId: legacyRewardIds.has(rewardId) ? rewardId : '',
+                        sourceId,
+                        type: typeMap[canonicalType] || canonicalType,
+                        amount: parseInt(item.amount || 0, 10) || 0,
+                        currency: getHabitCurrencyNameFromSnapshot(source, item.currencyId || item.currency),
+                        date: item.date || String(item.createdAt || item.updatedAt || getTodayStr()).slice(0, 10),
+                        note: item.note || '',
+                        createdAt: item.createdAt || item.date || getLocalDateTimeStr(),
+                        updatedAt: item.updatedAt || item.createdAt || item.date || getLocalDateTimeStr()
+                    };
+                });
+            const habitCurrencies = (source.habitCurrencies || [])
+                .filter(item => item?.id && !isDeleted('habitCurrencies', item.id))
+                .map(item => ({
+                    id: decodeHabitRemoteId(item.id, 'habitCurrencies') || genId(),
+                    name: normalizeHabitCurrency(item.name || item.currency || item.id),
+                    createdAt: item.createdAt || getLocalDateTimeStr(),
+                    updatedAt: item.updatedAt || item.createdAt || getLocalDateTimeStr()
+                }));
+            const deletedItems = (source.deletedItems || [])
+                .filter(item => item?.collection && item?.id && item?.deletedAt)
+                .map(item => {
+                    const collectionMap = {
+                        habits: 'habits',
+                        habitRecords: 'checkins',
+                        habitLedger: 'habitPointLedger',
+                        habitRewards: 'habitRewards',
+                        habitCurrencies: 'habitCurrencies'
+                    };
+                    const legacyCollection = collectionMap[item.collection];
+                    if (!legacyCollection) return null;
+                    return {
+                        collection: legacyCollection,
+                        id: decodeHabitRemoteId(item.id, item.collection),
+                        deletedAt: item.deletedAt,
+                        reason: item.reason || 'habit-cloud-apply',
+                        name: item.name || '',
+                        parentId: decodeHabitRemoteId(item.parentId, 'habits')
+                    };
+                })
+                .filter(Boolean);
+            return {
+                habits,
+                checkins,
+                habitPointLedger,
+                habitRewards,
+                habitCurrencies,
+                deletedItems
+            };
+        }
+
+        function applyHabitLegacySliceToData(legacySlice = {}, mergedHash = '') {
+            const preservedDeletedItems = (data.deletedItems || []).filter(item => {
+                const collection = String(item?.collection || '').trim();
+                return !['habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies'].includes(collection);
+            });
+            data.habits = Array.isArray(legacySlice.habits) ? legacySlice.habits : [];
+            data.checkins = Array.isArray(legacySlice.checkins) ? legacySlice.checkins : [];
+            data.habitPointLedger = Array.isArray(legacySlice.habitPointLedger) ? legacySlice.habitPointLedger : [];
+            data.habitRewards = Array.isArray(legacySlice.habitRewards) ? legacySlice.habitRewards : [];
+            data.habitCurrencies = Array.isArray(legacySlice.habitCurrencies) ? legacySlice.habitCurrencies : [];
+            data.deletedItems = [
+                ...preservedDeletedItems,
+                ...(Array.isArray(legacySlice.deletedItems) ? legacySlice.deletedItems : [])
+            ];
+            normalizeDataShape();
+            const saved = saveDataFromSync();
+            if (!saved) return false;
+            const built = rebuildHabitAppLocalMirror('protected-cloud-apply');
+            if (!built) return false;
             return true;
         }
 
@@ -1533,7 +1768,16 @@
                     && habitRemotePreviewState.status === 'ready'
                     && !habitRemotePreviewState.hashesMatch
                     && !isHabitRemotePreviewRunning
-                    && !isHabitRemoteUploadRunning),
+                    && !isHabitRemoteUploadRunning
+                    && !isHabitRemoteApplyRunning),
+                manualApplyEnabled: !!(syncConfig.webdavUrl
+                    && habitAppLocalMirror
+                    && habitRemotePreviewState.status === 'ready'
+                    && habitRemotePreviewState.merged
+                    && !habitRemotePreviewState.hashesMatch
+                    && !isHabitRemotePreviewRunning
+                    && !isHabitRemoteUploadRunning
+                    && !isHabitRemoteApplyRunning),
                 dirty: !!habitSyncState.dirty,
                 lastLocalHash: habitSyncState.lastLocalHash || '',
                 lastLocalHashShort: (habitSyncState.lastLocalHash || '').slice(0, 12),
@@ -1554,7 +1798,7 @@
                     : (habitRemotePreviewState.status === 'missing'
                         ? '首次创建等待本次授权'
                         : (habitRemotePreviewState.status === 'ready'
-                            ? (habitRemotePreviewState.hashesMatch ? '本地与云端一致' : '可进行受保护手动同步')
+                            ? (habitRemotePreviewState.hashesMatch ? '本地与云端一致' : '可应用云端合并结果')
                             : '远端上传关闭，仅只读预检'))
             };
         }
@@ -2203,12 +2447,192 @@
             }
         }
 
+        async function applyHabitRemoteMergeToPc() {
+            if (isHabitRemoteApplyRunning || isHabitRemoteUploadRunning || isHabitRemotePreviewRunning) return false;
+            const scaffold = getHabitSyncScaffoldSummary();
+            if (!scaffold.manualApplyEnabled) {
+                habitRemoteUploadState = {
+                    ...habitRemoteUploadState,
+                    status: 'blocked',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: '请先手动检查云端，并确认本地与云端存在可合并差异后再应用到 PC。'
+                };
+                renderHabitDiagnosticsPanel();
+                return false;
+            }
+            const previewRemoteHash = habitRemotePreviewState.remote?.hash || '';
+            const previewMergedHash = habitRemotePreviewState.merged?.hash || '';
+            const previewMergedSnapshot = habitRemotePreviewState.merged?.snapshot || null;
+            if (!previewRemoteHash || !previewMergedHash || !previewMergedSnapshot) {
+                habitRemoteUploadState = {
+                    ...habitRemoteUploadState,
+                    status: 'blocked',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: '当前合并预览不完整，已停止应用。请重新手动检查云端。'
+                };
+                renderHabitDiagnosticsPanel();
+                return false;
+            }
+            isHabitRemoteApplyRunning = true;
+            habitRemoteUploadState = {
+                status: 'validating',
+                attemptedAt: getLocalDateTimeStr(),
+                message: '正在重新拉取云端并准备回写 PC 旧字段…',
+                uploadedHash: '',
+                uploadedEtag: ''
+            };
+            renderHabitDiagnosticsPanel();
+            try {
+                const built = rebuildHabitAppLocalMirror('protected-cloud-apply-preflight');
+                if (!built || !habitAppLocalMirror) throw new Error('本地 habit-app 镜像重建失败，已停止应用');
+                const localSnapshot = syncService.getHabitSnapshot(habitAppLocalMirror);
+                const local = getHabitRemotePreviewModel(localSnapshot);
+                const remoteResult = await syncService.pullJson(
+                    { ...syncConfig, remotePath: scaffold.remotePath },
+                    scaffold.remotePath,
+                    value => value,
+                    value => syncService.getHabitDataHash(value)
+                );
+                if (!remoteResult) throw new Error('重新拉取时云端 habit 文件不存在，已停止应用');
+                const remoteSnapshot = syncService.getHabitSnapshot(remoteResult.data);
+                const remote = getHabitRemotePreviewModel(remoteSnapshot, remoteResult.hash);
+                if (remote.hash !== previewRemoteHash) {
+                    const merged = getHabitRemotePreviewModel(syncService.mergeHabitSnapshots(local.snapshot, remoteSnapshot));
+                    habitRemotePreviewState = {
+                        status: 'ready',
+                        mode: 'apply-race-recheck',
+                        requestedAt: getLocalDateTimeStr(),
+                        remotePath: scaffold.remotePath,
+                        error: '',
+                        local,
+                        remote: { ...remote, etag: remoteResult.etag || '' },
+                        merged,
+                        hashesMatch: local.hash === remote.hash,
+                        risks: getHabitRemoteMergeRisks(local, remote, merged, getHabitRemoteSchemaRisks(remoteResult.data))
+                    };
+                    habitRemoteUploadState = {
+                        ...habitRemoteUploadState,
+                        status: 'blocked',
+                        message: '云端自上次预览后已变化，已重新生成预览但没有写入 PC。请重新确认后再应用。'
+                    };
+                    return false;
+                }
+                const mergedSnapshot = syncService.mergeHabitSnapshots(local.snapshot, remoteSnapshot);
+                const merged = getHabitRemotePreviewModel(mergedSnapshot);
+                if (merged.hash !== previewMergedHash) {
+                    habitRemotePreviewState = {
+                        status: 'ready',
+                        mode: 'apply-repreview',
+                        requestedAt: getLocalDateTimeStr(),
+                        remotePath: scaffold.remotePath,
+                        error: '',
+                        local,
+                        remote: { ...remote, etag: remoteResult.etag || '' },
+                        merged,
+                        hashesMatch: local.hash === remote.hash,
+                        risks: getHabitRemoteMergeRisks(local, remote, merged, getHabitRemoteSchemaRisks(remoteResult.data))
+                    };
+                    habitRemoteUploadState = {
+                        ...habitRemoteUploadState,
+                        status: 'blocked',
+                        message: '当前本地镜像已变化，合并结果已重新计算但未写入 PC。请重新确认后再应用。'
+                    };
+                    return false;
+                }
+                const legacySlice = buildLegacyHabitDataFromSnapshot(mergedSnapshot);
+                const summaryText = [
+                    `${legacySlice.habits.length} 个习惯`,
+                    `${legacySlice.checkins.length} 条打卡`,
+                    `${legacySlice.habitPointLedger.length} 条钱包流水`,
+                    `${legacySlice.habitRewards.length} 个心愿`,
+                    `${legacySlice.deletedItems.length} 条习惯删除标记`
+                ].join(' · ');
+                const confirmed = confirm(
+                    `将把云端合并结果应用到 PC 旧 habit 字段。\n\n`
+                    + `${summaryText}\n\n`
+                    + '执行前会创建本地快照；不会写云端，也不会改同步配置。确认继续吗？'
+                );
+                if (!confirmed) {
+                    habitRemoteUploadState = {
+                        ...habitRemoteUploadState,
+                        status: 'cancelled',
+                        message: '已取消应用云端合并结果；PC 本地数据未改变。'
+                    };
+                    return false;
+                }
+                const beforeData = cloneDataSnapshot(data);
+                const beforeSnapshot = createLocalSnapshot('应用 habit 云端合并结果前', data, {
+                    source: 'habit-app',
+                    action: 'before-cloud-apply',
+                    mergedWith: { label: 'habit 云端合并预览', hash: merged.hash }
+                });
+                if (!beforeSnapshot && !confirm('应用前快照创建失败。继续会缺少回滚点，确定继续吗？')) {
+                    habitRemoteUploadState = {
+                        ...habitRemoteUploadState,
+                        status: 'cancelled',
+                        message: '因应用前快照未创建，已取消本次回写。'
+                    };
+                    return false;
+                }
+                try {
+                    if (!applyHabitLegacySliceToData(legacySlice, merged.hash)) {
+                        data = beforeData;
+                        throw new Error('PC 本地数据保存失败');
+                    }
+                } catch (err) {
+                    data = beforeData;
+                    saveDataFromSync();
+                    throw err;
+                }
+                const now = new Date().toISOString();
+                habitSyncState.dirty = merged.hash !== remote.hash;
+                habitSyncState.lastLocalHash = getHabitLegacySourceHash();
+                habitSyncState.lastRemoteHash = remote.hash;
+                if (remoteResult.etag) habitSyncState.lastRemoteEtag = remoteResult.etag;
+                habitSyncState.lastPullAt = now;
+                habitSyncState.lastSyncAt = now;
+                saveHabitSyncState();
+                habitRemotePreviewState = {
+                    status: 'ready',
+                    mode: 'protected-cloud-apply',
+                    requestedAt: getLocalDateTimeStr(),
+                    remotePath: scaffold.remotePath,
+                    error: '',
+                    local: merged,
+                    remote: { ...remote, etag: remoteResult.etag || '' },
+                    merged,
+                    hashesMatch: merged.hash === remote.hash,
+                    risks: []
+                };
+                habitRemoteUploadState = {
+                    status: 'applied',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: `已应用云端合并结果到 PC，并重建本地镜像；merged hash ${merged.hashShort}。云端未写入。`,
+                    uploadedHash: merged.hash,
+                    uploadedEtag: remoteResult.etag || ''
+                };
+                renderAfterDataChange();
+                return true;
+            } catch (err) {
+                habitRemoteUploadState = {
+                    ...habitRemoteUploadState,
+                    status: 'error',
+                    message: `应用云端合并结果失败：${err?.message || String(err)}`
+                };
+                return false;
+            } finally {
+                isHabitRemoteApplyRunning = false;
+                renderHabitDiagnosticsPanel();
+            }
+        }
+
         async function runHabitManualSyncSkeleton(direction = 'pull') {
             if (direction === 'push') {
                 return habitRemotePreviewState.status === 'ready'
                     ? runProtectedHabitExistingPush()
                     : runProtectedHabitFirstUpload();
             }
+            if (direction === 'apply') return applyHabitRemoteMergeToPc();
             return previewHabitRemotePull(direction === 'both' ? 'merge' : 'pull');
         }
 
@@ -7926,6 +8350,7 @@
                 uploading: '正在创建',
                 success: '创建并核验成功',
                 synced: '同步并核验成功',
+                applied: '已应用到 PC',
                 blocked: '已安全停止',
                 cancelled: '已取消',
                 error: '创建前检查失败',
@@ -7938,6 +8363,7 @@
                 uploading: 'is-partial',
                 success: 'is-ready',
                 synced: 'is-ready',
+                applied: 'is-ready',
                 blocked: 'is-blocked',
                 cancelled: 'is-prepared',
                 error: 'is-blocked',
@@ -7980,7 +8406,9 @@
                     ${state.message ? `<div class="habit-upload-state-message">${escapeHtml(state.message)}</div>` : ''}
                     <div class="habit-upload-caveat">${firstCreateContext
                         ? '上传动作会重建本地镜像、再次 GET、单次发送 <code>If-None-Match: *</code>，并在 PUT 后回读 hash。现有 Cloudflare KV 条件检查并非严格原子锁，请勿让两台设备同时执行首次创建。'
-                        : '同步动作会重建本地镜像、再次 GET、单次发送 <code>If-Match</code>，并在 PUT 后回读 hash。若云端在别处变化，条件写入会拦下这次同步。'}</div>
+                        : (state.message && state.message.includes('应用云端合并结果')
+                            ? '应用动作会重新 GET 云端、重新合并、创建本地快照，再把合并结果写回 PC 旧 habit 字段；全程不写云端。'
+                            : '同步动作会重建本地镜像、再次 GET、单次发送 <code>If-Match</code>，并在 PUT 后回读 hash。若云端在别处变化，条件写入会拦下这次同步。')}</div>
                 </div>
             `;
         }
@@ -8085,6 +8513,7 @@
                         ${(() => {
                             const scaffold = getHabitSyncScaffoldSummary();
                             const actionLocked = isHabitRemotePreviewRunning || isHabitRemoteUploadRunning;
+                            const applyLocked = actionLocked || isHabitRemoteApplyRunning;
                             const uploadButtonLabel = habitRemotePreviewState.status === 'missing'
                                 ? (isHabitRemoteUploadRunning ? '正在创建云端 habit 文件…' : '创建云端 habit 文件')
                                 : (habitRemotePreviewState.status === 'ready'
@@ -8095,6 +8524,7 @@
                             const uploadButtonDisabled = habitRemotePreviewState.status === 'missing'
                                 ? !scaffold.manualPushEnabled
                                 : !scaffold.manualSyncEnabled || habitRemotePreviewState.hashesMatch || actionLocked;
+                            const applyButtonDisabled = !scaffold.manualApplyEnabled || applyLocked;
                             return `
                                 <div class="habit-sync-scaffold">
                                     <div class="habit-snapshot-head">
@@ -8111,13 +8541,14 @@
                                         <div>镜像 hash：${escapeHtml(scaffold.mirrorHashShort || '无')}</div>
                                         <div>merge/hash 能力：${scaffold.mergeReady && scaffold.hashReady ? '已接入 sync-service' : '未就绪'}</div>
                                         <div>上次远端同步：${escapeHtml(scaffold.lastSyncAt || '尚未启用')}</div>
-                                        <div>当前阶段：GET 预检后可进行一次性受保护首次创建；旧 lifePlanData 仍保持权威。</div>
+                                        <div>当前阶段：GET 预检后可手动上传 PC 或应用云端合并结果；旧 lifePlanData 仍保持 PC 运行权威。</div>
                                     </div>
                                     <div class="habit-sync-actions">
                                         <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('pull')">${isHabitRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
                                         <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('both')">手动合并预检</button>
+                                        <button type="button" class="btn btn-secondary" ${applyButtonDisabled ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('apply')">${isHabitRemoteApplyRunning ? '正在应用到 PC…' : '应用合并结果到 PC'}</button>
                                         <button type="button" class="btn btn-danger" ${uploadButtonDisabled ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('push')">${escapeHtml(uploadButtonLabel)}</button>
-                                        <span>不新增 endpoint；上传授权只在当前页面内存中存在。</span>
+                                        <span>不新增 endpoint；应用到 PC 会先快照，上传授权只在当前页面内存中存在。</span>
                                     </div>
                                     ${renderHabitRemotePreviewPanel()}
                                     ${renderHabitProtectedUploadGuard()}

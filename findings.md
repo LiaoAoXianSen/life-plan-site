@@ -94,3 +94,6 @@
 
 - The next safe habit increment after first upload is a guarded PC -> cloud sync path when the cloud file already exists. It should rebuild the local mirror, re-GET the cloud file, require a baseline match against the last known remote hash, and use conditional If-Match writes rather than opening automatic upload.
 - Browser CORS must expose the remote ETag header for the habit sync path; otherwise the client can only fall back to the saved lastRemoteEtag, which is safe but less fresh.
+- Cloud-to-PC apply does not require changing the Worker or adding another sync URL: the existing GET path is sufficient because the new action only reads cloud data and writes local browser data after confirmation.
+- Exact post-apply habit hash equality is too strict while PC still stores legacy-compatible defaults such as note mode, start date, and sort fields. The apply path should use hashes to guard stale previews before mutation, then rebuild the local mirror and surface the resulting actual preview/state instead of blocking on byte-identical canonical hash round-trips.
+- External/mobile canonical IDs must survive the PC legacy bridge. Storing `remoteId` on legacy habit/checkin/ledger/reward rows lets the mirror builder preserve cross-device identity without treating arbitrary legacy IDs containing `/` as canonical IDs.

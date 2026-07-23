@@ -54,6 +54,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 
 41. Status: complete - Add protected cloud-sync flow for the existing habit file with baseline checks and conditional writes.
 42. Status: complete - Validate the new habit cloud-sync flow, package a clean runtime zip, and commit/push the result.
+43. Status: complete - Add protected manual cloud-to-PC habit merge apply flow without changing sync endpoint or Worker.
+44. Status: in_progress - Validate the cloud-to-PC apply flow, package a clean runtime zip, then commit and push.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

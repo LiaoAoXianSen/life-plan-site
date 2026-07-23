@@ -3207,6 +3207,222 @@ test('habit protected cloud sync blocks when the cloud changed after the last kn
     ]);
 });
 
+test('habit cloud merge can be applied to PC legacy fields without uploading', async ({ page }) => {
+    const localData = createEmptyData({
+        habits: [
+            {
+                id: 'habit-pc',
+                name: 'PC 本地习惯',
+                tag: '学习',
+                rule: 'daily',
+                timesPerDay: 1,
+                rewardPoints: 1,
+                rewardCurrency: '金币',
+                createdAt: '2026-07-23T07:00:00.000Z',
+                updatedAt: '2026-07-23T07:00:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'habit-currency-default', name: '金币' }]
+    });
+    const remoteSnapshot = createHabitSnapshot({
+        habits: [
+            {
+                id: 'mobile/habits/habit-phone',
+                title: '手机新增习惯',
+                groupId: 'default',
+                repeatUnit: 'daily',
+                requiredCountPerDay: 1,
+                rewardAmount: 4,
+                rewardCurrencyId: 'default',
+                fineAmount: 0,
+                fineCurrencyId: 'default',
+                createdAt: '2026-07-23T08:00:00.000Z',
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ],
+        habitRecords: [
+            {
+                id: 'mobile/records/record-phone',
+                habitId: 'mobile/habits/habit-phone',
+                recordDate: '2026-07-23',
+                recordTime: '2026-07-23T08:30:00.000Z',
+                type: 'normal',
+                note: '手机打卡',
+                createdAt: '2026-07-23T08:30:00.000Z',
+                updatedAt: '2026-07-23T08:30:00.000Z'
+            }
+        ],
+        habitLedger: [
+            {
+                id: 'mobile/ledger/ledger-phone',
+                type: 'checkin',
+                habitId: 'mobile/habits/habit-phone',
+                sourceId: 'mobile/records/record-phone',
+                amount: 4,
+                currencyId: 'default',
+                date: '2026-07-23',
+                createdAt: '2026-07-23T08:30:00.000Z',
+                updatedAt: '2026-07-23T08:30:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'default', name: '金币' }]
+    });
+    const requestSequence = [];
+    let putCount = 0;
+
+    await page.route('https://habit-cloud-apply.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requestSequence.push(`${request.method()} ${url.pathname}`);
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            await route.fulfill({
+                contentType: 'application/json',
+                headers: { ETag: '"habit-apply-v1"', 'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag' },
+                body: JSON.stringify(remoteSnapshot)
+            });
+            return;
+        }
+        if (request.method() === 'PUT') putCount += 1;
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://habit-cloud-apply.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({
+            remotePath: '/apps/habit-app/data.json',
+            autoSync: false,
+            remoteUploadEnabled: false
+        }));
+    }, localData);
+
+    await page.goto('/');
+    await page.locator('[data-page-target="habits"]').click();
+    await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
+    const panel = page.locator('#habit-diagnostics-panel');
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel.locator('.habit-remote-preview')).toContainText('本地与云端存在差异，已生成合并预览');
+    const applyButton = panel.getByRole('button', { name: '应用合并结果到 PC', exact: true });
+    await expect(applyButton).toBeEnabled();
+
+    page.once('dialog', dialog => dialog.accept());
+    await applyButton.click();
+    await expect(panel.locator('.habit-upload-guard')).toContainText('已应用到 PC');
+    await expect(panel.locator('.habit-upload-guard')).toContainText('云端未写入');
+
+    expect(putCount).toBe(0);
+    expect(requestSequence).toEqual([
+        'GET /apps/habit-app/data.json',
+        'GET /apps/habit-app/data.json'
+    ]);
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData') || 'null'),
+        mirror: JSON.parse(localStorage.getItem('habitAppData') || 'null'),
+        syncState: JSON.parse(localStorage.getItem('habitAppSyncState') || 'null'),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]')
+    }));
+    expect(stored.data.habits.map(item => item.name)).toEqual(expect.arrayContaining(['PC 本地习惯', '手机新增习惯']));
+    expect(stored.data.checkins).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+            id: 'mobile/records/record-phone',
+            habitId: 'mobile/habits/habit-phone',
+            date: '2026-07-23',
+            note: '手机打卡'
+        })
+    ]));
+    expect(stored.data.habitPointLedger).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+            id: 'mobile/ledger/ledger-phone',
+            sourceId: 'mobile/records/record-phone',
+            amount: 4,
+            currency: '金币'
+        })
+    ]));
+    expect(stored.mirror.habits).toHaveLength(2);
+    expect(stored.syncState.lastRemoteHash).toBe(hashHabitSnapshot(remoteSnapshot));
+    expect(stored.snapshots.some(item => item.reason === '应用 habit 云端合并结果前')).toBe(true);
+});
+
+test('habit cloud merge apply blocks when cloud changes after preview', async ({ page }) => {
+    const localData = createEmptyData({
+        habits: [
+            {
+                id: 'habit-stale-local',
+                name: '本地习惯',
+                rule: 'daily',
+                timesPerDay: 1,
+                updatedAt: '2026-07-23T07:00:00.000Z'
+            }
+        ]
+    });
+    const firstRemote = createHabitSnapshot({
+        habits: [
+            {
+                id: 'mobile/habits/first',
+                title: '第一次预览的手机习惯',
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'default', name: '金币' }]
+    });
+    const changedRemote = createHabitSnapshot({
+        habits: [
+            {
+                id: 'mobile/habits/changed',
+                title: '预览后变更的手机习惯',
+                updatedAt: '2026-07-23T09:00:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'default', name: '金币' }]
+    });
+    let getCount = 0;
+    let putCount = 0;
+
+    await page.route('https://habit-cloud-apply-race.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            getCount += 1;
+            await route.fulfill({
+                contentType: 'application/json',
+                headers: { ETag: getCount === 1 ? '"habit-race-v1"' : '"habit-race-v2"' },
+                body: JSON.stringify(getCount === 1 ? firstRemote : changedRemote)
+            });
+            return;
+        }
+        if (request.method() === 'PUT') putCount += 1;
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://habit-cloud-apply-race.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+    }, localData);
+
+    await page.goto('/');
+    await page.locator('[data-page-target="habits"]').click();
+    await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
+    const panel = page.locator('#habit-diagnostics-panel');
+    const beforeLifePlanData = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel.locator('.habit-remote-preview')).toContainText('本地与云端存在差异，已生成合并预览');
+    await panel.getByRole('button', { name: '应用合并结果到 PC', exact: true }).click();
+    await expect(panel.locator('.habit-upload-guard')).toContainText('云端自上次预览后已变化');
+
+    expect(getCount).toBe(2);
+    expect(putCount).toBe(0);
+    const afterLifePlanData = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+    expect(afterLifePlanData).toBe(beforeLifePlanData);
+});
+
 test('habit protected first upload stops when final GET finds an existing file', async ({ page }) => {
     const remoteSnapshot = createHabitSnapshot({
         habits: [

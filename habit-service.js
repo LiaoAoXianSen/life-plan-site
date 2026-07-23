@@ -241,6 +241,21 @@
             const mode = options.mode === 'local-mirror' ? 'local-mirror' : 'preview';
             const generatedAt = options.generatedAt || new Date().toISOString();
             const sourceHash = normalizeId(options.sourceHash);
+            const habitRemoteIdMap = new Map(habits.map((item, index) => [
+                normalizeId(item?.id),
+                normalizeId(item?.remoteId) || stableRemoteId('habits', item?.id, index)
+            ]).filter(([id]) => id));
+            const checkinRemoteIdMap = new Map(checkins.map((item, index) => [
+                normalizeId(item?.id),
+                normalizeId(item?.remoteId) || stableRemoteId('checkins', item?.id || `${normalizeId(item?.habitId)}-${item?.date || index}`, index)
+            ]).filter(([id]) => id));
+            const rewardRemoteIdMap = new Map(rewards.map((item, index) => [
+                normalizeId(item?.id),
+                normalizeId(item?.remoteId) || stableRemoteId('rewards', item?.id, index)
+            ]).filter(([id]) => id));
+            const getHabitRemoteId = (id, index = 0) => habitRemoteIdMap.get(normalizeId(id)) || keepOrBuildRemoteId('habits', id, index);
+            const getCheckinRemoteId = (id, index = 0) => checkinRemoteIdMap.get(normalizeId(id)) || keepOrBuildRemoteId('checkins', id, index);
+            const getRewardRemoteId = (id, index = 0) => rewardRemoteIdMap.get(normalizeId(id)) || keepOrBuildRemoteId('rewards', id, index);
 
             legacyCurrencies.forEach(item => currencyNames.add(normalizeCurrency(item?.name || item?.currency || item?.id, defaultCurrency)));
             habits.forEach(item => {
@@ -257,7 +272,13 @@
                     sort: index + 1,
                     source: { app: 'life-plan-site', collection: 'habits.tag', id: tag }
                 }));
-            groups.unshift({ id: 'default', name: '默认', sort: 0 });
+            groups.unshift({
+                id: 'default',
+                name: '默认',
+                sort: 0,
+                createdAt: '1970-01-01T00:00:00.000Z',
+                updatedAt: '1970-01-01T00:00:00.000Z'
+            });
 
             const rewardRecords = ledger
                 .map((item, index) => ({ item, index }))
@@ -266,12 +287,12 @@
                     const currency = normalizeCurrency(item?.currency, defaultCurrency);
                     return compactObject({
                         id: stableRemoteId('reward-records', item?.id, index),
-                        rewardId: keepOrBuildRemoteId('rewards', item.rewardId, 0),
+                        rewardId: getRewardRemoteId(item.rewardId, 0),
                         redeemedAt: item?.createdAt || item?.updatedAt || item?.date,
                         amount: Math.abs(parseAmount(item?.amount).valid ? parseAmount(item.amount).value : 0),
                         currencyId: getCurrencyId(currency),
                         note: item?.note || '',
-                        ledgerId: stableRemoteId('ledger', item?.id, index),
+                        ledgerId: normalizeId(item?.remoteId) || stableRemoteId('ledger', item?.id, index),
                         sourceKey: `life-plan:habitPointLedger:${normalizeId(item?.id) || index + 1}`,
                         createdAt: item?.createdAt || item?.date,
                         updatedAt: item?.updatedAt || item?.createdAt || item?.date
@@ -284,12 +305,12 @@
                     const currency = normalizeCurrency(item?.currency, defaultCurrency);
                     return compactObject({
                         id: stableRemoteId('fine-records', item?.id, index),
-                        habitId: keepOrBuildRemoteId('habits', item.habitId, 0),
+                        habitId: getHabitRemoteId(item.habitId, 0),
                         finedAt: item?.createdAt || item?.updatedAt || item?.date,
                         amount: Math.abs(parseAmount(item?.amount).valid ? parseAmount(item.amount).value : 0),
                         currencyId: getCurrencyId(currency),
                         reason: item?.note || item?.type,
-                        ledgerId: stableRemoteId('ledger', item?.id, index),
+                        ledgerId: normalizeId(item?.remoteId) || stableRemoteId('ledger', item?.id, index),
                         sourceKey: `life-plan:habitPointLedger:${normalizeId(item?.id) || index + 1}`,
                         createdAt: item?.createdAt || item?.date,
                         updatedAt: item?.updatedAt || item?.createdAt || item?.date
@@ -303,7 +324,7 @@
                     const currency = normalizeCurrency(item?.currency, defaultCurrency);
                     return compactObject({
                         id: stableRemoteId('milestones', `${normalizeId(habit?.id) || habitIndex + 1}:${days}`, milestoneIndex),
-                        habitId: keepOrBuildRemoteId('habits', habit?.id, habitIndex),
+                        habitId: getHabitRemoteId(habit?.id, habitIndex),
                         targetDays: days,
                         rewardAmount: Math.max(0, parseInt(item?.rewardAmount ?? item?.amount ?? 0, 10) || 0),
                         currencyId: getCurrencyId(currency),
@@ -324,11 +345,11 @@
                         .filter(entry => normalizeId(entry?.habitId) === normalizeId(item?.id))
                         .sort((a, b) => normalizeId(b?.checkinAt || b?.createdAt || b?.updatedAt).localeCompare(normalizeId(a?.checkinAt || a?.createdAt || a?.updatedAt)))[0];
                     return compactObject({
-                        id: stableRemoteId('habits', item?.id, index),
+                        id: normalizeId(item?.remoteId) || stableRemoteId('habits', item?.id, index),
                         title: item?.name || '未命名习惯',
                         description: item?.description || '',
                         status: item?.archived ? 'archived' : 'active',
-                        sort: index,
+                        sort: Number.isFinite(Number(item?.sort)) ? Number(item.sort) : index,
                         icon: item?.icon || '✅',
                         color: item?.color || '#6EA6E4',
                         groupId: getGroupId(item?.tag),
@@ -343,7 +364,9 @@
                         targetRewardAmount: Math.max(0, parseInt(item?.targetRewardAmount ?? 0, 10) || 0),
                         requiredCountPerDay: getHabitTargetCount(item),
                         taskDurationSec: Math.max(0, parseInt(item?.taskDurationSec ?? 0, 10) || 0),
-                        lastCheckAt: latestCheckin?.checkinAt || latestCheckin?.createdAt,
+                        lastCheckAt: Object.prototype.hasOwnProperty.call(item || {}, 'lastCheckAt')
+                            ? item.lastCheckAt
+                            : (latestCheckin?.checkinAt || latestCheckin?.createdAt),
                         createdAt: item?.createdAt,
                         updatedAt: item?.updatedAt || item?.createdAt
                     });
@@ -356,18 +379,21 @@
                     const currency = normalizeCurrency(relatedLedger?.currency || habit?.rewardCurrency, defaultCurrency);
                     const recordTime = item?.checkinAt || item?.createdAt || item?.updatedAt || `${getLegacyDate(item)}T00:00:00`;
                     const recordType = getCanonicalRecordType(item);
+                    const explicitRecordAmount = parseAmount(item?.amount);
                     return compactObject({
-                        id: stableRemoteId('checkins', item?.id || `${habitId}-${item?.date || index}`, index),
-                        habitId: habitId ? stableRemoteId('habits', habitId, 0) : undefined,
+                        id: normalizeId(item?.remoteId) || stableRemoteId('checkins', item?.id || `${habitId}-${item?.date || index}`, index),
+                        habitId: habitId ? getHabitRemoteId(habitId, 0) : undefined,
                         recordTime,
                         recordDate: item?.date || getLegacyDate(item),
-                        amount: Math.max(0, parseAmount(relatedLedger?.amount).valid ? parseAmount(relatedLedger.amount).value : 0),
+                        amount: Math.max(0, explicitRecordAmount.valid ? explicitRecordAmount.value : (parseAmount(relatedLedger?.amount).valid ? parseAmount(relatedLedger.amount).value : 0)),
                         currencyId: getCurrencyId(currency),
                         type: recordType,
                         note: item?.note || '',
                         countsAsCompletion: ['normal', 'makeup'].includes(recordType),
                         countsForStreak: ['normal', 'makeup', 'exempt'].includes(recordType),
-                        sourceKey: `life-plan:checkins:${normalizeId(item?.id) || index + 1}`,
+                        sourceKey: Object.prototype.hasOwnProperty.call(item || {}, 'sourceKey')
+                            ? item.sourceKey
+                            : `life-plan:checkins:${normalizeId(item?.id) || index + 1}`,
                         createdAt: item?.createdAt || item?.checkinAt,
                         updatedAt: item?.updatedAt || item?.createdAt || item?.checkinAt
                     });
@@ -375,7 +401,7 @@
                 habitRewards: rewards.map((item, index) => {
                     const currency = normalizeCurrency(item?.currency, defaultCurrency);
                     return compactObject({
-                        id: stableRemoteId('rewards', item?.id, index),
+                        id: normalizeId(item?.remoteId) || stableRemoteId('rewards', item?.id, index),
                         name: item?.name || '未命名心愿',
                         description: item?.note || '',
                         cost: parseAmount(item?.cost).valid ? parseAmount(item.cost).value : 0,
@@ -399,17 +425,17 @@
                     const rewardId = normalizeId(item?.rewardId);
                     const canonicalType = getCanonicalLedgerType(item?.type);
                     const relatedRecordId = canonicalType === 'checkin' && item?.sourceId
-                        ? keepOrBuildRemoteId('checkins', item.sourceId, 0)
+                        ? getCheckinRemoteId(item.sourceId, 0)
                         : (canonicalType === 'reward_redeem'
                             ? stableRemoteId('reward-records', item?.id, index)
                             : (canonicalType === 'fine' ? stableRemoteId('fine-records', item?.id, index) : normalizeId(item?.sourceId || item?.id)));
                     return compactObject({
-                        id: stableRemoteId('ledger', item?.id, index),
+                        id: normalizeId(item?.remoteId) || stableRemoteId('ledger', item?.id, index),
                         amount: amount.valid ? amount.value : 0,
                         type: canonicalType,
                         currencyId: getCurrencyId(currency),
-                        habitId: habitId ? stableRemoteId('habits', habitId, 0) : undefined,
-                        rewardId: rewardId ? stableRemoteId('rewards', rewardId, 0) : undefined,
+                        habitId: habitId ? getHabitRemoteId(habitId, 0) : undefined,
+                        rewardId: rewardId ? getRewardRemoteId(rewardId, 0) : undefined,
                         sourceId: relatedRecordId,
                         date: item?.date || getLegacyDate(item),
                         note: item?.note || '',

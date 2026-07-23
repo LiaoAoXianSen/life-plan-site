@@ -157,3 +157,9 @@
 - Re-ran targeted habit smoke coverage and kept the first-upload and read-only preview regressions green.
 - Full scripts/check.ps1 passed all 65 Playwright smoke tests after adding the protected PC -> cloud habit sync path.
 - Generated a fresh clean runtime package at D:\project\life-plan-site\life-plan-site-runtime-20260723-121840.zip; the cleaner removed life-plan-site-runtime-20260723-102647.zip.
+- Started the protected cloud-to-PC habit apply phase without changing `D:\project\app-sync-kit`, the online Worker, or the single unified sync endpoint.
+- Added a manual diagnostics action that re-GETs `/apps/habit-app/data.json`, refuses stale previews, merges with the current local mirror, asks for confirmation, creates a local snapshot, writes the merged habit slice back into PC legacy fields, then rebuilds `localStorage.habitAppData`.
+- Added reverse canonical-to-legacy mapping for habits, habitRecords, habitLedger, habitRewards, currencies, and habit tombstones; external canonical IDs are preserved in legacy rows through `remoteId` so future mirror rebuilds keep stable cross-device identity.
+- Added smoke coverage proving a cloud/mobile habit/checkin/ledger can be applied to PC with zero PUT requests, and proving the apply action stops if the cloud file changes after preview.
+- Targeted cloud-to-PC apply tests passed, and the broader habit diagnostics/protected sync regression group passed 12/12.
+- An overlapping full `scripts/check.ps1` run still used the earlier too-strict post-apply hash gate and failed 1/67; after removing that gate, the targeted cloud-to-PC apply tests passed again. A fresh full check is required before packaging.
