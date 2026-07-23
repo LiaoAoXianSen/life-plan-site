@@ -16,6 +16,7 @@ $runtimeFiles = @(
     'styles.css',
     'habit-engine.js',
     'habit-ui.js',
+    'habit-service.js',
     'habit-style.css',
     'fitness-service.js',
     'fitness-ui.js',

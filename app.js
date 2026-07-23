@@ -8801,6 +8801,7 @@
                     <div class="habit-wallet-actions">
                         <button class="btn btn-secondary" onclick="settleYesterdayHabitPenalties()">结算昨日扣分</button>
                         <button class="btn btn-secondary" onclick="openHabitRewardModal()">新增心愿</button>
+                        <button class="btn btn-danger" onclick="resetAllHabitRecords()">清空所有记录</button>
                     </div>
                 </div>
                 <div class="habit-shop-grid">
@@ -8926,6 +8927,85 @@
             dualWriteHabitAppLocalMirror('redeem-reward');
             renderHabitRewards();
             renderHabitKpis();
+        }
+
+        function resetAllHabitRecords() {
+            const firstConfirmed = confirm(
+                '确认清空所有习惯记录吗？\n\n将清空：打卡/补卡、钱包流水、兑换、罚款及相关历史。\n将保留：习惯、心愿、分组、币种、规则、提醒和里程碑配置。'
+            );
+            if (!firstConfirmed) return false;
+            if (!confirm('请再次确认：确认后会先创建本地快照；清空完成后只能通过该快照恢复。')) return false;
+
+            const beforeData = cloneDataSnapshot(data);
+            const beforeMirror = habitAppLocalMirror ? cloneDataSnapshot(habitAppLocalMirror) : null;
+            const snapshot = createLocalSnapshot('清空全部习惯记录前', data, {
+                action: 'habit-reset-all-records'
+            });
+            if (!snapshot) {
+                alert('未能创建重置前快照，已取消清空。请先检查浏览器存储空间。');
+                return false;
+            }
+
+            const deletedAt = new Date().toISOString();
+            const historyCollections = [
+                'habitRecords',
+                'habitRewardRecords',
+                'habitFineRecords',
+                'habitLedger',
+                'habitMilestoneClaims',
+                'habitOverdueEvents',
+                'habitMoodNotes',
+                'habitTimeTasks'
+            ];
+            const legacySnapshot = habitService.buildHabitAppSnapshotPreview(beforeData);
+            const tombstoneMap = new Map((data.deletedItems || [])
+                .filter(item => item?.collection && item?.id && item?.deletedAt)
+                .map(item => [`${item.collection}:${item.id}`, item]));
+            [legacySnapshot, beforeMirror].filter(Boolean).forEach(source => {
+                historyCollections.forEach(collection => {
+                    (source[collection] || []).forEach(item => {
+                        if (!item?.id) return;
+                        const tombstone = {
+                            collection,
+                            id: item.id,
+                            deletedAt,
+                            parentId: item.habitId || item.parentId || '',
+                            reason: 'reset-all-habit-records'
+                        };
+                        tombstoneMap.set(`${collection}:${item.id}`, tombstone);
+                    });
+                });
+            });
+
+            data.checkins = [];
+            data.habitPointLedger = [];
+            data.habits = (data.habits || []).map(habit => ({
+                ...habit,
+                lastCheckAt: '',
+                updatedAt: deletedAt
+            }));
+            data.habitRewards = (data.habitRewards || []).map(reward => ({
+                ...reward,
+                redeemedCount: 0,
+                updatedAt: deletedAt
+            }));
+            data.deletedItems = Array.from(tombstoneMap.values());
+
+            const saved = saveData();
+            const mirrorBuilt = saved ? dualWriteHabitAppLocalMirror('reset-all-habit-records') : false;
+            if (!saved || !mirrorBuilt) {
+                data = beforeData;
+                saveDataFromSync();
+                if (beforeMirror) saveHabitAppLocalMirror(beforeMirror, { reason: 'reset-all-habit-records-rollback' });
+                else rebuildHabitAppLocalMirror('reset-all-habit-records-rollback');
+                renderHabitCurrentView();
+                alert('清空失败，已恢复原数据。请检查浏览器本地存储空间后重试。');
+                return false;
+            }
+
+            renderHabitCurrentView();
+            updateSyncStatus('习惯历史已在本地清空；如需同步到手机，请到数据诊断执行受保护上传。');
+            return true;
         }
 
         function openHabitPointAdjustModal() {

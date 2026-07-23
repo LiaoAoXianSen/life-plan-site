@@ -187,6 +187,21 @@
         function mapHabitDeletedItem(item, index) {
             const kind = getDeletedKind(item);
             const targetId = normalizeId(item?.itemId || item?.targetId || item?.entityId || item?.id);
+            const canonicalCollections = new Set([
+                'habits',
+                'habitGroups',
+                'habitRecords',
+                'habitRewards',
+                'habitRewardRecords',
+                'habitFineRecords',
+                'habitLedger',
+                'habitCurrencies',
+                'habitMilestones',
+                'habitMilestoneClaims',
+                'habitOverdueEvents',
+                'habitMoodNotes',
+                'habitTimeTasks'
+            ]);
             const mappings = {
                 habit: ['habits', 'habits'],
                 habits: ['habits', 'habits'],
@@ -198,6 +213,17 @@
             };
             const mapping = mappings[kind];
             const deletedAt = item?.deletedAt || item?.updatedAt || item?.createdAt;
+            if (!mapping && canonicalCollections.has(kind) && targetId && deletedAt && !item?.targetCollection && !item?.targetId) {
+                return compactObject({
+                    collection: kind,
+                    id: targetId,
+                    deletedAt,
+                    parentId: normalizeId(item?.habitId || item?.parentId),
+                    reason: item?.reason,
+                    name: item?.name,
+                    source: getSourceRef('deletedItems', item, index)
+                });
+            }
             if (!mapping || !targetId || !deletedAt) return null;
             const [collection, remoteCollection] = mapping;
             const parentId = normalizeId(item?.habitId || item?.parentId);

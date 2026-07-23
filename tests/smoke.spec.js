@@ -4483,3 +4483,147 @@ test('wheel backup restore can be cancelled before overwriting local wheel data'
     const snapshots = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
     expect(snapshots.some(snapshot => snapshot.reason === '大转盘恢复前自动快照')).toBe(false);
 });
+
+test('habit history reset is guarded, snapshotted, local-only, and emits canonical tombstones', async ({ page }) => {
+    const habitData = createEmptyData({
+        habits: [{
+            id: 'habit-reset',
+            name: '保留的习惯',
+            tag: '健康',
+            rule: 'daily',
+            reminderTimes: ['08:00'],
+            lastCheckAt: '2026-07-23T08:00:00.000Z',
+            milestoneRewards: [{ days: 7, enabled: true, rewardAmount: 5, currency: '金币' }],
+            createdAt: '2026-07-20T08:00:00.000Z',
+            updatedAt: '2026-07-23T08:00:00.000Z'
+        }],
+        checkins: [{
+            id: 'checkin-reset',
+            habitId: 'habit-reset',
+            date: '2026-07-23',
+            checkinAt: '2026-07-23T08:00:00.000Z',
+            createdAt: '2026-07-23T08:00:00.000Z'
+        }],
+        habitPointLedger: [
+            { id: 'ledger-checkin', habitId: 'habit-reset', sourceId: 'checkin-reset', type: 'checkin', amount: 10, currency: '金币', createdAt: '2026-07-23T08:00:00.000Z' },
+            { id: 'ledger-redeem', rewardId: 'reward-reset', type: 'redeem', amount: -4, currency: '金币', createdAt: '2026-07-23T09:00:00.000Z' },
+            { id: 'ledger-fine', habitId: 'habit-reset', type: 'miss', amount: -2, currency: '金币', createdAt: '2026-07-23T10:00:00.000Z' }
+        ],
+        habitRewards: [{
+            id: 'reward-reset',
+            name: '保留的心愿',
+            cost: 4,
+            currency: '金币',
+            stock: 3,
+            redeemedCount: 1,
+            createdAt: '2026-07-20T08:00:00.000Z',
+            updatedAt: '2026-07-23T09:00:00.000Z'
+        }],
+        habitCurrencies: [{ id: 'currency-reset', name: '金币' }]
+    });
+    const canonicalMirror = createHabitSnapshot({
+        habits: [{ id: 'life-plan/habits/habit-reset', title: '保留的习惯' }],
+        habitRecords: [{ id: 'mirror-record', habitId: 'life-plan/habits/habit-reset' }],
+        habitRewards: [{ id: 'life-plan/rewards/reward-reset', name: '保留的心愿' }],
+        habitRewardRecords: [{ id: 'mirror-reward-record', rewardId: 'life-plan/rewards/reward-reset' }],
+        habitFineRecords: [{ id: 'mirror-fine-record', habitId: 'life-plan/habits/habit-reset' }],
+        habitLedger: [{ id: 'mirror-ledger', amount: 1, currencyId: 'currency-coin' }],
+        habitCurrencies: [{ id: 'currency-coin', name: '金币' }],
+        habitMilestoneClaims: [{ id: 'mirror-claim', habitId: 'life-plan/habits/habit-reset' }],
+        habitOverdueEvents: [{ id: 'mirror-overdue', habitId: 'life-plan/habits/habit-reset' }],
+        habitMoodNotes: [{ id: 'mirror-mood', habitId: 'life-plan/habits/habit-reset' }],
+        habitTimeTasks: [{ id: 'mirror-time-task', habitId: 'life-plan/habits/habit-reset' }],
+        localMirror: true,
+        remoteUploadEnabled: false
+    });
+    let putCount = 0;
+    await page.route('https://reset.example.test/**', async route => {
+        if (route.request().method() === 'PUT') putCount += 1;
+        await route.fulfill({ status: 204, body: '' });
+    });
+    await page.addInitScript(({ data, mirror }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('habitAppData', JSON.stringify(mirror));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://reset.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/apps/habit-app/data.json', autoSync: false, remoteUploadEnabled: true }));
+    }, { data: habitData, mirror: canonicalMirror });
+
+    await page.goto('/');
+    await page.locator('[data-page-target="habits"]').click();
+    await page.locator('#habit-view-tabs button[data-habit-view="wallet"]').click();
+    const resetButton = page.getByRole('button', { name: '清空所有记录' });
+    await expect(resetButton).toBeVisible();
+    const before = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+
+    let firstDialogPromise = page.waitForEvent('dialog');
+    let resetPromise = page.evaluate(() => resetAllHabitRecords());
+    let dialog = await firstDialogPromise;
+    expect(dialog.message()).toContain('将保留');
+    await dialog.dismiss();
+    expect(await resetPromise).toBe(false);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(before);
+
+    firstDialogPromise = page.waitForEvent('dialog');
+    resetPromise = page.evaluate(() => resetAllHabitRecords());
+    dialog = await firstDialogPromise;
+    const secondDialogPromise = page.waitForEvent('dialog');
+    await dialog.accept();
+    dialog = await secondDialogPromise;
+    expect(dialog.message()).toContain('再次确认');
+    await dialog.dismiss();
+    expect(await resetPromise).toBe(false);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(before);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'))).toHaveLength(0);
+
+    firstDialogPromise = page.waitForEvent('dialog');
+    resetPromise = page.evaluate(() => resetAllHabitRecords());
+    dialog = await firstDialogPromise;
+    const confirmAgainPromise = page.waitForEvent('dialog');
+    await dialog.accept();
+    dialog = await confirmAgainPromise;
+    await dialog.accept();
+    expect(await resetPromise).toBe(true);
+
+    const result = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]')
+    }));
+    expect(result.data.habits).toHaveLength(1);
+    expect(result.data.habits[0]).toMatchObject({ name: '保留的习惯', reminderTimes: ['08:00'], lastCheckAt: '' });
+    expect(result.data.habits[0].milestoneRewards).toEqual(expect.arrayContaining([
+        expect.objectContaining({ days: 7, enabled: true, rewardAmount: 5, currency: '金币' })
+    ]));
+    expect(result.data.habitRewards).toHaveLength(1);
+    expect(result.data.habitRewards[0]).toMatchObject({ name: '保留的心愿', cost: 4, stock: 3, redeemedCount: 0 });
+    expect(result.data.habitCurrencies).toHaveLength(1);
+    expect(result.data.checkins).toHaveLength(0);
+    expect(result.data.habitPointLedger).toHaveLength(0);
+    expect(result.snapshots).toHaveLength(1);
+    expect(result.snapshots[0]).toMatchObject({ reason: '清空全部习惯记录前', action: 'habit-reset-all-records' });
+    expect(result.snapshots[0].data.checkins).toHaveLength(1);
+    expect(result.snapshots[0].data.habitPointLedger).toHaveLength(3);
+    expect(result.mirror.habits).toHaveLength(1);
+    expect(result.mirror.habitRewards).toHaveLength(1);
+    expect(result.mirror.habitRecords).toHaveLength(0);
+    expect(result.mirror.habitLedger).toHaveLength(0);
+    const tombstoneKeys = new Set(result.mirror.deletedItems.map(item => `${item.collection}:${item.id}`));
+    [
+        'habitRecords:mirror-record',
+        'habitRewardRecords:mirror-reward-record',
+        'habitFineRecords:mirror-fine-record',
+        'habitLedger:mirror-ledger',
+        'habitMilestoneClaims:mirror-claim',
+        'habitOverdueEvents:mirror-overdue',
+        'habitMoodNotes:mirror-mood',
+        'habitTimeTasks:mirror-time-task'
+    ].forEach(key => expect(tombstoneKeys.has(key), key).toBe(true));
+    await expect(page.locator('#habit-rewards-panel')).toContainText('累计获得 0 金币');
+    await expect(page.locator('#habit-rewards-panel')).toContainText('暂无积分流水');
+    expect(putCount).toBe(0);
+});
