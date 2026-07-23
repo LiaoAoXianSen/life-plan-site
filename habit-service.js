@@ -363,8 +363,8 @@
                     legacyTargets: ['checkins', 'habitPointLedger', 'habits.updatedAt'],
                     snapshotTargets: ['habitRecords', 'habitLedger', 'habits'],
                     priority: 1,
-                    dualWrite: 'pending',
-                    note: '含每日 1 次切换与多次 +1；会触发奖励、里程碑和扣分冲销。'
+                    dualWrite: 'enabled',
+                    note: '含每日 1 次切换与多次 +1；会触发奖励、里程碑和扣分冲销。本地镜像全量重建，不上传云端。'
                 },
                 {
                     id: 'decrease-checkin',
@@ -373,8 +373,8 @@
                     legacyTargets: ['checkins', 'habitPointLedger', 'habits.updatedAt'],
                     snapshotTargets: ['habitRecords', 'habitLedger', 'habits'],
                     priority: 1,
-                    dualWrite: 'pending',
-                    note: '撤销最近一次打卡并反冲相关奖励。'
+                    dualWrite: 'enabled',
+                    note: '撤销最近一次打卡并反冲相关奖励。本地镜像全量重建，不上传云端。'
                 },
                 {
                     id: 'append-checkin',
@@ -383,8 +383,8 @@
                     legacyTargets: ['checkins', 'habitPointLedger', 'habits.updatedAt'],
                     snapshotTargets: ['habitRecords', 'habitLedger', 'habits'],
                     priority: 1,
-                    dualWrite: 'pending',
-                    note: '今日打卡、备注打卡与补卡共用入口。'
+                    dualWrite: 'enabled',
+                    note: '今日打卡、备注打卡与补卡共用入口。本地镜像全量重建，不上传云端。'
                 },
                 {
                     id: 'edit-checkin-note',
@@ -489,7 +489,7 @@
                 });
             }
 
-            if (pendingPaths.length === writePaths.length) {
+            if (enabledPaths.length === 0) {
                 blockers.push({
                     id: 'no-dual-write-hooks',
                     label: '写路径尚未接入本地双写',
@@ -497,16 +497,27 @@
                     details: pendingPaths.slice(0, 6).map(item => item.label),
                     hint: '按优先级逐个接入 toggleCheckin / decreaseCheckin / appendHabitCheckin 等写路径，不直接上传云端。'
                 });
+            } else if (pendingPaths.length) {
+                blockers.push({
+                    id: 'partial-dual-write-hooks',
+                    label: '仍有写路径未接入本地双写',
+                    count: pendingPaths.length,
+                    details: pendingPaths.slice(0, 6).map(item => item.label),
+                    hint: '打卡相关路径已本地双写；继续接入钱包、习惯编辑等路径，仍不上传云端。'
+                });
             }
 
             let status = 'ready';
-            let statusLabel = '可开始本地双写';
+            let statusLabel = '本地双写已全部接入';
             if (dangerIssues.length) {
                 status = 'blocked';
                 statusLabel = '被高风险数据阻塞';
-            } else if (pendingPaths.length) {
+            } else if (enabledPaths.length === 0) {
                 status = 'prepared';
                 statusLabel = '前置检查通过，等待接入写路径';
+            } else if (pendingPaths.length) {
+                status = 'partial';
+                statusLabel = `本地双写部分接入 ${enabledPaths.length}/${writePaths.length}`;
             }
 
             return {
@@ -527,7 +538,14 @@
                 },
                 blockers,
                 writePaths,
-                nextActions: [
+                nextActions: enabledPaths.length
+                ? [
+                    '打卡相关写路径已会重建 localStorage.habitAppData，仍不上传 /apps/habit-app/data.json。',
+                    '继续接入 saveHabit、redeemHabitReward、saveHabitPointAdjust 等剩余写路径。',
+                    '每个新写路径接入后校验 habitRecords / habitLedger 数量与余额一致性。',
+                    '全部本地写路径稳定后，再引入独立 habitSyncConfig。'
+                ]
+                : [
                     '保持只读预览与诊断，不上传 /apps/habit-app/data.json。',
                     '优先接入 toggleCheckin、decreaseCheckin、appendHabitCheckin 的本地双写。',
                     '每个写路径接入后校验 habitRecords / habitLedger 数量与余额一致性。',

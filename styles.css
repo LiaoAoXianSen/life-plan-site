@@ -1529,6 +1529,11 @@
         background: #e8f6ef;
         border: 1px solid #b7dfc8;
     }
+    .habit-dualwrite-status.is-partial {
+        color: #8a5a00;
+        background: #fff7e8;
+        border: 1px solid #f0d39a;
+    }
     .habit-dualwrite-status.is-ready {
         color: #145c9e;
         background: #eaf4ff;

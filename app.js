@@ -542,6 +542,16 @@
             return built;
         }
 
+        function dualWriteHabitAppLocalMirror(reason = 'habit-write') {
+            const built = rebuildHabitAppLocalMirror(reason);
+            if (!built) {
+                habitAppLocalMirrorMeta.dirty = true;
+                console.warn('habit-app 本地双写失败', reason);
+                return false;
+            }
+            return true;
+        }
+
         function renderLocalSaveWarning() {
             const container = document.getElementById('local-save-warning');
             if (!container) return;
@@ -6923,7 +6933,9 @@
             const issues = [...(diagnostics.issues || [])].sort((a, b) => (issueLevelRank[a.severity] ?? 3) - (issueLevelRank[b.severity] ?? 3));
             const readinessStatusClass = readiness.status === 'blocked'
                 ? 'is-blocked'
-                : (readiness.status === 'ready' ? 'is-ready' : 'is-prepared');
+                : (readiness.status === 'ready'
+                    ? 'is-ready'
+                    : (readiness.status === 'partial' ? 'is-partial' : 'is-prepared'));
             const mirrorStatusLabel = !mirrorSummary.exists
                 ? '尚未生成本地镜像'
                 : (mirrorSummary.matchesSource ? '本地镜像已对齐旧数据' : '本地镜像落后于旧数据');
@@ -7821,6 +7833,7 @@
             reverseHabitPenaltiesForDate(habit, date);
             touchHabit(habit, now);
             saveData();
+            dualWriteHabitAppLocalMirror('append-checkin');
             return true;
         }
 
@@ -7951,6 +7964,7 @@
 
             touchHabit(habit, now);
             saveData();
+            dualWriteHabitAppLocalMirror('toggle-checkin');
             renderHabitRewards();
             if (currentHabitView === 'analysis') renderHabitMatrix();
             renderAllRecords();
@@ -7970,6 +7984,7 @@
             touchHabit(habit);
             
             saveData();
+            dualWriteHabitAppLocalMirror('decrease-checkin');
             renderHabitRewards();
             if (currentHabitView === 'analysis') renderHabitMatrix();
             renderAllRecords();

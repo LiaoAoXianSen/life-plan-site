@@ -2311,8 +2311,9 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     });
     expect(readiness.remoteUploadEnabled).toBe(false);
     expect(readiness.summary.writePathPending).toBeGreaterThan(0);
-    expect(readiness.writePaths.some(item => item.fn === 'toggleCheckin')).toBe(true);
-    expect(readiness.status === 'prepared' || readiness.status === 'blocked').toBe(true);
+    expect(readiness.summary.writePathEnabled).toBeGreaterThan(0);
+    expect(readiness.writePaths.some(item => item.fn === 'toggleCheckin' && item.dualWrite === 'enabled')).toBe(true);
+    expect(['prepared', 'partial', 'blocked', 'ready']).toContain(readiness.status);
 
     page.once('dialog', dialog => dialog.accept());
     await panel.getByRole('button', { name: '从当前旧数据重建本地镜像' }).click();
@@ -2328,6 +2329,52 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
 
     const after = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     expect(after).toBe(before);
+});
+
+test('habit checkin dual-writes local habitAppData mirror without touching cloud path', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+        localStorage.removeItem('lifePlanData');
+        localStorage.removeItem('habitAppData');
+    });
+    await page.reload();
+
+    await page.locator('[data-page-target="habits"]').click();
+    await page.getByRole('button', { name: '+ 新建习惯' }).click();
+    await page.locator('#habit-name').fill('本地双写习惯');
+    await page.locator('#habit-note-mode').selectOption('never');
+    await page.locator('#habit-points-panel summary').click();
+    await page.locator('#habit-reward-points').fill('2');
+    await page.locator('#habit-reward-currency').fill('金币');
+    await page.getByRole('button', { name: '保存' }).click();
+
+    await page.locator('[data-page-target="dashboard"]').click();
+    await page.locator('.habit-quick-card', { hasText: '本地双写习惯' }).getByRole('button', { name: '打卡' }).click();
+
+    const afterCheckin = await page.evaluate(() => ({
+        life: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData') || 'null')
+    }));
+    expect(afterCheckin.life.checkins).toHaveLength(1);
+    expect(afterCheckin.mirror).toBeTruthy();
+    expect(afterCheckin.mirror.localMirror).toBe(true);
+    expect(afterCheckin.mirror.remoteUploadEnabled).toBe(false);
+    expect(afterCheckin.mirror.habitRecords).toHaveLength(1);
+    expect(afterCheckin.mirror.habitLedger.some(item => item.type === 'checkin' && item.amount === 2)).toBe(true);
+    expect(afterCheckin.mirror.mirror?.reason).toBe('append-checkin');
+
+    await page.locator('[data-page-target="habits"]').click();
+    await page.locator('#habit-view-tabs button[data-habit-view="today"]').click();
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('.habit-quick-card', { hasText: '本地双写习惯' }).getByRole('button', { name: '撤销' }).click();
+
+    const afterUndo = await page.evaluate(() => ({
+        life: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData') || 'null')
+    }));
+    expect(afterUndo.life.checkins).toHaveLength(0);
+    expect(afterUndo.mirror.habitRecords).toHaveLength(0);
+    expect(afterUndo.mirror.mirror?.reason === 'toggle-checkin' || afterUndo.mirror.mirror?.reason === 'decrease-checkin').toBe(true);
 });
 
 test('habit checkins only award configured currencies', async ({ page }) => {
