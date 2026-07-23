@@ -52,6 +52,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 39. Status: complete - Add regression coverage for mixed habit and non-habit legacy tombstones and rerun targeted/full checks.
 40. Status: complete - Package the corrected runtime, commit, push, and append memory.
 
+41. Status: complete - Add protected cloud-sync flow for the existing habit file with baseline checks and conditional writes.
+42. Status: complete - Validate the new habit cloud-sync flow, package a clean runtime zip, and commit/push the result.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

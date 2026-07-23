@@ -91,3 +91,6 @@
 - User wants future work to always create a lean runtime zip after fixes and not preserve lots of old packages.
 - User wants habit defaults changed: new habits should not grant coins by default.
 - User wants periodic cyclic habit rewards, e.g. 7, 15, 21, 30 days, quarter, half-year, one year, repeating; milestone rewards can use different currencies; reward items can require a specific currency.
+
+- The next safe habit increment after first upload is a guarded PC -> cloud sync path when the cloud file already exists. It should rebuild the local mirror, re-GET the cloud file, require a baseline match against the last known remote hash, and use conditional If-Match writes rather than opening automatic upload.
+- Browser CORS must expose the remote ETag header for the habit sync path; otherwise the client can only fall back to the saved lastRemoteEtag, which is safe but less fresh.

@@ -1,4 +1,23 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+let appSyncKitForHash = null;
+
+function getAppSyncKitForHash() {
+    if (appSyncKitForHash) return appSyncKitForHash;
+    const code = fs.readFileSync(path.join(__dirname, '..', 'vendor', 'app-sync-kit.browser.global.js'), 'utf8');
+    const context = { console };
+    vm.createContext(context);
+    vm.runInContext(code, context);
+    appSyncKitForHash = context.AppSyncKit;
+    return appSyncKitForHash;
+}
+
+function hashHabitSnapshot(value) {
+    return getAppSyncKitForHash().habitAppAdapter.getHash(value);
+}
 
 function createEmptyData(overrides = {}) {
     return {
@@ -2895,6 +2914,297 @@ test('habit protected first upload creates canonical file once and verifies it b
     expect(stored.config.autoSync).toBe(false);
     expect(stored.mirror.remoteUploadEnabled).toBe(false);
     expect(stored.state.lastRemoteHash).toBeTruthy();
+});
+
+test('habit protected cloud sync uploads local changes when cloud baseline is unchanged', async ({ page }) => {
+    const remoteSnapshot = createHabitSnapshot({
+        habits: [
+            {
+                id: 'life-plan/habits/habit-sync',
+                name: '同步习惯',
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'life-plan/currencies/%E9%87%91%E5%B8%81', name: '金币' }]
+    });
+    const localData = createEmptyData({
+        habits: [
+            {
+                id: 'habit-sync',
+                name: '同步习惯',
+                tag: '测试',
+                rule: 'daily',
+                timesPerDay: 1,
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ],
+        checkins: [
+            {
+                id: 'checkin-sync',
+                habitId: 'habit-sync',
+                date: '2026-07-23',
+                checkinAt: '2026-07-23T09:00:00.000Z',
+                createdAt: '2026-07-23T09:00:00.000Z',
+                updatedAt: '2026-07-23T09:00:00.000Z'
+            }
+        ],
+        habitPointLedger: [
+            {
+                id: 'ledger-sync',
+                habitId: 'habit-sync',
+                sourceId: 'checkin-sync',
+                type: 'checkin',
+                amount: 3,
+                currency: '金币',
+                createdAt: '2026-07-23T09:00:00.000Z',
+                updatedAt: '2026-07-23T09:00:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'life-plan/currencies/%E9%87%91%E5%B8%81', name: '金币' }]
+    });
+    const remoteHash = hashHabitSnapshot(remoteSnapshot);
+    const requestSequence = [];
+    const putRequests = [];
+    let getCount = 0;
+    let uploadedPayload = null;
+
+    await page.route('https://habit-cloud-sync.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requestSequence.push(`${request.method()} ${url.pathname}`);
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            getCount += 1;
+            if (getCount <= 2) {
+                await route.fulfill({
+                    contentType: 'application/json',
+                    headers: { ETag: '"habit-sync-v1"', 'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag' },
+                    body: JSON.stringify(remoteSnapshot)
+                });
+                return;
+            }
+            await route.fulfill({
+                contentType: 'application/json',
+                headers: { ETag: '"habit-sync-v2"', 'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag' },
+                body: JSON.stringify(uploadedPayload)
+            });
+            return;
+        }
+        if (request.method() === 'MKCOL' && url.pathname === '/apps/habit-app') {
+            await route.fulfill({ status: 201, body: '' });
+            return;
+        }
+        if (request.method() === 'PUT' && url.pathname === '/apps/habit-app/data.json') {
+            uploadedPayload = JSON.parse(request.postData() || 'null');
+            putRequests.push({
+                headers: request.headers(),
+                payload: uploadedPayload
+            });
+            await route.fulfill({ status: 200, headers: { ETag: '"habit-sync-v2"', 'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag' }, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(({ localData, remoteHash }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://habit-cloud-sync.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({
+            remotePath: '/apps/habit-app/data.json',
+            autoSync: false,
+            remoteUploadEnabled: false
+        }));
+        localStorage.setItem('habitAppSyncState', JSON.stringify({
+            dirty: false,
+            lastLocalHash: '',
+            lastRemoteHash: remoteHash,
+            lastRemoteEtag: '"habit-sync-v1"',
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: '',
+            lastRebuildAt: '',
+            lastRebuildReason: ''
+        }));
+    }, { localData, remoteHash });
+
+    await page.goto('/');
+    await page.locator('[data-page-target="habits"]').click();
+    await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
+    const panel = page.locator('#habit-diagnostics-panel');
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel.locator('.habit-remote-preview')).toContainText('本地与云端存在差异，已生成合并预览');
+    const syncButton = panel.getByRole('button', { name: '受保护同步到云端', exact: true });
+    await expect(syncButton).toBeEnabled();
+
+    page.once('dialog', dialog => dialog.accept());
+    await syncButton.click();
+
+    await expect(panel.locator('.habit-upload-guard')).toContainText('同步并核验成功');
+    await expect(panel.locator('.habit-upload-guard')).toContainText('自动同步仍保持关闭');
+    await expect.poll(() => getCount).toBe(3);
+
+    expect(putRequests).toHaveLength(1);
+    expect(putRequests[0].headers['if-match']).toBe('"habit-sync-v1"');
+    expect(putRequests[0].payload).toMatchObject({
+        habits: [expect.objectContaining({
+            id: 'life-plan/habits/habit-sync',
+            title: '同步习惯'
+        })],
+        habitRecords: [expect.objectContaining({
+            id: 'life-plan/checkins/checkin-sync',
+            habitId: 'life-plan/habits/habit-sync',
+            recordDate: '2026-07-23'
+        })],
+        habitLedger: [expect.objectContaining({
+            id: 'life-plan/ledger/ledger-sync',
+            sourceId: 'life-plan/checkins/checkin-sync',
+            amount: 3
+        })]
+    });
+    expect(requestSequence).toEqual([
+        'GET /apps/habit-app/data.json',
+        'GET /apps/habit-app/data.json',
+        'MKCOL /apps/habit-app',
+        'PUT /apps/habit-app/data.json',
+        'GET /apps/habit-app/data.json'
+    ]);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('habitAppSyncState') || 'null'));
+    expect(stored.lastRemoteHash).toBeTruthy();
+    expect(stored.lastRemoteEtag).toBe('"habit-sync-v2"');
+});
+
+test('habit protected cloud sync blocks when the cloud changed after the last known baseline', async ({ page }) => {
+    const localData = createEmptyData({
+        habits: [
+            {
+                id: 'habit-cloud-race',
+                name: '云端竞态习惯',
+                rule: 'daily',
+                timesPerDay: 1,
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ],
+        checkins: [
+            {
+                id: 'checkin-cloud-race',
+                habitId: 'habit-cloud-race',
+                date: '2026-07-23',
+                checkinAt: '2026-07-23T09:00:00.000Z',
+                createdAt: '2026-07-23T09:00:00.000Z',
+                updatedAt: '2026-07-23T09:00:00.000Z'
+            }
+        ],
+        habitPointLedger: [
+            {
+                id: 'ledger-cloud-race',
+                habitId: 'habit-cloud-race',
+                sourceId: 'checkin-cloud-race',
+                type: 'checkin',
+                amount: 2,
+                currency: '金币',
+                createdAt: '2026-07-23T09:00:00.000Z',
+                updatedAt: '2026-07-23T09:00:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'life-plan/currencies/%E9%87%91%E5%B8%81', name: '金币' }]
+    });
+    const oldRemoteSnapshot = createHabitSnapshot({
+        habits: [
+            {
+                id: 'life-plan/habits/habit-cloud-race',
+                name: '云端竞态习惯',
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'life-plan/currencies/%E9%87%91%E5%B8%81', name: '金币' }]
+    });
+    const liveRemoteSnapshot = createHabitSnapshot({
+        habits: [
+            {
+                id: 'life-plan/habits/habit-cloud-race',
+                name: '云端竞态习惯',
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            },
+            {
+                id: 'life-plan/habits/habit-cloud-only',
+                name: '手机刚补的一条',
+                updatedAt: '2026-07-23T10:00:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'life-plan/currencies/%E9%87%91%E5%B8%81', name: '金币' }]
+    });
+    const requestSequence = [];
+    let putCount = 0;
+    let getCount = 0;
+
+    await page.route('https://habit-cloud-race.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requestSequence.push(`${request.method()} ${url.pathname}`);
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            getCount += 1;
+            await route.fulfill({
+                contentType: 'application/json',
+                headers: { ETag: '"habit-cloud-v2"' },
+                body: JSON.stringify(getCount === 1 ? liveRemoteSnapshot : liveRemoteSnapshot)
+            });
+            return;
+        }
+        if (request.method() === 'PUT' && url.pathname === '/apps/habit-app/data.json') {
+            putCount += 1;
+            await route.fulfill({ status: 200, headers: { ETag: '"habit-cloud-v2"' }, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(({ localData, remoteHash }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://habit-cloud-race.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({
+            remotePath: '/apps/habit-app/data.json',
+            autoSync: false,
+            remoteUploadEnabled: false
+        }));
+        localStorage.setItem('habitAppSyncState', JSON.stringify({
+            dirty: false,
+            lastLocalHash: '',
+            lastRemoteHash: remoteHash,
+            lastRemoteEtag: '"habit-cloud-v1"',
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: '',
+            lastRebuildAt: '',
+            lastRebuildReason: ''
+        }));
+    }, { localData, remoteHash: hashHabitSnapshot(oldRemoteSnapshot) });
+
+    await page.goto('/');
+    await page.locator('[data-page-target="habits"]').click();
+    await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
+    const panel = page.locator('#habit-diagnostics-panel');
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel.locator('.habit-remote-preview')).toContainText('本地与云端存在差异，已生成合并预览');
+    const syncButton = panel.getByRole('button', { name: '受保护同步到云端', exact: true });
+    await expect(syncButton).toBeEnabled();
+    await syncButton.click();
+    await expect(panel.locator('.habit-upload-guard')).toContainText('云端自上次 habit 同步后已变化');
+
+    expect(getCount).toBe(2);
+    expect(putCount).toBe(0);
+    expect(requestSequence).toEqual([
+        'GET /apps/habit-app/data.json',
+        'GET /apps/habit-app/data.json'
+    ]);
 });
 
 test('habit protected first upload stops when final GET finds an existing file', async ({ page }) => {

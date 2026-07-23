@@ -151,3 +151,9 @@
 - Implemented habit module files, multi-currency wallet UI, milestone config fields, unified sync endpoint UI, and runtime package whitelist script. Validation started.
 
 - Targeted Playwright verification first failed because temp script ran outside project module resolution and could not find @playwright/test; retrying from project context.
+
+- Added the guarded PC -> cloud habit sync flow for the already-created remote file: the diagnostics page now distinguishes first creation from later cloud sync, and later sync uses a last-known-baseline check plus If-Match rather than opening automatic upload.
+- Added Playwright coverage for unchanged-baseline cloud sync and cloud-race blocking, including the ETag exposure path needed for cross-origin verification.
+- Re-ran targeted habit smoke coverage and kept the first-upload and read-only preview regressions green.
+- Full scripts/check.ps1 passed all 65 Playwright smoke tests after adding the protected PC -> cloud habit sync path.
+- Generated a fresh clean runtime package at D:\project\life-plan-site\life-plan-site-runtime-20260723-121840.zip; the cleaner removed life-plan-site-runtime-20260723-102647.zip.
