@@ -3313,6 +3313,7 @@ test('habit cloud merge can be applied to PC legacy fields without uploading', a
     await applyButton.click();
     await expect(panel.locator('.habit-upload-guard')).toContainText('已应用到 PC');
     await expect(panel.locator('.habit-upload-guard')).toContainText('云端未写入');
+    await expect(panel.locator('.habit-upload-guard')).toContainText('下一步点“受保护同步到云端”');
 
     expect(putCount).toBe(0);
     expect(requestSequence).toEqual([

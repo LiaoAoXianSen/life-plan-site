@@ -163,3 +163,4 @@
 - Added smoke coverage proving a cloud/mobile habit/checkin/ledger can be applied to PC with zero PUT requests, and proving the apply action stops if the cloud file changes after preview.
 - Targeted cloud-to-PC apply tests passed, and the broader habit diagnostics/protected sync regression group passed 12/12.
 - An overlapping full `scripts/check.ps1` run still used the earlier too-strict post-apply hash gate and failed 1/67; after removing that gate, the targeted cloud-to-PC apply tests passed again. A fresh full check is required before packaging.
+- Added post-apply diagnostics guidance so the UI now tells the user whether the next step after applying cloud changes to PC is a protected cloud sync or no further action; added smoke coverage for that hint.

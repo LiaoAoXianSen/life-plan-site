@@ -8343,6 +8343,15 @@
             const previewMissing = habitRemotePreviewState.status === 'missing';
             if (!previewMissing && state.status === 'idle') return '';
             const uploadReadiness = getHabitProtectedUploadReadiness();
+            const nextStepHint = state.status === 'applied'
+                ? (habitRemotePreviewState.hashesMatch
+                    ? '云端与 PC 已一致，不需要再上传。'
+                    : '如果要把本次 PC 结果回到云端，下一步点“受保护同步到云端”。')
+                : (state.status === 'synced'
+                    ? '同步已完成，可继续观察最新云端状态。'
+                    : (previewMissing
+                        ? '首次创建完成后，后续同一文件可直接走受保护同步。'
+                        : '先检查云端，再决定应用到 PC 还是受保护同步到云端。'));
             const statusLabels = {
                 idle: '等待授权',
                 armed: '本次已授权',
@@ -8404,6 +8413,7 @@
                         </div>
                     ` : ''}
                     ${state.message ? `<div class="habit-upload-state-message">${escapeHtml(state.message)}</div>` : ''}
+                    <div class="habit-upload-next-step">${escapeHtml(nextStepHint)}</div>
                     <div class="habit-upload-caveat">${firstCreateContext
                         ? '上传动作会重建本地镜像、再次 GET、单次发送 <code>If-None-Match: *</code>，并在 PUT 后回读 hash。现有 Cloudflare KV 条件检查并非严格原子锁，请勿让两台设备同时执行首次创建。'
                         : (state.message && state.message.includes('应用云端合并结果')
