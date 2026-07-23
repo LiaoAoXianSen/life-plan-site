@@ -95,6 +95,7 @@ npm run dev
 | fitness | `D:\project\fitness-app`（建议） | `/apps/fitness-app/data.json` | `fitnessPlans` / `fitnessWorkouts` / `bodyMetrics` / `exerciseLibrary` | 未建；本站已有 `fitness-*.js/css` |
 | habit | `D:\project\yuanqidaka`（已有 Android App）；如需 Web/Capacitor 独立壳再另建 `D:\project\habit-app` | `/apps/habit-app/data.json` | `habits` / records / ledger / rewards / currencies / milestones / overdue | App 已有；本站旧习惯页待重做为 PC 习惯中心；协议见 `app-sync-kit/docs/habit-app-schema.md` |
 | life-plan-core | 本仓瘦身或新仓 | `/life-plan.json` | records / todos / goals / materials / AI 等 | 仍为本站主体 |
+| todo | `D:\project\yuanqidaka`（手机待办页）+ 本站 PC 待办 | `/apps/todo-app/data.json` | `todos` / `deletedItems(collection=todos)`；`sourceRecordId` 透传 | **已有**：PC 受保护同步；手机手动合并/条件上传 |
 
 推荐落地顺序：转盘收尾（文档/内嵌策略）→ 习惯协议/PC 习惯中心 → yuanqidaka 同步迁移 → fitness-app → core 瘦身。
 
