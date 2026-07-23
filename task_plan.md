@@ -3,6 +3,9 @@
 ## Goal
 Add configurable AI support to `D:\project\life-plan-site` after saving the current version, using URL + key + model settings and a small first set of AI-assisted planning actions.
 
+## Current Goal (2026-07-23)
+Continue the habit migration by turning the diagnostic sync skeleton into a strictly read-only remote pull and merge preview for `/apps/habit-app/data.json`, without changing `lifePlanData`, `localStorage.habitAppData`, or issuing PUT requests.
+
 ## Phases
 
 1. Status: complete - Save the current workspace version and create a working branch without reverting existing user changes.
@@ -32,6 +35,11 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 25. Status: complete - Validate the data safety/sync reliability batch and package runtime files.
 26. Status: complete - Commit and push the data safety/sync reliability batch to `master`.
 27. Status: complete - Remove unused sync credentials, harden import/restore confirmations, validate, package, and commit the follow-up data safety batch.
+28. Status: complete - Inspect the current habit diagnostics, sync-service helpers, UI conventions, and existing smoke coverage.
+29. Status: complete - Implement read-only remote habit pull and local/remote/merged preview state with explicit risk reporting.
+30. Status: complete - Render the preview in the diagnostics UI while preserving existing product styles and disabled upload safeguards.
+31. Status: complete - Add targeted smoke coverage proving GET-only behavior and zero local data mutation.
+32. Status: complete - Run syntax/targeted/full validation, package a clean runtime zip, and append conversation memory.
 
 ## Decisions
 
@@ -48,6 +56,7 @@ Add configurable AI support to `D:\project\life-plan-site` after saving the curr
 - Data safety work should clearly distinguish completed reliability fixes from larger storage roadmap items like IndexedDB migration, data-volume dashboards, and ETag conflict prevention.
 - Sync settings should only expose fields that are actually used by the Cloudflare Worker sync path; unused WebDAV username/password fields should be removed and cleaned from old local config.
 - Wheel JSON restore remains an explicit overwrite action for now, but it must confirm the overwrite, create a restore-before snapshot, and leave current data untouched when canceled or when saving fails.
+- Habit remote preview remains strictly read-only: it may GET `/apps/habit-app/data.json`, but must not mutate legacy habit fields, `localStorage.habitAppData`, or remote data; `autoSync` and `remoteUploadEnabled` remain `false`.
 
 ## Errors Encountered
 

@@ -131,6 +131,22 @@
         let localSaveWarning = '';
         const CRITICAL_FAILURE_LOG_KEY = 'lifePlanCriticalFailures';
         const HABIT_APP_LOCAL_MIRROR_KEY = 'habitAppData';
+        const HABIT_REMOTE_PREVIEW_COLLECTIONS = [
+            'habits',
+            'habitGroups',
+            'habitRecords',
+            'habitRewards',
+            'habitRewardRecords',
+            'habitFineRecords',
+            'habitLedger',
+            'habitCurrencies',
+            'habitMilestones',
+            'habitMilestoneClaims',
+            'habitOverdueEvents',
+            'habitMoodNotes',
+            'habitTimeTasks',
+            'deletedItems'
+        ];
         const MAX_CRITICAL_FAILURES = 5;
         let habitAppLocalMirror = null;
         let habitAppLocalMirrorMeta = {
@@ -139,6 +155,18 @@
             lastRebuildReason: '',
             lastError: ''
         };
+        let habitRemotePreviewState = {
+            status: 'idle',
+            mode: 'pull',
+            requestedAt: '',
+            remotePath: '/apps/habit-app/data.json',
+            error: '',
+            local: null,
+            remote: null,
+            merged: null,
+            risks: []
+        };
+        let isHabitRemotePreviewRunning = false;
         const syncService = window.LifePlanSyncService.create({
             appSyncKit: () => window.AppSyncKit,
             fetchImpl: (...args) => fetch(...args),
@@ -1373,6 +1401,117 @@
             persistLocalValue('habitAppSyncState', JSON.stringify(habitSyncState), 'habit-app 同步状态');
         }
 
+        function getHabitRemotePreviewBalances(snapshot = {}) {
+            const balances = new Map();
+            (snapshot.habitLedger || []).forEach(item => {
+                const amount = Number(item?.amount);
+                if (!Number.isFinite(amount)) return;
+                const currency = String(item?.currency || item?.currencyId || HABIT_DEFAULT_CURRENCY).trim() || HABIT_DEFAULT_CURRENCY;
+                balances.set(currency, (balances.get(currency) || 0) + amount);
+            });
+            return Array.from(balances.entries())
+                .sort(([a], [b]) => a.localeCompare(b, 'zh-Hans-CN'))
+                .map(([currency, amount]) => ({ currency, amount }));
+        }
+
+        function formatHabitRemotePreviewBalances(balances = []) {
+            return balances.length
+                ? balances.map(item => `${item.amount} ${item.currency}`).join(' · ')
+                : `0 ${HABIT_DEFAULT_CURRENCY}`;
+        }
+
+        function getHabitRemotePreviewModel(source = {}, hash = '') {
+            const snapshot = syncService.getHabitSnapshot(source);
+            const balances = getHabitRemotePreviewBalances(snapshot);
+            const resolvedHash = hash || syncService.getHabitDataHash(snapshot);
+            return {
+                snapshot,
+                hash: resolvedHash,
+                hashShort: resolvedHash ? resolvedHash.slice(0, 12) : '',
+                counts: {
+                    habits: snapshot.habits.length,
+                    records: snapshot.habitRecords.length,
+                    ledger: snapshot.habitLedger.length,
+                    tombstones: snapshot.deletedItems.length
+                },
+                balances,
+                balanceText: formatHabitRemotePreviewBalances(balances)
+            };
+        }
+
+        function getHabitRemoteSchemaRisks(raw = {}) {
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+                return [{
+                    severity: 'danger',
+                    title: '云端 schema 不是对象',
+                    detail: '远端文件必须是 habit-app JSON 对象；当前响应无法安全参与合并预览。'
+                }];
+            }
+            const risks = [];
+            const missing = HABIT_REMOTE_PREVIEW_COLLECTIONS.filter(key => !(key in raw));
+            const invalid = HABIT_REMOTE_PREVIEW_COLLECTIONS.filter(key => key in raw && !Array.isArray(raw[key]));
+            if (!Number.isFinite(Number(raw.schemaVersion))) {
+                risks.push({
+                    severity: 'warning',
+                    title: '云端 schemaVersion 缺失或无效',
+                    detail: '预检会按 schemaVersion 1 规范化，但不会保存规范化结果。'
+                });
+            }
+            if (missing.length) {
+                const criticalMissing = missing.some(key => ['habits', 'habitRecords', 'habitLedger'].includes(key));
+                risks.push({
+                    severity: criticalMissing ? 'danger' : 'warning',
+                    title: '云端 schema 缺字段',
+                    detail: `缺少数组字段：${missing.join('、')}。缺失字段仅在预览中按空数组处理。`
+                });
+            }
+            if (invalid.length) {
+                risks.push({
+                    severity: 'danger',
+                    title: '云端 schema 字段类型异常',
+                    detail: `以下字段不是数组：${invalid.join('、')}。异常字段仅在预览中按空数组处理。`
+                });
+            }
+            return risks;
+        }
+
+        function getHabitRemoteMergeRisks(local, remote, merged, schemaRisks = []) {
+            const risks = [...schemaRisks];
+            const countLabels = {
+                habits: 'habits',
+                records: 'habitRecords',
+                ledger: 'habitLedger'
+            };
+            Object.entries(countLabels).forEach(([key, label]) => {
+                const expectedFloor = Math.max(local.counts[key], remote.counts[key]);
+                if (merged.counts[key] < expectedFloor) {
+                    risks.push({
+                        severity: 'warning',
+                        title: `合并后 ${label} 数量减少`,
+                        detail: `本地 ${local.counts[key]} · 云端 ${remote.counts[key]} · 合并 ${merged.counts[key]}。请检查 tombstone 或实体时间戳。`
+                    });
+                }
+            });
+            if (local.counts.tombstones !== remote.counts.tombstones || merged.counts.tombstones !== local.counts.tombstones) {
+                risks.push({
+                    severity: 'info',
+                    title: 'tombstone 数量发生变化',
+                    detail: `本地 ${local.counts.tombstones} · 云端 ${remote.counts.tombstones} · 合并 ${merged.counts.tombstones}。删除标记会保留在预览结果中。`
+                });
+            }
+            const localBalances = JSON.stringify(local.balances);
+            const remoteBalances = JSON.stringify(remote.balances);
+            const mergedBalances = JSON.stringify(merged.balances);
+            if (mergedBalances !== localBalances || mergedBalances !== remoteBalances) {
+                risks.push({
+                    severity: 'warning',
+                    title: '合并后钱包余额变化',
+                    detail: `本地 ${local.balanceText}；云端 ${remote.balanceText}；合并 ${merged.balanceText}。上传前需确认流水没有重复。`
+                });
+            }
+            return risks;
+        }
+
         function getHabitSyncScaffoldSummary() {
             const mirrorHash = habitAppLocalMirror ? getHabitAppDataHash(habitAppLocalMirror) : '';
             return {
@@ -1396,35 +1535,108 @@
                 lastRebuildReason: habitSyncState.lastRebuildReason || '',
                 mergeReady: typeof syncService.mergeHabitSnapshots === 'function',
                 hashReady: typeof syncService.getHabitDataHash === 'function',
-                phase: 'phase-5-manual-sync-skeleton',
+                phase: 'phase-5-readonly-remote-preview',
                 statusLabel: habitSyncConfig.remoteUploadEnabled
                     ? '远端上传可手动触发'
-                    : '远端上传关闭，仅本地脚手架'
+                    : '远端上传关闭，仅只读预检'
             };
         }
 
-        async function runHabitManualSyncSkeleton(direction = 'pull') {
-            const mode = ['pull', 'push', 'both'].includes(direction) ? direction : 'pull';
+        async function previewHabitRemotePull(mode = 'pull') {
+            const previewMode = mode === 'merge' || mode === 'both' ? 'merge' : 'pull';
+            if (isHabitRemotePreviewRunning) return false;
             ensureHabitAppLocalMirrorForDiagnostics();
             const scaffold = getHabitSyncScaffoldSummary();
             if (!scaffold.endpointConfigured) {
-                alert('请先在统一同步设置里填写 Cloudflare Worker / WebDAV 中转地址。');
+                habitRemotePreviewState = {
+                    ...habitRemotePreviewState,
+                    status: 'error',
+                    mode: previewMode,
+                    requestedAt: getLocalDateTimeStr(),
+                    remotePath: scaffold.remotePath,
+                    error: '请先在统一同步设置里填写 Cloudflare Worker / WebDAV 中转地址。',
+                    local: habitAppLocalMirror ? getHabitRemotePreviewModel(habitAppLocalMirror) : null,
+                    remote: null,
+                    merged: null,
+                    risks: []
+                };
+                renderHabitDiagnosticsPanel();
                 return false;
             }
-            if (mode !== 'pull' && !habitSyncConfig.remoteUploadEnabled) {
-                alert('habit 远端上传仍是关闭状态。当前只允许本地镜像和手动同步骨架检查，不会上传 /apps/habit-app/data.json。');
-                return false;
-            }
-            const now = getLocalDateTimeStr();
-            habitSyncState.lastSyncAt = now;
-            if (mode === 'pull') habitSyncState.lastPullAt = now;
-            if (mode === 'push') habitSyncState.lastPushAt = now;
-            habitSyncState.lastLocalHash = getHabitLegacySourceHash();
-            habitSyncState.lastRemoteHash = '';
-            saveHabitSyncState();
+            isHabitRemotePreviewRunning = true;
+            habitRemotePreviewState = {
+                status: 'loading',
+                mode: previewMode,
+                requestedAt: getLocalDateTimeStr(),
+                remotePath: scaffold.remotePath,
+                error: '',
+                local: habitAppLocalMirror ? getHabitRemotePreviewModel(habitAppLocalMirror) : null,
+                remote: null,
+                merged: null,
+                risks: []
+            };
             renderHabitDiagnosticsPanel();
-            alert(`habit 手动同步骨架已记录：${mode}。当前版本不会发起网络请求。`);
-            return true;
+            try {
+                const remoteResult = await syncService.pullJson(
+                    { ...syncConfig, remotePath: scaffold.remotePath },
+                    scaffold.remotePath,
+                    value => value,
+                    value => syncService.getHabitDataHash(value)
+                );
+                const local = getHabitRemotePreviewModel(habitAppLocalMirror || {});
+                if (!remoteResult) {
+                    habitRemotePreviewState = {
+                        ...habitRemotePreviewState,
+                        status: 'missing',
+                        local,
+                        remote: null,
+                        merged: null,
+                        error: '',
+                        risks: []
+                    };
+                    return false;
+                }
+                const schemaRisks = getHabitRemoteSchemaRisks(remoteResult.data);
+                const remoteSnapshot = syncService.getHabitSnapshot(remoteResult.data);
+                const mergedSnapshot = syncService.mergeHabitSnapshots(local.snapshot, remoteSnapshot);
+                const remote = getHabitRemotePreviewModel(remoteSnapshot, remoteResult.hash);
+                const merged = getHabitRemotePreviewModel(mergedSnapshot);
+                habitRemotePreviewState = {
+                    ...habitRemotePreviewState,
+                    status: 'ready',
+                    local,
+                    remote: { ...remote, etag: remoteResult.etag || '' },
+                    merged,
+                    hashesMatch: local.hash === remote.hash,
+                    error: '',
+                    risks: getHabitRemoteMergeRisks(local, remote, merged, schemaRisks)
+                };
+                return true;
+            } catch (err) {
+                const isJsonError = err instanceof SyntaxError || /JSON/i.test(err?.message || '');
+                habitRemotePreviewState = {
+                    ...habitRemotePreviewState,
+                    status: 'error',
+                    error: isJsonError
+                        ? `云端 JSON 解析失败：${err?.message || String(err)}`
+                        : `只读检查失败：${err?.message || String(err)}`,
+                    remote: null,
+                    merged: null,
+                    risks: []
+                };
+                return false;
+            } finally {
+                isHabitRemotePreviewRunning = false;
+                renderHabitDiagnosticsPanel();
+            }
+        }
+
+        async function runHabitManualSyncSkeleton(direction = 'pull') {
+            if (direction === 'push') {
+                alert('habit 远端上传仍是关闭状态。当前只允许 GET 只读预检，不会 PUT /apps/habit-app/data.json。');
+                return false;
+            }
+            return previewHabitRemotePull(direction === 'both' ? 'merge' : 'pull');
         }
 
         function applySyncSettingsToForm() {
@@ -7039,6 +7251,96 @@
             return !!rebuildHabitAppLocalMirror('diagnostics-auto-bootstrap');
         }
 
+        function renderHabitRemotePreviewPanel() {
+            const preview = habitRemotePreviewState || {};
+            const statusLabels = {
+                idle: '尚未检查',
+                loading: '正在只读检查',
+                missing: '云端文件不存在',
+                ready: preview.hashesMatch ? '本地与云端一致' : '只读预检完成',
+                error: '只读检查失败'
+            };
+            const statusClasses = {
+                idle: 'is-prepared',
+                loading: 'is-partial',
+                missing: 'is-partial',
+                ready: preview.hashesMatch ? 'is-ready' : 'is-prepared',
+                error: 'is-blocked'
+            };
+            let body = '<div class="habit-remote-preview-empty">点击“手动检查云端”发起一次 GET；远端与合并结果只在当前页面展示。若本地镜像尚不存在，进入诊断页仍会按既有规则自动创建镜像。</div>';
+            if (preview.status === 'loading') {
+                body = '<div class="habit-remote-preview-empty is-loading">正在读取云端 habit-app 文件并计算合并预览…</div>';
+            } else if (preview.status === 'missing') {
+                body = `
+                    <div class="habit-remote-preview-empty is-warning">
+                        <strong>云端尚无 habit-app 文件</strong>
+                        <span>${escapeHtml(preview.remotePath || '/apps/habit-app/data.json')} 返回 404 或空内容。本次没有创建文件，也没有自动上传本地镜像。</span>
+                    </div>
+                `;
+            } else if (preview.status === 'error') {
+                body = `
+                    <div class="habit-remote-preview-empty is-danger">
+                        <strong>无法完成只读预检</strong>
+                        <span>${escapeHtml(preview.error || '未知错误')}</span>
+                    </div>
+                `;
+            } else if (preview.status === 'ready' && preview.local && preview.remote && preview.merged) {
+                const rows = [
+                    ['本地镜像', preview.local],
+                    ['云端文件', preview.remote],
+                    ['合并预览', preview.merged]
+                ];
+                body = `
+                    <div class="habit-remote-preview-table-wrap">
+                        <table class="habit-remote-preview-table">
+                            <thead>
+                                <tr><th>来源</th><th>Hash</th><th>Habits</th><th>Records</th><th>Ledger</th><th>Tombstone</th><th>钱包余额</th></tr>
+                            </thead>
+                            <tbody>
+                                ${rows.map(([label, item]) => `
+                                    <tr>
+                                        <th>${escapeHtml(label)}</th>
+                                        <td><code>${escapeHtml(item.hashShort || '无')}</code></td>
+                                        <td>${escapeHtml(item.counts.habits)}</td>
+                                        <td>${escapeHtml(item.counts.records)}</td>
+                                        <td>${escapeHtml(item.counts.ledger)}</td>
+                                        <td>${escapeHtml(item.counts.tombstones)}</td>
+                                        <td>${escapeHtml(item.balanceText)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="habit-remote-preview-verdict">
+                        <strong>${preview.hashesMatch ? '本地镜像与云端 hash 一致' : '本地与云端存在差异，已生成合并预览'}</strong>
+                        <span>merged hash ${escapeHtml(preview.merged.hashShort || '无')} · ${escapeHtml(preview.mode === 'merge' ? '手动合并预检' : '手动云端检查')} · 全程未保存</span>
+                    </div>
+                    ${(preview.risks || []).length ? `
+                        <div class="habit-remote-risk-list">
+                            ${(preview.risks || []).map(item => `
+                                <div class="habit-remote-risk is-${escapeHtml(item.severity || 'info')}">
+                                    <strong>${escapeHtml(item.title || '预检提示')}</strong>
+                                    <span>${escapeHtml(item.detail || '')}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<div class="habit-remote-preview-ok">未发现 schema、数量、tombstone 或钱包流水风险。</div>'}
+                `;
+            }
+            return `
+                <div class="habit-remote-preview" aria-live="polite" aria-busy="${preview.status === 'loading' ? 'true' : 'false'}">
+                    <div class="habit-remote-preview-head">
+                        <div>
+                            <strong>云端只读预检</strong>
+                            <span>GET ${escapeHtml(preview.remotePath || habitSyncConfig.remotePath || '/apps/habit-app/data.json')} · GET 结果不写 lifePlanData / habitAppData · 不发 PUT</span>
+                        </div>
+                        <span class="habit-dualwrite-status ${statusClasses[preview.status] || 'is-prepared'}">${escapeHtml(statusLabels[preview.status] || statusLabels.idle)}</span>
+                    </div>
+                    ${body}
+                </div>
+            `;
+        }
+
         function renderHabitDiagnosticsPanel() {
             const container = document.getElementById('habit-diagnostics-panel');
             if (!container) return;
@@ -7142,7 +7444,7 @@
                                 <div class="habit-sync-scaffold">
                                     <div class="habit-snapshot-head">
                                         <div>
-                                            <div class="habit-shop-title">habit 同步脚手架</div>
+                                            <div class="habit-shop-title">habit 独立同步预检</div>
                                             <div class="habit-snapshot-meta">path ${escapeHtml(scaffold.remotePath)} · autoSync ${scaffold.autoSync ? 'on' : 'off'} · upload ${scaffold.remoteUploadEnabled ? 'on' : 'off'}</div>
                                         </div>
                                         <span class="habit-dualwrite-status is-prepared">${escapeHtml(scaffold.statusLabel)}</span>
@@ -7154,14 +7456,15 @@
                                         <div>镜像 hash：${escapeHtml(scaffold.mirrorHashShort || '无')}</div>
                                         <div>merge/hash 能力：${scaffold.mergeReady && scaffold.hashReady ? '已接入 sync-service' : '未就绪'}</div>
                                         <div>上次远端同步：${escapeHtml(scaffold.lastSyncAt || '尚未启用')}</div>
-                                        <div>当前阶段：手动同步骨架已就绪，但默认不会上传，也不会自动发起网络请求。</div>
+                                        <div>当前阶段：只允许手动 GET 预检；不会覆盖本地数据，也不会上传。</div>
                                     </div>
                                     <div class="habit-sync-actions">
-                                        <button type="button" class="btn btn-secondary" onclick="runHabitManualSyncSkeleton('pull')">手动检查云端（骨架）</button>
-                                        <button type="button" class="btn btn-secondary" onclick="runHabitManualSyncSkeleton('both')">手动合并预检（骨架）</button>
+                                        <button type="button" class="btn btn-secondary" ${isHabitRemotePreviewRunning ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('pull')">${isHabitRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
+                                        <button type="button" class="btn btn-secondary" ${isHabitRemotePreviewRunning ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('both')">手动合并预检</button>
                                         <button type="button" class="btn btn-danger" ${scaffold.manualPushEnabled ? '' : 'disabled'} onclick="runHabitManualSyncSkeleton('push')">手动上传 habit-app（未开启）</button>
-                                        <span>上传按钮必须显式开启 remoteUploadEnabled 后才可用。</span>
+                                        <span>上传保持关闭；本阶段只会读取云端文件。</span>
                                     </div>
+                                    ${renderHabitRemotePreviewPanel()}
                                 </div>
                             `;
                         })()}

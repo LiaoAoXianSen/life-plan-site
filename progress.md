@@ -1,5 +1,24 @@
 # Progress
 
+## 2026-07-23
+
+- Read the habit migration handoff and confirmed the current task is a read-only remote pull/merge preview.
+- Loaded the project workflow, persistent planning, product UI, and memory append instructions.
+- Checked the worktree; only the pre-existing untracked `.zcode/` directory is present.
+- Added phases 28–32 for inspection, implementation, UI, tests, validation, packaging, and memory.
+- Located the sync state/config helpers, diagnostic renderer, `sync-service.js` hash/merge/pull APIs, and existing habit Playwright coverage.
+- Defined the in-memory-only preview state and risk model; no preview action will persist sync state or local/merged snapshots.
+- Implemented GET-only remote pull, raw schema validation, local/remote/merged hash and collection summaries, and merge risk detection in `app.js`.
+- Added a responsive inline preview table and status/risk states in `styles.css`, following the existing diagnostics UI rather than introducing a modal.
+- Added Playwright coverage for successful GET-only merge preview, missing remote files, schema gaps, disabled upload safeguards, and unchanged local storage.
+- Syntax checks and `git diff --check` passed.
+- Targeted habit validation passed 5/5 tests.
+- Visually inspected the diagnostics idle and successful preview states at desktop width; the comparison table and status/risk hierarchy are readable and remain within the existing UI language.
+- Full `scripts/check.ps1` validation passed all 58 Playwright smoke tests.
+- A read-only review agent found no reachable PUT path and identified two preview-accuracy refinements; added all 13 habit collections to schema checks, clarified the bootstrap-versus-GET persistence copy, and extended malformed JSON coverage.
+- Re-ran targeted habit checks (5/5) and the full `scripts/check.ps1` suite (58/58) after the review fixes.
+- Generated the final clean runtime package at `D:\project\life-plan-site\life-plan-site-runtime-20260723-103435.zip`; the latest packaging run removed the older `life-plan-site-runtime-20260720-154129.zip` artifact under the five-package retention policy.
+
 ## 2026-07-14
 
 - Continued the data safety follow-up on a clean `master` worktree after the interrupted subagent attempt; true sidecar spawning was not used because the spawn calls failed parameter validation, so local parallel file reads were used instead.

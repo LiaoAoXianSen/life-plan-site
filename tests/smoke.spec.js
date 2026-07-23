@@ -2354,11 +2354,13 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('已接入');
     await expect(panel).toContainText('远端上传关闭');
     await expect(panel).toContainText('本地 habit-app 镜像');
-    await expect(panel).toContainText('habit 同步脚手架');
+    await expect(panel).toContainText('habit 独立同步预检');
     await expect(panel).toContainText('/apps/habit-app/data.json');
     await expect(panel).toContainText('merge/hash 能力：已接入 sync-service');
-    await expect(panel).toContainText('手动检查云端（骨架）');
-    await expect(panel).toContainText('手动合并预检（骨架）');
+    await expect(panel).toContainText('手动检查云端');
+    await expect(panel).toContainText('手动合并预检');
+    await expect(panel).toContainText('云端只读预检');
+    await expect(panel).toContainText('GET 结果不写 lifePlanData / habitAppData · 不发 PUT');
     await expect(panel.getByRole('button', { name: '手动上传 habit-app（未开启）' })).toBeDisabled();
     await expect(panel).toContainText('从当前旧数据重建本地镜像');
     await expect(panel).toContainText('本地镜像与旧数据一致');
@@ -2437,6 +2439,187 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
 
     const after = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     expect(after).toBe(before);
+});
+
+test('habit remote preview GETs and merges without mutating local data or issuing PUT', async ({ page }) => {
+    const localData = createEmptyData({
+        habits: [
+            {
+                id: 'habit-local',
+                name: '本地习惯',
+                tag: '健康',
+                rule: 'daily',
+                timesPerDay: 1,
+                startDate: '2026-07-23',
+                rewardPoints: 1,
+                rewardCurrency: '金币',
+                createdAt: '2026-07-20T08:00:00.000Z',
+                updatedAt: '2026-07-22T08:00:00.000Z'
+            }
+        ]
+    });
+    const remoteSnapshot = {
+        schemaVersion: 1,
+        habits: [
+            {
+                id: 'habit-remote',
+                name: '云端习惯',
+                createdAt: '2026-07-21T08:00:00.000Z',
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ],
+        habitGroups: [],
+        habitRecords: [
+            {
+                id: 'record-remote',
+                habitId: 'habit-remote',
+                date: '2026-07-23',
+                sourceKey: 'remote-2026-07-23',
+                updatedAt: '2026-07-23T08:30:00.000Z'
+            }
+        ],
+        habitRewards: [],
+        habitRewardRecords: [],
+        habitFineRecords: [],
+        habitLedger: [
+            {
+                id: 'ledger-remote',
+                type: 'checkin',
+                sourceId: 'remote-2026-07-23',
+                currencyId: 'currency-coin',
+                currency: '金币',
+                amount: 5,
+                updatedAt: '2026-07-23T08:30:00.000Z'
+            }
+        ],
+        habitCurrencies: [{ id: 'currency-coin', name: '金币' }],
+        habitMilestones: [],
+        habitMilestoneClaims: [],
+        habitOverdueEvents: [],
+        habitMoodNotes: [],
+        habitTimeTasks: [],
+        deletedItems: []
+    };
+    let getCount = 0;
+    let putCount = 0;
+    const requestPaths = [];
+
+    await page.route('https://habit-preview.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requestPaths.push(`${request.method()} ${url.pathname}`);
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            getCount += 1;
+            await route.fulfill({ contentType: 'application/json', body: JSON.stringify(remoteSnapshot) });
+            return;
+        }
+        if (request.method() === 'PUT') putCount += 1;
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://habit-preview.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({
+            remotePath: '/apps/habit-app/data.json',
+            autoSync: false,
+            remoteUploadEnabled: false
+        }));
+    }, localData);
+
+    await page.goto('/');
+    await page.locator('[data-page-target="habits"]').click();
+    await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
+    const panel = page.locator('#habit-diagnostics-panel');
+    const before = await page.evaluate(() => ({
+        legacy: localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData'),
+        syncState: localStorage.getItem('habitAppSyncState')
+    }));
+
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel.locator('.habit-remote-preview')).toContainText('只读预检完成');
+    await expect(panel.locator('.habit-remote-preview')).toContainText('本地与云端存在差异，已生成合并预览');
+    await expect(panel.locator('.habit-remote-preview')).toContainText('合并后钱包余额变化');
+    await expect(panel.locator('.habit-remote-risk')).not.toContainText('云端 schema');
+    const mergedRow = panel.locator('.habit-remote-preview-table tbody tr', { hasText: '合并预览' });
+    await expect(mergedRow).toContainText('2');
+    await expect.poll(() => getCount).toBe(1);
+    expect(putCount).toBe(0);
+    expect(requestPaths).toEqual(['GET /apps/habit-app/data.json']);
+
+    const after = await page.evaluate(() => ({
+        legacy: localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData'),
+        syncState: localStorage.getItem('habitAppSyncState')
+    }));
+    expect(after).toEqual(before);
+    const config = await page.evaluate(() => JSON.parse(localStorage.getItem('habitAppSyncConfig')));
+    expect(config.autoSync).toBe(false);
+    expect(config.remoteUploadEnabled).toBe(false);
+});
+
+test('habit remote preview reports missing files and schema risks without uploading', async ({ page }) => {
+    let getCount = 0;
+    let putCount = 0;
+    await page.route('https://habit-schema.example.test/**', async route => {
+        const request = route.request();
+        if (request.method() === 'PUT') putCount += 1;
+        if (request.method() === 'GET') {
+            getCount += 1;
+            if (getCount === 1) {
+                await route.fulfill({ status: 404, body: '' });
+                return;
+            }
+            if (getCount === 2) {
+                await route.fulfill({
+                    contentType: 'application/json',
+                    body: JSON.stringify({ schemaVersion: 1, habits: [] })
+                });
+                return;
+            }
+            await route.fulfill({ contentType: 'application/json', body: '{invalid-json' });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://habit-schema.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+    }, createEmptyData());
+
+    await page.goto('/');
+    await page.locator('[data-page-target="habits"]').click();
+    await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
+    const panel = page.locator('#habit-diagnostics-panel');
+    const before = await page.evaluate(() => ({
+        legacy: localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData')
+    }));
+
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel.locator('.habit-remote-preview')).toContainText('云端尚无 habit-app 文件');
+    await panel.getByRole('button', { name: '手动合并预检', exact: true }).click();
+    await expect(panel.locator('.habit-remote-preview')).toContainText('云端 schema 缺字段');
+    await expect(panel.locator('.habit-remote-preview')).toContainText('缺少数组字段');
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel.locator('.habit-remote-preview')).toContainText('云端 JSON 解析失败');
+    expect(getCount).toBe(3);
+    expect(putCount).toBe(0);
+    const after = await page.evaluate(() => ({
+        legacy: localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData')
+    }));
+    expect(after).toEqual(before);
 });
 
 test('habit checkin dual-writes local habitAppData mirror without touching cloud path', async ({ page }) => {

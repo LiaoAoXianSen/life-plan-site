@@ -1,5 +1,20 @@
 # Findings
 
+## 2026-07-23
+
+- The handoff identifies `lifePlanData` as the current habit authority and `localStorage.habitAppData` as a fully rebuilt local mirror; this phase must never reverse-write mirror data into legacy fields.
+- The requested remote path is `/apps/habit-app/data.json`; the first live network capability is GET-only preview, with no PUT and no automatic save of merged data.
+- Existing untracked `.zcode/` content belongs to the user and must remain untouched.
+- The project has no `PRODUCT.md`; this scoped diagnostics enhancement will use the existing product UI and stylesheet conventions rather than initializing a new design system.
+- `app.js` already persists guarded `habitAppSyncConfig` / `habitAppSyncState`, exposes a diagnostics scaffold around lines 7042–7220, and forcibly keeps `autoSync` and `remoteUploadEnabled` false on load/save.
+- `sync-service.js` already provides `pullJson`, `getHabitSnapshot`, `getHabitDataHash`, and `mergeHabitSnapshots`; `pullJson` maps HTTP 404 or an empty response to `null` and otherwise performs one GET.
+- Existing diagnostics smoke coverage already checks read-only legacy behavior, local mirror bootstrap, disabled upload, and scaffold labels; the new regression can extend this area with request interception and storage snapshots.
+- The preview result should remain in-memory only. Avoiding `saveHabitSyncState()` means a manual preview cannot quietly mutate any local sync metadata while claiming to be read-only.
+- Remote schema validation must run against the raw pulled JSON before `getHabitSnapshot()` fills absent collections with empty arrays; otherwise missing-field risks would be invisible.
+- UI direction: keep the existing restrained diagnostics vocabulary, add an inline status region and compact comparison table beneath the actions, and avoid a modal or decorative motion for a state/reporting interaction.
+- Read-only review confirmed no reachable PUT path. It also caught that schema validation must cover all 13 collections from `sync-service.js`, including `habitMilestones`, `habitMoodNotes`, and `habitTimeTasks`; the final implementation now does so.
+- Entering diagnostics may still perform the existing one-time local mirror bootstrap. The stricter guarantee is that the remote GET result and merged preview are never persisted.
+
 ## 2026-07-14
 
 - `sync-service.js` only uses the configured endpoint and remote path; sync username/password were UI/config leftovers and did not affect requests.
