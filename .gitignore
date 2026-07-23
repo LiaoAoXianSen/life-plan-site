@@ -27,3 +27,7 @@ dist/
 build/
 test-results/
 playwright-report/
+
+# Local planning notes (agent scratchpad)
+.planning/
+.zcode/

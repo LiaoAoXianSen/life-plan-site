@@ -3639,6 +3639,285 @@ test('habit checkin dual-writes local habitAppData mirror without touching cloud
     expect(afterUndo.mirror.mirror?.reason === 'toggle-checkin' || afterUndo.mirror.mirror?.reason === 'decrease-checkin').toBe(true);
 });
 
+test('todo dual-writes local todoAppData mirror from legacy lifePlanData without cloud upload', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+        localStorage.removeItem('lifePlanData');
+        localStorage.removeItem('todoAppData');
+    });
+    await page.reload();
+
+    // Bootstrap migration should create a local-only mirror from empty legacy todos.
+    const bootstrapped = await page.evaluate(() => JSON.parse(localStorage.getItem('todoAppData') || 'null'));
+    expect(bootstrapped).toBeTruthy();
+    expect(bootstrapped.localMirror).toBe(true);
+    expect(bootstrapped.remoteUploadEnabled).toBe(false);
+    expect(bootstrapped.schemaVersion).toBe(1);
+    expect(bootstrapped.authority).toBe('lifePlanData.todos');
+    expect(Array.isArray(bootstrapped.todos)).toBe(true);
+
+    await page.locator('[data-page-target="todos"]').click();
+    await page.getByRole('button', { name: '+ 新建通用待办' }).click();
+    await page.locator('#todo-detail-text').fill('本地双写待办');
+    await page.locator('#todo-detail-note').fill('从 lifePlanData 镜像到 todoAppData');
+    await page.locator('#todo-detail-group').selectOption('工作');
+    await page.locator('#todo-detail-edit-actions').getByRole('button', { name: '保存' }).click();
+
+    const afterCreate = await page.evaluate(() => ({
+        life: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData') || 'null')
+    }));
+    expect(afterCreate.life.todos.some(todo => todo.text === '本地双写待办')).toBe(true);
+    expect(afterCreate.mirror).toBeTruthy();
+    expect(afterCreate.mirror.localMirror).toBe(true);
+    expect(afterCreate.mirror.remoteUploadEnabled).toBe(false);
+    expect(afterCreate.mirror.todos.some(todo => todo.text === '本地双写待办')).toBe(true);
+    expect(afterCreate.mirror.mirror?.sourceHash).toBeTruthy();
+    expect(['save-data', 'bootstrap-migrate-from-lifePlanData', 'bootstrap-realign']).toContain(afterCreate.mirror.mirror?.reason);
+
+    const createdId = afterCreate.life.todos.find(todo => todo.text === '本地双写待办').id;
+    await page.locator('#todo-table-body tr', { hasText: '本地双写待办' }).locator('input[type="checkbox"]').check();
+
+    const afterToggle = await page.evaluate(() => ({
+        life: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData') || 'null')
+    }));
+    expect(afterToggle.life.todos.find(todo => todo.id === createdId)?.done).toBe(true);
+    expect(afterToggle.mirror.todos.find(todo => todo.id === createdId)?.done).toBe(true);
+    expect(afterToggle.mirror.todos).toHaveLength(afterToggle.life.todos.length);
+
+    await page.locator('#todo-table-body tr', { hasText: '本地双写待办' }).locator('.todo-title-cell').click();
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('#todo-detail-view-actions').getByRole('button', { name: '删除待办' }).click();
+
+    const afterDelete = await page.evaluate(() => ({
+        life: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData') || 'null')
+    }));
+    expect(afterDelete.life.todos.some(todo => todo.id === createdId)).toBe(false);
+    expect(afterDelete.mirror.todos.some(todo => todo.id === createdId)).toBe(false);
+    expect(afterDelete.life.deletedItems.some(item => item.collection === 'todos' && item.id === createdId)).toBe(true);
+    expect(afterDelete.mirror.deletedItems.some(item => item.collection === 'todos' && item.id === createdId)).toBe(true);
+});
+
+test('todo protected first upload creates canonical file once and verifies it by GET', async ({ page }) => {
+    const localData = createEmptyData({
+        todos: [
+            {
+                id: 'todo-upload',
+                text: '首次上传待办',
+                note: 'todo-app 独立文件',
+                done: false,
+                dueDate: '2026-07-24',
+                planStartDate: '2026-07-23',
+                planEndDate: '2026-07-24',
+                urgency: 'high',
+                group: '工作',
+                subTodos: [{ text: '拆步骤', done: false }],
+                sessions: [],
+                isExclusive: false,
+                createdAt: '2026-07-23T08:00:00.000Z',
+                updatedAt: '2026-07-23T08:00:00.000Z',
+                completedAt: '',
+                sourceType: '',
+                sourceRecordId: '',
+                sourceMatchKey: '首次上传待办'
+            }
+        ],
+        deletedItems: [
+            {
+                collection: 'todos',
+                id: 'todo-old',
+                deletedAt: '2026-07-20T01:00:00.000Z',
+                reason: 'manual-delete',
+                text: '旧任务'
+            }
+        ]
+    });
+    const requestSequence = [];
+    const putRequests = [];
+    let getCount = 0;
+    let uploadedPayload = null;
+
+    await page.route('https://todo-first-upload.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requestSequence.push(`${request.method()} ${url.pathname}`);
+        if (request.method() === 'GET' && url.pathname === '/apps/todo-app/data.json') {
+            getCount += 1;
+            if (getCount <= 2) {
+                await route.fulfill({ status: 404, body: '' });
+                return;
+            }
+            await route.fulfill({
+                status: 200,
+                headers: { ETag: '"todo-created-v1"' },
+                contentType: 'application/json',
+                body: JSON.stringify(uploadedPayload)
+            });
+            return;
+        }
+        if (request.method() === 'MKCOL' && url.pathname === '/apps/todo-app') {
+            await route.fulfill({ status: 201, body: '' });
+            return;
+        }
+        if (request.method() === 'PUT' && url.pathname === '/apps/todo-app/data.json') {
+            uploadedPayload = JSON.parse(request.postData() || 'null');
+            putRequests.push({
+                headers: request.headers(),
+                payload: uploadedPayload
+            });
+            await route.fulfill({ status: 201, headers: { ETag: '"todo-created-v1"' }, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://todo-first-upload.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/apps/wheel-app/data.json', autoSync: false }));
+        localStorage.setItem('todoAppSyncConfig', JSON.stringify({
+            remotePath: '/apps/todo-app/data.json',
+            autoSync: false,
+            remoteUploadEnabled: false
+        }));
+        localStorage.removeItem('todoAppData');
+    }, localData);
+
+    await page.goto('/');
+    await page.locator('[data-page-target="todos"]').click();
+    const panel = page.locator('#todo-cloud-panel');
+    const beforeLifePlanData = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel).toContainText('云端尚无 todo-app 文件');
+    const armCheckbox = panel.getByRole('checkbox', { name: '复用现有统一同步地址并授权本次首次创建' });
+    await expect(armCheckbox).toBeVisible();
+    const createButton = panel.getByRole('button', { name: '创建云端 todo 文件', exact: true });
+    await expect(createButton).toBeDisabled();
+    await armCheckbox.check();
+    await expect(createButton).toBeEnabled();
+
+    let confirmMessage = '';
+    page.once('dialog', dialog => {
+        confirmMessage = dialog.message();
+        return dialog.accept();
+    });
+    await createButton.click();
+    await expect(panel.locator('.habit-upload-guard')).toContainText('创建并核验成功');
+    await expect(panel.locator('.habit-upload-guard')).toContainText('回读核验一致');
+    await expect.poll(() => getCount).toBe(3);
+
+    expect(confirmMessage).toContain('/apps/todo-app/data.json');
+    expect(confirmMessage).toContain('hash');
+    expect(putRequests).toHaveLength(1);
+    expect(putRequests[0].headers['if-none-match'] || putRequests[0].headers['If-None-Match']).toBe('*');
+    expect(uploadedPayload).toBeTruthy();
+    expect(uploadedPayload.schemaVersion).toBe(1);
+    expect(uploadedPayload.todos.map(item => item.id)).toEqual(['todo-upload']);
+    expect(uploadedPayload.todos[0].text).toBe('首次上传待办');
+    expect(uploadedPayload.deletedItems.map(item => item.id)).toEqual(['todo-old']);
+    expect(uploadedPayload.localMirror).toBeUndefined();
+    expect(uploadedPayload.mirror).toBeUndefined();
+    expect(uploadedPayload.remoteUploadEnabled).toBeUndefined();
+    expect(requestSequence.filter(item => item.startsWith('PUT '))).toEqual(['PUT /apps/todo-app/data.json']);
+
+    const afterLifePlanData = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+    expect(afterLifePlanData).toBe(beforeLifePlanData);
+    const mirror = await page.evaluate(() => JSON.parse(localStorage.getItem('todoAppData') || 'null'));
+    expect(mirror.localMirror).toBe(true);
+    expect(mirror.remoteUploadEnabled).toBe(false);
+    await expect(createButton).toBeDisabled();
+});
+
+test('todo protected first upload stops when final GET finds an existing file', async ({ page }) => {
+    const localData = createEmptyData({
+        todos: [
+            {
+                id: 'todo-race',
+                text: '竞态保护待办',
+                done: false,
+                group: '工作',
+                urgency: 'medium',
+                subTodos: [],
+                sessions: [],
+                createdAt: '2026-07-23T08:00:00.000Z',
+                updatedAt: '2026-07-23T08:00:00.000Z'
+            }
+        ]
+    });
+    let getCount = 0;
+    let putCount = 0;
+    const remotePayload = {
+        schemaVersion: 1,
+        generatedAt: '2026-07-23T09:00:00.000Z',
+        todos: [
+            {
+                id: 'todo-remote',
+                text: '云端已有待办',
+                done: false,
+                group: '工作',
+                urgency: 'medium',
+                subTodos: [],
+                sessions: []
+            }
+        ],
+        deletedItems: []
+    };
+
+    await page.route('https://todo-race-upload.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (request.method() === 'GET' && url.pathname === '/apps/todo-app/data.json') {
+            getCount += 1;
+            if (getCount === 1) {
+                await route.fulfill({ status: 404, body: '' });
+                return;
+            }
+            await route.fulfill({
+                status: 200,
+                headers: { ETag: '"todo-existing-v1"' },
+                contentType: 'application/json',
+                body: JSON.stringify(remotePayload)
+            });
+            return;
+        }
+        if (request.method() === 'PUT' && url.pathname === '/apps/todo-app/data.json') {
+            putCount += 1;
+            await route.fulfill({ status: 201, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://todo-race-upload.example.test',
+            remotePath: '/life-plan.json',
+            autoSync: false
+        }));
+        localStorage.removeItem('todoAppData');
+    }, localData);
+
+    await page.goto('/');
+    await page.locator('[data-page-target="todos"]').click();
+    const panel = page.locator('#todo-cloud-panel');
+    await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
+    await expect(panel).toContainText('云端尚无 todo-app 文件');
+    await panel.getByRole('checkbox', { name: '复用现有统一同步地址并授权本次首次创建' }).check();
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '创建云端 todo 文件', exact: true }).click();
+    await expect(panel.locator('.habit-upload-guard')).toContainText('已安全停止');
+    await expect(panel.locator('.habit-upload-guard')).toContainText('最终复查时发现云端文件已经存在');
+    expect(putCount).toBe(0);
+    await expect(panel).toContainText('云端已存在');
+    await expect(panel).toContainText('最终复查时发现云端文件已经存在');
+});
+
 test('habit checkins only award configured currencies', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('lifePlanData'));

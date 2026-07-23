@@ -74,6 +74,11 @@
             autoSync: false,
             remoteUploadEnabled: false
         };
+        let todoSyncConfig = {
+            remotePath: '/apps/todo-app/data.json',
+            autoSync: false,
+            remoteUploadEnabled: false
+        };
         let aiConfig = {
             endpointUrl: '',
             apiKey: '',
@@ -117,6 +122,18 @@
             lastRebuildAt: '',
             lastRebuildReason: ''
         };
+        let todoSyncState = {
+            dirty: false,
+            lastLocalHash: '',
+            lastRemoteHash: '',
+            lastRemoteEtag: '',
+            lastSyncAt: '',
+            lastPullAt: '',
+            lastPushAt: '',
+            lastConflictAt: '',
+            lastRebuildAt: '',
+            lastRebuildReason: ''
+        };
         let suppressDirtyMark = false;
         let autoSyncTimer = null;
         let syncIntervalTimer = null;
@@ -131,6 +148,7 @@
         let localSaveWarning = '';
         const CRITICAL_FAILURE_LOG_KEY = 'lifePlanCriticalFailures';
         const HABIT_APP_LOCAL_MIRROR_KEY = 'habitAppData';
+        const TODO_APP_LOCAL_MIRROR_KEY = 'todoAppData';
         const HABIT_REMOTE_PREVIEW_COLLECTIONS = [
             'habits',
             'habitGroups',
@@ -155,6 +173,13 @@
             lastRebuildReason: '',
             lastError: ''
         };
+        let todoAppLocalMirror = null;
+        let todoAppLocalMirrorMeta = {
+            dirty: false,
+            lastRebuildAt: '',
+            lastRebuildReason: '',
+            lastError: ''
+        };
         let habitRemotePreviewState = {
             status: 'idle',
             mode: 'pull',
@@ -170,6 +195,26 @@
         let isHabitRemoteUploadRunning = false;
         let isHabitRemoteApplyRunning = false;
         let habitRemoteUploadState = {
+            status: 'idle',
+            attemptedAt: '',
+            message: '',
+            uploadedHash: '',
+            uploadedEtag: ''
+        };
+        let todoRemotePreviewState = {
+            status: 'idle',
+            mode: 'pull',
+            requestedAt: '',
+            remotePath: '/apps/todo-app/data.json',
+            error: '',
+            local: null,
+            remote: null,
+            hashesMatch: false,
+            risks: []
+        };
+        let isTodoRemotePreviewRunning = false;
+        let isTodoRemoteUploadRunning = false;
+        let todoRemoteUploadState = {
             status: 'idle',
             attemptedAt: '',
             message: '',
@@ -482,6 +527,7 @@
             loadData();
             loadSyncState();
             loadWheelSyncState();
+            ensureTodoAppLocalMirrorBootstrapped();
             updateSidebarToolState(true);
             syncTimelineRangeControls();
             renderTodayDate();
@@ -524,7 +570,142 @@
             loadHabitSyncConfig();
             loadAiConfig();
             loadHabitAppLocalMirror();
+            loadTodoAppLocalMirror();
             loadHabitSyncState();
+            loadTodoSyncConfig();
+            loadTodoSyncState();
+        }
+
+        function getTodoLegacySourceHash(source = data) {
+            const slice = todosService?.getTodoLegacySourceSlice
+                ? todosService.getTodoLegacySourceSlice(source)
+                : {
+                    todos: source.todos || [],
+                    deletedItems: (source.deletedItems || []).filter(item => item?.collection === 'todos')
+                };
+            return getDataHash(slice);
+        }
+
+        function loadTodoAppLocalMirror() {
+            try {
+                const saved = localStorage.getItem(TODO_APP_LOCAL_MIRROR_KEY);
+                todoAppLocalMirror = saved ? JSON.parse(saved) : null;
+                todoAppLocalMirrorMeta.lastError = '';
+            } catch (err) {
+                todoAppLocalMirror = null;
+                todoAppLocalMirrorMeta.lastError = err?.message || String(err);
+                console.warn('todo-app 本地镜像读取失败', err);
+            }
+            return todoAppLocalMirror;
+        }
+
+        function getTodoAppLocalMirrorSummary() {
+            if (!todosService?.summarizeTodoAppLocalMirror) {
+                return {
+                    exists: !!todoAppLocalMirror,
+                    matchesSource: false,
+                    summary: {}
+                };
+            }
+            return todosService.summarizeTodoAppLocalMirror(
+                todoAppLocalMirror,
+                getTodoLegacySourceHash()
+            );
+        }
+
+        function getTodoAppCanonicalSnapshot(source = todoAppLocalMirror) {
+            if (!todosService?.getTodoAppCanonicalSnapshot) {
+                return {
+                    schemaVersion: 1,
+                    generatedAt: new Date().toISOString(),
+                    todos: Array.isArray(source?.todos) ? source.todos : [],
+                    deletedItems: Array.isArray(source?.deletedItems) ? source.deletedItems : []
+                };
+            }
+            return todosService.getTodoAppCanonicalSnapshot(source || {});
+        }
+
+        function getTodoAppDataHash(value = getTodoAppCanonicalSnapshot()) {
+            if (todosService?.getTodoAppHashPayload) {
+                return getDataHash(todosService.getTodoAppHashPayload(value));
+            }
+            return getDataHash(getTodoAppCanonicalSnapshot(value));
+        }
+
+        function saveTodoAppLocalMirror(snapshot, meta = {}) {
+            if (!snapshot || typeof snapshot !== 'object') return false;
+            const payload = {
+                ...snapshot,
+                localMirror: true,
+                remoteUploadEnabled: false,
+                authority: 'lifePlanData.todos'
+            };
+            if (!persistLocalValue(TODO_APP_LOCAL_MIRROR_KEY, JSON.stringify(payload), 'todo-app 本地镜像')) {
+                todoAppLocalMirrorMeta.lastError = '本地镜像写入失败';
+                return false;
+            }
+            todoAppLocalMirror = payload;
+            todoAppLocalMirrorMeta.dirty = false;
+            todoAppLocalMirrorMeta.lastRebuildAt = payload.mirror?.rebuiltAt || payload.generatedAt || getLocalDateTimeStr();
+            todoAppLocalMirrorMeta.lastRebuildReason = meta.reason || payload.mirror?.reason || '';
+            todoAppLocalMirrorMeta.lastError = '';
+            const mirrorHash = getTodoAppDataHash(payload);
+            todoSyncState.dirty = !!todoSyncState.lastRemoteHash && mirrorHash !== todoSyncState.lastRemoteHash;
+            todoSyncState.lastLocalHash = payload.mirror?.sourceHash || getTodoLegacySourceHash();
+            todoSyncState.lastRebuildAt = todoAppLocalMirrorMeta.lastRebuildAt;
+            todoSyncState.lastRebuildReason = todoAppLocalMirrorMeta.lastRebuildReason;
+            saveTodoSyncState();
+            return true;
+        }
+
+        function rebuildTodoAppLocalMirror(reason = 'manual-rebuild') {
+            if (!todosService?.buildTodoAppLocalMirror) {
+                console.warn('todo-app 镜像服务未就绪', reason);
+                return null;
+            }
+            const sourceHash = getTodoLegacySourceHash();
+            const dualWriteEnabledPaths = todosService.getTodoDualWritePathInventory
+                ? todosService.getTodoDualWritePathInventory()
+                    .filter(item => item.dualWrite === 'enabled')
+                    .map(item => item.id)
+                : [];
+            const built = todosService.buildTodoAppLocalMirror(data, {
+                reason,
+                sourceHash,
+                generatedAt: new Date().toISOString(),
+                dualWriteEnabledPaths
+            });
+            const saved = saveTodoAppLocalMirror(built.snapshot, { reason });
+            if (!saved) return null;
+            return built;
+        }
+
+        function dualWriteTodoAppLocalMirror(reason = 'todo-write') {
+            const expectedHash = getTodoLegacySourceHash();
+            const summary = getTodoAppLocalMirrorSummary();
+            if (summary.exists && summary.matchesSource && summary.sourceHash === expectedHash) {
+                return true;
+            }
+            const built = rebuildTodoAppLocalMirror(reason);
+            if (!built) {
+                todoAppLocalMirrorMeta.dirty = true;
+                console.warn('todo-app 本地双写失败', reason);
+                return false;
+            }
+            return true;
+        }
+
+        function ensureTodoAppLocalMirrorBootstrapped() {
+            const summary = getTodoAppLocalMirrorSummary();
+            if (summary.exists && summary.matchesSource) return true;
+            const reason = summary.exists ? 'bootstrap-realign' : 'bootstrap-migrate-from-lifePlanData';
+            const built = rebuildTodoAppLocalMirror(reason);
+            if (!built) {
+                todoAppLocalMirrorMeta.dirty = true;
+                console.warn('todo-app 本地镜像启动迁移失败', reason);
+                return false;
+            }
+            return true;
         }
 
         function getHabitLegacySourceHash(source = data) {
@@ -1235,6 +1416,8 @@
         function saveData() {
             normalizeDataShape();
             if (!persistLocalValue('lifePlanData', JSON.stringify(data), '主数据')) return false;
+            // 双写期权威仍是 lifePlanData.todos；todoAppData 只做本地镜像，不上传云端。
+            dualWriteTodoAppLocalMirror(suppressDirtyMark ? 'save-data-from-sync' : 'save-data');
             hasUnreliableLocalSave = false;
             localSaveWarning = '';
             renderLocalSaveWarning();
@@ -1643,6 +1826,659 @@
         function saveHabitSyncState() {
             habitSyncState.lastLocalHash = habitSyncState.lastLocalHash || getHabitLegacySourceHash();
             persistLocalValue('habitAppSyncState', JSON.stringify(habitSyncState), 'habit-app 同步状态');
+        }
+
+        function loadTodoSyncConfig() {
+            try {
+                const saved = localStorage.getItem('todoAppSyncConfig');
+                if (saved) {
+                    todoSyncConfig = { ...todoSyncConfig, ...JSON.parse(saved) };
+                }
+            } catch (err) {
+                console.warn('todo-app 同步配置读取失败', err);
+            }
+            todoSyncConfig.remotePath = '/apps/todo-app/data.json';
+            todoSyncConfig.autoSync = false;
+            todoSyncConfig.remoteUploadEnabled = false;
+            saveTodoSyncConfigToLocal();
+        }
+
+        function saveTodoSyncConfigToLocal() {
+            todoSyncConfig.remotePath = '/apps/todo-app/data.json';
+            todoSyncConfig.autoSync = false;
+            todoSyncConfig.remoteUploadEnabled = false;
+            persistLocalValue('todoAppSyncConfig', JSON.stringify(todoSyncConfig), 'todo-app 同步配置');
+        }
+
+        function loadTodoSyncState() {
+            try {
+                const saved = localStorage.getItem('todoAppSyncState');
+                if (saved) todoSyncState = { ...todoSyncState, ...JSON.parse(saved) };
+            } catch (err) {
+                console.warn('todo-app 同步状态读取失败', err);
+            }
+            todoSyncState.lastLocalHash = todoSyncState.lastLocalHash || getTodoLegacySourceHash();
+            todoSyncState.lastRebuildAt = todoSyncState.lastRebuildAt || todoAppLocalMirrorMeta.lastRebuildAt || '';
+            todoSyncState.lastRebuildReason = todoSyncState.lastRebuildReason || todoAppLocalMirrorMeta.lastRebuildReason || '';
+        }
+
+        function saveTodoSyncState() {
+            todoSyncState.lastLocalHash = todoSyncState.lastLocalHash || getTodoLegacySourceHash();
+            persistLocalValue('todoAppSyncState', JSON.stringify(todoSyncState), 'todo-app 同步状态');
+        }
+
+        function getTodoRemotePreviewModel(source = {}, hash = '') {
+            const snapshot = getTodoAppCanonicalSnapshot(source);
+            const summary = todosService?.getTodoSnapshotCollectionSummary
+                ? todosService.getTodoSnapshotCollectionSummary(snapshot)
+                : {
+                    todos: snapshot.todos.length,
+                    deletedItems: snapshot.deletedItems.length,
+                    openTodos: snapshot.todos.filter(item => !item.done).length,
+                    doneTodos: snapshot.todos.filter(item => !!item.done).length
+                };
+            const resolvedHash = hash || getTodoAppDataHash(snapshot);
+            return {
+                snapshot,
+                hash: resolvedHash,
+                hashShort: resolvedHash ? resolvedHash.slice(0, 12) : '',
+                counts: {
+                    todos: summary.todos || 0,
+                    openTodos: summary.openTodos || 0,
+                    doneTodos: summary.doneTodos || 0,
+                    tombstones: summary.deletedItems || 0
+                }
+            };
+        }
+
+        function getTodoRemoteSchemaRisks(raw = {}) {
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+                return [{
+                    severity: 'danger',
+                    title: '云端 schema 不是对象',
+                    detail: '远端文件必须是 todo-app JSON 对象；当前响应无法安全参与预检。'
+                }];
+            }
+            const risks = [];
+            ['todos', 'deletedItems'].forEach(key => {
+                if (!(key in raw)) {
+                    risks.push({
+                        severity: key === 'todos' ? 'danger' : 'warning',
+                        title: '云端 schema 缺字段',
+                        detail: `缺少数组字段：${key}`
+                    });
+                } else if (!Array.isArray(raw[key])) {
+                    risks.push({
+                        severity: 'danger',
+                        title: '云端 schema 字段类型异常',
+                        detail: `${key} 不是数组`
+                    });
+                }
+            });
+            return risks;
+        }
+
+        function getTodoSyncScaffoldSummary() {
+            const mirrorHash = todoAppLocalMirror ? getTodoAppDataHash(todoAppLocalMirror) : '';
+            return {
+                remotePath: todoSyncConfig.remotePath || '/apps/todo-app/data.json',
+                endpointConfigured: !!syncConfig.webdavUrl,
+                autoSync: !!todoSyncConfig.autoSync,
+                remoteUploadEnabled: !!todoSyncConfig.remoteUploadEnabled,
+                manualPullEnabled: !!(syncConfig.webdavUrl && todoSyncConfig.remotePath),
+                manualPushEnabled: !!(syncConfig.webdavUrl
+                    && todoSyncConfig.remoteUploadEnabled
+                    && todoAppLocalMirror
+                    && todoRemotePreviewState.status === 'missing'
+                    && !isTodoRemotePreviewRunning
+                    && !isTodoRemoteUploadRunning),
+                dirty: !!todoSyncState.dirty,
+                lastLocalHash: todoSyncState.lastLocalHash || '',
+                lastLocalHashShort: (todoSyncState.lastLocalHash || '').slice(0, 12),
+                mirrorHash,
+                mirrorHashShort: mirrorHash ? mirrorHash.slice(0, 12) : '',
+                lastRemoteHash: todoSyncState.lastRemoteHash || '',
+                lastRemoteHashShort: (todoSyncState.lastRemoteHash || '').slice(0, 12),
+                lastSyncAt: todoSyncState.lastSyncAt || '',
+                lastPullAt: todoSyncState.lastPullAt || '',
+                lastPushAt: todoSyncState.lastPushAt || '',
+                lastRebuildAt: todoSyncState.lastRebuildAt || '',
+                lastRebuildReason: todoSyncState.lastRebuildReason || '',
+                phase: 'phase-4-protected-first-upload',
+                statusLabel: todoSyncConfig.remoteUploadEnabled
+                    ? '远端上传可手动触发'
+                    : (todoRemotePreviewState.status === 'missing'
+                        ? '首次创建等待本次授权'
+                        : (todoRemotePreviewState.status === 'ready'
+                            ? (todoRemotePreviewState.hashesMatch ? '本地与云端一致' : '云端文件已存在，暂不覆盖')
+                            : '远端上传关闭，仅只读预检'))
+            };
+        }
+
+        function getTodoProtectedUploadReadiness(snapshot = null, sourceHash = '') {
+            const scaffold = getTodoSyncScaffoldSummary();
+            const resolvedSourceHash = sourceHash || getTodoLegacySourceHash();
+            const consistency = todosService?.buildTodoDualWriteConsistency
+                ? todosService.buildTodoDualWriteConsistency(data, todoAppLocalMirror, resolvedSourceHash)
+                : { status: 'missing', mismatches: ['todo 服务未就绪'], statusLabel: 'todo 服务未就绪' };
+            const canonical = snapshot || (todoAppLocalMirror ? getTodoAppCanonicalSnapshot(todoAppLocalMirror) : null);
+            const blockers = [];
+            if (!scaffold.endpointConfigured) blockers.push('统一同步地址尚未配置');
+            if (scaffold.remotePath !== '/apps/todo-app/data.json') blockers.push('todo 云端路径不是固定安全路径');
+            if (syncConfig.useAppSyncKitProvider) blockers.push('当前 provider 不支持条件创建');
+            if (!todoAppLocalMirror) blockers.push('本地 todoAppData 镜像不存在');
+            if (consistency.status !== 'matched' || (consistency.mismatches || []).length) {
+                blockers.push('本地镜像与旧数据不一致');
+            }
+            if ((data.todos || []).some(item => !String(item?.id || '').trim())) {
+                blockers.push('存在缺少稳定 ID 的待办');
+            }
+            const invalidTodoTombstones = (data.deletedItems || []).filter(item => {
+                if (String(item?.collection || '').trim() !== 'todos') return false;
+                return !String(item?.id || '').trim() || !String(item?.deletedAt || '').trim();
+            });
+            if (invalidTodoTombstones.length) blockers.push('存在无法规范化的待办删除标记');
+            if (canonical) {
+                const todoIds = new Set();
+                const hasDuplicateTodos = (canonical.todos || []).some(item => {
+                    const id = String(item?.id || '').trim();
+                    if (!id) return true;
+                    if (todoIds.has(id)) return true;
+                    todoIds.add(id);
+                    return false;
+                });
+                if (hasDuplicateTodos) blockers.push('todos 存在重复或空 ID');
+                const tombstoneIds = new Set();
+                const hasDuplicateTombstones = (canonical.deletedItems || []).some(item => {
+                    const id = String(item?.id || '').trim();
+                    if (!id) return true;
+                    if (tombstoneIds.has(id)) return true;
+                    tombstoneIds.add(id);
+                    return false;
+                });
+                if (hasDuplicateTombstones) blockers.push('todo tombstone 存在重复或空 ID');
+            }
+            return {
+                ready: blockers.length === 0,
+                blockers: Array.from(new Set(blockers)),
+                consistency,
+                sourceHash: resolvedSourceHash
+            };
+        }
+
+        async function previewTodoRemotePull(mode = 'pull') {
+            const previewMode = mode === 'merge' || mode === 'both' ? 'merge' : 'pull';
+            if (isTodoRemotePreviewRunning || isTodoRemoteUploadRunning) return false;
+            todoSyncConfig.remoteUploadEnabled = false;
+            if (todoRemoteUploadState.status === 'armed') {
+                todoRemoteUploadState = { ...todoRemoteUploadState, status: 'idle', message: '' };
+            }
+            ensureTodoAppLocalMirrorBootstrapped();
+            const scaffold = getTodoSyncScaffoldSummary();
+            if (!scaffold.endpointConfigured) {
+                todoRemotePreviewState = {
+                    ...todoRemotePreviewState,
+                    status: 'error',
+                    mode: previewMode,
+                    requestedAt: getLocalDateTimeStr(),
+                    remotePath: scaffold.remotePath,
+                    error: '请先在统一同步设置里填写 Cloudflare Worker / WebDAV 中转地址。',
+                    local: todoAppLocalMirror ? getTodoRemotePreviewModel(todoAppLocalMirror) : null,
+                    remote: null,
+                    hashesMatch: false,
+                    risks: []
+                };
+                renderTodoCloudPanel();
+                return false;
+            }
+            isTodoRemotePreviewRunning = true;
+            todoRemotePreviewState = {
+                status: 'loading',
+                mode: previewMode,
+                requestedAt: getLocalDateTimeStr(),
+                remotePath: scaffold.remotePath,
+                error: '',
+                local: todoAppLocalMirror ? getTodoRemotePreviewModel(todoAppLocalMirror) : null,
+                remote: null,
+                hashesMatch: false,
+                risks: []
+            };
+            renderTodoCloudPanel();
+            try {
+                const remoteResult = await syncService.pullJson(
+                    { ...syncConfig, remotePath: scaffold.remotePath },
+                    scaffold.remotePath,
+                    value => value,
+                    value => getTodoAppDataHash(value)
+                );
+                const local = getTodoRemotePreviewModel(todoAppLocalMirror || {});
+                if (!remoteResult) {
+                    todoRemotePreviewState = {
+                        ...todoRemotePreviewState,
+                        status: 'missing',
+                        local,
+                        remote: null,
+                        hashesMatch: false,
+                        error: '',
+                        risks: []
+                    };
+                    return false;
+                }
+                const schemaRisks = getTodoRemoteSchemaRisks(remoteResult.data);
+                const remote = getTodoRemotePreviewModel(remoteResult.data, remoteResult.hash);
+                todoRemotePreviewState = {
+                    ...todoRemotePreviewState,
+                    status: 'ready',
+                    local,
+                    remote: { ...remote, etag: remoteResult.etag || '' },
+                    hashesMatch: local.hash === remote.hash,
+                    error: '',
+                    risks: schemaRisks
+                };
+                todoSyncState.lastPullAt = new Date().toISOString();
+                todoSyncState.lastRemoteHash = remote.hash;
+                if (remoteResult.etag) todoSyncState.lastRemoteEtag = remoteResult.etag;
+                saveTodoSyncState();
+                return true;
+            } catch (err) {
+                const isJsonError = err instanceof SyntaxError || /JSON/i.test(err?.message || '');
+                todoRemotePreviewState = {
+                    ...todoRemotePreviewState,
+                    status: 'error',
+                    error: isJsonError
+                        ? `云端 JSON 解析失败：${err?.message || String(err)}`
+                        : `只读检查失败：${err?.message || String(err)}`,
+                    remote: null,
+                    hashesMatch: false,
+                    risks: []
+                };
+                return false;
+            } finally {
+                isTodoRemotePreviewRunning = false;
+                renderTodoCloudPanel();
+            }
+        }
+
+        function setTodoRemoteUploadArmed(armed) {
+            const scaffold = getTodoSyncScaffoldSummary();
+            const uploadReadiness = getTodoProtectedUploadReadiness();
+            const canArm = todoRemotePreviewState.status === 'missing'
+                && scaffold.endpointConfigured
+                && !!todoAppLocalMirror
+                && uploadReadiness.ready
+                && !isTodoRemotePreviewRunning
+                && !isTodoRemoteUploadRunning;
+            todoSyncConfig.remoteUploadEnabled = !!armed && canArm;
+            todoRemoteUploadState = {
+                ...todoRemoteUploadState,
+                status: todoSyncConfig.remoteUploadEnabled ? 'armed' : 'idle',
+                attemptedAt: todoSyncConfig.remoteUploadEnabled ? getLocalDateTimeStr() : todoRemoteUploadState.attemptedAt,
+                message: todoSyncConfig.remoteUploadEnabled
+                    ? '本次会话已解锁首次上传；执行前仍会重建镜像、复查云端并再次确认。'
+                    : ''
+            };
+            renderTodoCloudPanel();
+            return todoSyncConfig.remoteUploadEnabled;
+        }
+
+        async function runProtectedTodoFirstUpload() {
+            if (isTodoRemoteUploadRunning || isTodoRemotePreviewRunning) return false;
+            const scaffold = getTodoSyncScaffoldSummary();
+            if (!todoSyncConfig.remoteUploadEnabled || todoRemotePreviewState.status !== 'missing') {
+                todoSyncConfig.remoteUploadEnabled = false;
+                todoRemoteUploadState = {
+                    ...todoRemoteUploadState,
+                    status: 'blocked',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: '首次上传未解锁，或最近一次检查不再是 404。请重新检查云端并勾选本次会话授权。'
+                };
+                renderTodoCloudPanel();
+                return false;
+            }
+            if (!scaffold.endpointConfigured) {
+                todoSyncConfig.remoteUploadEnabled = false;
+                todoRemoteUploadState = {
+                    ...todoRemoteUploadState,
+                    status: 'error',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: '统一同步地址尚未配置；请使用现有云同步设置，不需要填写第二套 todo 地址。'
+                };
+                renderTodoCloudPanel();
+                return false;
+            }
+            if (syncConfig.useAppSyncKitProvider) {
+                todoSyncConfig.remoteUploadEnabled = false;
+                todoRemoteUploadState = {
+                    ...todoRemoteUploadState,
+                    status: 'blocked',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: '当前 AppSyncKit provider 无法保证 create-only 条件写入；请使用现有 Worker 直连模式完成首次上传。'
+                };
+                renderTodoCloudPanel();
+                return false;
+            }
+
+            isTodoRemoteUploadRunning = true;
+            let putAttempted = false;
+            todoRemoteUploadState = {
+                status: 'validating',
+                attemptedAt: getLocalDateTimeStr(),
+                message: '正在重建本地镜像并复查云端…',
+                uploadedHash: '',
+                uploadedEtag: ''
+            };
+            renderTodoCloudPanel();
+            try {
+                const built = rebuildTodoAppLocalMirror('protected-first-upload-preflight');
+                if (!built || !todoAppLocalMirror) {
+                    throw new Error('本地 todo-app 镜像重建失败，已停止上传');
+                }
+                const sourceHash = getTodoLegacySourceHash();
+                const consistency = todosService.buildTodoDualWriteConsistency(data, todoAppLocalMirror, sourceHash);
+                if (consistency.status !== 'matched' || (consistency.mismatches || []).length) {
+                    throw new Error(`本地镜像一致性检查未通过：${(consistency.mismatches || []).join('；') || consistency.statusLabel || consistency.status}`);
+                }
+                const canonicalSnapshot = getTodoAppCanonicalSnapshot(todoAppLocalMirror);
+                const uploadReadiness = getTodoProtectedUploadReadiness(canonicalSnapshot, sourceHash);
+                if (!uploadReadiness.ready) {
+                    throw new Error(`上传前置检查未通过：${uploadReadiness.blockers.join('；')}`);
+                }
+                const local = getTodoRemotePreviewModel(canonicalSnapshot);
+                const frozenMirrorHash = local.hash;
+                const finalRemote = await syncService.pullJson(
+                    { ...syncConfig, remotePath: scaffold.remotePath },
+                    scaffold.remotePath,
+                    value => value,
+                    value => getTodoAppDataHash(value)
+                );
+                if (finalRemote) {
+                    const schemaRisks = getTodoRemoteSchemaRisks(finalRemote.data);
+                    const remote = getTodoRemotePreviewModel(finalRemote.data, finalRemote.hash);
+                    todoRemotePreviewState = {
+                        ...todoRemotePreviewState,
+                        status: 'ready',
+                        mode: 'race-recheck',
+                        local,
+                        remote: { ...remote, etag: finalRemote.etag || '' },
+                        hashesMatch: local.hash === remote.hash,
+                        error: '',
+                        risks: schemaRisks
+                    };
+                    todoRemoteUploadState = {
+                        ...todoRemoteUploadState,
+                        status: 'blocked',
+                        message: '最终复查时发现云端文件已经存在，已停止首次上传，绝不会覆盖。'
+                    };
+                    return false;
+                }
+
+                const confirmed = confirm(
+                    `最终确认：将创建 ${scaffold.remotePath}\n\n`
+                    + `${local.counts.todos} todos · 未完成 ${local.counts.openTodos} · 已完成 ${local.counts.doneTodos} · tombstone ${local.counts.tombstones}\n`
+                    + `hash ${local.hashShort}\n\n`
+                    + '客户端会带条件创建并在写入后回读核验。当前 KV 条件检查不是严格原子操作，请不要同时在另一台设备创建该文件。确认继续吗？'
+                );
+                if (!confirmed) {
+                    todoRemoteUploadState = {
+                        ...todoRemoteUploadState,
+                        status: 'cancelled',
+                        message: '已取消首次上传；本地镜像已完成安全重建，云端未写入。'
+                    };
+                    return false;
+                }
+
+                const liveSourceHash = getTodoLegacySourceHash();
+                const liveMirrorHash = todoAppLocalMirror ? getTodoAppDataHash(todoAppLocalMirror) : '';
+                const liveReadiness = getTodoProtectedUploadReadiness(
+                    todoAppLocalMirror ? getTodoAppCanonicalSnapshot(todoAppLocalMirror) : null,
+                    liveSourceHash
+                );
+                if (liveSourceHash !== sourceHash || liveMirrorHash !== frozenMirrorHash || !liveReadiness.ready) {
+                    todoRemoteUploadState = {
+                        ...todoRemoteUploadState,
+                        status: 'blocked',
+                        message: '确认期间本地待办数据或镜像发生变化，已停止上传。请重新检查云端。'
+                    };
+                    return false;
+                }
+
+                todoRemoteUploadState = {
+                    ...todoRemoteUploadState,
+                    status: 'uploading',
+                    message: '正在以 create-only 条件创建云端 todo 文件…'
+                };
+                renderTodoCloudPanel();
+                putAttempted = true;
+                const result = await syncService.pushJson(
+                    { ...syncConfig, remotePath: scaffold.remotePath },
+                    scaffold.remotePath,
+                    local.snapshot,
+                    'todo-app',
+                    { ifNoneMatch: '*' }
+                );
+                let verification;
+                try {
+                    verification = await syncService.pullJson(
+                        { ...syncConfig, remotePath: scaffold.remotePath },
+                        scaffold.remotePath,
+                        value => getTodoAppCanonicalSnapshot(value),
+                        value => getTodoAppDataHash(value)
+                    );
+                } catch (err) {
+                    err.todoUploadVerificationFailed = true;
+                    throw err;
+                }
+                if (!verification || verification.hash !== local.hash) {
+                    const verificationError = new Error(verification
+                        ? `回读 hash 不一致：本地 ${local.hashShort}，云端 ${(verification.hash || '').slice(0, 12) || '无'}`
+                        : '写入后回读仍未找到云端文件');
+                    verificationError.todoUploadVerificationFailed = true;
+                    throw verificationError;
+                }
+                const now = new Date().toISOString();
+                todoSyncState.dirty = false;
+                todoSyncState.lastLocalHash = sourceHash;
+                todoSyncState.lastRemoteHash = local.hash;
+                if (verification.etag || result?.etag) todoSyncState.lastRemoteEtag = verification.etag || result.etag;
+                todoSyncState.lastPushAt = now;
+                todoSyncState.lastSyncAt = now;
+                saveTodoSyncState();
+                todoRemotePreviewState = {
+                    status: 'ready',
+                    mode: 'first-upload',
+                    requestedAt: getLocalDateTimeStr(),
+                    remotePath: scaffold.remotePath,
+                    error: '',
+                    local,
+                    remote: { ...local, etag: verification.etag || result?.etag || '' },
+                    hashesMatch: true,
+                    risks: []
+                };
+                todoRemoteUploadState = {
+                    status: 'success',
+                    attemptedAt: getLocalDateTimeStr(),
+                    message: `云端 todo 文件已创建并回读核验一致；hash ${local.hashShort}。本次上传授权已自动关闭。`,
+                    uploadedHash: local.hash,
+                    uploadedEtag: verification.etag || result?.etag || ''
+                };
+                return true;
+            } catch (err) {
+                const conditionalConflict = err?.status === 412;
+                const uncertain = putAttempted && !conditionalConflict;
+                if (conditionalConflict || uncertain) {
+                    todoRemotePreviewState = {
+                        ...todoRemotePreviewState,
+                        status: 'idle',
+                        requestedAt: '',
+                        error: '',
+                        local: null,
+                        remote: null,
+                        hashesMatch: false,
+                        risks: []
+                    };
+                }
+                todoRemoteUploadState = {
+                    ...todoRemoteUploadState,
+                    status: conditionalConflict ? 'blocked' : (uncertain ? 'uncertain' : 'error'),
+                    message: conditionalConflict
+                        ? '服务器拒绝 create-only PUT：云端文件已被其他设备创建，未发生覆盖。请重新检查云端。'
+                        : (uncertain
+                            ? `PUT 已发出，但无法确认最终云端内容：${err?.message || String(err)}。不会自动重试，请重新手动检查云端。`
+                            : `首次上传失败：${err?.message || String(err)}`)
+                };
+                return false;
+            } finally {
+                isTodoRemoteUploadRunning = false;
+                todoSyncConfig.remoteUploadEnabled = false;
+                saveTodoSyncConfigToLocal();
+                renderTodoCloudPanel();
+            }
+        }
+
+        async function runTodoManualSyncSkeleton(direction = 'pull') {
+            if (direction === 'push') return runProtectedTodoFirstUpload();
+            return previewTodoRemotePull(direction === 'both' ? 'merge' : 'pull');
+        }
+
+        function renderTodoCloudPanel() {
+            const container = document.getElementById('todo-cloud-panel');
+            if (!container) return;
+            ensureTodoAppLocalMirrorBootstrapped();
+            const scaffold = getTodoSyncScaffoldSummary();
+            const uploadReadiness = getTodoProtectedUploadReadiness();
+            const consistency = uploadReadiness.consistency || {};
+            const mirrorSummary = consistency.mirror || getTodoAppLocalMirrorSummary();
+            const preview = todoRemotePreviewState;
+            const upload = todoRemoteUploadState;
+            const previewMissing = preview.status === 'missing';
+            const actionLocked = isTodoRemotePreviewRunning || isTodoRemoteUploadRunning;
+            const canToggle = previewMissing && uploadReadiness.ready && !actionLocked;
+            const statusLabels = {
+                idle: '等待操作',
+                loading: '检查中',
+                missing: '云端尚无文件',
+                ready: preview.hashesMatch ? '本地与云端一致' : '云端已存在',
+                error: '检查失败',
+                armed: '已授权首次创建',
+                validating: '上传前复查中',
+                uploading: '上传中',
+                success: '创建并核验成功',
+                blocked: '已安全停止',
+                cancelled: '已取消',
+                uncertain: '结果待核验'
+            };
+            const statusClass = {
+                idle: 'is-prepared',
+                loading: 'is-partial',
+                missing: 'is-prepared',
+                ready: preview.hashesMatch ? 'is-ready' : 'is-partial',
+                error: 'is-blocked',
+                armed: 'is-ready',
+                validating: 'is-partial',
+                uploading: 'is-partial',
+                success: 'is-ready',
+                blocked: 'is-blocked',
+                cancelled: 'is-prepared',
+                uncertain: 'is-blocked'
+            };
+            const previewStatus = statusLabels[preview.status] || preview.status;
+            const uploadStatus = statusLabels[upload.status] || upload.status;
+            const localCounts = preview.local?.counts || getTodoRemotePreviewModel(todoAppLocalMirror || {}).counts;
+            container.innerHTML = `
+                <div class="habit-diagnostics-guard">
+                    <div>
+                        <strong>待办独立文件 · 受保护首次上传</strong>
+                        <span>当前权威仍是 lifePlanData.todos；本地镜像写 localStorage.todoAppData。这里可手动检查并创建 /apps/todo-app/data.json，不会覆盖已有云端文件，也不会改 /life-plan.json。</span>
+                    </div>
+                    <span class="habit-diagnostics-pill">Phase 4 Upload</span>
+                </div>
+                <div class="habit-diagnostics-grid" style="margin-top:12px;">
+                    <div class="habit-diagnostics-metric"><span>本地待办</span><strong>${escapeHtml(localCounts.todos || 0)}</strong><em>未完成 ${escapeHtml(localCounts.openTodos || 0)} · 完成 ${escapeHtml(localCounts.doneTodos || 0)}</em></div>
+                    <div class="habit-diagnostics-metric"><span>Tombstone</span><strong>${escapeHtml(localCounts.tombstones || 0)}</strong><em>collection=todos</em></div>
+                    <div class="habit-diagnostics-metric"><span>镜像状态</span><strong>${escapeHtml(consistency.statusLabel || mirrorSummary.statusLabel || (mirrorSummary.exists ? '已建立' : '未建立'))}</strong><em>${escapeHtml(mirrorSummary.sourceHashShort || scaffold.mirrorHashShort || '无指纹')}</em></div>
+                    <div class="habit-diagnostics-metric"><span>云端路径</span><strong style="font-size:13px;">${escapeHtml(scaffold.remotePath)}</strong><em>${scaffold.endpointConfigured ? '复用统一同步地址' : '未配置统一同步地址'}</em></div>
+                </div>
+                <div class="habit-remote-preview" style="margin-top:14px;" aria-live="polite">
+                    <div class="habit-remote-preview-head">
+                        <div>
+                            <strong>只读云端预检</strong>
+                            <span>GET ${escapeHtml(scaffold.remotePath)} · 不写 lifePlanData / todoAppData · 不发 PUT</span>
+                        </div>
+                        <span class="habit-dualwrite-status ${statusClass[preview.status] || 'is-prepared'}">${escapeHtml(previewStatus)}</span>
+                    </div>
+                    ${preview.error ? `<div class="habit-remote-preview-empty is-danger">${escapeHtml(preview.error)}</div>` : ''}
+                    ${preview.status === 'missing' ? `<div class="habit-remote-preview-empty is-warning">云端尚无 todo-app 文件（404/空）。可在下方授权后执行受保护首次创建。</div>` : ''}
+                    ${preview.status === 'ready' ? `
+                        <div class="habit-remote-preview-table-wrap">
+                            <table class="habit-remote-preview-table">
+                                <thead><tr><th></th><th>todos</th><th>open</th><th>done</th><th>tombstone</th><th>hash</th></tr></thead>
+                                <tbody>
+                                    <tr><td>本地</td><td>${escapeHtml(preview.local?.counts?.todos || 0)}</td><td>${escapeHtml(preview.local?.counts?.openTodos || 0)}</td><td>${escapeHtml(preview.local?.counts?.doneTodos || 0)}</td><td>${escapeHtml(preview.local?.counts?.tombstones || 0)}</td><td>${escapeHtml(preview.local?.hashShort || '')}</td></tr>
+                                    <tr><td>云端</td><td>${escapeHtml(preview.remote?.counts?.todos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.openTodos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.doneTodos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.tombstones || 0)}</td><td>${escapeHtml(preview.remote?.hashShort || '')}</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="habit-remote-preview-verdict">${preview.hashesMatch ? '本地与云端 hash 一致。' : '云端文件已存在且与本地不同；本阶段不会覆盖，请先人工确认。'}</div>
+                    ` : ''}
+                    ${(preview.risks || []).length ? `
+                        <div class="habit-remote-risk-list">
+                            ${preview.risks.map(item => `
+                                <div class="habit-remote-risk is-${escapeHtml(item.severity || 'info')}">
+                                    <strong>${escapeHtml(item.title || '风险')}</strong>
+                                    <span>${escapeHtml(item.detail || '')}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    <div class="habit-local-mirror-actions" style="margin-top:12px;">
+                        <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runTodoManualSyncSkeleton('pull')">${isTodoRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
+                        <button type="button" class="btn btn-primary" ${scaffold.manualPushEnabled ? '' : 'disabled'} onclick="runTodoManualSyncSkeleton('push')">${isTodoRemoteUploadRunning ? '正在上传…' : '创建云端 todo 文件'}</button>
+                        <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="rebuildTodoAppLocalMirrorFromPanel()">重建本地镜像</button>
+                    </div>
+                </div>
+                <div class="habit-upload-guard is-${escapeHtml(upload.status || 'idle')}" style="margin-top:14px;" role="status" aria-live="polite">
+                    <div class="habit-upload-guard-head">
+                        <div>
+                            <strong>受保护首次创建</strong>
+                            <span>复用现有统一同步地址；只允许云端 404/空时创建，绝不覆盖已有文件。</span>
+                        </div>
+                        <span class="habit-dualwrite-status ${statusClass[upload.status] || 'is-prepared'}">${escapeHtml(uploadStatus)}</span>
+                    </div>
+                    ${previewMissing ? `
+                        <label class="habit-upload-arm ${canToggle ? '' : 'is-disabled'}">
+                            <input type="checkbox"
+                                ${todoSyncConfig.remoteUploadEnabled ? 'checked' : ''}
+                                ${canToggle ? '' : 'disabled'}
+                                onchange="setTodoRemoteUploadArmed(this.checked)">
+                            <span>
+                                <strong>复用现有统一同步地址并授权本次首次创建</strong>
+                                <small>只对当前页面会话生效；成功、失败或取消后都会自动关闭。</small>
+                            </span>
+                        </label>
+                    ` : ''}
+                    ${uploadReadiness.blockers.length ? `
+                        <div class="habit-upload-blockers">
+                            <strong>当前不能上传</strong>
+                            <span>${escapeHtml(uploadReadiness.blockers.join('；'))}</span>
+                        </div>
+                    ` : ''}
+                    ${upload.message ? `<div class="habit-upload-state-message">${escapeHtml(upload.message)}</div>` : ''}
+                    <div class="habit-upload-next-step">${previewMissing
+                        ? (todoSyncConfig.remoteUploadEnabled
+                            ? '已解锁。点击“创建云端 todo 文件”将再次 GET、条件 PUT，并回读核验。'
+                            : '先“手动检查云端”，确认 404 后勾选授权，再创建。')
+                        : (preview.status === 'ready'
+                            ? (preview.hashesMatch ? '云端已有一致文件，无需再创建。' : '云端文件已存在。本阶段只支持首次创建，不覆盖。')
+                            : '先手动检查云端。')}</div>
+                    <div class="habit-upload-caveat">上传动作会重建本地镜像、再次 GET、单次发送 <code>If-None-Match: *</code>，并在 PUT 后回读 hash。现有 Cloudflare KV 条件检查并非严格原子锁，请勿让两台设备同时执行首次创建。</div>
+                </div>
+            `;
+        }
+
+        function rebuildTodoAppLocalMirrorFromPanel() {
+            const built = rebuildTodoAppLocalMirror('panel-manual-rebuild');
+            renderTodoCloudPanel();
+            return !!built;
         }
 
         function getHabitRemotePreviewBalances(snapshot = {}) {
@@ -5422,7 +6258,10 @@
             if (pageName === 'materials') renderMaterialsPage();
             if (pageName === 'tags') renderTagCenter();
             if (pageName === 'search') renderGlobalSearch();
-            if (pageName === 'todos') renderTodoTable();
+            if (pageName === 'todos') {
+                renderTodoTable();
+                renderTodoCloudPanel();
+            }
             if (pageName === 'habits') renderHabitPage();
             if (pageName === 'fitness') {
                 if (typeof renderFitnessPage === 'function') renderFitnessPage();
@@ -7542,6 +8381,7 @@
             const tbody = document.getElementById('todo-table-body');
             if (filtered.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无符合条件的待办</td></tr>';
+                renderTodoCloudPanel();
                 return;
             }
 
@@ -7571,6 +8411,7 @@
                     </tr>
                 `;
             }).join('');
+            renderTodoCloudPanel();
         }
 
         function openTodoModal() {

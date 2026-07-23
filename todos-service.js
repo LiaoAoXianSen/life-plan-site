@@ -239,6 +239,357 @@
             };
         }
 
+        function asArray(value) {
+            return Array.isArray(value) ? value : [];
+        }
+
+        function normalizeId(value) {
+            if (value === undefined || value === null) return '';
+            return String(value).trim();
+        }
+
+        function isTodoDeletionItem(item = {}) {
+            return normalizeId(item?.collection || item?.type || item?.entity || item?.entityType || item?.kind) === 'todos';
+        }
+
+        function getTodoLegacySourceSlice(source = {}) {
+            return {
+                todos: asArray(source.todos),
+                deletedItems: asArray(source.deletedItems).filter(isTodoDeletionItem)
+            };
+        }
+
+        function normalizeTodoSession(session = {}, index = 0) {
+            if (!session || typeof session !== 'object') return null;
+            const next = {
+                ...session,
+                id: normalizeId(session.id) || `session-${index + 1}`,
+                date: typeof session.date === 'string' ? session.date : '',
+                startTime: typeof session.startTime === 'string' ? session.startTime : '',
+                endTime: typeof session.endTime === 'string' ? session.endTime : '',
+                note: typeof session.note === 'string' ? session.note : '',
+                createdAt: typeof session.createdAt === 'string' ? session.createdAt : ''
+            };
+            return next;
+        }
+
+        function normalizeTodoSubTodo(sub = {}) {
+            if (!sub || typeof sub !== 'object') return null;
+            return {
+                ...sub,
+                text: typeof sub.text === 'string' ? sub.text : String(sub.text || ''),
+                done: !!sub.done
+            };
+        }
+
+        function normalizeTodoEntity(todo = {}, index = 0) {
+            if (!todo || typeof todo !== 'object') return null;
+            const text = typeof todo.text === 'string' ? todo.text : String(todo.text || '');
+            const sourceMatchKey = typeof todo.sourceMatchKey === 'string' && todo.sourceMatchKey
+                ? todo.sourceMatchKey
+                : normalizeTodoTextKey(text);
+            const urgency = urgencyMeta[todo.urgency] ? todo.urgency : 'medium';
+            return {
+                ...todo,
+                id: normalizeId(todo.id) || `todo-${index + 1}`,
+                text,
+                note: typeof todo.note === 'string' ? todo.note : '',
+                done: !!todo.done,
+                dueDate: typeof todo.dueDate === 'string' ? todo.dueDate : '',
+                planStartDate: typeof todo.planStartDate === 'string' ? todo.planStartDate : '',
+                planEndDate: typeof todo.planEndDate === 'string' ? todo.planEndDate : '',
+                urgency,
+                group: typeof todo.group === 'string' && todo.group ? todo.group : '其他',
+                subTodos: asArray(todo.subTodos).map(normalizeTodoSubTodo).filter(Boolean),
+                sessions: asArray(todo.sessions).map(normalizeTodoSession).filter(Boolean),
+                isExclusive: !!todo.isExclusive,
+                createdAt: typeof todo.createdAt === 'string' ? todo.createdAt : '',
+                updatedAt: typeof todo.updatedAt === 'string' ? todo.updatedAt : '',
+                completedAt: typeof todo.completedAt === 'string' ? todo.completedAt : '',
+                sourceType: typeof todo.sourceType === 'string' ? todo.sourceType : '',
+                sourceRecordId: typeof todo.sourceRecordId === 'string' ? todo.sourceRecordId : '',
+                sourceMatchKey
+            };
+        }
+
+        function normalizeTodoDeletedItem(item = {}, index = 0) {
+            if (!item || typeof item !== 'object' || !isTodoDeletionItem(item)) return null;
+            const id = normalizeId(item.id || item.targetId || item.itemId || item.entityId);
+            if (!id) return null;
+            return {
+                ...item,
+                collection: 'todos',
+                id,
+                deletedAt: typeof item.deletedAt === 'string' && item.deletedAt
+                    ? item.deletedAt
+                    : getNowLocal(),
+                reason: typeof item.reason === 'string' ? item.reason : '',
+                text: typeof item.text === 'string' ? item.text : '',
+                recordId: typeof item.recordId === 'string' ? item.recordId : '',
+                sourceIndex: index
+            };
+        }
+
+        function getTodoSnapshotCollectionSummary(snapshot = {}) {
+            return {
+                todos: asArray(snapshot.todos).length,
+                deletedItems: asArray(snapshot.deletedItems).length,
+                openTodos: asArray(snapshot.todos).filter(item => !item?.done).length,
+                doneTodos: asArray(snapshot.todos).filter(item => !!item?.done).length,
+                exclusiveTodos: asArray(snapshot.todos).filter(item => !!item?.isExclusive).length,
+                withSourceRecord: asArray(snapshot.todos).filter(item => !!normalizeId(item?.sourceRecordId)).length
+            };
+        }
+
+        function getTodoAppCanonicalSnapshot(source = {}) {
+            const input = source && typeof source === 'object' ? source : {};
+            const todos = asArray(input.todos).map((item, index) => normalizeTodoEntity(item, index)).filter(Boolean);
+            const deletedItems = asArray(input.deletedItems)
+                .map((item, index) => normalizeTodoDeletedItem(item, index))
+                .filter(Boolean);
+            return {
+                schemaVersion: Number.isFinite(Number(input.schemaVersion)) ? Number(input.schemaVersion) : 1,
+                generatedAt: typeof input.generatedAt === 'string' && input.generatedAt
+                    ? input.generatedAt
+                    : new Date().toISOString(),
+                todos,
+                deletedItems
+            };
+        }
+
+        function getTodoAppHashPayload(source = {}) {
+            const snapshot = getTodoAppCanonicalSnapshot(source);
+            return {
+                schemaVersion: snapshot.schemaVersion,
+                todos: snapshot.todos,
+                deletedItems: snapshot.deletedItems
+            };
+        }
+
+        function buildTodoAppSnapshot(source = {}, options = {}) {
+            const slice = getTodoLegacySourceSlice(source);
+            const mode = options.mode === 'local-mirror' ? 'local-mirror' : 'preview';
+            const generatedAt = options.generatedAt || new Date().toISOString();
+            const sourceHash = normalizeId(options.sourceHash);
+            const todos = slice.todos.map((item, index) => normalizeTodoEntity(item, index)).filter(Boolean);
+            const deletedItems = slice.deletedItems
+                .map((item, index) => normalizeTodoDeletedItem(item, index))
+                .filter(Boolean);
+            const snapshot = {
+                schemaVersion: 1,
+                generatedAt,
+                authority: 'lifePlanData.todos',
+                remotePath: '/apps/todo-app/data.json',
+                remoteUploadEnabled: false,
+                todos,
+                deletedItems
+            };
+
+            if (mode === 'preview') {
+                snapshot.readOnlyPreview = true;
+            } else {
+                snapshot.localMirror = true;
+                snapshot.mirror = {
+                    mode: 'local-only',
+                    reason: options.reason || 'manual-rebuild',
+                    rebuiltAt: generatedAt,
+                    sourceHash: sourceHash || undefined,
+                    dualWriteEnabledPaths: asArray(options.dualWriteEnabledPaths)
+                };
+            }
+
+            return snapshot;
+        }
+
+        function buildTodoAppSnapshotPreview(source = {}, options = {}) {
+            const snapshot = buildTodoAppSnapshot(source, { ...options, mode: 'preview' });
+            return {
+                generatedAt: snapshot.generatedAt,
+                readOnly: true,
+                summary: getTodoSnapshotCollectionSummary(snapshot),
+                snapshot,
+                jsonText: JSON.stringify(snapshot, null, 2)
+            };
+        }
+
+        function buildTodoAppLocalMirror(source = {}, options = {}) {
+            const snapshot = buildTodoAppSnapshot(source, { ...options, mode: 'local-mirror' });
+            return {
+                generatedAt: snapshot.generatedAt,
+                readOnly: false,
+                remoteUploadEnabled: false,
+                summary: getTodoSnapshotCollectionSummary(snapshot),
+                snapshot,
+                jsonText: JSON.stringify(snapshot, null, 2)
+            };
+        }
+
+        function summarizeTodoAppLocalMirror(mirror = null, expectedSourceHash = '') {
+            const snapshot = mirror && typeof mirror === 'object' ? mirror : null;
+            const summary = snapshot ? getTodoSnapshotCollectionSummary(snapshot) : {};
+            const storedSourceHash = normalizeId(snapshot?.mirror?.sourceHash || snapshot?.sourceHash);
+            const expected = normalizeId(expectedSourceHash);
+            return {
+                exists: !!snapshot,
+                generatedAt: snapshot?.generatedAt || '',
+                rebuiltAt: snapshot?.mirror?.rebuiltAt || snapshot?.generatedAt || '',
+                reason: snapshot?.mirror?.reason || '',
+                sourceHash: storedSourceHash,
+                sourceHashShort: storedSourceHash ? storedSourceHash.slice(0, 12) : '',
+                matchesSource: !!(expected && storedSourceHash && expected === storedSourceHash),
+                remoteUploadEnabled: snapshot?.remoteUploadEnabled === true,
+                localMirror: snapshot?.localMirror === true,
+                schemaVersion: Number(snapshot?.schemaVersion) || 0,
+                summary
+            };
+        }
+
+        function buildTodoDualWriteConsistency(source = {}, mirror = null, expectedSourceHash = '') {
+            const slice = getTodoLegacySourceSlice(source);
+            const mirrorSummary = summarizeTodoAppLocalMirror(mirror, expectedSourceHash);
+            const comparisons = [
+                {
+                    id: 'todos',
+                    label: '待办',
+                    legacy: slice.todos.length,
+                    mirror: mirrorSummary.summary.todos || 0
+                },
+                {
+                    id: 'openTodos',
+                    label: '未完成',
+                    legacy: slice.todos.filter(item => !item?.done).length,
+                    mirror: mirrorSummary.summary.openTodos || 0
+                },
+                {
+                    id: 'doneTodos',
+                    label: '已完成',
+                    legacy: slice.todos.filter(item => !!item?.done).length,
+                    mirror: mirrorSummary.summary.doneTodos || 0
+                },
+                {
+                    id: 'deletedItems',
+                    label: '删除标记',
+                    legacy: slice.deletedItems.length,
+                    mirror: mirrorSummary.summary.deletedItems || 0
+                }
+            ].map(item => ({
+                ...item,
+                matched: item.legacy === item.mirror,
+                delta: item.mirror - item.legacy
+            }));
+
+            const legacyIds = new Set(slice.todos.map(item => normalizeId(item?.id)).filter(Boolean));
+            const mirrorIds = new Set(asArray(mirror?.todos).map(item => normalizeId(item?.id)).filter(Boolean));
+            const missingInMirror = Array.from(legacyIds).filter(id => !mirrorIds.has(id));
+            const extraInMirror = Array.from(mirrorIds).filter(id => !legacyIds.has(id));
+            const mismatches = comparisons.filter(item => !item.matched).map(item => `${item.label}不一致`);
+            if (mirrorSummary.exists && !mirrorSummary.matchesSource) {
+                mismatches.unshift('sourceHash 未对齐旧数据');
+            }
+            if (!mirrorSummary.exists) {
+                mismatches.unshift('本地镜像不存在');
+            }
+            if (missingInMirror.length) {
+                mismatches.push(`镜像缺少 ${missingInMirror.length} 个 todo id`);
+            }
+            if (extraInMirror.length) {
+                mismatches.push(`镜像多出 ${extraInMirror.length} 个 todo id`);
+            }
+
+            let status = 'matched';
+            let statusLabel = '本地镜像已对齐旧数据';
+            if (!mirrorSummary.exists) {
+                status = 'missing';
+                statusLabel = '本地镜像尚未建立';
+            } else if (mismatches.length) {
+                status = 'mismatch';
+                statusLabel = '本地镜像与旧数据不一致';
+            }
+
+            return {
+                generatedAt: new Date().toISOString(),
+                status,
+                statusLabel,
+                authority: 'lifePlanData.todos',
+                remoteUploadEnabled: false,
+                mirror: mirrorSummary,
+                comparisons,
+                missingInMirror: missingInMirror.slice(0, 12),
+                extraInMirror: extraInMirror.slice(0, 12),
+                mismatches,
+                summary: {
+                    comparisonTotal: comparisons.length,
+                    comparisonMatched: comparisons.filter(item => item.matched).length,
+                    mismatchCount: mismatches.length
+                }
+            };
+        }
+
+        function getTodoDualWritePathInventory() {
+            return [
+                {
+                    id: 'save-data-central',
+                    label: '主数据保存（统一双写）',
+                    fn: 'saveData',
+                    legacyTargets: ['todos', 'deletedItems'],
+                    snapshotTargets: ['todos', 'deletedItems'],
+                    priority: 1,
+                    dualWrite: 'enabled',
+                    note: '所有待办变更最终都会走 saveData；sourceHash 变化时重建 localStorage.todoAppData，不上传云端。'
+                },
+                {
+                    id: 'toggle-todo',
+                    label: '勾选完成 / 恢复',
+                    fn: 'toggleTodo',
+                    legacyTargets: ['todos'],
+                    snapshotTargets: ['todos'],
+                    priority: 1,
+                    dualWrite: 'enabled',
+                    note: '通过 saveData 触发镜像重建。'
+                },
+                {
+                    id: 'save-todo-detail',
+                    label: '新建 / 编辑待办',
+                    fn: 'saveTodoDetail',
+                    legacyTargets: ['todos'],
+                    snapshotTargets: ['todos'],
+                    priority: 1,
+                    dualWrite: 'enabled',
+                    note: '含子任务、计划日期与执行记录；通过 saveData 触发。'
+                },
+                {
+                    id: 'delete-todo',
+                    label: '删除待办',
+                    fn: 'deleteCurrentTodo',
+                    legacyTargets: ['todos', 'deletedItems', 'records'],
+                    snapshotTargets: ['todos', 'deletedItems'],
+                    priority: 1,
+                    dualWrite: 'enabled',
+                    note: '写 tombstone 并重建镜像；records 引用仍由 lifePlanData 持有。'
+                },
+                {
+                    id: 'record-todo-link',
+                    label: '记录关联待办增删',
+                    fn: 'saveRecord',
+                    legacyTargets: ['todos', 'deletedItems', 'records'],
+                    snapshotTargets: ['todos', 'deletedItems'],
+                    priority: 2,
+                    dualWrite: 'enabled',
+                    note: '记录保存可能增删专属待办；镜像只同步 todos/tombstone。'
+                },
+                {
+                    id: 'ai-and-import',
+                    label: 'AI 生成 / 导入合并',
+                    fn: 'createTodoFromAiItem / importData',
+                    legacyTargets: ['todos', 'deletedItems'],
+                    snapshotTargets: ['todos', 'deletedItems'],
+                    priority: 2,
+                    dualWrite: 'enabled',
+                    note: '导入与 AI 批量写入后由 saveData 统一双写。'
+                }
+            ];
+        }
+
         return {
             urgencyMeta,
             getTodoUrgencyMeta,
@@ -254,7 +605,18 @@
             normalizeTodoTextKey,
             scoreTodoTextSimilarity,
             findMatchingTodo,
-            createTodoFromAiItem
+            createTodoFromAiItem,
+            getTodoLegacySourceSlice,
+            normalizeTodoEntity,
+            getTodoAppCanonicalSnapshot,
+            getTodoAppHashPayload,
+            buildTodoAppSnapshot,
+            buildTodoAppSnapshotPreview,
+            buildTodoAppLocalMirror,
+            summarizeTodoAppLocalMirror,
+            buildTodoDualWriteConsistency,
+            getTodoDualWritePathInventory,
+            getTodoSnapshotCollectionSummary
         };
     }
 
