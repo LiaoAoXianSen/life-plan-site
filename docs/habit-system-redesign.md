@@ -338,19 +338,17 @@ UI 不直接拼旧字段，为迁移 snapshot 做准备。
 - `pendingHabitCloudSync`
 - 默认路径 `/apps/habit-app/data.json`
 
-脚手架状态：已完成本地配置/状态键与诊断展示。
+脚手架状态：已完成本地配置/状态键、诊断展示，以及 `sync-service` 的 habit hash/merge。
 
 - `remoteUploadEnabled: false`
 - `autoSync: false`
-- 诊断页显示 path、本地 hash、上次同步时间
+- 诊断页显示 path、旧数据 hash、镜像 hash、merge/hash 就绪状态
+- `sync-service.js` 已提供：
+  - `getHabitSnapshot`
+  - `getHabitDataHash`
+  - `mergeHabitSnapshots`
+  - habit tombstone 判定
 - 尚未实现 pull/push/network timer
-
-`sync-service.js` 后续需要类似能力：
-
-- `getHabitSnapshot`
-- `getHabitDataHash`
-- `mergeHabitSnapshots`
-- habit tombstone 判定
 
 ### Phase 6：yuanqidaka 接入 mapper
 
@@ -396,7 +394,7 @@ UI 不直接拼旧字段，为迁移 snapshot 做准备。
 
 下一步应该优先做：
 
-1. 在 `sync-service.js` 增加 habit snapshot hash/merge 能力，但仍默认不上传。
-2. 增加显式开关后的 pull/push 流程，先手动、后 autoSync。
+1. 增加显式开关后的手动 pull/push 流程，默认仍关闭上传。
+2. 手动同步先只操作 `/apps/habit-app/data.json`，不混入 life 主文件。
 3. 远端同步仍保持 Worker 无业务合并逻辑。
 4. 最后再对 `yuanqidaka` 做 Room sync migration。

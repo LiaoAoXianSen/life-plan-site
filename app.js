@@ -921,6 +921,18 @@
             return syncService.getWheelDataHash(value);
         }
 
+        function getHabitAppSnapshot(source = habitAppLocalMirror) {
+            return syncService.getHabitSnapshot(source || {});
+        }
+
+        function getHabitAppDataHash(value = getHabitAppSnapshot()) {
+            return syncService.getHabitDataHash(value);
+        }
+
+        function mergeHabitAppSnapshots(localSnapshot, remoteSnapshot) {
+            return syncService.mergeHabitSnapshots(localSnapshot, remoteSnapshot);
+        }
+
         function applyWheelSnapshot(snapshot, shouldRender = true) {
             const next = snapshot && typeof snapshot === 'object' ? snapshot : {};
             const previousData = cloneDataSnapshot(data);
@@ -1362,6 +1374,7 @@
         }
 
         function getHabitSyncScaffoldSummary() {
+            const mirrorHash = habitAppLocalMirror ? getHabitAppDataHash(habitAppLocalMirror) : '';
             return {
                 remotePath: habitSyncConfig.remotePath || '/apps/habit-app/data.json',
                 autoSync: !!habitSyncConfig.autoSync,
@@ -1369,10 +1382,15 @@
                 dirty: !!habitSyncState.dirty,
                 lastLocalHash: habitSyncState.lastLocalHash || '',
                 lastLocalHashShort: (habitSyncState.lastLocalHash || '').slice(0, 12),
+                mirrorHash,
+                mirrorHashShort: mirrorHash ? mirrorHash.slice(0, 12) : '',
                 lastRemoteHash: habitSyncState.lastRemoteHash || '',
+                lastRemoteHashShort: (habitSyncState.lastRemoteHash || '').slice(0, 12),
                 lastSyncAt: habitSyncState.lastSyncAt || '',
                 lastRebuildAt: habitSyncState.lastRebuildAt || '',
                 lastRebuildReason: habitSyncState.lastRebuildReason || '',
+                mergeReady: typeof syncService.mergeHabitSnapshots === 'function',
+                hashReady: typeof syncService.getHabitDataHash === 'function',
                 phase: 'phase-5-scaffold',
                 statusLabel: habitSyncConfig.remoteUploadEnabled
                     ? '远端上传已开启'
@@ -7102,9 +7120,11 @@
                                     </div>
                                     <div class="habit-dualwrite-next">
                                         <div>配置键：habitAppSyncConfig / habitAppSyncState</div>
-                                        <div>本地 hash：${escapeHtml(scaffold.lastLocalHashShort || '无')}</div>
+                                        <div>旧数据 hash：${escapeHtml(scaffold.lastLocalHashShort || '无')}</div>
+                                        <div>镜像 hash：${escapeHtml(scaffold.mirrorHashShort || '无')}</div>
+                                        <div>merge/hash 能力：${scaffold.mergeReady && scaffold.hashReady ? '已接入 sync-service' : '未就绪'}</div>
                                         <div>上次远端同步：${escapeHtml(scaffold.lastSyncAt || '尚未启用')}</div>
-                                        <div>当前阶段：只落本地配置与状态，不发起网络请求。</div>
+                                        <div>当前阶段：本地 merge/hash 已就绪，仍不发起网络请求。</div>
                                     </div>
                                 </div>
                             `;

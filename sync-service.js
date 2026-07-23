@@ -52,6 +52,176 @@
             return getDataHash(value || {});
         }
 
+        const HABIT_APP_COLLECTIONS = [
+            'habits',
+            'habitGroups',
+            'habitRecords',
+            'habitRewards',
+            'habitRewardRecords',
+            'habitFineRecords',
+            'habitLedger',
+            'habitCurrencies',
+            'habitMilestones',
+            'habitMilestoneClaims',
+            'habitOverdueEvents',
+            'habitMoodNotes',
+            'habitTimeTasks'
+        ];
+
+        function asArray(value) {
+            return Array.isArray(value) ? value : [];
+        }
+
+        function isHabitDeletionCollection(collection = '') {
+            return HABIT_APP_COLLECTIONS.includes(collection)
+                || ['habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'habit', 'checkin'].includes(collection);
+        }
+
+        function normalizeHabitDeletedItem(item = {}) {
+            if (!item || typeof item !== 'object') return null;
+            const collection = String(item.collection || item.targetCollection || item.type || item.entity || item.entityType || item.kind || '').trim();
+            const id = String(item.id || item.itemId || item.targetId || item.entityId || '').trim();
+            const deletedAt = item.deletedAt || item.updatedAt || item.createdAt || '';
+            if (!collection || !id || !deletedAt) return null;
+            return {
+                collection,
+                id,
+                deletedAt,
+                parentId: item.parentId || item.habitId || item.wheelId || '',
+                reason: item.reason || '',
+                name: item.name || ''
+            };
+        }
+
+        function getHabitSnapshot(source = {}) {
+            const input = source && typeof source === 'object' ? source : {};
+            const snapshot = {
+                schemaVersion: Number.isFinite(Number(input.schemaVersion)) ? Number(input.schemaVersion) : 1
+            };
+            HABIT_APP_COLLECTIONS.forEach(key => {
+                snapshot[key] = asArray(input[key]).filter(item => item && typeof item === 'object');
+            });
+            snapshot.deletedItems = asArray(input.deletedItems)
+                .map(normalizeHabitDeletedItem)
+                .filter(Boolean)
+                .filter(item => isHabitDeletionCollection(item.collection));
+            return snapshot;
+        }
+
+        function getHabitHashPayload(source = {}) {
+            const snapshot = getHabitSnapshot(source);
+            return {
+                schemaVersion: snapshot.schemaVersion,
+                ...Object.fromEntries(HABIT_APP_COLLECTIONS.map(key => [key, snapshot[key]])),
+                deletedItems: snapshot.deletedItems
+            };
+        }
+
+        function getHabitDataHash(value = getHabitSnapshot()) {
+            return getDataHash(getHabitHashPayload(value));
+        }
+
+        function getHabitEntityTime(item) {
+            if (!item || typeof item !== 'object') return 0;
+            const raw = item.updatedAt || item.createdAt || item.deletedAt || item.date || item.recordTime || item.checkinAt || '';
+            const time = new Date(raw).getTime();
+            return Number.isFinite(time) ? time : 0;
+        }
+
+        function getHabitEntityMergeKey(item, collection = '', index = 0) {
+            if (!item || typeof item !== 'object') return `${collection}:row-${index}`;
+            if (collection === 'habitLedger') {
+                if (item.sourceId) {
+                    return `ledger:${item.type || 'adjust'}:${item.sourceId}:${item.currencyId || item.currency || defaultCurrency}`;
+                }
+                if (item.id) return `id:${item.id}`;
+                return `ledger-fallback:${item.type || ''}:${item.habitId || ''}:${item.rewardId || ''}:${item.date || ''}:${item.currencyId || item.currency || ''}:${item.amount || 0}:${index}`;
+            }
+            if (collection === 'habitRecords') {
+                if (item.sourceKey) return `record-source:${item.sourceKey}`;
+                if (item.id) return `id:${item.id}`;
+                return `record:${item.habitId || ''}:${item.date || item.recordTime || ''}:${item.recordType || item.type || 'normal'}:${index}`;
+            }
+            if (collection === 'habitMilestoneClaims') {
+                return `claim:${item.habitId || ''}:${item.milestoneId || ''}:${item.cycleStartDate || ''}:${item.achievedDays || ''}:${item.currencyId || item.currency || ''}`;
+            }
+            if (collection === 'habitOverdueEvents') {
+                return `overdue:${item.habitId || ''}:${item.dueDate || ''}`;
+            }
+            if (item.id) return `id:${item.id}`;
+            return `${collection}:json:${index}:${JSON.stringify(item)}`;
+        }
+
+        function buildHabitDeletionMap(localSnapshot = {}, remoteSnapshot = {}) {
+            const map = new Map();
+            [...asArray(localSnapshot.deletedItems), ...asArray(remoteSnapshot.deletedItems)]
+                .map(normalizeHabitDeletedItem)
+                .filter(Boolean)
+                .forEach(item => {
+                    const key = getDeletedItemKey(item.collection, item.id);
+                    const current = map.get(key);
+                    if (!current || getHabitEntityTime(item) >= getHabitEntityTime(current)) {
+                        map.set(key, item);
+                    }
+                });
+            HABIT_APP_COLLECTIONS.forEach(collection => {
+                [...asArray(localSnapshot[collection]), ...asArray(remoteSnapshot[collection])].forEach(item => {
+                    if (!item?.id || !item?.deletedAt) return;
+                    const tombstone = normalizeHabitDeletedItem({
+                        collection,
+                        id: item.id,
+                        deletedAt: item.deletedAt,
+                        parentId: item.habitId || item.parentId || ''
+                    });
+                    if (!tombstone) return;
+                    const key = getDeletedItemKey(collection, item.id);
+                    const current = map.get(key);
+                    if (!current || getHabitEntityTime(tombstone) >= getHabitEntityTime(current)) {
+                        map.set(key, tombstone);
+                    }
+                });
+            });
+            return map;
+        }
+
+        function shouldKeepHabitEntity(collection, item, deletionMap = new Map()) {
+            if (!item || typeof item !== 'object') return false;
+            if (item.deletedAt) return false;
+            if (!item.id) return true;
+            const tombstone = deletionMap.get(getDeletedItemKey(collection, item.id));
+            if (!tombstone) return true;
+            return getHabitEntityTime(item) > getHabitEntityTime(tombstone);
+        }
+
+        function mergeHabitEntities(localItems = [], remoteItems = [], collection = '', deletionMap = new Map()) {
+            const merged = new Map();
+            [...asArray(localItems), ...asArray(remoteItems)].forEach((item, index) => {
+                if (!item || typeof item !== 'object') return;
+                const key = getHabitEntityMergeKey(item, collection, index);
+                const current = merged.get(key);
+                if (!current || getHabitEntityTime(item) >= getHabitEntityTime(current)) {
+                    merged.set(key, item);
+                }
+            });
+            return Array.from(merged.values())
+                .filter(item => shouldKeepHabitEntity(collection, item, deletionMap));
+        }
+
+        function mergeHabitSnapshots(localSnapshot, remoteSnapshot) {
+            const local = getHabitSnapshot(localSnapshot || {});
+            const remote = getHabitSnapshot(remoteSnapshot || {});
+            const deletionMap = buildHabitDeletionMap(local, remote);
+            const merged = {
+                schemaVersion: Math.max(local.schemaVersion || 1, remote.schemaVersion || 1)
+            };
+            HABIT_APP_COLLECTIONS.forEach(key => {
+                merged[key] = mergeHabitEntities(local[key], remote[key], key, deletionMap);
+            });
+            merged.deletedItems = Array.from(deletionMap.values())
+                .filter(item => isHabitDeletionCollection(item.collection));
+            return merged;
+        }
+
         function getProvider() {
             const kit = getKit();
             if (!kit?.createWebdavProvider) return null;
@@ -451,6 +621,10 @@
             getWheelDataHash,
             isWheelDeletionCollection,
             mergeWheelSnapshots,
+            getHabitSnapshot,
+            getHabitDataHash,
+            isHabitDeletionCollection,
+            mergeHabitSnapshots,
             mergeCloudData,
             request,
             pullJson,

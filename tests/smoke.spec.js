@@ -1457,6 +1457,73 @@ test('merge keeps tombstoned entities deleted instead of reviving stale remote d
     ]));
 });
 
+test('habit snapshot merge keeps tombstoned records deleted and hashes stably', async ({ page }) => {
+    const deletedAt = '2026-07-22T12:00:00';
+    const localSnapshot = {
+        schemaVersion: 1,
+        habits: [{ id: 'life-plan/habits/habit-1', name: '晨跑', updatedAt: '2026-07-22T11:00:00' }],
+        habitGroups: [],
+        habitRecords: [],
+        habitRewards: [],
+        habitRewardRecords: [],
+        habitFineRecords: [],
+        habitLedger: [
+            { id: 'life-plan/ledger/ledger-1', type: 'checkin', amount: 2, currencyId: 'life-plan/currencies/%E9%87%91%E5%B8%81', sourceId: 'checkin-1', updatedAt: '2026-07-22T11:00:00' }
+        ],
+        habitCurrencies: [{ id: 'life-plan/currencies/%E9%87%91%E5%B8%81', name: '金币' }],
+        habitMilestones: [],
+        habitMilestoneClaims: [],
+        habitOverdueEvents: [],
+        habitMoodNotes: [],
+        habitTimeTasks: [],
+        deletedItems: [{ collection: 'habitRecords', id: 'life-plan/checkins/checkin-old', deletedAt }]
+    };
+    const remoteSnapshot = {
+        schemaVersion: 1,
+        habits: [{ id: 'life-plan/habits/habit-1', name: '晨跑-旧', updatedAt: '2026-07-21T11:00:00' }],
+        habitGroups: [],
+        habitRecords: [
+            { id: 'life-plan/checkins/checkin-old', habitId: 'life-plan/habits/habit-1', date: '2026-07-20', recordType: 'normal', updatedAt: '2026-07-20T08:00:00' },
+            { id: 'life-plan/checkins/checkin-new', habitId: 'life-plan/habits/habit-1', date: '2026-07-22', recordType: 'normal', updatedAt: '2026-07-22T08:00:00' }
+        ],
+        habitRewards: [],
+        habitRewardRecords: [],
+        habitFineRecords: [],
+        habitLedger: [
+            { id: 'life-plan/ledger/ledger-remote', type: 'checkin', amount: 2, currencyId: 'life-plan/currencies/%E9%87%91%E5%B8%81', sourceId: 'checkin-1', updatedAt: '2026-07-21T11:00:00' }
+        ],
+        habitCurrencies: [{ id: 'life-plan/currencies/%E9%87%91%E5%B8%81', name: '金币' }],
+        habitMilestones: [],
+        habitMilestoneClaims: [],
+        habitOverdueEvents: [],
+        habitMoodNotes: [],
+        habitTimeTasks: [],
+        deletedItems: []
+    };
+
+    await page.goto('/');
+    const result = await page.evaluate(({ localSnapshot, remoteSnapshot }) => {
+        const service = window.LifePlanSyncService.create({});
+        const merged = service.mergeHabitSnapshots(localSnapshot, remoteSnapshot);
+        return {
+            merged,
+            hashA: service.getHabitDataHash(merged),
+            hashB: service.getHabitDataHash(merged)
+        };
+    }, { localSnapshot, remoteSnapshot });
+
+    expect(result.merged.habits).toHaveLength(1);
+    expect(result.merged.habits[0].name).toBe('晨跑');
+    expect(result.merged.habitRecords.map(item => item.id)).toEqual(['life-plan/checkins/checkin-new']);
+    expect(result.merged.habitLedger).toHaveLength(1);
+    expect(result.merged.habitLedger[0].sourceId).toBe('checkin-1');
+    expect(result.merged.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'habitRecords', id: 'life-plan/checkins/checkin-old' })
+    ]));
+    expect(result.hashA).toBe(result.hashB);
+    expect(result.hashA).toBeTruthy();
+});
+
 test('wheel snapshot merge keeps deleted wheel items from returning', async ({ page }) => {
     const deletedAt = '2026-07-08T10:00:00';
     const localSnapshot = {
@@ -2289,6 +2356,7 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('本地 habit-app 镜像');
     await expect(panel).toContainText('habit 同步脚手架');
     await expect(panel).toContainText('/apps/habit-app/data.json');
+    await expect(panel).toContainText('merge/hash 能力：已接入 sync-service');
     await expect(panel).toContainText('从当前旧数据重建本地镜像');
     await expect(panel).toContainText('本地镜像与旧数据一致');
     await expect(panel).toContainText('数量、余额与 sourceHash 当前一致');
