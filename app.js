@@ -7284,11 +7284,11 @@
             for (let i = days - 1; i >= 0; i--) dates.push(addDays(today, -i));
 
             container.innerHTML = `
-                <div class="habit-matrix-grid" style="grid-template-columns: 160px repeat(${dates.length}, 36px); min-width:${160 + dates.length * 36}px;">
-                    <div class="habit-matrix-cell name">习惯</div>
+                <div class="habit-matrix-grid" style="grid-template-columns: 160px repeat(${dates.length}, minmax(28px, 36px)); width: max-content; min-width: 100%;">
+                    <div class="habit-matrix-cell name" title="习惯">习惯</div>
                     ${dates.map(date => `<div class="habit-matrix-cell head" title="${date}">${parseLocalDate(date).getDate()}</div>`).join('')}
                     ${data.habits.map(habit => `
-                        <div class="habit-matrix-cell name">${escapeHtml(habit.name)}</div>
+                        <div class="habit-matrix-cell name" title="${escapeHtml(habit.name)}">${escapeHtml(habit.name)}</div>
                         ${dates.map(date => {
                             const count = getCheckinCount(habit.id, date);
                             return `<div class="habit-matrix-cell" title="${escapeHtml(habit.name)} · ${date} · ${count}次">

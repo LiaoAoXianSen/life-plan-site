@@ -1113,8 +1113,16 @@
         font-weight: 800;
         padding: 2px 6px 0;
     }
-    .habit-view { display: none; }
-    .habit-view.active { display: block; }
+    .habit-view {
+        display: none;
+        min-width: 0;
+        max-width: 100%;
+    }
+    .habit-view.active {
+        display: block;
+        min-width: 0;
+        max-width: 100%;
+    }
     .habit-center-header { align-items: flex-start; }
     .habit-center-hero {
         display: grid;
@@ -1208,7 +1216,13 @@
         font-size: 18px;
         line-height: 1.25;
     }
-    .habit-center-card { display: grid; gap: 16px; }
+    .habit-center-card {
+        display: grid;
+        gap: 16px;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+    }
     .habit-center-toolbar {
         display: flex;
         align-items: center;
@@ -1317,10 +1331,51 @@
         flex-wrap: wrap;
         margin-top: 14px;
     }
-    .habit-matrix { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
-    .habit-matrix-grid { display: grid; grid-template-columns: 160px repeat(30, 36px); min-width: 1240px; }
-    .habit-matrix-cell { min-height: 34px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
-    .habit-matrix-cell.name { justify-content: flex-start; padding: 0 10px; font-weight: 850; color: var(--text); background: var(--surface-soft); position: sticky; left: 0; z-index: 2; }
+    .habit-matrix {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+    }
+    .habit-matrix-grid {
+        display: grid;
+        grid-template-columns: 160px repeat(30, 36px);
+        width: max-content;
+        min-width: 100%;
+        box-sizing: border-box;
+    }
+    .habit-matrix-cell {
+        min-height: 34px;
+        border-right: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: var(--muted);
+        box-sizing: border-box;
+    }
+    .habit-matrix-cell.name {
+        justify-content: flex-start;
+        padding: 0 10px;
+        font-weight: 850;
+        color: var(--text);
+        background: var(--surface-soft);
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        box-shadow: 1px 0 0 var(--line);
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
     .habit-matrix-cell.head { font-weight: 850; background: var(--surface-soft); }
     .habit-dot { width: 16px; height: 16px; border-radius: 5px; background: #e3e9e5; }
     .habit-dot.done { background: var(--accent); box-shadow: inset 0 0 0 2px rgba(255,255,255,.42); }
