@@ -2445,6 +2445,17 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await page.locator('#habit-view-tabs button[data-habit-view="diagnostics"]').click();
     const panel = page.locator('#habit-diagnostics-panel');
     await expect(panel).toBeVisible();
+    await expect(panel).toContainText('习惯云同步');
+    await expect(panel).toContainText('手动检查云端');
+    await expect(panel).toContainText('手动合并预检');
+    await expect(panel).toContainText('云端只读预检');
+    await expect(panel).toContainText('GET 结果不写 lifePlanData / habitAppData · 不发 PUT');
+    await expect(panel.getByRole('button', { name: '手动上传 habit-app（未开启）' })).toBeDisabled();
+    await expect(panel).toContainText('迁移 / 诊断详情');
+
+    const migrationDetails = panel.locator('details.migration-diagnostics-details');
+    await migrationDetails.locator('summary').click();
+    await expect(migrationDetails).toHaveAttribute('open', '');
     await expect(panel).toContainText('诊断页默认只读');
     await expect(panel).toContainText('旧习惯');
     await expect(panel).toContainText('habitRecords');
@@ -2460,11 +2471,6 @@ test('habit diagnostics preview is read-only and escapes legacy data', async ({ 
     await expect(panel).toContainText('habit 独立同步预检');
     await expect(panel).toContainText('/apps/habit-app/data.json');
     await expect(panel).toContainText('merge/hash 能力：已接入 sync-service');
-    await expect(panel).toContainText('手动检查云端');
-    await expect(panel).toContainText('手动合并预检');
-    await expect(panel).toContainText('云端只读预检');
-    await expect(panel).toContainText('GET 结果不写 lifePlanData / habitAppData · 不发 PUT');
-    await expect(panel.getByRole('button', { name: '手动上传 habit-app（未开启）' })).toBeDisabled();
     await expect(panel).toContainText('从当前旧数据重建本地镜像');
     await expect(panel).toContainText('本地镜像与旧数据一致');
     await expect(panel).toContainText('数量、余额与 sourceHash 当前一致');
@@ -4016,6 +4022,9 @@ test('todo cloud merge can be applied to PC legacy fields without uploading', as
     const panel = page.locator('#todo-cloud-panel');
     await panel.getByRole('button', { name: '手动检查云端', exact: true }).click();
     await expect(panel).toContainText('本地与云端存在差异，已生成合并预览');
+    const migrationDetails = panel.locator('details.migration-diagnostics-details');
+    await migrationDetails.locator('summary').click();
+    await expect(migrationDetails).toHaveAttribute('open', '');
     await expect(panel.locator('.habit-remote-preview-table tbody tr', { hasText: '合并预览' })).toBeVisible();
 
     page.once('dialog', dialog => dialog.accept());

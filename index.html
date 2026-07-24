@@ -396,11 +396,11 @@
                 <div class="habit-center-title-block">
                     <div class="habit-center-eyebrow">Habit operations</div>
                     <h2>今天先执行，历史在补卡页处理，规则和钱包集中管理。</h2>
-                    <p>这是 Phase 1：只重排 PC 端驾驶舱，不迁移数据、不启用独立 habit 云文件。</p>
+                    <p>日常在「今日 / 补卡 / 习惯库 / 钱包」完成；需要和手机对齐时，到「云同步」手动操作。</p>
                 </div>
                 <div class="habit-center-sync-note">
-                    <strong>同步规划</strong>
-                    <span>后续统一接入 `/apps/habit-app/data.json`，当前仍以 life 旧习惯数据为权威。</span>
+                    <strong>云同步</strong>
+                    <span>独立文件 `/apps/habit-app/data.json` · 手动合并与受保护上传 · 不自动后台同步。</span>
                 </div>
             </div>
 
@@ -414,7 +414,7 @@
                         <button data-habit-view="library" onclick="setHabitView('library', this)">习惯库</button>
                         <button data-habit-view="wallet" onclick="setHabitView('wallet', this)">钱包</button>
                         <button data-habit-view="analysis" onclick="setHabitView('analysis', this)">分析</button>
-                        <button data-habit-view="diagnostics" onclick="setHabitView('diagnostics', this)">诊断</button>
+                        <button data-habit-view="diagnostics" onclick="setHabitView('diagnostics', this)">云同步</button>
                     </div>
                     <div class="habit-center-toolbar-actions">
                         <input type="date" id="habit-makeup-date" onchange="renderHabitMakeupPanel()">
@@ -509,8 +509,8 @@
                 <div id="habit-view-diagnostics" class="habit-view">
                     <div class="habit-section-head">
                         <div>
-                            <div class="section-title">数据诊断</div>
-                            <div class="habit-section-sub">只读检查旧 habits / checkins / 钱包字段，并预览未来 habit-app 映射数量。</div>
+                            <div class="section-title">习惯云同步</div>
+                            <div class="habit-section-sub">日常只需检查云端、合并到 PC 或受保护上传；迁移期诊断默认折叠。</div>
                         </div>
                     </div>
                     <div id="habit-diagnostics-panel"></div>

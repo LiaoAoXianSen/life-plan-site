@@ -2876,61 +2876,37 @@
             const localCounts = preview.local?.counts || getTodoRemotePreviewModel(todoAppLocalMirror || {}).counts;
             const dirtyLabel = scaffold.dirty ? '有未同步本地改动' : '本地与最近云端基线一致';
             const phaseLabel = previewMissing ? '首次创建' : (preview.hashesMatch ? '已对齐' : '可合并/回写');
+            const dailyHint = previewMissing
+                ? (todoSyncConfig.remoteUploadEnabled
+                    ? '已解锁。点击“创建云端 todo 文件”将再次 GET、条件 PUT，并回读核验。'
+                    : '先“手动检查云端”，确认 404 后勾选授权，再创建。')
+                : (preview.status === 'ready'
+                    ? (preview.hashesMatch
+                        ? '云端已有一致文件。如 PC 后续有修改，可点“同步本地到云端”。'
+                        : '先点“应用云端合并结果到 PC”把差异写入本地；若你确认云端基线未变化且要以 PC 为准，再点“同步本地到云端”。')
+                    : '先手动检查云端。');
             container.innerHTML = `
                 <div class="habit-diagnostics-guard">
                     <div>
-                        <strong>待办独立文件 · 手动受保护同步</strong>
-                        <span>当前权威仍是 lifePlanData.todos；本地镜像写 localStorage.todoAppData。支持首次创建、合并应用到 PC、以及 If-Match 条件回写。不会自动后台同步，也不会改 /life-plan.json。</span>
+                        <strong>待办云同步</strong>
+                        <span>与手机共用 ${escapeHtml(scaffold.remotePath)} · 手动检查 / 合并 / 受保护上传 · 不自动后台同步。</span>
                     </div>
                     <span class="habit-diagnostics-pill">${escapeHtml(phaseLabel)}</span>
                 </div>
-                <div class="habit-diagnostics-grid" style="margin-top:12px;">
-                    <div class="habit-diagnostics-metric"><span>本地待办</span><strong>${escapeHtml(localCounts.todos || 0)}</strong><em>未完成 ${escapeHtml(localCounts.openTodos || 0)} · 完成 ${escapeHtml(localCounts.doneTodos || 0)}</em></div>
-                    <div class="habit-diagnostics-metric"><span>Tombstone</span><strong>${escapeHtml(localCounts.tombstones || 0)}</strong><em>collection=todos</em></div>
-                    <div class="habit-diagnostics-metric"><span>镜像状态</span><strong>${escapeHtml(consistency.statusLabel || mirrorSummary.statusLabel || (mirrorSummary.exists ? '已建立' : '未建立'))}</strong><em>${escapeHtml(mirrorSummary.sourceHashShort || scaffold.mirrorHashShort || '无指纹')}</em></div>
-                    <div class="habit-diagnostics-metric"><span>同步状态</span><strong>${escapeHtml(dirtyLabel)}</strong><em>${escapeHtml(scaffold.remotePath)} · ${scaffold.endpointConfigured ? '已配置地址' : '未配置地址'}</em></div>
+                <div class="daily-sync-summary">
+                    <span>${escapeHtml(localCounts.todos || 0)} 项待办 · 未完成 ${escapeHtml(localCounts.openTodos || 0)} · 完成 ${escapeHtml(localCounts.doneTodos || 0)}</span>
+                    <span class="habit-dualwrite-status ${statusClass[preview.status] || 'is-prepared'}">${escapeHtml(previewStatus)}</span>
+                    <span class="habit-dualwrite-status ${scaffold.dirty ? 'is-partial' : 'is-ready'}">${escapeHtml(dirtyLabel)}</span>
                 </div>
-                <div class="habit-remote-preview" style="margin-top:14px;" aria-live="polite">
-                    <div class="habit-remote-preview-head">
-                        <div>
-                            <strong>只读云端预检</strong>
-                            <span>GET ${escapeHtml(scaffold.remotePath)} · 不写 lifePlanData / todoAppData · 不发 PUT</span>
-                        </div>
-                        <span class="habit-dualwrite-status ${statusClass[preview.status] || 'is-prepared'}">${escapeHtml(previewStatus)}</span>
-                    </div>
-                    ${preview.error ? `<div class="habit-remote-preview-empty is-danger">${escapeHtml(preview.error)}</div>` : ''}
-                    ${preview.status === 'missing' ? `<div class="habit-remote-preview-empty is-warning">云端尚无 todo-app 文件（404/空）。可在下方授权后执行受保护首次创建。</div>` : ''}
-                    ${preview.status === 'ready' ? `
-                        <div class="habit-remote-preview-table-wrap">
-                            <table class="habit-remote-preview-table">
-                                <thead><tr><th></th><th>todos</th><th>open</th><th>done</th><th>tombstone</th><th>hash</th></tr></thead>
-                                <tbody>
-                                    <tr><td>本地</td><td>${escapeHtml(preview.local?.counts?.todos || 0)}</td><td>${escapeHtml(preview.local?.counts?.openTodos || 0)}</td><td>${escapeHtml(preview.local?.counts?.doneTodos || 0)}</td><td>${escapeHtml(preview.local?.counts?.tombstones || 0)}</td><td>${escapeHtml(preview.local?.hashShort || '')}</td></tr>
-                                    <tr><td>云端</td><td>${escapeHtml(preview.remote?.counts?.todos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.openTodos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.doneTodos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.tombstones || 0)}</td><td>${escapeHtml(preview.remote?.hashShort || '')}</td></tr>
-                                    ${preview.merged ? `<tr><td>合并预览</td><td>${escapeHtml(preview.merged?.counts?.todos || 0)}</td><td>${escapeHtml(preview.merged?.counts?.openTodos || 0)}</td><td>${escapeHtml(preview.merged?.counts?.doneTodos || 0)}</td><td>${escapeHtml(preview.merged?.counts?.tombstones || 0)}</td><td>${escapeHtml(preview.merged?.hashShort || '')}</td></tr>` : ''}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="habit-remote-preview-verdict">${preview.hashesMatch
-                            ? '本地与云端 hash 一致。'
-                            : '本地与云端存在差异，已生成合并预览；可应用到 PC，或在云端基线未变化时受保护回写。'}</div>
-                    ` : ''}
-                    ${(preview.risks || []).length ? `
-                        <div class="habit-remote-risk-list">
-                            ${preview.risks.map(item => `
-                                <div class="habit-remote-risk is-${escapeHtml(item.severity || 'info')}">
-                                    <strong>${escapeHtml(item.title || '风险')}</strong>
-                                    <span>${escapeHtml(item.detail || '')}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    ` : ''}
-                    <div class="habit-local-mirror-actions" style="margin-top:12px;">
-                        <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runTodoManualSyncSkeleton('pull')">${isTodoRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
-                        <button type="button" class="btn btn-primary" ${(previewMissing ? scaffold.manualPushEnabled : scaffold.manualSyncEnabled) ? '' : 'disabled'} onclick="runTodoManualSyncSkeleton('push')">${isTodoRemoteUploadRunning ? '正在上传…' : (previewMissing ? '创建云端 todo 文件' : '同步本地到云端')}</button>
-                        <button type="button" class="btn btn-secondary" ${scaffold.manualApplyEnabled ? '' : 'disabled'} onclick="runTodoManualSyncSkeleton('apply')">${isTodoRemoteApplyRunning ? '正在应用…' : '应用云端合并结果到 PC'}</button>
-                        <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="rebuildTodoAppLocalMirrorFromPanel()">重建本地镜像</button>
-                    </div>
+                ${preview.error ? `<div class="habit-remote-preview-empty is-danger">${escapeHtml(preview.error)}</div>` : ''}
+                ${preview.status === 'missing' ? `<div class="habit-remote-preview-empty is-warning">云端尚无 todo-app 文件（404/空）。可在下方授权后执行受保护首次创建。</div>` : ''}
+                ${preview.status === 'ready' ? `<div class="habit-remote-preview-verdict">${preview.hashesMatch
+                    ? '本地与云端 hash 一致。'
+                    : '本地与云端存在差异，已生成合并预览；可应用到 PC，或在云端基线未变化时受保护回写。'}</div>` : ''}
+                <div class="habit-local-mirror-actions daily-sync-actions">
+                    <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runTodoManualSyncSkeleton('pull')">${isTodoRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
+                    <button type="button" class="btn btn-primary" ${(previewMissing ? scaffold.manualPushEnabled : scaffold.manualSyncEnabled) ? '' : 'disabled'} onclick="runTodoManualSyncSkeleton('push')">${isTodoRemoteUploadRunning ? '正在上传…' : (previewMissing ? '创建云端 todo 文件' : '同步本地到云端')}</button>
+                    <button type="button" class="btn btn-secondary" ${scaffold.manualApplyEnabled ? '' : 'disabled'} onclick="runTodoManualSyncSkeleton('apply')">${isTodoRemoteApplyRunning ? '正在应用…' : '应用云端合并结果到 PC'}</button>
                 </div>
                 <div class="habit-upload-guard is-${escapeHtml(upload.status || 'idle')}" style="margin-top:14px;" role="status" aria-live="polite">
                     <div class="habit-upload-guard-head">
@@ -2961,19 +2937,55 @@
                         </div>
                     ` : ''}
                     ${upload.message ? `<div class="habit-upload-state-message">${escapeHtml(upload.message)}</div>` : ''}
-                    <div class="habit-upload-next-step">${previewMissing
-                        ? (todoSyncConfig.remoteUploadEnabled
-                            ? '已解锁。点击“创建云端 todo 文件”将再次 GET、条件 PUT，并回读核验。'
-                            : '先“手动检查云端”，确认 404 后勾选授权，再创建。')
-                        : (preview.status === 'ready'
-                            ? (preview.hashesMatch
-                                ? '云端已有一致文件。如 PC 后续有修改，可点“同步本地到云端”。'
-                                : '先点“应用云端合并结果到 PC”把差异写入本地；若你确认云端基线未变化且要以 PC 为准，再点“同步本地到云端”。')
-                            : '先手动检查云端。')}</div>
-                    <div class="habit-upload-caveat">${previewMissing
+                    <div class="habit-upload-next-step">${escapeHtml(dailyHint)}</div>
+                </div>
+                <details class="migration-diagnostics-details">
+                    <summary>迁移 / 测试详情（日常可忽略）</summary>
+                    <div class="habit-diagnostics-grid" style="margin-top:12px;">
+                        <div class="habit-diagnostics-metric"><span>本地待办</span><strong>${escapeHtml(localCounts.todos || 0)}</strong><em>未完成 ${escapeHtml(localCounts.openTodos || 0)} · 完成 ${escapeHtml(localCounts.doneTodos || 0)}</em></div>
+                        <div class="habit-diagnostics-metric"><span>Tombstone</span><strong>${escapeHtml(localCounts.tombstones || 0)}</strong><em>collection=todos</em></div>
+                        <div class="habit-diagnostics-metric"><span>镜像状态</span><strong>${escapeHtml(consistency.statusLabel || mirrorSummary.statusLabel || (mirrorSummary.exists ? '已建立' : '未建立'))}</strong><em>${escapeHtml(mirrorSummary.sourceHashShort || scaffold.mirrorHashShort || '无指纹')}</em></div>
+                        <div class="habit-diagnostics-metric"><span>同步状态</span><strong>${escapeHtml(dirtyLabel)}</strong><em>${escapeHtml(scaffold.remotePath)} · ${scaffold.endpointConfigured ? '已配置地址' : '未配置地址'}</em></div>
+                    </div>
+                    <div class="habit-remote-preview" style="margin-top:14px;" aria-live="polite">
+                        <div class="habit-remote-preview-head">
+                            <div>
+                                <strong>只读云端预检</strong>
+                                <span>GET ${escapeHtml(scaffold.remotePath)} · 不写 lifePlanData / todoAppData · 不发 PUT</span>
+                            </div>
+                            <span class="habit-dualwrite-status ${statusClass[preview.status] || 'is-prepared'}">${escapeHtml(previewStatus)}</span>
+                        </div>
+                        ${preview.status === 'ready' ? `
+                            <div class="habit-remote-preview-table-wrap">
+                                <table class="habit-remote-preview-table">
+                                    <thead><tr><th></th><th>todos</th><th>open</th><th>done</th><th>tombstone</th><th>hash</th></tr></thead>
+                                    <tbody>
+                                        <tr><td>本地</td><td>${escapeHtml(preview.local?.counts?.todos || 0)}</td><td>${escapeHtml(preview.local?.counts?.openTodos || 0)}</td><td>${escapeHtml(preview.local?.counts?.doneTodos || 0)}</td><td>${escapeHtml(preview.local?.counts?.tombstones || 0)}</td><td>${escapeHtml(preview.local?.hashShort || '')}</td></tr>
+                                        <tr><td>云端</td><td>${escapeHtml(preview.remote?.counts?.todos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.openTodos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.doneTodos || 0)}</td><td>${escapeHtml(preview.remote?.counts?.tombstones || 0)}</td><td>${escapeHtml(preview.remote?.hashShort || '')}</td></tr>
+                                        ${preview.merged ? `<tr><td>合并预览</td><td>${escapeHtml(preview.merged?.counts?.todos || 0)}</td><td>${escapeHtml(preview.merged?.counts?.openTodos || 0)}</td><td>${escapeHtml(preview.merged?.counts?.doneTodos || 0)}</td><td>${escapeHtml(preview.merged?.counts?.tombstones || 0)}</td><td>${escapeHtml(preview.merged?.hashShort || '')}</td></tr>` : ''}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : ''}
+                        ${(preview.risks || []).length ? `
+                            <div class="habit-remote-risk-list">
+                                ${preview.risks.map(item => `
+                                    <div class="habit-remote-risk is-${escapeHtml(item.severity || 'info')}">
+                                        <strong>${escapeHtml(item.title || '风险')}</strong>
+                                        <span>${escapeHtml(item.detail || '')}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        <div class="habit-local-mirror-actions" style="margin-top:12px;">
+                            <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="rebuildTodoAppLocalMirrorFromPanel()">重建本地镜像</button>
+                            <span>当前权威仍是 lifePlanData.todos；本地镜像写 localStorage.todoAppData。</span>
+                        </div>
+                    </div>
+                    <div class="habit-upload-caveat" style="margin-top:12px;">${previewMissing
                         ? '上传动作会重建本地镜像、再次 GET、单次发送 <code>If-None-Match: *</code>，并在 PUT 后回读 hash。现有 Cloudflare KV 条件检查并非严格原子锁，请勿让两台设备同时执行首次创建。'
                         : '应用动作只写 PC，不写云端；同步动作会重建本地镜像、再次 GET、单次发送 <code>If-Match</code>，并在 PUT 后回读 hash。若云端在别处变化，条件写入会拦下这次同步。'}</div>
-                </div>
+                </details>
             `;
         }
 
@@ -9809,147 +9821,163 @@
                 ? `localStorage.habitAppData · 指纹 ${escapeHtml(mirrorSummary.sourceHashShort || '无')} · ${escapeHtml(mirrorSummary.summary.habits || 0)} habits · ${escapeHtml(mirrorSummary.summary.habitRecords || 0)} records · ${escapeHtml(mirrorSummary.summary.habitLedger || 0)} ledger`
                 : '仅本地重建，不上传 /apps/habit-app/data.json';
 
+            const scaffold = getHabitSyncScaffoldSummary();
+            const actionLocked = isHabitRemotePreviewRunning || isHabitRemoteUploadRunning;
+            const applyLocked = actionLocked || isHabitRemoteApplyRunning;
+            const uploadButtonLabel = habitRemotePreviewState.status === 'missing'
+                ? (isHabitRemoteUploadRunning ? '正在创建云端 habit 文件…' : '创建云端 habit 文件')
+                : (habitRemotePreviewState.status === 'ready'
+                    ? (habitRemotePreviewState.hashesMatch
+                        ? '云端已一致'
+                        : (isHabitRemoteUploadRunning ? '正在同步云端 habit 文件…' : '受保护同步到云端'))
+                    : '手动上传 habit-app（未开启）');
+            const uploadButtonDisabled = habitRemotePreviewState.status === 'missing'
+                ? !scaffold.manualPushEnabled
+                : !scaffold.manualSyncEnabled || habitRemotePreviewState.hashesMatch || actionLocked;
+            const applyButtonDisabled = !scaffold.manualApplyEnabled || applyLocked;
+            const dailySyncStatus = habitRemotePreviewState.status === 'missing'
+                ? '云端尚无文件'
+                : (habitRemotePreviewState.status === 'ready'
+                    ? (habitRemotePreviewState.hashesMatch ? '本地与云端一致' : '可合并 / 回写')
+                    : (scaffold.statusLabel || '等待检查'));
+
             container.innerHTML = `
                 <div class="habit-diagnostics-guard">
                     <div>
-                        <strong>诊断页默认只读；本地镜像重建只写 localStorage.habitAppData，不上传云端。</strong>
-                        <span>当前权威仍是 ${escapeHtml(diagnostics.authority || 'lifePlanData')}；这里先检查迁移/同步前的历史数据风险，并展示 Phase 4 本地双写前置状态。</span>
+                        <strong>习惯云同步</strong>
+                        <span>与手机共用 ${escapeHtml(scaffold.remotePath)} · 手动检查 / 合并 / 受保护上传 · 不自动后台同步。当前权威仍是 ${escapeHtml(diagnostics.authority || 'lifePlanData')}。</span>
                     </div>
-                    <span class="habit-diagnostics-pill">Phase 4 Readiness</span>
+                    <span class="habit-diagnostics-pill">${escapeHtml(dailySyncStatus)}</span>
                 </div>
-                <div class="habit-diagnostics-grid">
-                    ${metrics.map(item => renderHabitDiagnosticsMetric(item)).join('')}
+                <div class="daily-sync-summary">
+                    <span>${escapeHtml(summary.habits || 0)} 习惯 · ${escapeHtml(summary.checkins || 0)} 打卡 · 今日 ${escapeHtml(summary.doneToday || 0)}/${escapeHtml(summary.dueToday || 0)}</span>
+                    <span class="habit-dualwrite-status ${mirrorStatusClass}">${escapeHtml(mirrorStatusLabel)}</span>
+                    <span class="habit-dualwrite-status is-prepared">${escapeHtml(scaffold.endpointConfigured ? '地址已配置' : '地址未配置')}</span>
                 </div>
-                <div class="habit-diagnostics-layout">
-                    <section class="habit-diagnostics-card">
-                        <div class="habit-shop-title">风险检查</div>
-                        ${issues.length ? `
-                            <div class="habit-diagnostics-issue-list">
-                                ${issues.map(renderHabitDiagnosticsIssue).join('')}
-                            </div>
-                        ` : '<div class="habit-diagnostics-ok">当前没有发现重复 ID、孤儿引用、异常金额或未来打卡。</div>'}
-                    </section>
-                    <section class="habit-diagnostics-card">
-                        <div class="habit-shop-title">habit-app 映射预览</div>
-                        <div class="habit-mapping-list">
-                            ${(diagnostics.mappingPreview || []).map(renderHabitMappingPreviewRow).join('')}
+                <div class="habit-sync-actions daily-sync-actions">
+                    <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('pull')">${isHabitRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
+                    <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('both')">手动合并预检</button>
+                    <button type="button" class="btn btn-secondary" ${applyButtonDisabled ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('apply')">${isHabitRemoteApplyRunning ? '正在应用到 PC…' : '应用合并结果到 PC'}</button>
+                    <button type="button" class="btn btn-primary" ${uploadButtonDisabled ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('push')">${escapeHtml(uploadButtonLabel)}</button>
+                </div>
+                ${renderHabitRemotePreviewPanel()}
+                ${renderHabitProtectedUploadGuard()}
+                <details class="migration-diagnostics-details">
+                    <summary>迁移 / 诊断详情（日常可忽略）</summary>
+                    <div class="habit-diagnostics-guard" style="margin-top:12px;">
+                        <div>
+                            <strong>诊断页默认只读；本地镜像重建只写 localStorage.habitAppData，不上传云端。</strong>
+                            <span>这里保留迁移期风险检查、双写前置与 JSON 预览，默认折叠。</span>
                         </div>
-                    </section>
-                    <section class="habit-diagnostics-card habit-dualwrite-card">
-                        <div class="habit-snapshot-head">
-                            <div>
-                                <div class="habit-shop-title">本地双写前置</div>
-                                <div class="habit-snapshot-meta">远端上传关闭 · 已接入 ${escapeHtml(readinessSummary.writePathEnabled || 0)}/${escapeHtml(readinessSummary.writePathTotal || 0)} 写路径 · 阻塞 ${escapeHtml(readinessSummary.blockerCount || 0)}</div>
-                            </div>
-                            <span class="habit-dualwrite-status ${readinessStatusClass}">${escapeHtml(readiness.statusLabel || readiness.status || 'unknown')}</span>
-                        </div>
-                        ${(readiness.blockers || []).length ? `
-                            <div class="habit-diagnostics-issue-list">
-                                ${(readiness.blockers || []).map(renderHabitDualWriteBlocker).join('')}
-                            </div>
-                        ` : '<div class="habit-diagnostics-ok">没有高风险阻塞项；可以开始按写路径清单做本地双写。</div>'}
-                        <div class="habit-dualwrite-path-list">
-                            ${(readiness.writePaths || []).map(renderHabitDualWritePathRow).join('')}
-                        </div>
-                        <div class="habit-dualwrite-next">
-                            ${(readiness.nextActions || []).map(item => `<div>${escapeHtml(item)}</div>`).join('')}
-                        </div>
-                    </section>
-                    <section class="habit-diagnostics-card habit-local-mirror-card">
-                        <div class="habit-snapshot-head">
-                            <div>
-                                <div class="habit-shop-title">本地 habit-app 镜像</div>
-                                <div class="habit-snapshot-meta">${mirrorMeta}</div>
-                            </div>
-                            <span class="habit-dualwrite-status ${mirrorStatusClass}">${escapeHtml(mirrorStatusLabel)}</span>
-                        </div>
-                        ${(() => {
-                            const scaffold = getHabitSyncScaffoldSummary();
-                            const actionLocked = isHabitRemotePreviewRunning || isHabitRemoteUploadRunning;
-                            const applyLocked = actionLocked || isHabitRemoteApplyRunning;
-                            const uploadButtonLabel = habitRemotePreviewState.status === 'missing'
-                                ? (isHabitRemoteUploadRunning ? '正在创建云端 habit 文件…' : '创建云端 habit 文件')
-                                : (habitRemotePreviewState.status === 'ready'
-                                    ? (habitRemotePreviewState.hashesMatch
-                                        ? '云端已一致'
-                                        : (isHabitRemoteUploadRunning ? '正在同步云端 habit 文件…' : '受保护同步到云端'))
-                                    : '手动上传 habit-app（未开启）');
-                            const uploadButtonDisabled = habitRemotePreviewState.status === 'missing'
-                                ? !scaffold.manualPushEnabled
-                                : !scaffold.manualSyncEnabled || habitRemotePreviewState.hashesMatch || actionLocked;
-                            const applyButtonDisabled = !scaffold.manualApplyEnabled || applyLocked;
-                            return `
-                                <div class="habit-sync-scaffold">
-                                    <div class="habit-snapshot-head">
-                                        <div>
-                                            <div class="habit-shop-title">habit 独立同步预检</div>
-                                            <div class="habit-snapshot-meta">path ${escapeHtml(scaffold.remotePath)} · autoSync ${scaffold.autoSync ? 'on' : 'off'} · upload ${scaffold.remoteUploadEnabled ? 'on' : 'off'}</div>
-                                        </div>
-                                        <span class="habit-dualwrite-status is-prepared">${escapeHtml(scaffold.statusLabel)}</span>
-                                    </div>
-                                    <div class="habit-dualwrite-next">
-                                        <div>配置键：habitAppSyncConfig / habitAppSyncState</div>
-                                        <div>统一中转地址：${scaffold.endpointConfigured ? '已配置' : '未配置'}</div>
-                                        <div>旧数据 hash：${escapeHtml(scaffold.lastLocalHashShort || '无')}</div>
-                                        <div>镜像 hash：${escapeHtml(scaffold.mirrorHashShort || '无')}</div>
-                                        <div>merge/hash 能力：${scaffold.mergeReady && scaffold.hashReady ? '已接入 sync-service' : '未就绪'}</div>
-                                        <div>上次远端同步：${escapeHtml(scaffold.lastSyncAt || '尚未启用')}</div>
-                                        <div>当前阶段：GET 预检后可手动上传 PC 或应用云端合并结果；旧 lifePlanData 仍保持 PC 运行权威。</div>
-                                    </div>
-                                    <div class="habit-sync-actions">
-                                        <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('pull')">${isHabitRemotePreviewRunning ? '正在检查…' : '手动检查云端'}</button>
-                                        <button type="button" class="btn btn-secondary" ${actionLocked ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('both')">手动合并预检</button>
-                                        <button type="button" class="btn btn-secondary" ${applyButtonDisabled ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('apply')">${isHabitRemoteApplyRunning ? '正在应用到 PC…' : '应用合并结果到 PC'}</button>
-                                        <button type="button" class="btn btn-danger" ${uploadButtonDisabled ? 'disabled' : ''} onclick="runHabitManualSyncSkeleton('push')">${escapeHtml(uploadButtonLabel)}</button>
-                                        <span>不新增 endpoint；应用到 PC 会先快照，上传授权只在当前页面内存中存在。</span>
-                                    </div>
-                                    ${renderHabitRemotePreviewPanel()}
-                                    ${renderHabitProtectedUploadGuard()}
+                        <span class="habit-diagnostics-pill">Phase 4 Readiness</span>
+                    </div>
+                    <div class="habit-diagnostics-grid">
+                        ${metrics.map(item => renderHabitDiagnosticsMetric(item)).join('')}
+                    </div>
+                    <div class="habit-diagnostics-layout">
+                        <section class="habit-diagnostics-card">
+                            <div class="habit-shop-title">风险检查</div>
+                            ${issues.length ? `
+                                <div class="habit-diagnostics-issue-list">
+                                    ${issues.map(renderHabitDiagnosticsIssue).join('')}
                                 </div>
-                            `;
-                        })()}
-                        <div class="habit-local-mirror-actions">
-                            <button type="button" class="btn btn-secondary" onclick="rebuildHabitAppLocalMirrorFromDiagnostics()">从当前旧数据重建本地镜像</button>
-                            <span>不会触达 Worker / WebDAV，也不会修改 lifePlanData。</span>
-                        </div>
-                        <div class="habit-consistency-grid">
-                            ${(consistency.comparisons || []).map(renderHabitConsistencyRow).join('')}
-                        </div>
-                        ${(consistency.balances || []).length ? `
-                            <div class="habit-consistency-balance-list">
-                                ${(consistency.balances || []).map(renderHabitConsistencyBalanceRow).join('')}
+                            ` : '<div class="habit-diagnostics-ok">当前没有发现重复 ID、孤儿引用、异常金额或未来打卡。</div>'}
+                        </section>
+                        <section class="habit-diagnostics-card">
+                            <div class="habit-shop-title">habit-app 映射预览</div>
+                            <div class="habit-mapping-list">
+                                ${(diagnostics.mappingPreview || []).map(renderHabitMappingPreviewRow).join('')}
                             </div>
-                        ` : '<div class="habit-diagnostics-ok">当前没有钱包余额可对比。</div>'}
-                        ${(consistency.mismatches || []).length ? `
-                            <div class="habit-diagnostics-issue-list">
-                                ${(consistency.mismatches || []).map(item => `
-                                    <article class="habit-diagnostics-issue is-warning">
-                                        <div class="habit-diagnostics-issue-head">
-                                            <strong>${escapeHtml(item)}</strong>
-                                            <span>不一致</span>
-                                        </div>
-                                    </article>
-                                `).join('')}
+                        </section>
+                        <section class="habit-diagnostics-card habit-dualwrite-card">
+                            <div class="habit-snapshot-head">
+                                <div>
+                                    <div class="habit-shop-title">本地双写前置</div>
+                                    <div class="habit-snapshot-meta">远端上传关闭 · 已接入 ${escapeHtml(readinessSummary.writePathEnabled || 0)}/${escapeHtml(readinessSummary.writePathTotal || 0)} 写路径 · 阻塞 ${escapeHtml(readinessSummary.blockerCount || 0)}</div>
+                                </div>
+                                <span class="habit-dualwrite-status ${readinessStatusClass}">${escapeHtml(readiness.statusLabel || readiness.status || 'unknown')}</span>
                             </div>
-                        ` : '<div class="habit-diagnostics-ok">数量、余额与 sourceHash 当前一致。</div>'}
-                        <div class="habit-dualwrite-next">
-                            <div>上次重建：${escapeHtml(mirrorSummary.rebuiltAt || habitAppLocalMirrorMeta.lastRebuildAt || '尚未重建')}</div>
-                            <div>原因：${escapeHtml(mirrorSummary.reason || habitAppLocalMirrorMeta.lastRebuildReason || '无')}</div>
-                            <div>当前旧数据指纹：${escapeHtml(snapshotSourceHash.slice(0, 12))}</div>
-                            ${habitAppLocalMirrorMeta.lastError ? `<div>最近错误：${escapeHtml(habitAppLocalMirrorMeta.lastError)}</div>` : ''}
-                        </div>
-                    </section>
-                    <section class="habit-diagnostics-card habit-snapshot-preview-card">
-                        <div class="habit-snapshot-head">
-                            <div>
-                                <div class="habit-shop-title">habit-app JSON 预览</div>
-                                <div class="habit-snapshot-meta">只读输出 · 预览指纹 ${escapeHtml(snapshotSourceHash.slice(0, 12))} · ${escapeHtml(snapshotSummary.habits || 0)} habits · ${escapeHtml(snapshotSummary.habitRecords || 0)} records · ${escapeHtml(snapshotSummary.habitLedger || 0)} ledger</div>
+                            ${(readiness.blockers || []).length ? `
+                                <div class="habit-diagnostics-issue-list">
+                                    ${(readiness.blockers || []).map(renderHabitDualWriteBlocker).join('')}
+                                </div>
+                            ` : '<div class="habit-diagnostics-ok">没有高风险阻塞项；可以开始按写路径清单做本地双写。</div>'}
+                            <div class="habit-dualwrite-path-list">
+                                ${(readiness.writePaths || []).map(renderHabitDualWritePathRow).join('')}
                             </div>
-                            <span>Phase 3 Preview</span>
-                        </div>
-                        <textarea id="habit-snapshot-preview-json" class="habit-snapshot-preview" readonly spellcheck="false">${escapeHtml(snapshotPreview.jsonText || '')}</textarea>
-                    </section>
-                </div>
+                            <div class="habit-dualwrite-next">
+                                ${(readiness.nextActions || []).map(item => `<div>${escapeHtml(item)}</div>`).join('')}
+                            </div>
+                        </section>
+                        <section class="habit-diagnostics-card habit-local-mirror-card">
+                            <div class="habit-snapshot-head">
+                                <div>
+                                    <div class="habit-shop-title">本地 habit-app 镜像</div>
+                                    <div class="habit-snapshot-meta">${mirrorMeta}</div>
+                                </div>
+                                <span class="habit-dualwrite-status ${mirrorStatusClass}">${escapeHtml(mirrorStatusLabel)}</span>
+                            </div>
+                            <div class="habit-sync-scaffold">
+                                <div class="habit-snapshot-head">
+                                    <div>
+                                        <div class="habit-shop-title">habit 独立同步预检</div>
+                                        <div class="habit-snapshot-meta">path ${escapeHtml(scaffold.remotePath)} · autoSync ${scaffold.autoSync ? 'on' : 'off'} · upload ${scaffold.remoteUploadEnabled ? 'on' : 'off'}</div>
+                                    </div>
+                                    <span class="habit-dualwrite-status is-prepared">${escapeHtml(scaffold.statusLabel)}</span>
+                                </div>
+                                <div class="habit-dualwrite-next">
+                                    <div>配置键：habitAppSyncConfig / habitAppSyncState</div>
+                                    <div>统一中转地址：${scaffold.endpointConfigured ? '已配置' : '未配置'}</div>
+                                    <div>旧数据 hash：${escapeHtml(scaffold.lastLocalHashShort || '无')}</div>
+                                    <div>镜像 hash：${escapeHtml(scaffold.mirrorHashShort || '无')}</div>
+                                    <div>merge/hash 能力：${scaffold.mergeReady && scaffold.hashReady ? '已接入 sync-service' : '未就绪'}</div>
+                                    <div>上次远端同步：${escapeHtml(scaffold.lastSyncAt || '尚未启用')}</div>
+                                    <div>当前阶段：GET 预检后可手动上传 PC 或应用云端合并结果；旧 lifePlanData 仍保持 PC 运行权威。</div>
+                                </div>
+                            </div>
+                            <div class="habit-local-mirror-actions">
+                                <button type="button" class="btn btn-secondary" onclick="rebuildHabitAppLocalMirrorFromDiagnostics()">从当前旧数据重建本地镜像</button>
+                                <span>不会触达 Worker / WebDAV，也不会修改 lifePlanData。</span>
+                            </div>
+                            <div class="habit-consistency-grid">
+                                ${(consistency.comparisons || []).map(renderHabitConsistencyRow).join('')}
+                            </div>
+                            ${(consistency.balances || []).length ? `
+                                <div class="habit-consistency-balance-list">
+                                    ${(consistency.balances || []).map(renderHabitConsistencyBalanceRow).join('')}
+                                </div>
+                            ` : '<div class="habit-diagnostics-ok">当前没有钱包余额可对比。</div>'}
+                            ${(consistency.mismatches || []).length ? `
+                                <div class="habit-diagnostics-issue-list">
+                                    ${(consistency.mismatches || []).map(item => `
+                                        <article class="habit-diagnostics-issue is-warning">
+                                            <div class="habit-diagnostics-issue-head">
+                                                <strong>${escapeHtml(item)}</strong>
+                                                <span>不一致</span>
+                                            </div>
+                                        </article>
+                                    `).join('')}
+                                </div>
+                            ` : '<div class="habit-diagnostics-ok">数量、余额与 sourceHash 当前一致。</div>'}
+                            <div class="habit-dualwrite-next">
+                                <div>上次重建：${escapeHtml(mirrorSummary.rebuiltAt || habitAppLocalMirrorMeta.lastRebuildAt || '尚未重建')}</div>
+                                <div>原因：${escapeHtml(mirrorSummary.reason || habitAppLocalMirrorMeta.lastRebuildReason || '无')}</div>
+                                <div>当前旧数据指纹：${escapeHtml(snapshotSourceHash.slice(0, 12))}</div>
+                                ${habitAppLocalMirrorMeta.lastError ? `<div>最近错误：${escapeHtml(habitAppLocalMirrorMeta.lastError)}</div>` : ''}
+                            </div>
+                        </section>
+                        <section class="habit-diagnostics-card habit-snapshot-preview-card">
+                            <div class="habit-snapshot-head">
+                                <div>
+                                    <div class="habit-shop-title">habit-app JSON 预览</div>
+                                    <div class="habit-snapshot-meta">只读输出 · 预览指纹 ${escapeHtml(snapshotSourceHash.slice(0, 12))} · ${escapeHtml(snapshotSummary.habits || 0)} habits · ${escapeHtml(snapshotSummary.habitRecords || 0)} records · ${escapeHtml(snapshotSummary.habitLedger || 0)} ledger</div>
+                                </div>
+                                <span>Phase 3 Preview</span>
+                            </div>
+                            <textarea id="habit-snapshot-preview-json" class="habit-snapshot-preview" readonly spellcheck="false">${escapeHtml(snapshotPreview.jsonText || '')}</textarea>
+                        </section>
+                    </div>
+                </details>
             `;
         }
 

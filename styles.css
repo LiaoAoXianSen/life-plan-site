@@ -1583,6 +1583,45 @@
         cursor: not-allowed;
         transform: none;
     }
+    .daily-sync-summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        align-items: center;
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .daily-sync-actions {
+        margin-top: 14px;
+    }
+    .migration-diagnostics-details {
+        margin-top: 16px;
+        border-top: 1px dashed var(--line);
+        padding-top: 12px;
+    }
+    .migration-diagnostics-details > summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 850;
+        list-style: none;
+        user-select: none;
+    }
+    .migration-diagnostics-details > summary::-webkit-details-marker {
+        display: none;
+    }
+    .migration-diagnostics-details > summary::before {
+        content: '▸ ';
+        color: var(--accent);
+    }
+    .migration-diagnostics-details[open] > summary::before {
+        content: '▾ ';
+    }
+    .migration-diagnostics-details > summary:hover {
+        color: var(--text);
+    }
     .habit-remote-preview {
         margin-top: 14px;
         padding-top: 14px;
