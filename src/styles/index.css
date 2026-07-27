@@ -3,5 +3,7 @@
 @import '../../styles/shell.css';
 @import '../../styles/pages/dashboard.css';
 @import '../../styles/pages/todos.css';
+@import '../../styles/pages/records.css';
+@import '../../styles/pages/calendar.css';
 @import '../../styles/responsive.css';
 @import './app-shell.css';
