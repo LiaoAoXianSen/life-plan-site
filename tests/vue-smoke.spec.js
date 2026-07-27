@@ -12,7 +12,7 @@ test('Vue shell navigates through migrated pages without browser errors', async 
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/');
     await expect(page.locator('#page-dashboard')).toBeVisible();
-    for (const [label, title] of [['所有记录', '所有记录'], ['灵感池', '灵感池'], ['素材库', '素材库'], ['标签中心', '标签中心'], ['全局搜索', '全局搜索'], ['待办总览', '待办总览'], ['运动健身', '运动健身'], ['目标管理', '目标管理'], ['AI 助手', 'AI 助手'], ['云同步', '云同步']]) {
+    for (const [label, title] of [['所有记录', '所有记录'], ['灵感池', '灵感池'], ['素材库', '素材库'], ['标签中心', '标签中心'], ['全局搜索', '全局搜索'], ['待办总览', '待办总览'], ['习惯打卡', '习惯打卡'], ['运动健身', '运动健身'], ['目标管理', '目标管理'], ['工具转盘', '工具转盘'], ['AI 助手', 'AI 助手'], ['云同步', '云同步']]) {
         await page.getByRole('link', { name: label }).click();
         await expect(page.locator('.page-title')).toHaveText(title);
     }

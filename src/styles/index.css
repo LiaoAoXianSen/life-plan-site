@@ -10,5 +10,8 @@
 @import '../../fitness-style.css';
 @import '../../styles/features/ai.css';
 @import '../../styles/features/sync.css';
+@import '../../styles/pages/habits.css';
+@import '../../habit-style.css';
+@import '../../wheel-tool.css';
 @import '../../styles/responsive.css';
 @import './app-shell.css';
