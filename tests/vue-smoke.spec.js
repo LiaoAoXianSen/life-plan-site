@@ -52,8 +52,42 @@ test('records day view maintains a fixed-width timed event with a complete hover
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({ ...data, records: [{ id: 'record-1', type: '日记', title: '这是一个完整的日程标题', content: '', startDate: date, endDate: date, recordTime: '09:00', recordEndTime: '10:00' }] })), { data: emptyData(), date: today });
     await page.goto('/#/records');
-    await page.getByRole('button', { name: '日' }).click();
+    await page.getByRole('button', { name: '日', exact: true }).click();
     const event = page.locator('.agenda-day-column .agenda-event-block').first();
     await expect(event).toHaveAttribute('title', /09:00 - 10:00 这是一个完整的日程标题/);
     await expect(event).toHaveCSS('width', '160px');
+});
+
+test('record editor persists linked and exclusive todos through the main data contract', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({
+        ...data,
+        records: [{ id: 'record-1', type: '日记', title: '旧记录', content: '# 小结\n旧内容', startDate: date, endDate: date, recordTime: '08:00', recordEndTime: '09:00', todoIds: [] }],
+        todos: [{ id: 'todo-1', text: '已有待办', note: '', done: false, dueDate: date, planStartDate: date, planEndDate: date, urgency: 'medium', group: '其他', subTodos: [], sessions: [], completedAt: '', sourceType: 'manual', sourceRecordId: '', sourceMatchKey: '已有待办' }],
+    })), { data: emptyData(), date: today });
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: /旧记录/ }).click();
+    const editor = page.locator('.record-editor-panel');
+    await editor.getByLabel('标题').fill('更新后的记录');
+    await editor.getByLabel('内容').fill('# 小结\n更新后的内容');
+    await editor.getByLabel('关联已有待办').selectOption('todo-1');
+    await editor.getByRole('button', { name: '关联待办' }).click();
+    await editor.getByLabel('新建专属待办').fill('记录专属下一步');
+    await editor.getByRole('button', { name: '添加专属待办' }).click();
+    await editor.getByRole('button', { name: '保存修改' }).click();
+    await expect(editor).toContainText('记录已保存');
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    const record = stored.data.records.find(item => item.id === 'record-1');
+    expect(record.title).toBe('更新后的记录');
+    expect(record.content).toContain('更新后的内容');
+    expect(record.todoIds).toContain('todo-1');
+    const exclusive = stored.data.todos.find(item => item.text === '记录专属下一步');
+    expect(exclusive).toMatchObject({ isExclusive: true, sourceType: 'record', sourceRecordId: 'record-1' });
+    expect(record.todoIds).toContain(exclusive.id);
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.mirror.todos.map(item => item.id)).toEqual(expect.arrayContaining(['todo-1', exclusive.id]));
 });
