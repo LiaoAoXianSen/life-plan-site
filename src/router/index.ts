@@ -9,6 +9,7 @@ import MaterialsPage from '../pages/MaterialsPage.vue';
 import TagsPage from '../pages/TagsPage.vue';
 import SearchPage from '../pages/SearchPage.vue';
 import GoalsPage from '../pages/GoalsPage.vue';
+import FitnessPage from '../pages/FitnessPage.vue';
 
 const router = createRouter({
   // Hash routing avoids Cloudflare Pages refresh 404s during the phased migration.
@@ -23,7 +24,7 @@ const router = createRouter({
     { path: '/tags', name: 'tags', component: TagsPage, meta: { title: '标签中心', phase: '第 5 步' } },
     { path: '/search', name: 'search', component: SearchPage, meta: { title: '全局搜索', phase: '第 5 步' } },
     { path: '/habits', name: 'habits', component: FeaturePlaceholderPage, meta: { title: '习惯打卡', phase: '第 6 步' } },
-    { path: '/fitness', name: 'fitness', component: FeaturePlaceholderPage, meta: { title: '运动健身', phase: '第 6 步' } },
+    { path: '/fitness', name: 'fitness', component: FitnessPage, meta: { title: '运动健身', phase: '第 6 步' } },
     { path: '/goals', name: 'goals', component: GoalsPage, meta: { title: '目标管理', phase: '第 6 步' } },
     { path: '/wheel', name: 'wheel', component: FeaturePlaceholderPage, meta: { title: '工具转盘', phase: '第 6 步' } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
