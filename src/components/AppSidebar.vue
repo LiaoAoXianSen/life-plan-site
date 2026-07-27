@@ -11,6 +11,8 @@ const navigation = [
   { to: '/fitness', icon: '🏋️', label: '运动健身' },
   { to: '/goals', icon: '🎯', label: '目标管理' },
   { to: '/wheel', icon: '🎡', label: '工具转盘' },
+  { to: '/ai', icon: '✨', label: 'AI 助手' },
+  { to: '/sync', icon: '☁️', label: '云同步' },
 ];
 </script>
 

@@ -8,5 +8,7 @@
 @import '../../styles/pages/library.css';
 @import '../../styles/pages/goals.css';
 @import '../../fitness-style.css';
+@import '../../styles/features/ai.css';
+@import '../../styles/features/sync.css';
 @import '../../styles/responsive.css';
 @import './app-shell.css';
