@@ -7,36 +7,38 @@
     }
     .hero-panel {
         min-height: 172px;
-        background: #123226;
-        color: #fff;
-        border-radius: var(--radius);
+        background:
+            radial-gradient(circle at 92% 84%, rgba(33,110,78,.15), transparent 34%),
+            linear-gradient(135deg, rgba(255,255,255,.96), rgba(250,248,242,.92));
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
         padding: 24px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        box-shadow: 0 22px 50px rgba(18,50,38,.18);
+        box-shadow: var(--shadow);
         position: relative;
         overflow: hidden;
     }
     .hero-panel::before {
         content: "";
         position: absolute;
-        inset: auto -80px -90px auto;
-        width: 240px;
-        height: 240px;
-        background: radial-gradient(circle, rgba(88, 190, 137, .3), transparent 68%);
+        inset: 0 auto 0 0;
+        width: 5px;
+        background: linear-gradient(180deg, var(--accent), rgba(33,110,78,.18));
         pointer-events: none;
     }
-    .hero-date { font-size: 13px; color: rgba(255,255,255,.7); font-weight: 700; }
+    .hero-date { font-size: 13px; color: var(--muted); font-weight: 700; }
     .hero-title { font-size: clamp(24px, 3vw, 36px); font-weight: 700; line-height: 1.18; max-width: 680px; margin: 12px 0; overflow-wrap: anywhere; }
-    .hero-meta { color: rgba(255,255,255,.74); display: flex; gap: 14px; flex-wrap: wrap; }
+    .hero-meta { color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
     .quick-create {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
     }
-    .quick-create .btn { width: 100%; background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.2); }
-    .quick-create .btn:hover { background: rgba(255,255,255,.16); }
+    .quick-create .btn { width: 100%; background: rgba(255,255,255,.76); color: var(--accent); border-color: rgba(33,110,78,.16); box-shadow: var(--shadow-sm); }
+    .quick-create .btn:hover { background: var(--accent-soft); border-color: rgba(33,110,78,.24); color: var(--accent); }
     .summary-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
