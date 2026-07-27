@@ -25,6 +25,7 @@ temp/
 node_modules/
 dist/
 build/
+*.tsbuildinfo
 test-results/
 playwright-report/
 
