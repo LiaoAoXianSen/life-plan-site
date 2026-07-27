@@ -30,11 +30,12 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice and remote/local request path. | Old modes and confirmation writeback are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
 | Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists. | Needs broader contract tests with mirrors/tombstones. | Import/export round-trips complete data with snapshots and merge semantics intact. |
 
-## First Implementation Slice
+## Completed Implementation Slices
 
-Status: in progress
+### Records Editor Slice
 
-Records editor slice:
+Status: verified in `50898e7`
+
 
 - Add list-page preview/edit support for existing records.
 - Save title, type, date range, time, content, and linked todo IDs into `lifePlanData.records`.
@@ -42,8 +43,25 @@ Records editor slice:
 - Rebuild `todoAppData` through the repository commit path.
 - Add Playwright coverage asserting both `lifePlanData.records[].todoIds` and `todoAppData.todos` after the editor flow.
 
-Out of scope for this slice:
+Remaining Records scope:
 
 - Built-in structured templates and user template management.
 - AI diary analysis writeback.
 - Full legacy modal/autosave behavior.
+
+### Sync Protected Main Upload Slice
+
+Status: verified locally
+
+- Keep the main remote path as `/life-plan.json` and the state key as `lifePlanSyncState`.
+- Before manual upload, read the current remote ETag through `sync-service.js` `pullJson`.
+- Upload with `sync-service.js` `pushJson(..., { ifMatch })`.
+- On HTTP 412, fetch the latest remote payload, create conflict merge snapshots, merge through `mergeCloudData`, persist the merged `lifePlanData`, then retry once with the new ETag.
+- Preserve tombstones so remote stale records do not revive local deletions.
+- Add Playwright coverage asserting GET/PUT sequence, `If-Match` headers, merged local/remote records, retained tombstones, conflict snapshots, and `lifePlanSyncState.lastRemoteEtag`.
+
+Remaining Sync scope:
+
+- Automatic sync and visibility-resume sync.
+- Independent todo/habit/wheel remote preview/apply/upload flows.
+- WebDAV verification readback for independent app mirrors.

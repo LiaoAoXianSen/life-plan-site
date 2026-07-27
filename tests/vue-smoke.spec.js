@@ -91,3 +91,73 @@ test('record editor persists linked and exclusive todos through the main data co
     expect(stored.mirror.authority).toBe('lifePlanData.todos');
     expect(stored.mirror.todos.map(item => item.id)).toEqual(expect.arrayContaining(['todo-1', exclusive.id]));
 });
+
+test('main sync upload uses If-Match and merges after a 412 conflict', async ({ page }) => {
+    const localData = emptyData({
+        records: [
+            { id: 'local-record', type: '日记', title: '本机记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [], updatedAt: '2026-07-27T10:00:00' },
+        ],
+        deletedItems: [
+            { collection: 'records', id: 'deleted-record', deletedAt: '2026-07-27T10:30:00', reason: 'local-delete' },
+        ],
+    });
+    const remoteBase = emptyData({
+        records: [
+            { id: 'remote-base', type: '日记', title: '云端基线', content: '', startDate: '2026-07-26', endDate: '2026-07-26', todoIds: [], updatedAt: '2026-07-26T12:00:00' },
+            { id: 'deleted-record', type: '日记', title: '不应复活', content: '', startDate: '2026-07-25', endDate: '2026-07-25', todoIds: [], updatedAt: '2026-07-25T12:00:00' },
+        ],
+    });
+    const remoteConflict = emptyData({
+        records: [
+            ...remoteBase.records,
+            { id: 'remote-conflict', type: '日记', title: '另一设备记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [], updatedAt: '2026-07-27T10:45:00' },
+        ],
+    });
+
+    await page.addInitScript(({ local, firstRemote, secondRemote }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(local));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: true, lastRemoteHash: '', lastRemoteEtag: '' }));
+        window.__syncRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            const headers = options.headers || {};
+            window.__syncRequests.push({ url: String(url), method, headers, body: options.body || '' });
+            const jsonResponse = (body, etag, status = 200) => new Response(JSON.stringify(body), { status, headers: { ETag: etag, 'Content-Type': 'application/json' } });
+            if (method === 'GET') {
+                const getCount = window.__syncRequests.filter(item => item.method === 'GET').length;
+                return jsonResponse(getCount === 1 ? firstRemote : secondRemote, getCount === 1 ? '"v1"' : '"v2"');
+            }
+            if (method === 'PUT') {
+                const putCount = window.__syncRequests.filter(item => item.method === 'PUT').length;
+                if (putCount === 1) return new Response('conflict', { status: 412, headers: { ETag: '"stale"' } });
+                return jsonResponse({ ok: true, etag: '"v3"' }, '"v3"');
+            }
+            return new Response('', { status: 200 });
+        };
+    }, { local: localData, firstRemote: remoteBase, secondRemote: remoteConflict });
+
+    await page.goto('/#/sync');
+    await page.getByRole('button', { name: '上传主数据' }).click();
+    await expect(page.locator('.sync-status')).toContainText('云端版本变化');
+
+    const result = await page.evaluate(() => ({
+        requests: window.__syncRequests,
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        state: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'),
+    }));
+    const putRequests = result.requests.filter(item => item.method === 'PUT');
+    const getRequests = result.requests.filter(item => item.method === 'GET');
+    expect(getRequests).toHaveLength(2);
+    expect(putRequests).toHaveLength(2);
+    expect(putRequests.map(item => item.headers['If-Match'] || item.headers['if-match'])).toEqual(['"v1"', '"v2"']);
+    expect(result.data.records.map(item => item.id)).toEqual(expect.arrayContaining(['local-record', 'remote-base', 'remote-conflict']));
+    expect(result.data.records.map(item => item.id)).not.toContain('deleted-record');
+    expect(result.data.deletedItems).toEqual(expect.arrayContaining([expect.objectContaining({ collection: 'records', id: 'deleted-record' })]));
+    expect(result.state.dirty).toBe(false);
+    expect(result.state.lastRemoteEtag).toBe('"v3"');
+    expect(result.state.lastConflictAt).toBeTruthy();
+    expect(result.snapshots.some(item => item.reason === '条件写入冲突合并前')).toBe(true);
+    expect(result.snapshots.some(item => item.reason === '条件写入冲突合并结果')).toBe(true);
+});
