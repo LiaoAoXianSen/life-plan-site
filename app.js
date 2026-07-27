@@ -8144,11 +8144,12 @@
                                                 const hasExplicitEnd = item.endMinutes !== null && item.endMinutes > item.startMinutes;
                                                 const visualEnd = hasExplicitEnd ? item.endMinutes : item.startMinutes;
                                                 const height = Math.max((visualEnd - item.startMinutes) * hourHeight / 60, hasExplicitEnd ? 22 : 18);
-                                                const gap = 2;
                                                 const columnCount = item.layoutColumns || 1;
                                                 const columnIndex = item.layoutColumn || 0;
-                                                const width = `calc((100% - 8px - ${gap * (columnCount - 1)}px) / ${columnCount})`;
-                                                const left = `calc(4px + (${width} + ${gap}px) * ${columnIndex})`;
+                                                const isDayView = mode === 'day';
+                                                const gap = isDayView ? 6 : 2;
+                                                const width = isDayView ? '160px' : `calc((100% - 8px - ${gap * (columnCount - 1)}px) / ${columnCount})`;
+                                                const left = isDayView ? `${4 + (160 + gap) * columnIndex}px` : `calc(4px + (${width} + ${gap}px) * ${columnIndex})`;
                                                 const densityClass = [
                                                     height < 46 ? 'is-short' : '',
                                                     columnCount > 1 ? 'is-overlap' : ''
