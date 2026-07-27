@@ -153,6 +153,12 @@
         pointer-events: auto;
         opacity: .92;
     }
+    .agenda-day .agenda-event-block {
+        width: min(420px, calc(100% - 12px)) !important;
+    }
+    .agenda-day .agenda-event-block.is-overlap {
+        width: min(260px, calc(50% - 8px)) !important;
+    }
     .agenda-event-block:hover { opacity: 1; background: #fff; }
     .agenda-event-time {
         font-size: 10px;
