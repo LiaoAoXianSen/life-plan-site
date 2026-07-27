@@ -17,11 +17,11 @@
         margin-bottom: 14px;
     }
     .todo-detail-card {
-        border: 1px solid #dce8df;
-        border-radius: 16px;
-        background: linear-gradient(135deg, #ffffff, #f5faf6);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: linear-gradient(135deg, #ffffff, #fbf8ef);
         padding: 14px;
-        box-shadow: 0 10px 22px rgba(45, 73, 54, .06);
+        box-shadow: 0 2px 8px rgba(60,55,40,.06);
     }
     .todo-detail-card h3 {
         font-size: 18px;
@@ -41,10 +41,10 @@
         min-height: 24px;
         padding: 2px 9px;
         border-radius: 999px;
-        background: #eef5f0;
-        color: #4e6356;
+        background: var(--surface-soft);
+        color: var(--muted);
         font-size: 12px;
-        font-weight: 800;
+        font-weight: 700;
     }
     .todo-detail-note {
         margin-top: 10px;
@@ -66,9 +66,9 @@
         margin: -4px 0 14px;
     }
     .todo-date-presets button {
-        border: 1px solid #d5e3db;
-        background: #f7fbf8;
-        color: #426151;
+        border: 1px solid var(--line);
+        background: var(--surface-soft);
+        color: var(--muted);
         border-radius: 999px;
         min-height: 26px;
         padding: 3px 10px;
@@ -78,8 +78,8 @@
         transition: .16s ease;
     }
     .todo-date-presets button:hover {
-        background: #e8f3ec;
-        border-color: #bdd5c5;
+        background: var(--accent-soft);
+        border-color: rgba(33,110,78,.18);
         color: var(--accent);
         transform: translateY(-1px);
     }
@@ -94,14 +94,14 @@
 
     .todo-pool-hint { margin-top: 8px; color: var(--faint); font-size: 12px; }
     .todo-add { display: flex; gap: 8px; margin-top: 10px; }
-    .todo-add input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #d3ded7; border-radius: var(--radius); font-size: 13px; outline: none; }
+    .todo-add input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px; outline: none; }
     .todo-add input:focus { border-color: var(--accent-2); }
     .sub-todos { margin-left: 25px; margin-top: 4px; border-left: 2px solid var(--line); padding-left: 10px; }
     .todo-subtodo-item.is-viewing {
         padding: 8px 10px;
-        border: 1px solid #e1ebe5;
-        border-radius: 13px;
-        background: #fbfdfb;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255,255,255,.78);
     }
     .todo-subtodo-item.is-viewing input {
         cursor: pointer;
@@ -117,33 +117,80 @@
     }
     .todo-expand { cursor: pointer; color: var(--faint); font-size: 12px; user-select: none; margin-right: 4px; }
 
-    .filter-bar {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 18px;
-        align-items: center;
-        flex-wrap: wrap;
-        background: rgba(255,255,255,.76);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        padding: 12px;
+    #page-todos { max-width: 1120px; }
+    #page-todos .page-header {
+        align-items: flex-end;
+        margin-bottom: 14px;
     }
-    .filter-bar input, .filter-bar select { width: auto; min-width: 132px; }
+    #page-todos .page-title {
+        font-size: 26px;
+        letter-spacing: -0.02em;
+    }
+    #page-todos .filter-bar {
+        display: grid;
+        grid-template-columns: auto minmax(145px, .8fr) auto minmax(145px, .8fr) repeat(4, minmax(130px, 1fr));
+        gap: 9px;
+        margin-bottom: 14px;
+        align-items: center;
+        background: rgba(255,255,255,.78);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        padding: 12px;
+        box-shadow: 0 2px 8px rgba(60,55,40,.05);
+    }
+    #page-todos .filter-bar span {
+        color: var(--muted) !important;
+        font-size: 12px !important;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    #page-todos .filter-bar input,
+    #page-todos .filter-bar select {
+        width: 100%;
+        min-width: 0;
+        background: rgba(255,255,255,.86);
+    }
     .todo-table {
         width: 100%;
-        background: var(--surface);
-        border-radius: var(--radius);
+        background: rgba(255,255,255,.78);
+        border-radius: var(--radius-lg);
         overflow: hidden;
-        box-shadow: var(--shadow);
+        box-shadow: 0 2px 8px rgba(60,55,40,.06);
         border: 1px solid var(--line);
         border-collapse: separate;
         border-spacing: 0;
     }
-    .todo-table th, .todo-table td { padding: 12px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-    .todo-table th { background: var(--surface-soft); font-weight: 700; color: var(--muted); font-size: 12px; }
+    .todo-table th,
+    .todo-table td {
+        padding: 13px 14px;
+        text-align: left;
+        font-size: 13px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: middle;
+    }
+    .todo-table th {
+        background: #fbf8ef;
+        font-weight: 700;
+        color: var(--muted);
+        font-size: 12px;
+    }
     .todo-table tr:last-child td { border-bottom: none; }
-    .todo-table tbody tr:hover td { background: #fbfdfb; }
-    .todo-title-cell { cursor: pointer; font-weight: 750; color: var(--text); overflow-wrap: anywhere; }
+    .todo-table tbody tr { transition: background .16s ease; }
+    .todo-table tbody tr:hover td { background: rgba(250,248,242,.68); }
+    .todo-table input[type="checkbox"] {
+        width: 17px;
+        height: 17px;
+        accent-color: var(--accent);
+        cursor: pointer;
+    }
+    .todo-title-cell {
+        cursor: pointer;
+        font-weight: 700;
+        color: var(--text);
+        overflow-wrap: anywhere;
+        line-height: 1.45;
+    }
+    .todo-title-cell:hover { color: var(--accent); }
     .todo-title-cell.is-done { text-decoration: line-through; color: var(--faint); font-weight: 650; }
     .todo-title-meta {
         margin-top: 5px;
@@ -162,7 +209,7 @@
     .todo-session-editor input {
         min-width: 0;
         padding: 8px 10px;
-        border: 1px solid #d3ded7;
+        border: 1px solid var(--line);
         border-radius: var(--radius);
         outline: none;
     }
@@ -182,11 +229,11 @@
     }
     .todo-session-empty {
         padding: 10px 12px;
-        border: 1px dashed #d9e3dc;
-        border-radius: 14px;
+        border: 1px dashed var(--line);
+        border-radius: var(--radius-lg);
         color: var(--faint);
         font-size: 12px;
-        background: #f8fbf8;
+        background: var(--surface-soft);
     }
     .todo-session-item {
         display: flex;
@@ -194,11 +241,10 @@
         align-items: center;
         gap: 10px;
         padding: 11px 12px;
-        border: 1px solid #dce8df;
-        border-radius: 16px;
-        background:
-            linear-gradient(135deg, rgba(255,255,255,.95), rgba(244,250,246,.92));
-        box-shadow: 0 8px 18px rgba(45, 73, 54, .06);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(250,248,242,.92));
+        box-shadow: 0 2px 8px rgba(60,55,40,.06);
         min-width: 0;
     }
     .todo-session-main { display: grid; gap: 3px; min-width: 0; }
@@ -229,7 +275,7 @@
     .todo-urgency-high { background: #fff3d2; color: #956000; }
     .todo-urgency-medium { background: #eaf4ff; color: #2564a8; }
     .todo-urgency-low { background: #eef5f0; color: #547060; }
-    .tag { display: inline-flex; align-items: center; min-height: 22px; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: #edf1ee; color: var(--muted); font-weight: 800; }
+    .tag { display: inline-flex; align-items: center; min-height: 22px; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: #f0eee6; color: var(--muted); font-weight: 700; }
     .tag-健身 { background: #e8f4ff; color: #1e68bc; }
     .tag-学习 { background: #f1ecff; color: #6d4bc2; }
     .tag-工作 { background: #fff5e5; color: #9a5b03; }
