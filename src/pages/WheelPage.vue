@@ -1,13 +1,151 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { genId, getNowLocal } from '../services/legacyServices';
-import { useLifePlanStore } from '../stores/lifePlanStore';
-import { useTodosStore } from '../stores/todosStore';
-const store = useLifePlanStore(); const todos = useTodosStore(); const selectedId = ref(''); const result = ref<any>(null);
-const wheels = computed(() => store.data.wheels); const selected = computed(() => wheels.value.find(item => item.id === selectedId.value) || wheels.value[0]);
-type WheelOption = { id?: string; name?: string; weight?: number; enabled?: boolean; tagIds?: string[] };
-const options = computed<WheelOption[]>(() => { const wheel = selected.value; if (!wheel) return []; const tags = Array.isArray(wheel.tagIds) ? wheel.tagIds as string[] : []; if (wheel.mode === 'tag') return store.data.wheelLibraryItems.filter(item => item.enabled !== false && (Array.isArray(item.tagIds) ? item.tagIds as string[] : []).some(id => tags.includes(id))) as WheelOption[]; return (Array.isArray(wheel.items) ? wheel.items : []).filter((item: WheelOption) => item.enabled !== false) as WheelOption[]; });
-function spin() { const items = options.value; if (!items.length || !selected.value) return; const total = items.reduce((sum: number, item: WheelOption) => sum + Math.max(1, Number(item.weight || 1)), 0); let cursor = Math.random() * total; const picked = items.find((item: WheelOption) => (cursor -= Math.max(1, Number(item.weight || 1))) <= 0) || items[items.length - 1]; result.value = picked; store.mutate('wheel-spin', data => data.wheelHistory.unshift({ id: genId(), wheelId: String(selected.value?.id || ''), wheelName: String(selected.value?.name || ''), mode: String(selected.value?.mode || 'normal'), resultId: picked.id || '', resultName: picked.name || '未命名结果', note: '', createdAt: getNowLocal(), updatedAt: getNowLocal() })); }
-function createTodo() { if (!result.value) return; todos.create({ text: `执行转盘结果：${result.value.name}`, note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '转盘' }); }
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+
+import { useWheelStore, type WheelItem, type WheelMode, type WheelTag } from '../stores/wheelStore';
+
+const wheelStore = useWheelStore();
+const selectedId = ref('');
+const stageTag = ref<WheelTag | null>(null);
+const resultId = ref('');
+const spinning = ref(false);
+const rotation = ref(0);
+const notice = ref('');
+let spinTimer: number | undefined;
+
+const selectedWheel = computed(() => wheelStore.wheels.find(wheel => wheel.id === selectedId.value) || wheelStore.wheels[0]);
+const selectedOptions = computed(() => selectedWheel.value ? wheelStore.candidates(selectedWheel.value, stageTag.value?.id || '') : []);
+const availableTags = computed(() => selectedWheel.value?.mode === 'tag' ? wheelStore.candidateTags(selectedWheel.value) : []);
+const currentResult = computed(() => wheelStore.history.find(item => item.id === resultId.value));
+const isTagSecondStage = computed(() => Boolean(selectedWheel.value?.mode === 'tag' && stageTag.value));
+const wheelSegments = computed(() => selectedOptions.value.slice(0, 18).map((item, index, all) => {
+  const start = (index / all.length) * 360; const end = ((index + 1) / all.length) * 360;
+  return `${segmentColors[index % segmentColors.length]} ${start}deg ${end}deg`;
+}).join(', ') || '#edf2ee 0deg 360deg');
+const segmentColors = ['#bcdcc9', '#d7e5f5', '#f4d5b7', '#e3d6f4', '#d1e6db', '#f3dfad'];
+
+const wheelForm = reactive<{ id: string; name: string; mode: WheelMode; tagIds: string[]; itemsText: string }>({ id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' });
+const optionForm = reactive({ id: '', name: '', weight: 1, enabled: true });
+const tagForm = reactive({ id: '', name: '', color: '#216e4e', weight: 1, enabled: true });
+const libraryForm = reactive({ id: '', name: '', tagIds: [] as string[], weight: 1, enabled: true });
+
+watch(() => wheelStore.wheels, wheels => {
+  if (!wheels.some(wheel => wheel.id === selectedId.value)) selectedId.value = wheels[0]?.id || '';
+}, { immediate: true, deep: true });
+watch(selectedId, () => { stageTag.value = null; resultId.value = ''; notice.value = ''; });
+onBeforeUnmount(() => { if (spinTimer) window.clearTimeout(spinTimer); });
+
+function say(message: string) { notice.value = message; }
+function handle(action: () => void, success = '') { try { action(); if (success) say(success); } catch (error) { say(error instanceof Error ? error.message : String(error)); } }
+function confirmAction(message: string, action: () => void, success = '') { if (window.confirm(message)) handle(action, success); }
+function libraryTagNames(item: WheelItem) { return (Array.isArray(item.tagIds) ? item.tagIds as string[] : []).map(id => wheelStore.tags.find(tag => tag.id === id)?.name).filter(Boolean).join('、') || '未分类'; }
+function resetWheelForm() { Object.assign(wheelForm, { id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' }); }
+function editWheel() { const wheel = selectedWheel.value; if (!wheel) return; Object.assign(wheelForm, { id: wheel.id, name: wheel.name, mode: wheel.mode, tagIds: [...(wheel.tagIds || [])], itemsText: wheel.items.map(item => `${item.name},${item.weight}`).join('\n') }); }
+function parseItems(text: string) {
+  return text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+    const match = line.match(/^(.*?)[,，\t]\s*(\d+(?:\.\d+)?)%?\s*$/);
+    return { name: (match?.[1] || line).trim(), weight: Number(match?.[2] || 1) };
+  });
+}
+function submitWheel() {
+  handle(() => {
+    if (wheelForm.id) wheelStore.updateWheel(wheelForm.id, { name: wheelForm.name, tagIds: wheelForm.tagIds });
+    else {
+      const created = wheelStore.createWheel({ name: wheelForm.name, mode: wheelForm.mode, tagIds: wheelForm.tagIds, items: parseItems(wheelForm.itemsText) });
+      selectedId.value = created.id;
+    }
+    resetWheelForm();
+  }, wheelForm.id ? '已更新转盘' : '已创建转盘');
+}
+function removeWheel() { const wheel = selectedWheel.value; if (wheel && window.confirm(`删除转盘“${wheel.name}”吗？抽取历史会保留。`)) handle(() => wheelStore.deleteWheel(wheel.id), '已删除转盘'); }
+function resetOptionForm() { Object.assign(optionForm, { id: '', name: '', weight: 1, enabled: true }); }
+function editOption(item: WheelItem) { Object.assign(optionForm, { id: item.id, name: item.name, weight: item.weight, enabled: item.enabled }); }
+function submitOption() { const wheel = selectedWheel.value; if (!wheel) return; handle(() => { wheelStore.saveOption(wheel.id, optionForm); resetOptionForm(); }, optionForm.id ? '已更新选项' : '已添加选项'); }
+function resetTagForm() { Object.assign(tagForm, { id: '', name: '', color: '#216e4e', weight: 1, enabled: true }); }
+function editTag(tag: WheelTag) { Object.assign(tagForm, { id: tag.id, name: tag.name, color: tag.color, weight: tag.weight, enabled: tag.enabled }); }
+function submitTag() { handle(() => { wheelStore.saveTag(tagForm); resetTagForm(); }, tagForm.id ? '已更新标签' : '已添加标签'); }
+function resetLibraryForm() { Object.assign(libraryForm, { id: '', name: '', tagIds: [], weight: 1, enabled: true }); }
+function editLibrary(item: WheelItem) { Object.assign(libraryForm, { id: item.id, name: item.name, tagIds: [...(Array.isArray(item.tagIds) ? item.tagIds as string[] : [])], weight: item.weight, enabled: item.enabled }); }
+function submitLibrary() { handle(() => { wheelStore.saveLibraryItem(libraryForm); resetLibraryForm(); }, libraryForm.id ? '已更新公共项' : '已添加公共项'); }
+function nextSpin() {
+  const wheel = selectedWheel.value;
+  if (!wheel || spinning.value) return;
+  if (wheel.mode === 'tag' && !stageTag.value) {
+    const tag = wheelStore.weightedPick(availableTags.value);
+    if (!tag) return say('这个标签转盘没有可抽标签，或标签下没有启用的公共项。');
+    animate(() => { stageTag.value = tag; say(`已锁定标签：${tag.name}，再转一次抽具体内容。`); });
+    return;
+  }
+  const picked = wheelStore.weightedPick(selectedOptions.value);
+  if (!picked) return say('当前转盘没有启用的可抽选项。');
+  animate(() => {
+    const history = wheelStore.recordSpin(wheel.id, picked, stageTag.value || undefined);
+    resultId.value = history.id; stageTag.value = null; say(`抽中了：${picked.name}`);
+  });
+}
+function directTag(tag: WheelTag) { stageTag.value = tag; resultId.value = ''; nextSpin(); }
+function animate(done: () => void) {
+  spinning.value = true; rotation.value += 1440 + Math.floor(Math.random() * 720);
+  spinTimer = window.setTimeout(() => { spinning.value = false; done(); }, 560);
+}
+function toggleTag(list: string[], id: string, checked: boolean) { const next = new Set(list); checked ? next.add(id) : next.delete(id); return [...next]; }
+function exportJson() { wheelStore.exportBackup(); say('已下载转盘 JSON 备份，并创建本地快照。'); }
+function exportCsv() { wheelStore.exportHistoryCsv(); say('已下载抽取历史 CSV。'); }
+function importJson(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const raw = JSON.parse(String(reader.result || '{}')) as Record<string, unknown>;
+      const summary = `转盘 ${Array.isArray(raw.wheels) ? raw.wheels.length : 0} 个，标签 ${Array.isArray(raw.wheelTags) ? raw.wheelTags.length : 0} 个，公共项 ${Array.isArray(raw.wheelLibraryItems) ? raw.wheelLibraryItems.length : 0} 个，历史 ${Array.isArray(raw.wheelHistory) ? raw.wheelHistory.length : 0} 条`;
+      if (!window.confirm(`恢复会覆盖当前转盘、标签、公共项和抽取记录。\n\n备份内容：${summary}\n\n恢复前会自动建立可回滚快照。继续吗？`)) return;
+      wheelStore.restoreBackup(raw, file.name); selectedId.value = wheelStore.wheels[0]?.id || ''; resultId.value = ''; stageTag.value = null; say('已恢复转盘 JSON 备份。');
+    } catch (error) { say(error instanceof Error ? error.message : '备份文件不是有效的大转盘 JSON'); }
+    (event.target as HTMLInputElement).value = '';
+  };
+  reader.readAsText(file, 'utf-8');
+}
 </script>
-<template><section class="page active" id="page-wheel"><header class="page-header"><div class="page-title">工具转盘</div></header><article class="card"><div class="form-group"><label>选择转盘</label><select v-model="selectedId"><option v-for="wheel in wheels" :key="String(wheel.id)" :value="String(wheel.id)">{{ wheel.name }}</option></select></div><div class="wheel-stage"><div class="wheel-result">{{ result?.name || '准备开始' }}</div><button class="btn btn-primary" :disabled="!options.length" @click="spin">开始转动</button><button v-if="result" class="btn btn-secondary" @click="createTodo">转为待办</button></div><p v-if="!options.length" class="empty-state">当前转盘没有启用的选项。</p></article><article class="card"><div class="card-title">最近记录</div><div v-for="entry in store.data.wheelHistory.slice(0, 10)" :key="String(entry.id)" class="wheel-history-row">{{ entry.resultName }} · {{ entry.createdAt }}</div></article></section></template>
+
+<template>
+  <section id="page-wheel" class="page active">
+    <header class="page-header wheel-header">
+      <div><div class="page-title">工具转盘</div><p class="wheel-subtitle">用可追溯的随机选择，帮自己越过“该做什么”的小阻力。</p></div>
+      <div class="wheel-actions"><button class="btn btn-secondary" type="button" @click="exportJson">导出 JSON</button><label class="btn btn-secondary import-button">恢复备份<input type="file" accept=".json,application/json" @change="importJson" /></label><button class="btn btn-secondary" type="button" @click="exportCsv">导出 CSV</button></div>
+    </header>
+
+    <p v-if="notice" class="wheel-notice" role="status">{{ notice }}</p>
+    <div class="wheel-layout">
+      <article class="card wheel-stage-card">
+        <div class="wheel-toolbar">
+          <label class="form-group wheel-selector"><span>当前转盘</span><select v-model="selectedId" :disabled="!wheelStore.wheels.length"><option v-for="wheel in wheelStore.wheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }} · {{ wheel.mode === 'tag' ? '标签' : '普通' }}</option></select></label>
+          <button class="btn btn-secondary" type="button" @click="editWheel" :disabled="!selectedWheel">编辑当前</button>
+          <button class="btn btn-danger" type="button" @click="removeWheel" :disabled="!selectedWheel">删除</button>
+        </div>
+        <div class="wheel-pointer">▼</div>
+        <div class="wheel-disc" :class="{ spinning }" :style="{ '--wheel-fill': `conic-gradient(${wheelSegments})`, transform: `rotate(${rotation}deg)` }">
+          <span v-for="(item, index) in selectedOptions.slice(0, 8)" :key="item.id" class="wheel-label" :style="{ transform: `rotate(${index * (360 / Math.max(1, Math.min(8, selectedOptions.length)))}deg) translateY(-86px) rotate(${-index * (360 / Math.max(1, Math.min(8, selectedOptions.length)))}deg)` }" :title="item.name">{{ item.name.slice(0, 7) }}</span>
+          <span class="wheel-center">{{ spinning ? '转动中' : isTagSecondStage ? '抽项目' : selectedWheel?.mode === 'tag' ? '抽标签' : 'GO' }}</span>
+        </div>
+        <div class="wheel-result" aria-live="polite"><template v-if="currentResult"><strong>{{ currentResult!.resultName }}</strong><span>{{ currentResult!.mode === 'tag' ? `标签：${currentResult!.tagName || '-'}` : '普通转盘结果' }}</span><button class="btn btn-primary" :disabled="Boolean(currentResult!.convertedTodoId)" @click="handle(() => wheelStore.convertHistoryToTodo(currentResult!.id), '已转入今日待办')">{{ currentResult!.convertedTodoId ? '已转入待办' : '转入待办' }}</button></template><template v-else-if="stageTag"><strong>已锁定：{{ stageTag.name }}</strong><span>再转一次，从该标签的公共项里抽取。</span></template><template v-else><strong>{{ selectedWheel ? '准备开始' : '先创建一个转盘' }}</strong><span>{{ selectedOptions.length }} 个候选</span></template></div>
+        <button class="btn btn-primary wheel-spin" type="button" :disabled="spinning || !selectedWheel" @click="nextSpin">{{ isTagSecondStage ? '抽取具体内容' : selectedWheel?.mode === 'tag' ? '开始抽标签' : '开始转动' }}</button>
+        <div v-if="selectedWheel?.mode === 'tag' && availableTags.length" class="direct-tags"><span>直接抽标签：</span><button v-for="tag in availableTags" :key="tag.id" type="button" class="tag-chip" :style="{ '--tag-color': tag.color }" @click="directTag(tag)">{{ tag.name }} · {{ wheelStore.candidates(selectedWheel, tag.id).length }}</button></div>
+      </article>
+
+      <aside class="wheel-side-stack">
+        <form class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式<select v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)"><option value="normal">普通转盘</option><option value="tag">标签转盘（两段抽取）</option></select></label></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><label>选项（每行一项；可用“名称,权重”）<textarea v-model="wheelForm.itemsText" rows="4" placeholder="阅读,2&#10;散步,1" /></label></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
+        <article class="card history-card"><div class="card-title-row"><div class="card-title">最近抽取</div><button v-if="wheelStore.history.length" type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div><div v-for="entry in wheelStore.history.slice(0, 8)" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ entry.createdAt }}</span></div><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></div><p v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</p></article>
+      </aside>
+    </div>
+
+    <div class="wheel-management-grid">
+      <article class="card"><div class="card-title">普通转盘选项</div><form v-if="selectedWheel?.mode === 'normal'" class="inline-editor" @submit.prevent="submitOption"><input v-model="optionForm.name" required placeholder="选项名称" /><input v-model.number="optionForm.weight" type="number" min="1" title="权重" /><label><input v-model="optionForm.enabled" type="checkbox" />启用</label><button class="btn btn-primary">{{ optionForm.id ? '保存' : '添加' }}</button><button v-if="optionForm.id" type="button" class="btn btn-secondary" @click="resetOptionForm">取消</button></form><p v-else class="hint">标签转盘从公共项按标签抽取，不维护私有选项。</p><div v-for="item in selectedWheel?.mode === 'normal' ? selectedWheel.items : []" :key="item.id" class="entity-row"><span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }}</em></span><span><button class="link-button" @click="editOption(item)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除选项“${item.name}”吗？`, () => wheelStore.deleteOption(selectedWheel!.id, item.id), '已删除选项')">删除</button></span></div></article>
+      <article class="card"><div class="card-title">标签管理</div><form class="inline-editor tag-form" @submit.prevent="submitTag"><input v-model="tagForm.name" required placeholder="标签名称" /><input v-model="tagForm.color" type="color" /><input v-model.number="tagForm.weight" type="number" min="1" title="权重" /><label><input v-model="tagForm.enabled" type="checkbox" />启用</label><button class="btn btn-primary">{{ tagForm.id ? '保存' : '添加' }}</button><button v-if="tagForm.id" type="button" class="btn btn-secondary" @click="resetTagForm">取消</button></form><div v-for="tag in wheelStore.tags" :key="tag.id" class="entity-row"><span><i class="color-dot" :style="{ background: tag.color }" /><strong>{{ tag.name }}</strong><em>权重 {{ tag.weight }} · {{ tag.enabled ? '启用' : '停用' }}</em></span><span><button class="link-button" @click="editTag(tag)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除标签“${tag.name}”吗？`, () => wheelStore.deleteTag(tag.id))">删除</button></span></div></article>
+      <article class="card library-card"><div class="card-title">公共项库</div><form class="library-form" @submit.prevent="submitLibrary"><input v-model="libraryForm.name" required placeholder="公共项名称" /><input v-model.number="libraryForm.weight" type="number" min="1" title="权重" /><label><input v-model="libraryForm.enabled" type="checkbox" />启用</label><div class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="libraryForm.tagIds.includes(tag.id)" @change="libraryForm.tagIds = toggleTag(libraryForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label></div><div class="inline-actions"><button class="btn btn-primary">{{ libraryForm.id ? '保存公共项' : '添加公共项' }}</button><button v-if="libraryForm.id" type="button" class="btn btn-secondary" @click="resetLibraryForm">取消</button></div></form><div v-for="item in wheelStore.libraryItems" :key="item.id" class="entity-row"><span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ libraryTagNames(item) }}</em></span><span><button class="link-button" @click="editLibrary(item)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除公共项“${item.name}”吗？`, () => wheelStore.deleteLibraryItem(item.id), '已删除公共项')">删除</button></span></div></article>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.wheel-header,.wheel-toolbar,.wheel-actions,.inline-actions,.card-title-row,.entity-row,.history-row,.wheel-result,.wheel-management-grid,.inline-editor,.direct-tags{display:flex;align-items:center}.wheel-header,.wheel-toolbar,.card-title-row,.entity-row,.history-row{justify-content:space-between;gap:12px}.wheel-header{align-items:flex-start}.wheel-subtitle,.hint{margin:5px 0 0;color:var(--text-secondary,#66756c);font-size:.9rem}.wheel-actions,.inline-actions{flex-wrap:wrap}.import-button{cursor:pointer}.import-button input{display:none}.wheel-notice{margin:0 0 14px;padding:10px 13px;border-radius:9px;background:#edf6ef;color:#25613d}.wheel-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(290px,.8fr);gap:18px}.wheel-side-stack{display:grid;gap:18px}.wheel-stage-card{text-align:center}.wheel-selector{text-align:left;min-width:200px}.wheel-selector span{display:block;margin-bottom:4px}.wheel-pointer{position:relative;z-index:2;color:#e75d4d;font-size:28px;line-height:.5;margin-top:16px}.wheel-disc{width:min(390px,86vw);height:min(390px,86vw);margin:-1px auto 14px;border:10px solid #f7faf8;border-radius:50%;background:var(--wheel-fill);box-shadow:0 8px 28px rgba(25,61,42,.16),inset 0 0 0 2px rgba(31,83,57,.08);position:relative;transition:transform 560ms cubic-bezier(.16,.85,.22,1)}.wheel-center{position:absolute;inset:50% auto auto 50%;display:grid;place-items:center;width:82px;height:82px;border-radius:50%;background:#fff;color:#285940;font-weight:800;transform:translate(-50%,-50%);box-shadow:0 2px 9px rgba(0,0,0,.12)}.wheel-label{position:absolute;left:calc(50% - 30px);top:calc(50% - 12px);width:60px;color:#24332a;font-size:.72rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wheel-result{min-height:68px;justify-content:center;flex-direction:column;gap:3px}.wheel-result strong{font-size:1.15rem}.wheel-result span,.history-row span,.entity-row em{color:var(--text-secondary,#66756c);font-style:normal;font-size:.82rem}.wheel-spin{min-width:180px}.direct-tags{justify-content:center;flex-wrap:wrap;margin-top:15px;gap:7px;font-size:.85rem}.tag-chip{border:1px solid color-mix(in srgb,var(--tag-color) 35%,white);background:color-mix(in srgb,var(--tag-color) 12%,white);color:#32483a;border-radius:999px;padding:5px 9px;cursor:pointer}.compact-form label{display:block}.tag-checks{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}.tag-checks label{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;background:#f5f7f5;border-radius:7px;font-size:.84rem}.inline-editor{gap:8px;flex-wrap:wrap;margin:10px 0 14px}.inline-editor input:not([type=checkbox]){width:100px}.inline-editor input:first-child{flex:1;min-width:130px}.entity-row,.history-row{padding:9px 0;border-top:1px solid rgba(42,75,56,.1);text-align:left}.entity-row>span:first-child,.history-row>div{display:flex;align-items:center;gap:7px;min-width:0}.entity-row em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.color-dot{display:inline-block;width:10px;height:10px;border-radius:50%}.link-button{border:0;background:transparent;color:#316c4a;cursor:pointer;padding:3px}.danger-text{color:#b84f45}.wheel-management-grid{align-items:start;display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.library-card{grid-column:1/-1}.library-form{display:grid;grid-template-columns:minmax(160px,1fr) 90px auto;gap:8px;align-items:center;margin:10px 0}.library-form .tag-checks,.library-form .inline-actions{grid-column:1/-1}.empty-state{padding:12px 0}.history-card{max-height:430px;overflow:auto}@media (max-width:850px){.wheel-layout,.wheel-management-grid{grid-template-columns:1fr}.wheel-header{flex-direction:column}.library-card{grid-column:auto}.library-form{grid-template-columns:1fr 90px auto}.wheel-disc{width:min(350px,82vw);height:min(350px,82vw)}}@media (max-width:560px){.wheel-toolbar{align-items:stretch;flex-wrap:wrap}.wheel-selector{width:100%}.wheel-disc{width:280px;height:280px}.wheel-label{display:none}.library-form{grid-template-columns:1fr 80px}.library-form>label{grid-column:1/-1}.wheel-actions .btn{font-size:.82rem}}
+</style>

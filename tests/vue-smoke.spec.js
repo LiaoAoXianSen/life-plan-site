@@ -32,6 +32,22 @@ test('todo writes main data and the compatible todo mirror', async ({ page }) =>
     expect(stored.mirror.todos[0].text).toBe('Vue 待办');
 });
 
+test('habit quick check-in writes the legacy fields and rebuilds its local mirror', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({
+        ...data,
+        habits: [{ id: 'habit-1', name: '阅读', rule: 'daily', timesPerDay: '1', startDate: date, rewardPoints: 2, rewardCurrency: '金币' }],
+    })), { data: emptyData(), date: today });
+    await page.goto('/#/habits');
+    await page.getByRole('button', { name: '打卡' }).click();
+    await expect(page.locator('#page-habits')).toContainText('1/1 次');
+    const stored = await page.evaluate(() => ({ data: JSON.parse(localStorage.getItem('lifePlanData')), mirror: JSON.parse(localStorage.getItem('habitAppData')) }));
+    expect(stored.data.checkins).toHaveLength(1);
+    expect(stored.data.checkins[0]).toMatchObject({ habitId: 'habit-1', date: today, note: '' });
+    expect(stored.mirror.localMirror).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+});
+
 test('records day view maintains a fixed-width timed event with a complete hover title', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({ ...data, records: [{ id: 'record-1', type: '日记', title: '这是一个完整的日程标题', content: '', startDate: date, endDate: date, recordTime: '09:00', recordEndTime: '10:00' }] })), { data: emptyData(), date: today });
