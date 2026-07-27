@@ -82,6 +82,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 64. Status: complete - Add GET/PUT sequence, conditional header, persistence, mirror, snapshot, and race-protection contract tests.
 65. Status: complete - Run Vue build/check and desktop/mobile visual verification for the independent Todo sync surface.
 66. Status: complete - Update parity evidence and commit the verified Todo independent sync stage.
+67. Status: complete - Audit legacy built-in/custom record templates, structured-field Markdown generation, persistence, and deletion contracts.
+68. Status: complete - Implement Vue built-in template selection, structured field editing, and legacy-compatible record persistence.
+69. Status: complete - Implement custom record template creation, application, and protected deletion with tombstones.
+70. Status: complete - Add template contract tests and run Vue build/check plus desktop/mobile visual verification.
+71. Status: complete - Update parity evidence and commit the verified Records template stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -116,3 +121,5 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | `npm run test:legacy` exceeded the 5-minute command timeout and later loaded the Vue entry | Direct legacy regression attempts from `migration/vue-app-v1` | Exported protected `master` to ignored `.tmp`, ran master syntax checks, then passed all 73 master Playwright tests with its own static server/config; current-branch legacy command is not a valid gate because `index.html` is intentionally Vue |
 | First Todo relationship test still found an unlinked record title | Assertion expected the title to disappear from the whole detail panel | Confirmed the record correctly returned to the candidate select and changed the assertion to require the linked-row unlink command to disappear |
 | Session-authorization fixture patch first matched the existing-upload setup | Reused sync setup lines were not unique enough | Kept that compatibility coverage and added the stale authorized config explicitly to the first-creation fixture before rerunning it |
+| First built-in Records template contract timed out on a nested `details.filter({ has: scoped locator })` selector | Focused two-test run; custom template contract passed | Replaced the over-scoped matcher with exact `summary` text locators and retained the browser-visible interaction path |
+| Second built-in Records template contract expected one fewer newline between consecutive empty sections | Focused rerun reached the persisted-data assertion | Corrected the expected value to the legacy `fields.map(...).join('\\n\\n') + '\\n'` contract; implementation already matched legacy output |

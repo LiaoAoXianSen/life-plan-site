@@ -1,7 +1,7 @@
 import { computed } from 'vue';
 import { defineStore } from 'pinia';
 import { createLegacyServices, genId, getNowLocal, getTodayStr } from '../services/legacyServices';
-import type { Todo } from '../types/lifePlan';
+import type { DataEntity, Todo } from '../types/lifePlan';
 import { useLifePlanStore } from './lifePlanStore';
 
 const services = createLegacyServices();
@@ -13,6 +13,7 @@ type RecordUpdateInput = Partial<{
   endDate: string;
   recordTime: string;
   recordEndTime: string;
+  templateId: string;
   todoIds: string[];
   ideaStatus: string;
   ideaTags: string[];
@@ -43,7 +44,83 @@ export const useRecordsStore = defineStore('records', () => {
       const next = { ...input };
       if (Array.isArray(next.todoIds)) next.todoIds = Array.from(new Set(next.todoIds.map(String).filter(Boolean)));
       Object.assign(record, next, { updatedAt: getNowLocal() });
+      delete record.templateFields;
     });
+  }
+
+  function addTemplate(input: { name: string; type: string; content: string; todos?: DataEntity[] }) {
+    const name = input.name.trim();
+    if (!name) return null;
+    const template = {
+      id: genId(),
+      name,
+      type: input.type || '记录',
+      content: input.content || '',
+      todos: JSON.parse(JSON.stringify(input.todos || [])),
+    };
+    lifePlan.mutate('create-record-template', data => data.templates.push(template));
+    return template;
+  }
+
+  function deleteTemplate(id: string) {
+    const template = lifePlan.data.templates.find(item => item.id === id);
+    if (!template) return;
+    lifePlan.mutate('delete-record-template', data => {
+      services.sync.markDeletedItem(data, 'templates', id, { reason: 'manual-delete', name: String(template.name || '') });
+      data.templates = data.templates.filter(item => item.id !== id);
+    });
+  }
+
+  function replaceRecordTodosFromTemplate(recordId: string, templateTodos: DataEntity[] = []) {
+    let todoIds: string[] = [];
+    lifePlan.mutate('apply-record-template-todos', data => {
+      const record = data.records.find(item => item.id === recordId);
+      if (!record) return;
+      const previousIds = Array.isArray(record.todoIds) ? record.todoIds.map(String) : [];
+      data.todos
+        .filter(todo => previousIds.includes(todo.id) && todo.isExclusive)
+        .forEach(todo => services.sync.markDeletedItem(data, 'todos', todo.id, {
+          text: todo.text,
+          reason: 'record-template-replace',
+          recordId,
+        }));
+      data.todos = data.todos.filter(todo => !previousIds.includes(todo.id) || !todo.isExclusive);
+
+      const now = getNowLocal();
+      const dueDate = String(record.endDate || record.startDate || getTodayStr());
+      const created = templateTodos.map(source => {
+        const cloned = JSON.parse(JSON.stringify(source || {}));
+        const todo = Object.assign(services.todos.createTodoFromAiItem({
+          text: String(cloned.text || '模板待办'),
+          note: String(cloned.note || ''),
+          group: String(cloned.group || '记录'),
+          urgency: cloned.urgency || 'medium',
+          sourceType: 'record',
+          sourceRecordId: recordId,
+          planStartDate: String(record.startDate || dueDate),
+          planEndDate: dueDate,
+          dueDate,
+        }), cloned, {
+          id: genId(),
+          dueDate,
+          createdAt: now,
+          updatedAt: now,
+        }) as Todo;
+        todo.text = String(todo.text || '模板待办');
+        todo.subTodos = Array.isArray(todo.subTodos) ? todo.subTodos.map(item => ({ ...item })) : [];
+        todo.sessions = Array.isArray(todo.sessions) ? todo.sessions.map(item => ({ ...item })) : [];
+        if (todo.isExclusive) {
+          todo.sourceType = 'record';
+          todo.sourceRecordId = recordId;
+        }
+        return todo;
+      });
+      data.todos.push(...created);
+      todoIds = created.map(todo => todo.id);
+      record.todoIds = todoIds;
+      record.updatedAt = now;
+    });
+    return todoIds;
   }
 
   function linkExistingTodo(recordId: string, todoId: string) {
@@ -123,5 +200,5 @@ export const useRecordsStore = defineStore('records', () => {
       data[collection] = data[collection].filter(entity => entity.id !== id) as never;
     });
   }
-  return { ideas, materials, addRecord, updateRecord, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, remove, services };
+  return { ideas, materials, addRecord, updateRecord, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, remove, services };
 });

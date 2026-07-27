@@ -337,6 +337,83 @@ test('record editor persists linked and exclusive todos through the main data co
     expect(stored.mirror.todos.map(item => item.id)).toEqual(expect.arrayContaining(['todo-1', exclusive.id]));
 });
 
+test('record built-in structured template preserves legacy markdown and template id', async ({ page }) => {
+    const date = '2026-07-27';
+    const source = emptyData({
+        records: [{
+            id: 'record-diary-template', type: '日记', title: '模板日记',
+            content: '# 正文\n旧正文\n\n# 今日一句话\n旧一句话\n',
+            templateId: 'builtin-diary-daily-review', templateFields: { body: '不应保留' },
+            startDate: date, endDate: date, recordTime: '', recordEndTime: '', todoIds: [],
+        }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: /模板日记/ }).first().click();
+    const editor = page.locator('.record-editor-panel');
+    await expect(editor.getByLabel('记录模板')).toHaveValue('builtin:builtin-diary-daily-review');
+    await expect(editor.getByLabel('内容')).toHaveAttribute('readonly', '');
+    await editor.locator('summary').filter({ hasText: /^正文$/ }).click();
+    await editor.getByLabel('正文').fill('新的正文');
+    await editor.locator('summary').filter({ hasText: /^明日重点$/ }).click();
+    await editor.getByLabel('明日重点').fill('先写迁移测试');
+    await editor.getByRole('button', { name: '保存修改' }).click();
+
+    const record = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.find(item => item.id === 'record-diary-template'));
+    expect(record.templateId).toBe('builtin-diary-daily-review');
+    expect(record.templateFields).toBeUndefined();
+    const expectedFields = [
+        ['正文', '新的正文'], ['今日一句话', '旧一句话'], ['高兴', ''], ['思考', ''],
+        ['小确幸', ''], ['待改进', ''], ['复盘', ''], ['明日重点', '先写迁移测试'],
+    ];
+    expect(record.content).toBe(expectedFields.map(([label, value]) => `# ${label}\n${value}`).join('\n\n') + '\n');
+});
+
+test('custom record templates clone todos and delete with a template tombstone', async ({ page }) => {
+    const date = '2026-07-27';
+    const source = emptyData({
+        records: [
+            { id: 'record-template-source', type: '工作记录', title: '模板来源', content: '# 今日完成\n完成旧任务', startDate: date, endDate: date, todoIds: ['todo-template-source'] },
+            { id: 'record-template-target', type: '工作记录', title: '模板目标', content: '', startDate: date, endDate: date, todoIds: [] },
+        ],
+        todos: [todoFixture('todo-template-source', '模板里的下一步', { group: '工作', isExclusive: true, sourceType: 'record', sourceRecordId: 'record-template-source' })],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: /模板来源/ }).first().click();
+    page.once('dialog', dialog => dialog.accept('工作推进模板'));
+    await page.locator('.record-editor-panel').getByRole('button', { name: '保存为模板' }).click();
+    const templateId = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).templates[0].id);
+
+    await page.locator('.record-editor-panel').getByRole('button', { name: '关闭' }).click();
+    await page.getByRole('button', { name: /模板目标/ }).first().click();
+    const editor = page.locator('.record-editor-panel');
+    await editor.getByLabel('记录模板').selectOption(templateId);
+    await editor.getByRole('button', { name: '应用模板' }).click();
+    await editor.getByRole('button', { name: '保存修改' }).click();
+
+    const applied = await page.evaluate(id => {
+        const data = JSON.parse(localStorage.getItem('lifePlanData'));
+        return { data, template: data.templates.find(item => item.id === id), target: data.records.find(item => item.id === 'record-template-target') };
+    }, templateId);
+    expect(applied.template).toMatchObject({ name: '工作推进模板', type: '工作记录', content: '# 今日完成\n完成旧任务' });
+    expect(applied.template.todos[0]).toMatchObject({ text: '模板里的下一步', group: '工作', isExclusive: true });
+    expect(applied.target.content).toBe('# 今日完成\n完成旧任务');
+    expect(applied.target.templateId).toBe('');
+    const clonedTodo = applied.data.todos.find(item => applied.target.todoIds.includes(item.id));
+    expect(clonedTodo.id).not.toBe('todo-template-source');
+    expect(clonedTodo).toMatchObject({ text: '模板里的下一步', sourceType: 'record', sourceRecordId: 'record-template-target' });
+
+    await editor.getByRole('button', { name: '管理模板' }).click();
+    page.once('dialog', dialog => dialog.accept());
+    await editor.getByRole('button', { name: '删除模板 工作推进模板' }).click();
+    const deleted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(deleted.templates).toEqual([]);
+    expect(deleted.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'templates', id: templateId, reason: 'manual-delete', name: '工作推进模板' }),
+    ]));
+});
+
 test('todo remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {
     const local = emptyData({ todos: [todoFixture('todo-local-sync', '本机独立待办')] });
     const remote = todoRemoteSnapshot([todoFixture('todo-remote-sync', '云端独立待办', { updatedAt: '2026-07-27T09:00:00' })]);

@@ -76,5 +76,5 @@ The Vue branch has operational Dashboard, Todos, Records, Libraries, Search,
 Goals, basic Habits, Fitness, Wheel, AI and main Sync workflows. The following
 specialist controls still live in the proven static app and should be migrated
 only as separately tested follow-up releases: habit wallet/reward administration
-and protected remote flow, wheel Canvas/remote auto-sync, and the full legacy
-record/template editor. They are not replaced by incompatible shortcuts.
+and protected remote flow, wheel Canvas/remote auto-sync, and remaining Records
+autosave/AI writeback behavior. They are not replaced by incompatible shortcuts.

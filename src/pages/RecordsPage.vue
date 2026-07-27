@@ -16,6 +16,7 @@ type RecordEntity = DataEntity & {
   endDate?: string;
   recordTime?: string;
   recordEndTime?: string;
+  templateId?: string;
   todoIds?: string[];
   ideaStatus?: string;
   ideaTags?: string[];
@@ -36,6 +37,7 @@ const editForm = reactive({
   endDate: today(),
   recordTime: '',
   recordEndTime: '',
+  templateId: '',
   todoIds: [] as string[],
   linkedTodoId: '',
   newTodoText: '',
@@ -47,6 +49,10 @@ const typeFilter = ref('all');
 const listRange = ref<'7' | '30' | '90' | 'all'>('30');
 const activeRecordId = ref('');
 const editorNotice = ref('');
+const selectedTemplateKey = ref('');
+const templateValues = reactive<Record<string, string>>({});
+const showTemplateManager = ref(false);
+const templateEditorRef = ref<HTMLElement | null>(null);
 
 const typeOptions = computed(() => [...new Set(lifePlan.data.records.map(record => String(record.type || '')).filter(Boolean))]);
 const activeRecord = computed(() => lifePlan.data.records.find(record => record.id === activeRecordId.value) as RecordEntity | undefined);
@@ -55,6 +61,11 @@ const openTodos = computed(() => lifePlan.data.todos
   .slice()
   .sort(records.services.todos.compareTodosForFocus));
 const linkedTodos = computed(() => lifePlan.data.todos.filter(todo => editForm.todoIds.includes(todo.id)));
+const builtInTemplates = computed(() => records.services.records.getBuiltInTemplates(editForm.type));
+const customTemplates = computed(() => lifePlan.data.templates.filter(template => template.type === editForm.type));
+const activeBuiltInTemplate = computed(() => editForm.templateId
+  ? records.services.records.getBuiltInTemplate(editForm.templateId)
+  : null);
 const previewSections = computed(() => records.services.records.parseRecordContentSections(editForm.content || ''));
 const listRecords = computed(() => {
   const min = listRange.value === 'all' ? '' : addDays(today(), -Number(listRange.value) + 1);
@@ -96,6 +107,79 @@ function recordTodoIds(record: DataEntity): string[] {
   return Array.isArray(record.todoIds) ? record.todoIds.map(String).filter(Boolean) : [];
 }
 
+function setTemplateValues(values: Record<string, string> = {}) {
+  Object.keys(templateValues).forEach(key => delete templateValues[key]);
+  Object.assign(templateValues, values);
+}
+
+function updateStructuredContent() {
+  if (!activeBuiltInTemplate.value) return;
+  editForm.content = records.services.records.composeTemplateContent(activeBuiltInTemplate.value, templateValues);
+}
+
+function applySelectedTemplate() {
+  const key = selectedTemplateKey.value;
+  if (!key) {
+    editForm.templateId = '';
+    setTemplateValues();
+    editorNotice.value = '已切换为空白编辑';
+    return;
+  }
+  const template = key.startsWith('builtin:')
+    ? records.services.records.getBuiltInTemplate(key.slice('builtin:'.length))
+    : lifePlan.data.templates.find(item => item.id === key);
+  if (!template) return;
+  const templateTodos = Array.isArray(template.todos) ? template.todos as DataEntity[] : [];
+  if (templateTodos.length && linkedTodos.value.length && !window.confirm('应用模板会替换当前记录的待办关联，继续吗？')) return;
+
+  if (template.builtIn && Array.isArray(template.fields)) {
+    editForm.templateId = String(template.id);
+    setTemplateValues();
+    editForm.content = records.services.records.composeTemplateContent(template, templateValues);
+  } else {
+    editForm.templateId = '';
+    setTemplateValues();
+    editForm.content = String(template.content || '');
+  }
+
+  if (templateTodos.length) {
+    editForm.todoIds = records.replaceRecordTodosFromTemplate(editForm.id, templateTodos);
+  }
+  editorNotice.value = `已应用模板：${String(template.name || '')}`;
+}
+
+function clearStructuredFields() {
+  if (!activeBuiltInTemplate.value || !window.confirm('清空当前模板里已填写的内容吗？')) return;
+  setTemplateValues();
+  updateStructuredContent();
+}
+
+function toggleTemplateFields(open: boolean) {
+  templateEditorRef.value?.querySelectorAll('details').forEach(item => { item.open = open; });
+}
+
+function saveAsTemplate() {
+  const name = window.prompt('请输入模板名称：');
+  if (!name?.trim()) return;
+  const template = records.addTemplate({
+    name,
+    type: editForm.type || '记录',
+    content: editForm.content,
+    todos: linkedTodos.value,
+  });
+  if (!template) return;
+  selectedTemplateKey.value = String(template.id);
+  showTemplateManager.value = true;
+  editorNotice.value = '模板已保存';
+}
+
+function deleteTemplate(id: string) {
+  if (!window.confirm('确定删除这个模板吗？')) return;
+  records.deleteTemplate(id);
+  if (selectedTemplateKey.value === id) selectedTemplateKey.value = '';
+  editorNotice.value = '模板已删除';
+}
+
 function updateRecordQuery(recordId = '') {
   const query = { ...route.query };
   if (recordId) query.record = recordId;
@@ -115,10 +199,15 @@ function openEditor(record: DataEntity, updateRoute = true) {
     endDate: item.endDate || item.startDate || today(),
     recordTime: item.recordTime || '',
     recordEndTime: item.recordEndTime || '',
+    templateId: item.templateId || '',
     todoIds: recordTodoIds(item),
     linkedTodoId: '',
     newTodoText: '',
   });
+  const template = item.templateId ? records.services.records.getBuiltInTemplate(item.templateId) : null;
+  selectedTemplateKey.value = template ? `builtin:${template.id}` : '';
+  setTemplateValues(template ? records.services.records.parseTemplateContent(template, item.content || '') : {});
+  showTemplateManager.value = false;
   editorNotice.value = '';
   if (updateRoute && route.query.record !== item.id) updateRecordQuery(item.id);
 }
@@ -139,6 +228,7 @@ function saveEditor() {
     endDate: editForm.endDate || editForm.startDate,
     recordTime: editForm.recordTime,
     recordEndTime: editForm.recordEndTime,
+    templateId: editForm.templateId,
     todoIds: editForm.todoIds,
   });
   editorNotice.value = '记录已保存';
@@ -178,6 +268,18 @@ watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) 
   const record = lifePlan.data.records.find(item => item.id === recordId);
   if (record) openEditor(record, false);
 }, { immediate: true });
+
+watch(() => editForm.type, type => {
+  const selected = selectedTemplateKey.value;
+  if (!selected) return;
+  const template = selected.startsWith('builtin:')
+    ? records.services.records.getBuiltInTemplate(selected.slice('builtin:'.length))
+    : lifePlan.data.templates.find(item => item.id === selected);
+  if (template?.type === type) return;
+  selectedTemplateKey.value = '';
+  editForm.templateId = '';
+  setTemplateValues();
+});
 </script>
 
 <template>
@@ -246,7 +348,34 @@ watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) 
             <label class="form-group"><span>开始时间</span><input v-model="editForm.recordTime" type="time" /></label>
             <label class="form-group"><span>结束时间</span><input v-model="editForm.recordEndTime" type="time" /></label>
           </div>
-          <label class="form-group"><span>内容</span><textarea v-model="editForm.content" rows="8" /></label>
+          <div class="record-template-toolbar">
+            <label class="form-group"><span>记录模板</span><select v-model="selectedTemplateKey"><option value="">空白</option><optgroup v-if="builtInTemplates.length" label="内置模板"><option v-for="template in builtInTemplates" :key="template.id" :value="`builtin:${template.id}`">{{ template.name }}</option></optgroup><optgroup v-if="customTemplates.length" label="我的模板"><option v-for="template in customTemplates" :key="String(template.id)" :value="String(template.id)">{{ template.name }}</option></optgroup></select></label>
+            <div class="record-template-actions">
+              <button class="btn btn-secondary" type="button" :disabled="!selectedTemplateKey" @click="applySelectedTemplate">应用模板</button>
+              <button class="btn btn-secondary" type="button" @click="saveAsTemplate">保存为模板</button>
+              <button class="btn btn-secondary" type="button" :aria-expanded="showTemplateManager" @click="showTemplateManager = !showTemplateManager">管理模板</button>
+            </div>
+          </div>
+          <section v-if="showTemplateManager" class="record-template-manager" aria-label="自定义模板管理">
+            <div v-if="lifePlan.data.templates.length" class="record-template-list">
+              <div v-for="template in lifePlan.data.templates" :key="String(template.id)" class="record-template-row">
+                <span><strong>{{ template.name }}</strong><small>{{ template.type }}</small></span>
+                <button class="link-button danger-text" type="button" :aria-label="`删除模板 ${template.name}`" @click="deleteTemplate(String(template.id))">删除</button>
+              </div>
+            </div>
+            <p v-else class="empty-state">暂无自定义模板。</p>
+          </section>
+          <section v-if="activeBuiltInTemplate" ref="templateEditorRef" class="record-template-editor" :aria-label="`${activeBuiltInTemplate.name}结构化字段`">
+            <div class="record-template-editor-head">
+              <div><strong>{{ activeBuiltInTemplate.name }}</strong><p>{{ activeBuiltInTemplate.description }}</p></div>
+              <div class="record-template-actions"><button class="link-button" type="button" @click="toggleTemplateFields(true)">全部展开</button><button class="link-button" type="button" @click="toggleTemplateFields(false)">全部收起</button><button class="link-button danger-text" type="button" @click="clearStructuredFields">清空</button></div>
+            </div>
+            <details v-for="field in activeBuiltInTemplate.fields" :key="field.id" class="record-template-field">
+              <summary>{{ field.label }}</summary>
+              <textarea v-model="templateValues[field.id]" :aria-label="field.label" :placeholder="field.placeholder" :rows="field.rows || 3" @input="updateStructuredContent" />
+            </details>
+          </section>
+          <label class="form-group"><span>内容</span><textarea v-model="editForm.content" rows="8" :readonly="Boolean(activeBuiltInTemplate)" :class="{ 'is-preview': activeBuiltInTemplate }" /></label>
           <div class="record-link-tools">
             <label class="form-group"><span>关联已有待办</span><select v-model="editForm.linkedTodoId"><option value="">选择待办</option><option v-for="todo in openTodos" :key="todo.id" :value="todo.id">{{ todo.text }}</option></select></label>
             <button class="btn btn-secondary" type="button" @click="linkExistingTodo">关联待办</button>
@@ -322,8 +451,25 @@ watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) 
 
 <style scoped>
 .record-editor-panel { margin-bottom: 18px; }
+#page-records .filter-bar { grid-template-columns: minmax(0, 1fr) minmax(128px, .45fr) minmax(128px, .45fr); }
 .record-editor-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
 .record-edit-form { display: grid; gap: 13px; }
+.record-template-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 10px; align-items: end; }
+.record-template-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.record-template-manager,
+.record-template-editor { border-block: 1px solid rgba(42, 75, 56, .13); padding-block: 12px; }
+.record-template-list { display: grid; }
+.record-template-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(42, 75, 56, .09); }
+.record-template-row:last-child { border-bottom: 0; }
+.record-template-row span { display: grid; gap: 2px; }
+.record-template-row small,
+.record-template-editor-head p { color: var(--faint); font-size: 12px; margin: 0; }
+.record-template-editor { display: grid; gap: 8px; }
+.record-template-editor-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.record-template-field { border: 1px solid rgba(42, 75, 56, .13); border-radius: 6px; padding: 9px 11px; }
+.record-template-field summary { cursor: pointer; font-weight: 650; }
+.record-template-field textarea { margin-top: 9px; }
+.is-preview { background: #f7f9f7; color: var(--muted); }
 .record-link-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
 .record-linked-list { display: grid; gap: 8px; }
 .linked-todo-list { display: grid; gap: 6px; }
@@ -336,6 +482,11 @@ watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) 
 .danger-text { color: #b84f45; }
 @media (max-width: 900px) {
   .record-editor-grid,
-  .record-link-tools { grid-template-columns: 1fr; }
+  .record-link-tools,
+  .record-template-toolbar { grid-template-columns: 1fr; }
+  .record-template-editor-head { flex-direction: column; }
+}
+@media (max-width: 640px) {
+  #page-records .filter-bar { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

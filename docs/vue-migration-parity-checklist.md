@@ -18,7 +18,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview plus exact Todo detail links from today and floating lists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
 | Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
-| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | List/calendar views plus basic create/delete. Day view preserves fixed 160px timed event width and hover title. | Full editor, preview, templates, linked todos, detail interactions, and legacy filters are incomplete. | Users can create, preview, edit, delete, and link records/todos with legacy-compatible `todoIds`, tombstones, and snapshots where applicable. |
+| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | Persisted editor/preview, date ranges, linked/exclusive todos, list/calendar views, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | AI diary writeback, full legacy autosave behavior, idea-specific editor fields, and remaining filters need parity work. | Users can create, preview, edit, delete, template, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, and tombstones. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Status filtering, colors, tags/search, and basic todo conversion exist. | Detail editing and old AI/next-action flows need parity audit. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation. | Basic global search and tag center exist. | Needs full index parity including templates and wheel items. | Search covers legacy modules with matching labels and navigation targets. |
@@ -45,9 +45,19 @@ Status: verified in `50898e7`
 
 Remaining Records scope:
 
-- Built-in structured templates and user template management.
 - AI diary analysis writeback.
 - Full legacy modal/autosave behavior.
+
+### Records Template Slice
+
+Status: verified locally
+
+- Reuse six stable legacy built-in template IDs and exact heading-based Markdown composition in `records-service.js`.
+- Parse existing built-in-template records back into structured editor fields and persist only `content` plus `templateId`; transient `templateFields` are removed on save.
+- Save custom templates with the legacy `{ id, name, type, content, todos }` contract and apply cloned Todo IDs with exclusive source records rebound to the target record.
+- Confirm custom-template deletion and write a `deletedItems(collection=templates)` tombstone.
+- Verify exact persistence, Todo mirror-compatible repository commits, and custom-template deletion in Playwright.
+- Verify 1440px and 390px layouts with no document, `.vue-main`, or editor horizontal overflow.
 
 ### Sync Protected Main Upload Slice
 

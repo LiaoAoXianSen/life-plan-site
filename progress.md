@@ -215,3 +215,9 @@
 - Desktop 1440px and mobile 390px Todo sync previews showed all actions and comparison states without overlap; document and `.vue-main` both reported `scrollWidth === clientWidth`.
 - Verified stale persisted Todo upload authorization is reset on load and remains unchecked until the current session explicitly arms first creation.
 - Final review restored the legacy second confirmation when an application-before snapshot cannot be created; the focused apply contract, production build, and `git diff --check` passed afterward.
+- Opened phases 67-71 for the Records template parity stage: legacy contract audit, built-in structured fields, custom template management, persistence tests, responsive verification, documentation, and commit.
+- Implemented shared built-in template definitions/helpers, Vue structured fields, custom template CRUD, Todo cloning, and template tombstones; production build passed and the first focused run passed custom-template coverage while exposing only an over-scoped built-in test locator.
+- Focused Records template contracts passed 2/2 after correcting test-only locator and newline expectations; coverage proves exact legacy Markdown, persisted `templateId`, removed `templateFields`, custom Todo cloning, source-record rebinding, and template deletion tombstones.
+- Full `scripts/check.ps1` passed syntax checks and 16/16 Vue Playwright tests.
+- Desktop 1440px template editing had no overflow. The first 390px screenshot exposed the legacy six-column Records filter grid; a Vue-scoped three-column/one-column override removed the overflow, and the final document, `.vue-main`, and editor all reported `scrollWidth === clientWidth`.
+- Final production build, JavaScript syntax checks, `git diff --check`, and the full 16/16 Vue Playwright suite passed before the Records template stage commit.
