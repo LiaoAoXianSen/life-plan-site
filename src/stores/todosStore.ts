@@ -12,10 +12,10 @@ export const useTodosStore = defineStore('todos', () => {
   const todos = computed(() => lifePlan.data.todos);
 
   function toggle(id: string) {
-    const todo = lifePlan.data.todos.find(item => item.id === id);
-    if (!todo) return;
-    services.todos.toggleTodoDone(todo);
-    lifePlan.commit('toggle-todo');
+    lifePlan.mutate('toggle-todo', data => {
+      const todo = data.todos.find(item => item.id === id);
+      if (todo) services.todos.toggleTodoDone(todo);
+    });
   }
 
   function create(input: Pick<Todo, 'text' | 'note' | 'dueDate' | 'planStartDate' | 'planEndDate' | 'urgency' | 'group'>) {
@@ -26,22 +26,22 @@ export const useTodosStore = defineStore('todos', () => {
       ...range,
       sourceType: 'manual',
     }) as Todo;
-    lifePlan.data.todos.unshift(todo);
-    lifePlan.commit('create-todo');
+    lifePlan.mutate('create-todo', data => data.todos.unshift(todo));
     return todo;
   }
 
   function remove(id: string) {
     const todo = lifePlan.data.todos.find(item => item.id === id);
     if (!todo) return;
-    services.sync.markDeletedItem(lifePlan.data, 'todos', id, { text: todo.text, reason: 'vue-delete-todo' });
-    lifePlan.data.todos = lifePlan.data.todos.filter(item => item.id !== id);
-    lifePlan.data.records.forEach(record => {
-      const todoIds = Array.isArray(record.todoIds) ? record.todoIds as string[] : [];
-      if (todoIds.includes(id)) record.todoIds = todoIds.filter(todoId => todoId !== id);
-      if (record.ideaTodoId === id) record.ideaTodoId = '';
+    lifePlan.mutate('delete-todo', data => {
+      services.sync.markDeletedItem(data, 'todos', id, { text: todo.text, reason: 'vue-delete-todo' });
+      data.todos = data.todos.filter(item => item.id !== id);
+      data.records.forEach(record => {
+        const todoIds = Array.isArray(record.todoIds) ? record.todoIds as string[] : [];
+        if (todoIds.includes(id)) record.todoIds = todoIds.filter(todoId => todoId !== id);
+        if (record.ideaTodoId === id) record.ideaTodoId = '';
+      });
     });
-    lifePlan.commit('delete-todo');
   }
 
   return { todos, toggle, create, remove, services };

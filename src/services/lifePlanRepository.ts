@@ -8,7 +8,9 @@ const syncStateKey = 'lifePlanSyncState';
 const todoMirrorKey = 'todoAppData';
 
 function clone<T>(value: T): T {
-  return structuredClone(value);
+  // Vue store values are reactive proxies. JSON cloning mirrors the legacy
+  // snapshot service and deliberately converts them into plain persisted data.
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export class LifePlanRepository {

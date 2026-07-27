@@ -27,10 +27,15 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
     }
   }
 
+  function mutate(reason: string, mutation: (draft: LifePlanData) => void, source: 'user' | 'sync' = 'user') {
+    mutation(data.value);
+    commit(reason, source);
+  }
+
   function replace(next: LifePlanData, reason: string, source: 'user' | 'sync' = 'user') {
     data.value = normalizeTopLevelData(next);
     commit(reason, source);
   }
 
-  return { data, isLoaded, lastError, openTodos, load, commit, replace };
+  return { data, isLoaded, lastError, openTodos, load, commit, mutate, replace };
 });

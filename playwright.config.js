@@ -12,7 +12,7 @@ module.exports = defineConfig({
         trace: 'on-first-retry'
     },
     webServer: {
-        command: 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\serve.ps1 5173',
+        command: 'npm run dev -- --port 5173',
         url: 'http://127.0.0.1:5173',
         reuseExistingServer: true,
         timeout: 15000
