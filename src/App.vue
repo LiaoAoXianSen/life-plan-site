@@ -1,5 +1,10 @@
 <script setup lang="ts">
+import { onBeforeMount } from 'vue';
 import AppSidebar from './components/AppSidebar.vue';
+import { useLifePlanStore } from './stores/lifePlanStore';
+
+const lifePlan = useLifePlanStore();
+onBeforeMount(() => lifePlan.load());
 </script>
 
 <template>

@@ -1,5 +1,7 @@
 @import '../../styles/tokens.css';
 @import '../../styles/base.css';
 @import '../../styles/shell.css';
+@import '../../styles/pages/dashboard.css';
+@import '../../styles/pages/todos.css';
 @import '../../styles/responsive.css';
 @import './app-shell.css';
