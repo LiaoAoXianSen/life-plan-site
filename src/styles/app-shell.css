@@ -139,6 +139,19 @@
 .todo-save-status { margin: 12px 0 0; color: var(--accent); font-size: 12px; font-weight: 700; }
 .calendar-event, .agenda-all-day-item, .agenda-event-block { font: inherit; text-align: left; }
 .calendar-event, .agenda-all-day-item { width: 100%; }
+.record-diary-ai { display: grid; gap: 12px; margin: 16px 0; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.record-diary-ai-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.record-diary-ai-head > div { min-width: 0; }
+.record-diary-ai-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.record-diary-ai-status { margin: 0; color: var(--accent); font-size: 12px; font-weight: 750; line-height: 1.5; }
+.record-diary-ai-status.error { color: var(--danger); }
+.record-diary-ai-result { display: grid; gap: 14px; min-width: 0; }
+.record-diary-ai-summary { display: grid; gap: 4px; padding: 10px 12px; background: var(--surface-soft); color: var(--text); }
+.record-diary-ai-summary span { color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.record-diary-ai-section { display: grid; grid-template-columns: minmax(120px, 150px) minmax(0, 1fr); cursor: default; }
+.record-diary-ai-section .ai-result-select { padding-top: 8px; }
+.record-diary-ai-section .diary-ai-draft { min-width: 0; }
+.record-diary-ai-todos { display: grid; gap: 10px; padding-top: 4px; }
 
 @media (max-width: 1040px) {
   .todo-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -153,4 +166,8 @@
   .todo-session-form input, .todo-session-form input[aria-label="执行备注"], .todo-session-form button { grid-column: 1; }
   .todo-session-form button { justify-self: stretch; }
   .todo-inline-add { align-items: stretch; flex-direction: column; }
+  .record-diary-ai-head { align-items: stretch; flex-direction: column; }
+  .record-diary-ai-head .btn { align-self: flex-start; }
+  .record-diary-ai-section { grid-template-columns: minmax(0, 1fr); }
+  .record-diary-ai-section .ai-result-select { padding-top: 0; }
 }

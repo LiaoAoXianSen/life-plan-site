@@ -540,6 +540,127 @@ test('record editor autosaves after three seconds and flushes before close switc
     expect(stored.records.find(item => item.id === 'record-switch').content).toBe('离开页面前刷新');
 });
 
+test('diary AI keeps remote drafts read-only until confirmed writeback and Todo creation', async ({ page }) => {
+    const originalContent = [
+        '# 正文',
+        '今天先把日记 AI 的确认链路做稳。',
+        '',
+        '# 今日一句话',
+        '先确认，再写入',
+        '',
+        '# 高兴',
+        '',
+        '',
+        '# 思考',
+        '',
+        '',
+        '# 小确幸',
+        '',
+        '',
+        '# 待改进',
+        '',
+        '',
+        '# 复盘',
+        '旧复盘不能静默覆盖。',
+        '',
+        '# 明日重点',
+        '旧明日重点要保留。',
+        '',
+    ].join('\n');
+    const source = emptyData({
+        records: [{
+            id: 'diary-ai-vue', type: '日记', title: 'Vue 日记 AI', content: originalContent,
+            startDate: '2026-07-27', endDate: '2026-07-27', recordTime: '21:00', recordEndTime: '',
+            templateId: 'builtin-diary-daily-review', todoIds: [], updatedAt: '2026-07-27T21:00:00',
+        }],
+    });
+    const requests = [];
+    await page.route('https://ai.example.test/v1/chat/completions', async route => {
+        requests.push(route.request().postDataJSON());
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                choices: [{
+                    message: {
+                        content: JSON.stringify({
+                            title: '日记分析：Vue 日记 AI',
+                            summary: '先确认复盘，再决定是否创建行动项。',
+                            review: 'AI 原始复盘草稿',
+                            tomorrowFocus: 'AI 明日重点草稿',
+                            items: [{
+                                text: '验证日记 AI 写回', note: '先检查持久化契约', group: '工作', urgency: 'high',
+                                planStartDate: '2026-07-28', planEndDate: '2026-07-29', dueDate: '2026-07-29',
+                            }],
+                        }),
+                    },
+                }],
+            }),
+        });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({
+            endpointUrl: 'https://ai.example.test/v1', apiKey: 'test-key', model: 'test-model', remoteEnabled: true, userStyle: '短句',
+        }));
+    }, source);
+
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: /Vue 日记 AI/ }).first().click();
+    const editor = page.locator('.record-editor-panel');
+    const aiPanel = editor.locator('.record-diary-ai');
+    await aiPanel.getByLabel('分析偏好').fill('只写一条明确复盘');
+    await aiPanel.getByRole('button', { name: '生成分析' }).click();
+    await expect(aiPanel.getByRole('status')).toContainText('AI 草稿已生成');
+    await expect(aiPanel.getByLabel('AI 复盘草稿')).toHaveValue('AI 原始复盘草稿');
+    await expect(aiPanel.getByLabel('AI 明日重点草稿')).toHaveValue('AI 明日重点草稿');
+
+    expect(requests).toHaveLength(1);
+    const userPayload = JSON.parse(requests[0].messages.find(message => message.role === 'user').content);
+    expect(userPayload).toMatchObject({
+        mode: 'diaryReview',
+        userInput: '只写一条明确复盘',
+        userStyle: '短句',
+        context: { selectedDiary: { id: 'diary-ai-vue', title: 'Vue 日记 AI', content: originalContent, templateId: 'builtin-diary-daily-review' } },
+    });
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records[0].content).toBe(originalContent);
+    expect(stored.todos).toHaveLength(0);
+
+    await aiPanel.getByLabel('AI 复盘草稿').fill('编辑后的复盘：确认后才写入。');
+    const tomorrowSection = aiPanel.locator('.record-diary-ai-section').nth(1);
+    await tomorrowSection.getByRole('checkbox').uncheck();
+    page.once('dialog', dialog => dialog.dismiss());
+    await aiPanel.getByRole('button', { name: '写入所选内容' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records[0].content).toBe(originalContent);
+
+    page.once('dialog', dialog => dialog.accept());
+    await aiPanel.getByRole('button', { name: '写入所选内容' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records[0]).toMatchObject({ templateId: 'builtin-diary-daily-review' });
+    expect(stored.records[0].content).toContain('# 复盘\n编辑后的复盘：确认后才写入。');
+    expect(stored.records[0].content).toContain('# 明日重点\n旧明日重点要保留。');
+    expect(stored.todos).toHaveLength(0);
+
+    await aiPanel.getByLabel('AI 待办 1 标题').fill('编辑后的待办：核对日记写回');
+    await aiPanel.getByLabel('AI 待办 1 备注').fill('草稿可编辑，创建动作独立');
+    await aiPanel.getByRole('button', { name: '创建所选待办' }).click();
+    const saved = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    const todo = saved.data.todos[0];
+    expect(todo).toMatchObject({
+        text: '编辑后的待办：核对日记写回', note: expect.stringContaining('草稿可编辑，创建动作独立'),
+        group: '工作', urgency: 'high', planStartDate: '2026-07-28', planEndDate: '2026-07-29', dueDate: '2026-07-29',
+        sourceType: 'diary-ai', sourceRecordId: 'diary-ai-vue',
+    });
+    expect(todo.note).toContain('来源日记：Vue 日记 AI');
+    expect(saved.data.records[0].todoIds).toContain(todo.id);
+    expect(saved.mirror).toMatchObject({ authority: 'lifePlanData.todos' });
+    expect(saved.mirror.todos.map(item => item.id)).toContain(todo.id);
+});
+
 test('todo remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {
     const local = emptyData({ todos: [todoFixture('todo-local-sync', '本机独立待办')] });
     const remote = todoRemoteSnapshot([todoFixture('todo-remote-sync', '云端独立待办', { updatedAt: '2026-07-27T09:00:00' })]);

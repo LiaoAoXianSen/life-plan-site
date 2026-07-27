@@ -96,6 +96,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 78. Status: complete - Implement repository-backed existing-record autosave with manual save and navigation flush semantics.
 79. Status: complete - Add autosave timing/flush contracts and run build/check plus responsive status verification.
 80. Status: complete - Update parity evidence and commit the verified existing-record autosave stage.
+81. Status: complete - Audit legacy diary AI payload, normalization, editable draft, overwrite confirmation, Todo creation, and relationship contracts.
+82. Status: complete - Implement store-backed diary section writeback and linked AI Todo creation without mutating data before confirmation.
+83. Status: complete - Add the Records diary analysis surface with remote/local generation, editable section/Todo drafts, duplicate hints, and stale-request protection.
+84. Status: complete - Add mocked-network and persistence contracts, then run build, focused/full checks, and desktop/mobile visual verification.
+85. Status: complete - Update migration parity evidence, package the verified runtime, commit the diary AI stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -134,3 +139,6 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | Second built-in Records template contract expected one fewer newline between consecutive empty sections | Focused rerun reached the persisted-data assertion | Corrected the expected value to the legacy `fields.map(...).join('\\n\\n') + '\\n'` contract; implementation already matched legacy output |
 | First idea-detail contract could see the labeled combobox in the accessibility snapshot but `getByLabel(..., { exact: true })` did not resolve it | Focused two-test run; idea conversion contract passed | Scoped the locator to the `灵感推进` region and selected its named combobox by role, avoiding the adjacent generic relationship controls |
 | First autosave build rejected `@click="closeEditor"` after the function gained a boolean flush parameter | `vue-tsc` treated Vue's click payload as the first argument | Changed the template binding to `@click="closeEditor()"` so no `MouseEvent` is passed into the flush flag |
+| First diary AI build could not narrow a result assigned inside the Pinia mutation callback and inferred AI urgency as arbitrary text | Initial production build after the store/UI patch | Switched the callback result to an explicit holder and constrained the draft urgency to `Todo['urgency']` before rebuilding |
+| First focused diary AI contract timed out locating the tomorrow checkbox through an outer-scoped nested `has` selector | The test had already passed request, normalized draft, and no-mutation assertions | Used the stable generated section order and scoped the checkbox to the second diary field item |
+| Second focused diary AI contract received `medium` after the remote response specified `high` | Vue's legacy-service adapter passed `urgencyMeta`, while `ai-service.js` expects `todoUrgencyMeta`; it also omitted the local fallback's `addDays` dependency | Corrected both injected option names/implementations in `legacyServices.ts` and retained the persisted urgency assertion |

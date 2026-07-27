@@ -50,6 +50,13 @@ export function formatDate(value = ''): string {
   return Number.isNaN(date.getTime()) ? value : `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
+function addDays(date: string, days: number): string {
+  const value = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(value.getTime())) return date;
+  value.setDate(value.getDate() + days);
+  return getTodayStr(value);
+}
+
 export function createLegacyServices() {
   const sync = window.LifePlanSyncService.create({
     appSyncKit: () => window.AppSyncKit,
@@ -86,7 +93,13 @@ export function createLegacyServices() {
     getNowLocal,
   });
   const fitness = window.LifePlanFitnessService.create({ getTodayStr, getNowLocal, genId });
-  const ai = window.LifePlanAiService.create({ urgencyMeta, getTodayStr, getNowLocal, fetchImpl: (...args: Parameters<typeof fetch>) => fetch(...args) });
+  const ai = window.LifePlanAiService.create({
+    todoUrgencyMeta: urgencyMeta,
+    getTodayStr,
+    addDays,
+    getNowLocal,
+    fetchImpl: (...args: Parameters<typeof fetch>) => fetch(...args),
+  });
 
   return { sync, todos, records, snapshots, fitness, ai, urgencyMeta };
 }

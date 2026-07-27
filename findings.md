@@ -133,3 +133,12 @@
 - Legacy considers `ideaTodoId` linked only when the referenced Todo still exists; a stale imported ID must not block creating a replacement Todo or navigating to a valid detail.
 - Legacy record autosave debounces editor changes for 3 seconds, persists dirty changes immediately when closing, cancels the pending timer before preview/close, and reports the autosave clock time after success.
 - The current Vue Records editor edits existing records inline, while new records still use a separate explicit-submit form. Existing-record autosave can match debounce and close/switch/navigation flush semantics without creating a second draft store; new-record modal/draft parity remains a later scope.
+
+## 2026-07-27 Diary AI parity
+
+- Legacy diary analysis sends `mode: diaryReview` with a compact `selectedDiary` containing persisted metadata, full Markdown content, `templateId`, and parsed built-in diary fields.
+- `ai-service.js` already owns remote request construction, strict JSON parsing, result normalization, local fallback, and relative-date refinement; Vue should reuse it with `lifePlanAiConfig` instead of adding another client.
+- AI generation must remain read-only. Section drafts and Todo drafts are editable UI state until separate write commands are explicitly invoked.
+- Diary section writeback uses `builtin-diary-daily-review`, preserves unselected sections, confirms before replacing selected non-empty sections, then persists generated heading-based Markdown plus `templateId`.
+- Diary AI Todos use `todos-service.js#createTodoFromAiItem`, `sourceType: diary-ai`, the diary ID as `sourceRecordId`, append a source note, and add created IDs to `record.todoIds`; repository commits rebuild `todoAppData`.
+- Similar existing Todos are detected through `todos-service.js#findMatchingTodo` and should default to unselected while still allowing deliberate recreation.

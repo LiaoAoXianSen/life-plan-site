@@ -232,3 +232,10 @@
 - Focused autosave coverage passed, then full `scripts/check.ps1` passed syntax checks and 19/19 Vue Playwright tests.
 - Desktop dirty-state and mobile auto-saved-state screenshots showed clear status text with no overlap; document, `.vue-main`, and active Records page all reported `scrollWidth === clientWidth`.
 - Final production build and `git diff --check` passed before the existing-record autosave stage commit; protected branch and stash pointers remained unchanged.
+- Opened phases 81-85 for Records diary AI parity and completed the legacy contract audit before implementation.
+- Added store-owned diary section composition and linked AI Todo creation plus a Records editor analysis workspace with remote/local generation, editable drafts, overwrite confirmation, duplicate hints, and request invalidation; production build passed after two narrow TypeScript corrections.
+- The focused remote diary contract passed after fixing the Vue AI adapter's urgency/date dependencies; full `scripts/check.ps1` then passed syntax checks and 20/20 Vue Playwright tests.
+- Desktop 1440px and mobile 390px diary AI drafts showed editable sections and Todo dates without overlap; document, `.vue-main`, Records, and the AI panel all reported `scrollWidth === clientWidth`.
+- Updated the migration checklist and preview deployment guide to close the diary AI blocker while retaining new-record draft/filter and non-diary AI mode gaps.
+- Final production build, `git diff --check`, and all 20 Vue Playwright tests passed; responsive overflow checks remained clean.
+- Created clean runtime package `life-plan-site-runtime-20260727-222706.zip` and retained the newest five packages per project policy.

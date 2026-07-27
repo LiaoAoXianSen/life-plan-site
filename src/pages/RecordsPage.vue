@@ -25,6 +25,27 @@ type RecordEntity = DataEntity & {
   ideaConclusion?: string;
 };
 
+type DiaryAiSectionKey = 'oneLine' | 'review' | 'tomorrow' | 'improve' | 'thinking' | 'smallJoy';
+type DiaryAiResult = {
+  title: string;
+  summary: string;
+  diary: Partial<Record<DiaryAiSectionKey, string>>;
+  items: Array<Record<string, any>>;
+};
+type DiaryAiSectionDraft = { key: DiaryAiSectionKey; label: string; value: string; selected: boolean };
+type DiaryAiTodoDraft = {
+  text: string;
+  note: string;
+  group: string;
+  urgency: Todo['urgency'];
+  planStartDate: string;
+  planEndDate: string;
+  dueDate: string;
+  sourceMatchKey: string;
+  selected: boolean;
+  existingTodoText: string;
+};
+
 const lifePlan = useLifePlanStore();
 const records = useRecordsStore();
 const route = useRoute();
@@ -64,6 +85,14 @@ const templateEditorRef = ref<HTMLElement | null>(null);
 const editorDirty = ref(false);
 let editorHydrating = false;
 let recordAutoSaveTimer: number | undefined;
+const diaryAiPreference = ref('');
+const diaryAiRunning = ref(false);
+const diaryAiStatus = ref('');
+const diaryAiError = ref(false);
+const diaryAiResult = ref<DiaryAiResult | null>(null);
+const diaryAiSections = ref<DiaryAiSectionDraft[]>([]);
+const diaryAiTodos = ref<DiaryAiTodoDraft[]>([]);
+let diaryAiRequestToken = 0;
 
 const typeOptions = computed(() => [...new Set(lifePlan.data.records.map(record => String(record.type || '')).filter(Boolean))]);
 const activeRecord = computed(() => lifePlan.data.records.find(record => record.id === activeRecordId.value) as RecordEntity | undefined);
@@ -205,6 +234,16 @@ function updateRecordQuery(recordId = '') {
   void router.replace({ path: route.path, query });
 }
 
+function resetDiaryAiState() {
+  diaryAiRequestToken += 1;
+  diaryAiRunning.value = false;
+  diaryAiStatus.value = '';
+  diaryAiError.value = false;
+  diaryAiResult.value = null;
+  diaryAiSections.value = [];
+  diaryAiTodos.value = [];
+}
+
 function openEditor(record: DataEntity, updateRoute = true) {
   const item = record as RecordEntity;
   if (activeRecordId.value === item.id) {
@@ -212,6 +251,7 @@ function openEditor(record: DataEntity, updateRoute = true) {
     return;
   }
   if (activeRecordId.value && activeRecordId.value !== item.id) flushPendingEditorSave();
+  resetDiaryAiState();
   editorHydrating = true;
   window.clearTimeout(recordAutoSaveTimer);
   activeRecordId.value = item.id;
@@ -250,6 +290,7 @@ function closeEditor(flush = true) {
   editorDirty.value = false;
   activeRecordId.value = '';
   editorNotice.value = '';
+  resetDiaryAiState();
   if (route.query.record) updateRecordQuery();
 }
 
@@ -338,6 +379,182 @@ function removeRecord(id: string) {
   if (activeRecordId.value === id) closeEditor(false);
 }
 
+function getDiaryAiConfig() {
+  try {
+    return records.services.ai.normalizeConfig(JSON.parse(localStorage.getItem('lifePlanAiConfig') || '{}'));
+  } catch {
+    return records.services.ai.normalizeConfig({});
+  }
+}
+
+function buildDiaryAiPayload(record: RecordEntity) {
+  const template = records.services.records.getBuiltInTemplate('builtin-diary-daily-review');
+  return {
+    mode: 'diaryReview',
+    title: 'AI 日记分析',
+    today: today(),
+    userInput: diaryAiPreference.value.trim(),
+    context: {
+      selectedDiary: {
+        id: record.id,
+        type: record.type || '',
+        title: record.title || '',
+        startDate: record.startDate || '',
+        endDate: record.endDate || '',
+        recordTime: record.recordTime || '',
+        content: record.content || '',
+        templateId: record.templateId || '',
+        fields: template ? records.services.records.parseTemplateContent(template, record.content || '') : {},
+      },
+    },
+    instruction: [
+      '分析 selectedDiary，不要自动替用户下结论太满。',
+      '返回 diary.review：适合写入日记“复盘”的 2-5 句中文。',
+      '返回 diary.tomorrow：适合写入“明日重点”的 1-3 条短句。',
+      '可选 diary.oneLine/improve/thinking/smallJoy；items 返回 0-4 个需要用户确认创建的待办。',
+      '多个独立打算必须拆成多条 items；相对时间换算成 YYYY-MM-DD。',
+      '所有结果都是可编辑草稿，不要假定已经写入。',
+    ].join('\n'),
+  };
+}
+
+function refineDiaryAiResult(result: DiaryAiResult): DiaryAiResult {
+  return {
+    ...result,
+    items: (result.items || []).map(item => {
+      const refined = records.services.ai.applyResolvedDatesToItem(item, today(), {
+        fallbackDate: '',
+        preferResolved: true,
+        stripDateFromText: false,
+      });
+      if (refined.planStartDate && !refined.planEndDate) refined.planEndDate = refined.planStartDate;
+      if (!refined.dueDate && refined.planEndDate) refined.dueDate = refined.planEndDate;
+      return refined;
+    }),
+  };
+}
+
+function setDiaryAiDrafts(result: DiaryAiResult) {
+  const sectionMeta: Array<[DiaryAiSectionKey, string]> = [
+    ['review', '复盘'], ['tomorrow', '明日重点'], ['oneLine', '今日一句话'],
+    ['improve', '待改进'], ['thinking', '思考'], ['smallJoy', '小确幸'],
+  ];
+  diaryAiResult.value = result;
+  diaryAiSections.value = sectionMeta
+    .filter(([key]) => String(result.diary?.[key] || '').trim())
+    .map(([key, label]) => ({ key, label, value: String(result.diary[key] || ''), selected: key === 'review' || key === 'tomorrow' }));
+  diaryAiTodos.value = (result.items || []).map(item => {
+    const match = records.services.todos.findMatchingTodo(lifePlan.data.todos, item, {
+      sourceRecordId: editForm.id,
+      linkedTodoIds: editForm.todoIds,
+    });
+    return {
+      text: String(item.text || ''),
+      note: String(item.note || item.reason || ''),
+      group: String(item.group || '其他'),
+      urgency: ['urgent', 'high', 'medium', 'low'].includes(String(item.urgency)) ? item.urgency as Todo['urgency'] : 'medium',
+      planStartDate: String(item.planStartDate || ''),
+      planEndDate: String(item.planEndDate || item.planStartDate || ''),
+      dueDate: String(item.dueDate || item.planEndDate || ''),
+      sourceMatchKey: String(item.sourceMatchKey || item.text || ''),
+      selected: !match,
+      existingTodoText: String(match?.todo?.text || ''),
+    };
+  });
+}
+
+async function runDiaryAi() {
+  if (diaryAiRunning.value || editForm.type !== '日记' || !editForm.id) return;
+  flushPendingEditorSave();
+  const target = lifePlan.data.records.find(item => item.id === editForm.id) as RecordEntity | undefined;
+  if (!target || !String(target.content || '').trim()) {
+    diaryAiError.value = true;
+    diaryAiStatus.value = '先写一点日记内容，再生成分析。';
+    return;
+  }
+  const token = ++diaryAiRequestToken;
+  const targetId = target.id;
+  diaryAiRunning.value = true;
+  diaryAiError.value = false;
+  diaryAiStatus.value = '正在分析日记…';
+  diaryAiResult.value = null;
+  diaryAiSections.value = [];
+  diaryAiTodos.value = [];
+  const payload = buildDiaryAiPayload(target);
+  const config = getDiaryAiConfig();
+  let usedFallback = false;
+  try {
+    let result: DiaryAiResult;
+    if (records.services.ai.isRemoteReady(config)) {
+      try {
+        result = await records.services.ai.requestRemoteAi(config, payload) as DiaryAiResult;
+      } catch {
+        usedFallback = true;
+        result = records.services.ai.generateLocalAiResult(payload) as DiaryAiResult;
+      }
+    } else {
+      result = records.services.ai.generateLocalAiResult(payload) as DiaryAiResult;
+    }
+    if (token !== diaryAiRequestToken || activeRecordId.value !== targetId) return;
+    setDiaryAiDrafts(refineDiaryAiResult(result));
+    diaryAiStatus.value = usedFallback ? '远程 AI 请求失败，已改用本地规则生成草稿。' : records.services.ai.isRemoteReady(config) ? 'AI 草稿已生成。' : '已用本地规则生成草稿。';
+    diaryAiError.value = usedFallback;
+  } catch (error) {
+    if (token !== diaryAiRequestToken || activeRecordId.value !== targetId) return;
+    diaryAiError.value = true;
+    diaryAiStatus.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (token === diaryAiRequestToken) diaryAiRunning.value = false;
+  }
+}
+
+function applySelectedDiaryAiSections() {
+  const selected = diaryAiSections.value.filter(section => section.selected && section.value.trim());
+  if (!selected.length || !editForm.id) {
+    diaryAiError.value = true;
+    diaryAiStatus.value = '请至少选择一个有内容的日记字段。';
+    return;
+  }
+  flushPendingEditorSave();
+  const template = records.services.records.getBuiltInTemplate('builtin-diary-daily-review');
+  const existing = template ? records.services.records.parseTemplateContent(template, editForm.content) : {};
+  const overwriteLabels = selected.filter(section => String(existing[section.key] || '').trim()).map(section => section.label);
+  if (overwriteLabels.length && !window.confirm(`这些字段已有内容：${overwriteLabels.join('、')}。确定用 AI 草稿覆盖吗？`)) return;
+  const result = records.applyDiaryAiSections(editForm.id, Object.fromEntries(selected.map(section => [section.key, section.value])));
+  if (!result) return;
+  editorHydrating = true;
+  window.clearTimeout(recordAutoSaveTimer);
+  editForm.templateId = result.templateId;
+  editForm.content = result.content;
+  selectedTemplateKey.value = `builtin:${result.templateId}`;
+  setTemplateValues(result.values);
+  editorDirty.value = false;
+  editorHydrating = false;
+  diaryAiError.value = false;
+  diaryAiStatus.value = `已写入：${selected.map(section => section.label).join('、')}`;
+  editorNotice.value = '日记 AI 内容已保存';
+}
+
+function createSelectedDiaryAiTodos() {
+  const selected = diaryAiTodos.value.filter(item => item.selected && item.text.trim());
+  if (!selected.length || !editForm.id) {
+    diaryAiError.value = true;
+    diaryAiStatus.value = '请至少选择一条保留标题的待办。';
+    return;
+  }
+  const duplicateCount = selected.filter(item => item.existingTodoText).length;
+  if (duplicateCount && !window.confirm(`选中项里有 ${duplicateCount} 条与已有待办相似，仍要创建吗？`)) return;
+  flushPendingEditorSave();
+  const createdIds = records.createDiaryAiTodos(editForm.id, selected.map(item => ({ ...item, text: item.text.trim() })));
+  editorHydrating = true;
+  editForm.todoIds = recordTodoIds(lifePlan.data.records.find(item => item.id === editForm.id) || {});
+  editorHydrating = false;
+  selected.forEach(item => { item.selected = false; });
+  diaryAiError.value = false;
+  diaryAiStatus.value = `已创建待办 ${createdIds.length} 项。`;
+  editorNotice.value = '日记 AI 待办已创建';
+}
+
 watch(editForm, scheduleEditorAutoSave, { deep: true, flush: 'sync' });
 
 watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) => {
@@ -348,6 +565,7 @@ watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) 
 }, { immediate: true });
 
 watch(() => editForm.type, type => {
+  if (type !== '日记') resetDiaryAiState();
   const selected = selectedTemplateKey.value;
   if (!selected) return;
   const template = selected.startsWith('builtin:')
@@ -459,6 +677,42 @@ onBeforeUnmount(() => {
             </details>
           </section>
           <label class="form-group"><span>内容</span><textarea v-model="editForm.content" rows="8" :readonly="Boolean(activeBuiltInTemplate)" :class="{ 'is-preview': activeBuiltInTemplate }" /></label>
+          <section v-if="editForm.type === '日记'" class="record-diary-ai" aria-labelledby="record-diary-ai-title">
+            <div class="record-diary-ai-head">
+              <div><div class="record-preview-heading" id="record-diary-ai-title">AI 日记分析</div><p>复盘、明日重点与行动草稿</p></div>
+              <button class="btn btn-secondary ai-run-button" :class="{ 'is-loading': diaryAiRunning }" type="button" :disabled="diaryAiRunning" @click="runDiaryAi"><span class="ai-run-spinner"></span>{{ diaryAiRunning ? '分析中…' : '生成分析' }}</button>
+            </div>
+            <label class="form-group"><span>分析偏好</span><textarea v-model="diaryAiPreference" rows="2" placeholder="例如：复盘直白一点，明日重点只保留最关键的一件事" /></label>
+            <p v-if="diaryAiStatus" class="record-diary-ai-status" :class="{ error: diaryAiError }" role="status">{{ diaryAiStatus }}</p>
+            <div v-if="diaryAiResult" class="record-diary-ai-result">
+              <div class="record-diary-ai-summary"><strong>{{ diaryAiResult.title }}</strong><span v-if="diaryAiResult.summary">{{ diaryAiResult.summary }}</span></div>
+              <div v-if="diaryAiSections.length" class="diary-ai-section-list">
+                <label v-for="section in diaryAiSections" :key="section.key" class="diary-ai-section record-diary-ai-section">
+                  <span class="ai-result-select"><input v-model="section.selected" type="checkbox" /><strong>{{ section.label }}</strong></span>
+                  <textarea v-model="section.value" class="ai-capture-draft diary-ai-draft" :aria-label="`AI ${section.label}草稿`" rows="4" />
+                </label>
+                <div class="diary-ai-actions"><button class="btn btn-primary" type="button" @click="applySelectedDiaryAiSections">写入所选内容</button></div>
+              </div>
+              <div v-if="diaryAiTodos.length" class="record-diary-ai-todos">
+                <div class="record-preview-heading">建议待办</div>
+                <div class="ai-result-list">
+                  <div v-for="(item, index) in diaryAiTodos" :key="index" class="ai-result-item ai-capture-todo-draft" :class="{ 'is-existing': item.existingTodoText }">
+                    <label class="ai-result-select"><input v-model="item.selected" type="checkbox" /><strong>创建这条待办</strong></label>
+                    <div v-if="item.existingTodoText" class="ai-existing-hint">与已有待办相似：{{ item.existingTodoText }}</div>
+                    <label><span>待办标题</span><input v-model="item.text" :aria-label="`AI 待办 ${index + 1} 标题`" /></label>
+                    <label><span>备注</span><textarea v-model="item.note" :aria-label="`AI 待办 ${index + 1} 备注`" rows="2" /></label>
+                    <label><span>分组</span><input v-model="item.group" :aria-label="`AI 待办 ${index + 1} 分组`" /></label>
+                    <div class="ai-capture-todo-dates">
+                      <label><span>计划开始</span><input v-model="item.planStartDate" :aria-label="`AI 待办 ${index + 1} 计划开始`" type="date" /></label>
+                      <label><span>计划结束</span><input v-model="item.planEndDate" :aria-label="`AI 待办 ${index + 1} 计划结束`" type="date" /></label>
+                      <label><span>截止日期</span><input v-model="item.dueDate" :aria-label="`AI 待办 ${index + 1} 截止日期`" type="date" /></label>
+                    </div>
+                  </div>
+                </div>
+                <div class="diary-ai-actions"><button class="btn btn-primary" type="button" @click="createSelectedDiaryAiTodos">创建所选待办</button></div>
+              </div>
+            </div>
+          </section>
           <section v-if="editForm.type === '灵感碎片'" class="record-idea-fields" aria-labelledby="record-idea-fields-title">
             <div class="record-preview-heading" id="record-idea-fields-title">灵感推进</div>
             <div class="form-row">

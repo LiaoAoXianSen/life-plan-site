@@ -18,7 +18,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview plus exact Todo detail links from today and floating lists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
 | Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
-| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | Persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, list/calendar views, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | AI diary writeback, new-record modal/draft autosave behavior, and remaining filters need parity work. | Users can create, preview, edit, delete, template, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
+| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | Persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, list/calendar views, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | New-record modal/draft autosave behavior and remaining filters need parity work. | Users can create, preview, edit, delete, template, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, and compatible Todo conversion exist. | AI next-action generation and the legacy editable pre-create Todo draft remain incomplete. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation. | Basic global search and tag center exist. | Needs full index parity including templates and wheel items. | Search covers legacy modules with matching labels and navigation targets. |
@@ -27,7 +27,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, single-exercise plan, live workout basics, history. | Multi-exercise plan editing, timer UX, complete history editing, plan writeback. | Fitness writes are delegated to `fitness-service.js` and support old multi-exercise workflows. |
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, tag two-stage spin, history, todo conversion, JSON/CSV. | Canvas parity, batch public-item flows, independent sync/conflict handling. | Wheel collections and independent sync path remain compatible with old `wheel-tool.js` behavior. |
 | Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo independent preview/apply/conditional upload flows. | Auto sync and Habit/Wheel independent flows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
-| AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice and remote/local request path. | Old modes and confirmation writeback are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
+| AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice plus Records diary analysis with remote/local generation, editable section/Todo drafts, overwrite confirmation, duplicate hints, and repository-backed writeback. | Idea next action, Todo breakdown, chat capture, and remaining legacy mode writebacks are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
 | Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists. | Needs broader contract tests with mirrors/tombstones. | Import/export round-trips complete data with snapshots and merge semantics intact. |
 
 ## Completed Implementation Slices
@@ -45,8 +45,8 @@ Status: verified in `50898e7`
 
 Remaining Records scope:
 
-- AI diary analysis writeback.
 - New-record modal/draft autosave behavior.
+- Remaining legacy record filters.
 
 ### Records Template Slice
 
@@ -80,6 +80,18 @@ Status: verified locally
 - Discard the pending timer when the active record is deleted so deletion cannot be followed by a stale update attempt.
 - Verify delayed persistence, immediate close/switch/navigation flush, same-record reselection, and `updatedAt` changes in Playwright.
 - Verify dirty/saved status at 1440px and 390px with no document, `.vue-main`, or active-page horizontal overflow.
+
+### Records Diary AI Slice
+
+Status: verified locally
+
+- Reuse `ai-service.js` and `lifePlanAiConfig` for remote requests, strict result normalization, local fallback, and relative-date refinement without adding a parallel AI client.
+- Send the legacy `diaryReview` context contract with the selected diary Markdown, template ID, parsed fields, metadata, and editable analysis preference.
+- Keep generated sections and Todo suggestions in page-local drafts; no `lifePlanData` mutation occurs before a separate write/create command.
+- Confirm before replacing selected non-empty diary fields, preserve unselected template sections, and persist exact heading-based Markdown plus `builtin-diary-daily-review`.
+- Create selected Todo drafts through `todos-service.js` with `sourceType: diary-ai`, link IDs through `record.todoIds`, and rebuild `todoAppData` through the repository commit path.
+- Default similar existing Todos to unselected, invalidate stale requests when the active record changes, and verify the full remote payload/no-mutation/confirmation/writeback/mirror contract in Playwright.
+- Verify editable section and Todo date layouts at 1440px and 390px with no document, `.vue-main`, Records page, or AI-panel horizontal overflow.
 
 ### Sync Protected Main Upload Slice
 

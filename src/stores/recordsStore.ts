@@ -22,6 +22,9 @@ type RecordUpdateInput = Partial<{
   ideaConclusion: string;
 }>;
 
+type DiaryAiSectionKey = 'oneLine' | 'review' | 'tomorrow' | 'improve' | 'thinking' | 'smallJoy';
+type DiaryAiTodoInput = Partial<Todo> & Pick<Todo, 'text'>;
+
 export const useRecordsStore = defineStore('records', () => {
   const lifePlan = useLifePlanStore();
   const ideas = computed(() => lifePlan.data.records.filter(record => record.type === '灵感碎片'));
@@ -177,6 +180,55 @@ export const useRecordsStore = defineStore('records', () => {
     });
   }
 
+  function applyDiaryAiSections(recordId: string, sections: Partial<Record<DiaryAiSectionKey, string>>) {
+    const template = services.records.getBuiltInTemplate('builtin-diary-daily-review');
+    if (!template) return null;
+    const allowedKeys = new Set(template.fields.map((field: { id: string }) => field.id));
+    const applied: { value: { content: string; templateId: string; values: Record<string, string> } | null } = { value: null };
+    lifePlan.mutate('apply-diary-ai-sections', data => {
+      const record = data.records.find(item => item.id === recordId && item.type === '日记');
+      if (!record) return;
+      const values = services.records.parseTemplateContent(template, String(record.content || '')) as Record<string, string>;
+      Object.entries(sections).forEach(([key, value]) => {
+        const cleanValue = String(value || '').trim();
+        if (allowedKeys.has(key) && cleanValue) values[key] = cleanValue;
+      });
+      const content = services.records.composeTemplateContent(template, values);
+      record.templateId = template.id;
+      record.content = content;
+      record.updatedAt = getNowLocal();
+      applied.value = { content, templateId: template.id, values };
+    });
+    return applied.value;
+  }
+
+  function createDiaryAiTodos(recordId: string, inputs: DiaryAiTodoInput[]) {
+    const createdIds: string[] = [];
+    lifePlan.mutate('create-diary-ai-todos', data => {
+      const record = data.records.find(item => item.id === recordId && item.type === '日记');
+      if (!record) return;
+      const sourceLabel = String(record.title || record.startDate || '未命名日记');
+      const created = inputs.map(input => {
+        const todo = services.todos.createTodoFromAiItem(input, {
+          sourceType: 'diary-ai',
+          sourceRecordId: recordId,
+          sourceMatchKey: input.sourceMatchKey || input.text,
+        }) as Todo;
+        todo.note = [todo.note, `来源日记：${sourceLabel}`].filter(Boolean).join('\n\n');
+        return todo;
+      });
+      data.todos.push(...created);
+      const todoIds = Array.isArray(record.todoIds) ? record.todoIds.map(String) : [];
+      created.forEach(todo => {
+        createdIds.push(todo.id);
+        if (!todoIds.includes(todo.id)) todoIds.push(todo.id);
+      });
+      record.todoIds = todoIds;
+      record.updatedAt = getNowLocal();
+    });
+    return createdIds;
+  }
+
   function addIdea(title: string, content = '') {
     const now = getNowLocal();
     lifePlan.data.records.unshift({ id: genId(), type: '灵感碎片', title, content, startDate: getTodayStr(), endDate: getTodayStr(), recordTime: '', recordEndTime: '', todoIds: [], ideaStatus: '待整理', ideaTags: [], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '', createdAt: now, updatedAt: now });
@@ -210,5 +262,5 @@ export const useRecordsStore = defineStore('records', () => {
       data[collection] = data[collection].filter(entity => entity.id !== id) as never;
     });
   }
-  return { ideas, materials, addRecord, updateRecord, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, remove, services };
+  return { ideas, materials, addRecord, updateRecord, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, remove, services };
 });
