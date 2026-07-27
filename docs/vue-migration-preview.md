@@ -77,5 +77,5 @@ Goals, basic Habits, Fitness, Wheel, AI and main Sync workflows. The following
 specialist controls still live in the proven static app and should be migrated
 only as separately tested follow-up releases: habit wallet/reward administration
 and protected remote flow, wheel Canvas/remote auto-sync, remaining Records
-new-draft/filter behavior, and non-diary AI writeback modes. They are not replaced
+filter behavior, and non-diary AI writeback modes. They are not replaced
 by incompatible shortcuts.

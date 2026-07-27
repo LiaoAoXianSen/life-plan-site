@@ -142,3 +142,12 @@
 - Diary section writeback uses `builtin-diary-daily-review`, preserves unselected sections, confirms before replacing selected non-empty sections, then persists generated heading-based Markdown plus `templateId`.
 - Diary AI Todos use `todos-service.js#createTodoFromAiItem`, `sourceType: diary-ai`, the diary ID as `sourceRecordId`, append a source note, and add created IDs to `record.todoIds`; repository commits rebuild `todoAppData`.
 - Similar existing Todos are detected through `todos-service.js#findMatchingTodo` and should default to unselected while still allowing deliberate recreation.
+
+## 2026-07-27 New record draft parity
+
+- Legacy does not use a separate `recordDraft` localStorage key. New-record autosave creates or updates a real `lifePlanData.records[]` entity through the normal save path.
+- Opening a type initializes suggested dates, current time, diary date-title, and the first built-in structured template while leaving `isRecordDirty` false; closing this untouched initialized modal must not create a record.
+- Once a user changes a field, the legacy three-second debounce persists only when input is meaningful: a title, non-template plain content, at least one non-empty structured field, or a temporary Todo.
+- Closing a dirty modal cancels the pending debounce and synchronously persists; leaving the page must provide the same flush guarantee in Vue.
+- Scoped types are unique for the same range: `日记`, `日计划`, `工作记录`, weekly/monthly/yearly review/plan types, `3年计划`, and `终身愿景` (globally unique). Selecting an existing scope opens that record instead of creating a duplicate.
+- The bounded Vue stage will keep new-record templates and idea fields in the create modal; linked/exclusive Todo editing remains available immediately through the shared existing-record editor after first persistence.

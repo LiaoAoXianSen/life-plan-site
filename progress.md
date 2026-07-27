@@ -239,3 +239,10 @@
 - Updated the migration checklist and preview deployment guide to close the diary AI blocker while retaining new-record draft/filter and non-diary AI mode gaps.
 - Final production build, `git diff --check`, and all 20 Vue Playwright tests passed; responsive overflow checks remained clean.
 - Created clean runtime package `life-plan-site-runtime-20260727-222706.zip` and retained the newest five packages per project policy.
+- Opened phases 86-90 for the Records new-record modal/draft stage and completed the legacy lifecycle audit before implementation.
+- Added `RecordCreateModal.vue` with grouped legacy types, suggested ranges, diary title/default templates, structured and idea fields, meaningful-input gating, three-second first-save debounce, close/unmount flush, and scoped existing-record redirection; production build passed.
+- Both focused new-record lifecycle contracts passed on their first run; coverage includes untouched initialization, delayed first persistence, immediate close flush, route-leave flush, exact built-in Markdown, idea fields, and scoped reuse.
+- Full `scripts/check.ps1` passed syntax checks and 22/22 Vue Playwright tests; the production build and `git diff --check` also passed.
+- Desktop 1440px and mobile 390px type-picker/editor/footer screenshots had no overlap or horizontal overflow. The first pass exposed narrow structured textareas; the corrected fields now use 828px/358px respectively while all measured containers retain `scrollWidth === clientWidth`.
+- Updated parity and preview documentation to close the new-record modal/draft blocker while leaving legacy Records filters explicit.
+- Final production build, all 22 Vue Playwright tests, and `git diff --check` passed after the textarea correction; created `life-plan-site-runtime-20260727-224426.zip` and retained the newest five packages.

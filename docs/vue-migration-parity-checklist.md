@@ -18,7 +18,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview plus exact Todo detail links from today and floating lists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
 | Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
-| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | Persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, list/calendar views, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | New-record modal/draft autosave behavior and remaining filters need parity work. | Users can create, preview, edit, delete, template, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
+| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | New-record modal with meaningful-input autosave plus persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, list/calendar views, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | Remaining legacy filters need parity work. | Users can create, preview, edit, delete, template, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, and compatible Todo conversion exist. | AI next-action generation and the legacy editable pre-create Todo draft remain incomplete. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation. | Basic global search and tag center exist. | Needs full index parity including templates and wheel items. | Search covers legacy modules with matching labels and navigation targets. |
@@ -45,7 +45,6 @@ Status: verified in `50898e7`
 
 Remaining Records scope:
 
-- New-record modal/draft autosave behavior.
 - Remaining legacy record filters.
 
 ### Records Template Slice
@@ -92,6 +91,18 @@ Status: verified locally
 - Create selected Todo drafts through `todos-service.js` with `sourceType: diary-ai`, link IDs through `record.todoIds`, and rebuild `todoAppData` through the repository commit path.
 - Default similar existing Todos to unselected, invalidate stale requests when the active record changes, and verify the full remote payload/no-mutation/confirmation/writeback/mirror contract in Playwright.
 - Verify editable section and Todo date layouts at 1440px and 390px with no document, `.vue-main`, Records page, or AI-panel horizontal overflow.
+
+### New Record Modal And Draft Slice
+
+Status: verified locally
+
+- Replace the shortcut top-page create form with the legacy grouped type chooser and a dedicated modal editor for all twelve record types.
+- Initialize suggested date ranges, current start time, diary date title, and the first built-in structured template without marking the modal dirty or creating data.
+- Gate first persistence on meaningful input, then create the real `records[]` entity through `recordsStore -> lifePlanRepository` after the legacy three-second debounce.
+- Continue saving the same generated ID, flush dirty input before close, Escape, overlay dismissal, or Records-route unmount, and keep untouched initialized modals out of `lifePlanData`.
+- Redirect an already-existing scoped period to the shared editor instead of creating a duplicate diary/plan/review/work record.
+- Persist exact built-in-template Markdown and all idea-specific fields; relationship editing remains available through the shared editor immediately after the first save.
+- Verify blank close, delayed first save, close and route-leave flush, scoped reuse, template/idea contracts, and 1440px/390px layouts in Playwright and browser screenshots.
 
 ### Sync Protected Main Upload Slice
 

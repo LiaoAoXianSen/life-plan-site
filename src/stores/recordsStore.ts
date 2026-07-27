@@ -22,6 +22,23 @@ type RecordUpdateInput = Partial<{
   ideaConclusion: string;
 }>;
 
+type RecordDraftInput = {
+  title: string;
+  content: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  recordTime: string;
+  recordEndTime: string;
+  templateId: string;
+  todoIds: string[];
+  ideaStatus: string;
+  ideaTags: string[];
+  ideaNextAction: string;
+  ideaTodoId: string;
+  ideaConclusion: string;
+};
+
 type DiaryAiSectionKey = 'oneLine' | 'review' | 'tomorrow' | 'improve' | 'thinking' | 'smallJoy';
 type DiaryAiTodoInput = Partial<Todo> & Pick<Todo, 'text'>;
 
@@ -29,6 +46,16 @@ export const useRecordsStore = defineStore('records', () => {
   const lifePlan = useLifePlanStore();
   const ideas = computed(() => lifePlan.data.records.filter(record => record.type === '灵感碎片'));
   const materials = computed(() => lifePlan.data.materials);
+  const uniqueScopedRecordTypes = new Set(['日记', '日计划', '工作记录', '周复盘', '周计划', '月复盘', '月计划', '年复盘', '年度计划', '3年计划', '终身愿景']);
+
+  function findExistingScopedRecord(type: string, startDate: string, endDate: string, excludeId = '') {
+    if (!uniqueScopedRecordTypes.has(type)) return null;
+    return lifePlan.data.records.find(record => {
+      if (record.id === excludeId || record.type !== type) return false;
+      if (type === '终身愿景') return true;
+      return String(record.startDate || '') === startDate && String(record.endDate || '') === endDate;
+    }) || null;
+  }
 
   function addRecord(input: { title: string; content?: string; type?: string; startDate?: string; endDate?: string; recordTime?: string; recordEndTime?: string }) {
     const now = getNowLocal();
@@ -49,6 +76,31 @@ export const useRecordsStore = defineStore('records', () => {
       Object.assign(record, next, { updatedAt: getNowLocal() });
       delete record.templateFields;
     });
+  }
+
+  function saveRecordDraft(id: string, input: RecordDraftInput) {
+    const saved: { value: { id: string; created: boolean } | null } = { value: null };
+    lifePlan.mutate(id ? 'update-record-draft' : 'create-record-draft', data => {
+      const now = getNowLocal();
+      const existing = id ? data.records.find(item => item.id === id) : null;
+      const next = {
+        ...input,
+        title: input.title.trim(),
+        todoIds: Array.from(new Set(input.todoIds.map(String).filter(Boolean))),
+        ideaTags: Array.from(new Set(input.ideaTags.map(String).filter(Boolean))),
+      };
+      if (existing) {
+        Object.assign(existing, next, { updatedAt: now });
+        delete existing.templateFields;
+        delete existing.isDraft;
+        saved.value = { id: String(existing.id), created: false };
+        return;
+      }
+      const recordId = genId();
+      data.records.push({ id: recordId, ...next, createdAt: now, updatedAt: now });
+      saved.value = { id: recordId, created: true };
+    });
+    return saved.value;
   }
 
   function addTemplate(input: { name: string; type: string; content: string; todos?: DataEntity[] }) {
@@ -262,5 +314,5 @@ export const useRecordsStore = defineStore('records', () => {
       data[collection] = data[collection].filter(entity => entity.id !== id) as never;
     });
   }
-  return { ideas, materials, addRecord, updateRecord, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, remove, services };
+  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, remove, services };
 });

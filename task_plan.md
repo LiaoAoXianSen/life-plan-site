@@ -101,6 +101,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 83. Status: complete - Add the Records diary analysis surface with remote/local generation, editable section/Todo drafts, duplicate hints, and stale-request protection.
 84. Status: complete - Add mocked-network and persistence contracts, then run build, focused/full checks, and desktop/mobile visual verification.
 85. Status: complete - Update migration parity evidence, package the verified runtime, commit the diary AI stage, and append dual-store memory.
+86. Status: complete - Audit legacy new-record type selection, meaningful-input gate, default fields/templates, scoped reuse, debounce, close, and navigation flush contracts.
+87. Status: complete - Add a dedicated Vue record-create modal and store-backed first-save/upsert path while keeping blank initialization read-only.
+88. Status: complete - Add Playwright contracts for blank close, three-second first persistence, close/navigation flush, structured template fields, idea fields, and scoped reuse.
+89. Status: complete - Run production build, focused/full checks, and desktop/mobile modal verification without horizontal overflow.
+90. Status: complete - Update parity evidence, package, commit the verified new-record stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -142,3 +147,4 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First diary AI build could not narrow a result assigned inside the Pinia mutation callback and inferred AI urgency as arbitrary text | Initial production build after the store/UI patch | Switched the callback result to an explicit holder and constrained the draft urgency to `Todo['urgency']` before rebuilding |
 | First focused diary AI contract timed out locating the tomorrow checkbox through an outer-scoped nested `has` selector | The test had already passed request, normalized draft, and no-mutation assertions | Used the stable generated section order and scoped the checkbox to the second diary field item |
 | Second focused diary AI contract received `medium` after the remote response specified `high` | Vue's legacy-service adapter passed `urgencyMeta`, while `ai-service.js` expects `todoUrgencyMeta`; it also omitted the local fallback's `addDays` dependency | Corrected both injected option names/implementations in `legacyServices.ts` and retained the persisted urgency assertion |
+| First new-record visual pass showed structured textareas at their intrinsic narrow width | Desktop and mobile screenshots had no overflow but exposed an impractical editing width | Scoped template-field textareas inside the create modal to the full available width and reran responsive screenshots |

@@ -152,6 +152,20 @@
 .record-diary-ai-section .ai-result-select { padding-top: 8px; }
 .record-diary-ai-section .diary-ai-draft { min-width: 0; }
 .record-diary-ai-todos { display: grid; gap: 10px; padding-top: 4px; }
+.record-create-modal { width: min(880px, 100%); }
+.record-create-type-groups { display: grid; gap: 18px; }
+.record-create-type-group { display: grid; gap: 9px; }
+.record-create-type-group h3 { margin: 0; color: var(--muted); font-size: 12px; }
+.record-create-type-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.record-create-type-option { min-width: 104px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); color: var(--text); font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.record-create-type-option:hover { border-color: rgba(33,110,78,.35); background: var(--surface); color: var(--accent); }
+.record-create-type-option:focus-visible { outline: 3px solid rgba(47,128,237,.18); outline-offset: 2px; }
+.record-create-form { min-width: 0; }
+.record-create-template-row { display: grid; grid-template-columns: minmax(0, 1fr); }
+.record-create-modal .record-template-field textarea { width: 100%; min-width: 0; }
+.record-create-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 4px; }
+.record-create-footer .form-actions { margin: 0; }
+.record-create-status { min-height: 20px; color: var(--accent); font-size: 12px; font-weight: 750; }
 
 @media (max-width: 1040px) {
   .todo-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -170,4 +184,9 @@
   .record-diary-ai-head .btn { align-self: flex-start; }
   .record-diary-ai-section { grid-template-columns: minmax(0, 1fr); }
   .record-diary-ai-section .ai-result-select { padding-top: 0; }
+  .record-create-overlay { align-items: flex-end; padding: 0; }
+  .record-create-modal { width: 100%; max-width: 100vw; max-height: 94vh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 18px 14px; }
+  .record-create-type-option { flex: 1 1 calc(50% - 8px); min-width: 0; }
+  .record-create-footer { align-items: stretch; flex-direction: column; }
+  .record-create-footer .form-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }

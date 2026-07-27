@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
+import RecordCreateModal from '../components/RecordCreateModal.vue';
 import { buildScheduleItems, addDays, getMonthStart, getWeekStart, type ScheduleItem } from '../utils/schedule';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -51,7 +52,6 @@ const records = useRecordsStore();
 const route = useRoute();
 const router = useRouter();
 const today = () => new Date().toISOString().slice(0, 10);
-const form = reactive({ title: '', content: '', type: '记录', startDate: today(), recordTime: '', recordEndTime: '' });
 const editForm = reactive({
   id: '',
   title: '',
@@ -81,6 +81,7 @@ const editorNotice = ref('');
 const selectedTemplateKey = ref('');
 const templateValues = reactive<Record<string, string>>({});
 const showTemplateManager = ref(false);
+const showRecordCreate = ref(false);
 const templateEditorRef = ref<HTMLElement | null>(null);
 const editorDirty = ref(false);
 let editorHydrating = false;
@@ -142,12 +143,6 @@ function selectCalendarItem(item: ScheduleItem) {
   if (item.sourceType.startsWith('todo-')) {
     void router.push({ path: '/todos', query: { todo: item.id } });
   }
-}
-
-function addRecord() {
-  if (!form.title.trim()) return;
-  records.addRecord({ ...form, title: form.title.trim(), endDate: form.startDate });
-  Object.assign(form, { title: '', content: '', type: '记录', startDate: today(), recordTime: '', recordEndTime: '' });
 }
 
 function recordTodoIds(record: DataEntity): string[] {
@@ -282,6 +277,13 @@ function openEditor(record: DataEntity, updateRoute = true) {
   editorDirty.value = false;
   editorNotice.value = '';
   if (updateRoute && route.query.record !== item.id) updateRecordQuery(item.id);
+}
+
+function openExistingFromCreate(recordId: string) {
+  const record = lifePlan.data.records.find(item => item.id === recordId);
+  if (!record) return;
+  openEditor(record);
+  editorNotice.value = '这个周期已经有一条了，已为你打开继续编辑';
 }
 
 function closeEditor(flush = true) {
@@ -585,20 +587,9 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page active" id="page-records">
-    <header class="page-header"><div class="page-title">所有记录</div></header>
+    <header class="page-header"><div class="page-title">所有记录</div><div class="page-actions"><button class="btn btn-primary" type="button" @click="showRecordCreate = true">新建记录</button></div></header>
 
-    <form class="card" @submit.prevent="addRecord">
-      <div class="card-title">新建记录</div>
-      <div class="form-row">
-        <label class="form-group"><span>标题</span><input v-model="form.title" required placeholder="记录一件事" /></label>
-        <label class="form-group"><span>类型</span><input v-model="form.type" /></label>
-        <label class="form-group"><span>日期</span><input v-model="form.startDate" type="date" /></label>
-        <label class="form-group"><span>开始时间</span><input v-model="form.recordTime" type="time" /></label>
-        <label class="form-group"><span>结束时间</span><input v-model="form.recordEndTime" type="time" /></label>
-      </div>
-      <label class="form-group"><span>内容</span><textarea v-model="form.content" /></label>
-      <button class="btn btn-primary">保存记录</button>
-    </form>
+    <RecordCreateModal v-model="showRecordCreate" @open-existing="openExistingFromCreate" />
 
     <div class="filter-bar">
       <input v-model="keyword" type="search" placeholder="搜索标题、内容、类型" />

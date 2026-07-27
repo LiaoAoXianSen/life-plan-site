@@ -540,6 +540,80 @@ test('record editor autosaves after three seconds and flushes before close switc
     expect(stored.records.find(item => item.id === 'record-switch').content).toBe('离开页面前刷新');
 });
 
+test('new record modal keeps blank initialization read-only then autosaves and reuses the scoped diary', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/records');
+
+    await page.getByRole('button', { name: '新建记录' }).click();
+    let modal = page.getByRole('dialog');
+    await modal.getByRole('button', { name: '日记', exact: true }).click();
+    await expect(modal.getByLabel('标题')).toHaveValue(/^\d{4}年\d{1,2}月\d{1,2}日 星期[一二三四五六日]$/);
+    await expect(modal.getByLabel('记录模板')).toHaveValue('builtin:builtin-diary-daily-review');
+    await page.keyboard.press('Escape');
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records)).toEqual([]);
+
+    await page.getByRole('button', { name: '新建记录' }).click();
+    modal = page.getByRole('dialog');
+    await modal.getByRole('button', { name: '日记', exact: true }).click();
+    await modal.locator('summary').filter({ hasText: /^正文$/ }).click();
+    await modal.getByLabel('新记录正文').fill('新记录自动保存正文');
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records)).toEqual([]);
+    await expect(modal.getByRole('status')).toContainText('已自动保存于', { timeout: 5000 });
+
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records).toHaveLength(1);
+    const diaryId = stored.records[0].id;
+    expect(stored.records[0]).toMatchObject({
+        type: '日记', templateId: 'builtin-diary-daily-review', startDate: expect.any(String), endDate: expect.any(String), todoIds: [],
+    });
+    expect(stored.records[0].content).toContain('# 正文\n新记录自动保存正文');
+
+    await modal.locator('summary').filter({ hasText: /^明日重点$/ }).click();
+    await modal.getByLabel('新记录明日重点').fill('关闭前立即保存的新重点');
+    await modal.getByRole('button', { name: '关闭', exact: true }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records).toHaveLength(1);
+    expect(stored.records[0].id).toBe(diaryId);
+    expect(stored.records[0].content).toContain('# 明日重点\n关闭前立即保存的新重点');
+
+    await page.getByRole('button', { name: '新建记录' }).click();
+    modal = page.getByRole('dialog');
+    await modal.getByRole('button', { name: '日记', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const editor = page.locator('.record-editor-panel');
+    await expect(editor).toBeVisible();
+    await expect(editor.getByRole('status')).toContainText('这个周期已经有一条了');
+    await expect(editor.getByLabel('内容')).toHaveValue(/关闭前立即保存的新重点/);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records)).toHaveLength(1);
+});
+
+test('new idea record flushes its structured and idea fields when the route leaves', async ({ page }) => {
+    const source = emptyData({ todos: [todoFixture('idea-draft-todo', '草稿关联待办')] });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: '新建记录' }).click();
+    const modal = page.getByRole('dialog');
+    await modal.getByRole('button', { name: '灵感碎片', exact: true }).click();
+    await modal.getByLabel('标题').fill('路由离开前的灵感草稿');
+    await modal.locator('summary').filter({ hasText: /^想法本身$/ }).click();
+    await modal.getByLabel('新记录想法本身').fill('把新记录 modal 做成可靠草稿入口');
+    const ideaFields = modal.getByRole('region', { name: '新记录灵感推进' });
+    await ideaFields.getByLabel('状态').selectOption('待实践');
+    await ideaFields.getByLabel('标签').fill('记录, Migration 记录');
+    await ideaFields.getByLabel('下一步').fill('验证离开页面时同步落库');
+    await ideaFields.getByLabel('关联待办').selectOption('idea-draft-todo');
+    await ideaFields.getByLabel('结果结论').fill('等待验证');
+
+    await page.evaluate(() => { location.hash = '#/ideas'; });
+    await expect(page).toHaveURL(/#\/ideas$/);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.find(item => item.title === '路由离开前的灵感草稿'));
+    expect(saved).toMatchObject({
+        type: '灵感碎片', templateId: 'builtin-idea-capture', ideaStatus: '待实践',
+        ideaTags: ['记录', 'Migration'], ideaNextAction: '验证离开页面时同步落库', ideaTodoId: 'idea-draft-todo', ideaConclusion: '等待验证',
+    });
+    expect(saved.content).toContain('# 想法本身\n把新记录 modal 做成可靠草稿入口');
+});
+
 test('diary AI keeps remote drafts read-only until confirmed writeback and Todo creation', async ({ page }) => {
     const originalContent = [
         '# 正文',
