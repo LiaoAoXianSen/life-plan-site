@@ -6,7 +6,7 @@ import TodoTable from '../components/TodoTable.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useTodosStore } from '../stores/todosStore';
-import type { Todo, TodoSubTodo } from '../types/lifePlan';
+import type { DataEntity, Todo, TodoSubTodo } from '../types/lifePlan';
 import { addDays, getWeekStart } from '../utils/schedule';
 
 const route = useRoute();
@@ -25,6 +25,7 @@ const editing = ref(false);
 const detailError = ref('');
 const detailStatus = ref('');
 const newSubTodo = ref('');
+const recordLinkId = ref('');
 const form = reactive({ text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium' as Todo['urgency'], group: '其他' });
 const detailForm = reactive({ text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium' as Todo['urgency'], group: '其他', subTodos: [] as TodoSubTodo[] });
 const sessionForm = reactive({ date: getTodayStr(), startTime: new Date().toTimeString().slice(0, 5), endTime: '', note: '' });
@@ -45,6 +46,13 @@ const linkedRecords = computed(() => selectedTodo.value
       return todoIds.includes(selectedTodo.value!.id) || record.ideaTodoId === selectedTodo.value!.id;
     })
   : []);
+const availableRecords = computed(() => {
+  const linkedIds = new Set(linkedRecords.value.map(record => String(record.id)));
+  return lifePlan.data.records
+    .filter(record => !record.isHabitRecord && !linkedIds.has(String(record.id)))
+    .slice()
+    .sort((left, right) => String(right.updatedAt || right.startDate || '').localeCompare(String(left.updatedAt || left.startDate || '')));
+});
 const sortedSessions = computed(() => [...(selectedTodo.value?.sessions ?? [])].sort((left, right) =>
   `${right.date}T${right.startTime || '00:00'}`.localeCompare(`${left.date}T${left.startTime || '00:00'}`)));
 
@@ -82,6 +90,7 @@ function selectTodo(id: string, updateRoute = true) {
   editing.value = false;
   detailError.value = '';
   detailStatus.value = '';
+  recordLinkId.value = '';
   loadDetailForm(todo);
   if (updateRoute && route.query.todo !== id) updateTodoQuery(id);
 }
@@ -187,6 +196,33 @@ function deleteSelectedTodo() {
 
 function openLinkedRecord(recordId: string) {
   void router.push({ path: '/records', query: { record: recordId } });
+}
+
+function linkSelectedRecord() {
+  if (!selectedTodo.value || !recordLinkId.value) return;
+  try {
+    todosStore.linkRecord(selectedTodo.value.id, recordLinkId.value);
+    recordLinkId.value = '';
+    detailError.value = '';
+    detailStatus.value = '记录已关联';
+  } catch (error) {
+    detailError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function canUnlinkRecord(record: DataEntity) {
+  return !selectedTodo.value?.isExclusive || selectedTodo.value.sourceRecordId !== record.id;
+}
+
+function unlinkRecord(record: DataEntity) {
+  if (!selectedTodo.value || !window.confirm(`解除与“${record.title || record.type || '未命名记录'}”的关联吗？`)) return;
+  try {
+    todosStore.unlinkRecord(selectedTodo.value.id, String(record.id));
+    detailError.value = '';
+    detailStatus.value = '记录关联已解除';
+  } catch (error) {
+    detailError.value = error instanceof Error ? error.message : String(error);
+  }
 }
 
 watch([() => route.query.todo, () => todosStore.todos.length], ([value]) => {
@@ -295,7 +331,15 @@ watch([() => route.query.todo, () => todosStore.todos.length], ([value]) => {
 
           <section class="todo-detail-section" aria-labelledby="todo-records-heading">
             <div class="todo-section-heading"><h3 id="todo-records-heading">关联记录</h3><span>{{ linkedRecords.length }} 条</span></div>
-            <button v-for="record in linkedRecords" :key="String(record.id)" class="todo-record-link" type="button" @click="openLinkedRecord(String(record.id))"><span>{{ record.title || record.type || '未命名记录' }}</span><small>{{ record.type }}{{ record.ideaTodoId === selectedTodo.id ? ' · 灵感来源' : '' }}</small></button>
+            <div class="todo-record-link-tools">
+              <select v-model="recordLinkId" aria-label="选择要关联的记录"><option value="">选择记录</option><option v-for="record in availableRecords" :key="String(record.id)" :value="String(record.id)">{{ record.title || record.type || '未命名记录' }}</option></select>
+              <button class="btn btn-secondary" type="button" :disabled="!recordLinkId" @click="linkSelectedRecord">关联</button>
+            </div>
+            <div v-for="record in linkedRecords" :key="String(record.id)" class="todo-record-row">
+              <button class="todo-record-link" type="button" @click="openLinkedRecord(String(record.id))"><span>{{ record.title || record.type || '未命名记录' }}</span><small>{{ record.type }}{{ record.ideaTodoId === selectedTodo.id ? ' · 灵感来源' : '' }}</small></button>
+              <button v-if="canUnlinkRecord(record)" class="link-button danger-text" type="button" :aria-label="`解除关联 ${record.title || record.type || '未命名记录'}`" @click="unlinkRecord(record)">解除</button>
+              <span v-else class="todo-record-lock">专属来源</span>
+            </div>
             <p v-if="!linkedRecords.length" class="todo-detail-empty">暂无关联记录。</p>
           </section>
 

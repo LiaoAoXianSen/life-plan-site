@@ -17,6 +17,8 @@
 - Legacy date presets are draft-only until save: today, tomorrow, this week (today through Sunday), next week (Monday through Sunday), and no date.
 - `CalendarViews` can keep navigation policy outside the generic renderer by emitting the selected `ScheduleItem`; `RecordsPage` opens record items locally and routes all `todo-*` items to the shared Todo detail URL.
 - A focused Playwright contract now proves Dashboard navigation, direct URL restoration, query cleanup, draft-only presets, and plan/due/session calendar navigation all target one Todo without changing `lifePlanData` or creating `todoAppData`.
+- Record/Todo relationships remain record-owned: ordinary links use `record.todoIds`, while idea-origin links use `record.ideaTodoId`.
+- The legacy Todo detail can delete a Todo and clean both fields but does not expose relationship unlink controls. Vue Todo-side editing should therefore mutate record fields directly and protect an exclusive Todo's source relationship from unlinking.
 
 
 ## 2026-07-23

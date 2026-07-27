@@ -74,6 +74,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 56. Status: complete - Add `todo=<id>` detail deep links, Dashboard and calendar Todo entry points, legacy plan/due schedule items, and date presets.
 57. Status: complete - Add route/preset/schedule contract coverage and run Vue build/check plus desktop/mobile verification.
 58. Status: complete - Update parity evidence and commit the verified Todo cross-entry stage.
+59. Status: complete - Add Todo-detail record relationship creation/removal while preserving exclusive-source invariants and record-owned fields.
+60. Status: complete - Add persisted relationship contract coverage and run Vue build/check plus responsive verification.
+61. Status: complete - Update parity evidence and commit the verified Todo relationship stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -105,3 +108,4 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | Focused Todo contract test had an ambiguous `任务` label locator | First Playwright run matched task, subtask region, and subtask inputs | Changed the main task locator to exact label matching; application reached the editor without runtime errors |
 | Focused Todo contract test used the edit-state subtask name in view state | Second run proved both subtasks persisted, but native wrapped labels exposed checkbox names as the subtask text | Switched view-state checks to role/name locators matching the accessibility tree |
 | `npm run test:legacy` exceeded the 5-minute command timeout and later loaded the Vue entry | Direct legacy regression attempts from `migration/vue-app-v1` | Exported protected `master` to ignored `.tmp`, ran master syntax checks, then passed all 73 master Playwright tests with its own static server/config; current-branch legacy command is not a valid gate because `index.html` is intentionally Vue |
+| First Todo relationship test still found an unlinked record title | Assertion expected the title to disappear from the whole detail panel | Confirmed the record correctly returned to the candidate select and changed the assertion to require the linked-row unlink command to disappear |

@@ -129,9 +129,12 @@
 .todo-detail-panel .link-button:hover { background: var(--surface-soft); }
 .todo-detail-panel .link-button:focus-visible { outline: 3px solid rgba(47,128,237,.18); outline-offset: 1px; }
 .todo-detail-panel .danger-text { color: var(--danger); }
-.todo-record-link { display: grid; gap: 2px; width: 100%; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.todo-record-link-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 10px; }
+.todo-record-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); }
+.todo-record-link { display: grid; gap: 2px; width: 100%; padding: 9px 0; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
 .todo-record-link:hover span { color: var(--accent); }
 .todo-record-link small { color: var(--faint); }
+.todo-record-lock { color: var(--faint); font-size: 12px; white-space: nowrap; }
 .todo-detail-empty { margin: 0; padding: 9px 0; color: var(--faint); font-size: 12px; }
 .todo-save-status { margin: 12px 0 0; color: var(--accent); font-size: 12px; font-weight: 700; }
 .calendar-event, .agenda-all-day-item, .agenda-event-block { font: inherit; text-align: left; }

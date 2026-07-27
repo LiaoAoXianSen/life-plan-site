@@ -97,6 +97,41 @@ export const useTodosStore = defineStore('todos', () => {
     });
   }
 
+  function linkRecord(todoId: string, recordId: string) {
+    const todo = lifePlan.data.todos.find(item => item.id === todoId);
+    const record = lifePlan.data.records.find(item => item.id === recordId);
+    if (!todo || !record) throw new Error('待办或记录不存在');
+    const todoIds = Array.isArray(record.todoIds) ? record.todoIds.map(String) : [];
+    if (todoIds.includes(todoId) || record.ideaTodoId === todoId) return false;
+    lifePlan.mutate('link-todo-record', data => {
+      const target = data.records.find(item => item.id === recordId);
+      if (!target) return;
+      const linkedIds = Array.isArray(target.todoIds) ? target.todoIds.map(String) : [];
+      target.todoIds = [...linkedIds, todoId];
+      target.updatedAt = getNowLocal();
+    });
+    return true;
+  }
+
+  function unlinkRecord(todoId: string, recordId: string) {
+    const todo = lifePlan.data.todos.find(item => item.id === todoId);
+    const record = lifePlan.data.records.find(item => item.id === recordId);
+    if (!todo || !record) throw new Error('待办或记录不存在');
+    if (todo.isExclusive && todo.sourceRecordId === recordId) {
+      throw new Error('专属待办必须保留来源记录');
+    }
+    const todoIds = Array.isArray(record.todoIds) ? record.todoIds.map(String) : [];
+    if (!todoIds.includes(todoId) && record.ideaTodoId !== todoId) return false;
+    lifePlan.mutate('unlink-todo-record', data => {
+      const target = data.records.find(item => item.id === recordId);
+      if (!target) return;
+      target.todoIds = (Array.isArray(target.todoIds) ? target.todoIds.map(String) : []).filter(id => id !== todoId);
+      if (target.ideaTodoId === todoId) target.ideaTodoId = '';
+      target.updatedAt = getNowLocal();
+    });
+    return true;
+  }
+
   function remove(id: string) {
     const todo = lifePlan.data.todos.find(item => item.id === id);
     if (!todo) return;
@@ -119,5 +154,5 @@ export const useTodosStore = defineStore('todos', () => {
     });
   }
 
-  return { todos, toggle, create, update, addSession, removeSession, remove, services };
+  return { todos, toggle, create, update, addSession, removeSession, linkRecord, unlinkRecord, remove, services };
 });

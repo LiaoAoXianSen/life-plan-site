@@ -199,3 +199,10 @@
 - Desktop 1440px and mobile 390px Todo edit/detail and day-calendar screenshots showed the date presets and all three schedule item types without overlap; all four page checks reported `scrollWidth === clientWidth`.
 - Updated the migration parity checklist and moved phase 58 into progress for final review and commit.
 - Final `npm run build` and `git diff --check` passed; protected branch and stash pointers remained unchanged before commit.
+- Committed the Todo cross-entry slice as `43c36a2 feat: add todo cross-entry parity`.
+- Started phase 59 for Todo-detail record relationship creation/removal; selected record ownership and exclusive-source invariants before editing.
+- Added store-backed Todo-side record link/unlink controls; `npm run build` passed after implementation.
+- Added the relationship persistence/exclusive-source Playwright contract. Its corrected focused run passed 1/1 after replacing a whole-panel text assertion with a linked-row command assertion.
+- Full `scripts/check.ps1` passed syntax checks and 10/10 Vue Playwright tests.
+- Relationship controls passed desktop 1440px and mobile 390px visual review. The desktop `.vue-main` scroll container exposed the full sticky panel (`scrollHeight 1540`, `clientHeight 1000`) with no horizontal overflow; the mobile full page also had `scrollWidth === clientWidth`.
+- Updated Todo parity evidence; final `npm run build` and `git diff --check` passed before the phase 61 commit.

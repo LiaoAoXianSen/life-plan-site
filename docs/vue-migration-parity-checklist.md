@@ -17,7 +17,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Area | Legacy baseline | Vue baseline | Blocking gaps | Replacement acceptance |
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview plus exact Todo detail links from today and floating lists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
-| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record deep navigation, and `todoAppData` mirror rebuild. | Relationship editing from Todo detail and Todo independent remote flows remain incomplete. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
+| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record deep navigation, and `todoAppData` mirror rebuild. | Todo independent remote flows remain incomplete. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
 | Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | List/calendar views plus basic create/delete. Day view preserves fixed 160px timed event width and hover title. | Full editor, preview, templates, linked todos, detail interactions, and legacy filters are incomplete. | Users can create, preview, edit, delete, and link records/todos with legacy-compatible `todoIds`, tombstones, and snapshots where applicable. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Status filtering, colors, tags/search, and basic todo conversion exist. | Detail editing and old AI/next-action flows need parity audit. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
@@ -80,7 +80,6 @@ Status: verified locally
 
 Remaining Todo scope:
 
-- Relationship creation/removal from the Todo detail.
 - Independent Todo remote preview/apply/upload diagnostics and conflict handling.
 
 ### Todo Filters And Record Deep Links
@@ -104,3 +103,14 @@ Status: verified locally
 - Provide legacy today, tomorrow, this-week, next-week, and no-date presets while keeping their values draft-only until the user saves.
 - Keep route and preset-only actions read-only: Playwright asserts the exact `lifePlanData` string remains unchanged and no `todoAppData` mirror is created.
 - Verify detail editing and day-calendar layouts at 1440px and 390px widths with zero page-level horizontal overflow.
+
+### Todo Record Relationship Editing Slice
+
+Status: verified locally
+
+- Add ordinary record relationships from Todo detail by updating the record-owned `todoIds` field.
+- Remove ordinary and idea-origin relationships by clearing the selected Todo from `record.todoIds` and `record.ideaTodoId` together.
+- Preserve exclusive-source invariants by showing the source record without an unlink command when `isExclusive` and `sourceRecordId` identify it.
+- Persist touched record timestamps and rebuild `todoAppData` through the existing `lifePlan.mutate` repository path.
+- Add Playwright coverage for added/removed record fields, timestamps, mirror authority, and the protected exclusive-source UI.
+- Verify the relationship controls at 1440px and 390px widths, including the desktop internal scroll container and zero horizontal overflow.

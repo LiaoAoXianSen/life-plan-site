@@ -217,6 +217,54 @@ test('todo dashboard route presets and calendar entries preserve one read-only d
     expect(persisted.mirror).toBeNull();
 });
 
+test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
+    const source = emptyData({
+        records: [
+            { id: 'record-linked', type: '日记', title: '已有关联记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: ['todo-relations'], updatedAt: '2026-07-27T08:00:00' },
+            { id: 'record-available', type: '工作记录', title: '待关联记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [], updatedAt: '2026-07-27T08:00:00' },
+            { id: 'idea-source', type: '灵感碎片', title: '灵感来源记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [], ideaTodoId: 'todo-relations', updatedAt: '2026-07-27T08:00:00' },
+            { id: 'exclusive-source', type: '日记', title: '专属来源记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: ['todo-exclusive-source'], updatedAt: '2026-07-27T08:00:00' },
+        ],
+        todos: [
+            { id: 'todo-relations', text: '关系编辑待办', note: '', done: false, dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他', subTodos: [], sessions: [], completedAt: '', sourceType: 'manual', sourceRecordId: '', sourceMatchKey: '关系编辑待办', createdAt: '2026-07-27T08:00:00', updatedAt: '2026-07-27T08:00:00' },
+            { id: 'todo-exclusive-source', text: '专属来源待办', note: '', done: false, dueDate: '2026-07-27', planStartDate: '2026-07-27', planEndDate: '2026-07-27', urgency: 'medium', group: '记录', subTodos: [], sessions: [], isExclusive: true, completedAt: '', sourceType: 'record', sourceRecordId: 'exclusive-source', sourceMatchKey: '专属来源待办', createdAt: '2026-07-27T08:00:00', updatedAt: '2026-07-27T08:00:00' },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/todos?todo=todo-relations');
+    const detail = page.locator('.todo-detail-panel');
+
+    await detail.getByLabel('选择要关联的记录').selectOption('record-available');
+    await detail.getByRole('button', { name: '关联', exact: true }).click();
+    await expect(detail).toContainText('待关联记录');
+    await expect(detail.getByRole('status')).toHaveText('记录已关联');
+
+    page.once('dialog', dialog => dialog.accept());
+    await detail.getByRole('button', { name: '解除关联 已有关联记录' }).click();
+    await expect(detail.getByRole('button', { name: '解除关联 已有关联记录' })).toHaveCount(0);
+    page.once('dialog', dialog => dialog.accept());
+    await detail.getByRole('button', { name: '解除关联 灵感来源记录' }).click();
+    await expect(detail.getByRole('button', { name: '解除关联 灵感来源记录' })).toHaveCount(0);
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    expect(stored.data.records.find(item => item.id === 'record-available').todoIds).toEqual(['todo-relations']);
+    expect(stored.data.records.find(item => item.id === 'record-linked').todoIds).toEqual([]);
+    expect(stored.data.records.find(item => item.id === 'idea-source').ideaTodoId).toBe('');
+    for (const id of ['record-available', 'record-linked', 'idea-source']) {
+        expect(stored.data.records.find(item => item.id === id).updatedAt).not.toBe('2026-07-27T08:00:00');
+    }
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.mirror.todos.map(item => item.id)).toEqual(expect.arrayContaining(['todo-relations', 'todo-exclusive-source']));
+
+    await page.goto('/#/todos?todo=todo-exclusive-source');
+    await expect(detail).toContainText('专属来源记录');
+    await expect(detail).toContainText('专属来源');
+    await expect(detail.getByRole('button', { name: '解除关联 专属来源记录' })).toHaveCount(0);
+});
+
 test('habit quick check-in writes the legacy fields and rebuilds its local mirror', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({
