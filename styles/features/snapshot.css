@@ -1,0 +1,174 @@
+    .snapshot-help {
+        padding: 12px 13px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #f6faf7;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+        margin-bottom: 14px;
+    }
+    .snapshot-storage-notice {
+        display: grid;
+        gap: 4px;
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border: 1px solid #d7e6dc;
+        border-radius: 12px;
+        background: #f8fcf9;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+    }
+    .snapshot-storage-notice:empty {
+        display: none;
+    }
+    .snapshot-storage-notice strong {
+        color: var(--text);
+        font-size: 13px;
+    }
+    .snapshot-storage-notice.is-warning {
+        border-color: #e7cf92;
+        background: #fff9e8;
+        color: #735b22;
+    }
+    .critical-failure-log {
+        display: grid;
+        gap: 8px;
+        margin: 0 0 12px;
+    }
+    .critical-failure-log:empty {
+        display: none;
+    }
+    .critical-failure-item {
+        padding: 10px 12px;
+        border: 1px solid #e9b9ad;
+        border-radius: 12px;
+        background: #fff4f1;
+        color: #7d2f1e;
+        font-size: 12px;
+        line-height: 1.55;
+    }
+    .critical-failure-item strong {
+        display: block;
+        color: #5f2115;
+        font-size: 13px;
+    }
+    .snapshot-list {
+        display: grid;
+        gap: 10px;
+        max-height: 48vh;
+        overflow: auto;
+        padding-right: 2px;
+    }
+    .snapshot-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 13px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fff;
+    }
+    .snapshot-main { min-width: 0; }
+    .snapshot-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-wrap: wrap;
+        font-weight: 850;
+        color: var(--text);
+        margin-bottom: 4px;
+        overflow-wrap: anywhere;
+    }
+    .snapshot-version-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 21px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: #e3f0e8;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 900;
+    }
+    .snapshot-meta {
+        color: var(--faint);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+    .snapshot-relation {
+        margin-top: 4px;
+        color: #607267;
+        font-size: 12px;
+        line-height: 1.55;
+        overflow-wrap: anywhere;
+    }
+    .snapshot-actions {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .snapshot-empty {
+        padding: 18px;
+        text-align: center;
+        color: var(--faint);
+        border: 1px dashed var(--line);
+        border-radius: 14px;
+        background: var(--surface-soft);
+    }
+    .snapshot-preview {
+        margin-bottom: 12px;
+    }
+    .snapshot-preview-card {
+        border: 1px solid #cfe0d5;
+        border-radius: 16px;
+        background:
+            linear-gradient(135deg, rgba(255,255,255,.96), rgba(239,248,242,.92));
+        padding: 13px;
+        box-shadow: 0 12px 26px rgba(44, 75, 54, .08);
+    }
+    .snapshot-preview-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: flex-start;
+        margin-bottom: 9px;
+    }
+    .snapshot-version {
+        font-weight: 900;
+        color: var(--text);
+        overflow-wrap: anywhere;
+    }
+    .snapshot-preview-stats {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin: 10px 0;
+    }
+    .snapshot-preview-stats span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 2px 9px;
+        border-radius: 999px;
+        background: #edf6f0;
+        color: #456354;
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .snapshot-preview-list {
+        border-top: 1px dashed #cedbd3;
+        padding-top: 9px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.7;
+    }
+    .snapshot-preview-list strong {
+        display: block;
+        color: var(--text);
+        margin-bottom: 3px;
+    }
+

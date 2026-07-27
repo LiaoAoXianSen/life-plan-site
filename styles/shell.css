@@ -1,0 +1,91 @@
+    .sidebar {
+        width: 248px;
+        background: rgba(255,255,255,.86);
+        border-right: 1px solid var(--line);
+        padding: 22px 14px;
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        backdrop-filter: blur(18px);
+        min-height: 0;
+    }
+    .sidebar h2 {
+        padding: 0 10px 18px;
+        font-size: 18px;
+        line-height: 1.25;
+        color: var(--text);
+        font-weight: 750;
+        border-bottom: 1px solid var(--line);
+        margin-bottom: 14px;
+    }
+    .sidebar h2::after {
+        content: "Personal OS";
+        display: block;
+        margin-top: 5px;
+        font-size: 11px;
+        color: var(--faint);
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .nav-item {
+        padding: 11px 12px;
+        margin: 3px 0;
+        cursor: pointer;
+        transition: .18s ease;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-radius: var(--radius);
+        border: 1px solid transparent;
+        font-weight: 650;
+    }
+    .nav-item:hover { background: var(--surface-soft); color: var(--text); }
+    .nav-item.active {
+        background: #eaf4ee;
+        color: var(--accent);
+        border-color: #cfe0d5;
+        box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .nav-list {
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 3px;
+    }
+    .sidebar-primary-action {
+        margin-top: auto;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+    }
+    .sidebar-primary-action .btn {
+        width: 100%;
+
+    .sidebar-bottom {
+        margin-top: 10px;
+        padding-top: 0;
+        border-top: none;
+        flex: 0 0 auto;
+    }
+    .sidebar-bottom summary {
+        display: none;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 850;
+        list-style: none;
+    }
+    .sidebar-bottom summary::-webkit-details-marker { display: none; }
+    .sidebar-button-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .sidebar-button-row .btn {
+        width: 100%;
+    }
+    .sidebar-button-row-compact .btn {
+        min-height: 34px;
+        padding-inline: 10px;
+    }
+    }

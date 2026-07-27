@@ -31,3 +31,10 @@ playwright-report/
 # Local planning notes (agent scratchpad)
 .planning/
 .zcode/
+
+# Local backups (kept for rollback)
+*.bak
+
+# Local design experiments (not shipped)
+docs/redesign/
+mobile-app/
