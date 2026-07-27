@@ -71,7 +71,7 @@
         cursor: pointer;
         color: var(--muted);
         font-size: 12px;
-        font-weight: 850;
+        font-weight: 700;
         list-style: none;
     }
     .sidebar-bottom summary::-webkit-details-marker { display: none; }

@@ -1,7 +1,7 @@
     .timeline-group { margin-bottom: 24px; position: relative; }
     .timeline-date {
         font-size: 13px;
-        font-weight: 850;
+        font-weight: 700;
         color: var(--accent);
         margin-bottom: 10px;
         display: flex;
@@ -79,7 +79,7 @@
     .record-time {
         color: #41554b;
         font-size: 13px;
-        font-weight: 850;
+        font-weight: 700;
         padding: 14px 10px 0 0;
         text-align: right;
         font-variant-numeric: tabular-nums;

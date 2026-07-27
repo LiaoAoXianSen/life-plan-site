@@ -1,5 +1,5 @@
     .type-section { margin-bottom: 20px; }
-    .type-section h4 { font-size: 12px; color: var(--muted); margin-bottom: 10px; font-weight: 850; letter-spacing: .04em; }
+    .type-section h4 { font-size: 12px; color: var(--muted); margin-bottom: 10px; font-weight: 700; letter-spacing: .04em; }
     .type-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
     .type-card {
         padding: 15px 10px;
@@ -35,7 +35,7 @@
     }
     .template-editor-title {
         font-size: 13px;
-        font-weight: 850;
+        font-weight: 700;
         color: var(--accent);
     }
     .template-editor-meta { margin-top: 3px; font-size: 12px; color: var(--muted); line-height: 1.6; }
@@ -62,7 +62,7 @@
     .template-field summary {
         cursor: pointer;
         padding: 10px 12px;
-        font-weight: 850;
+        font-weight: 700;
         color: var(--text);
         list-style: none;
     }
@@ -122,7 +122,7 @@
         padding: 2px 8px;
         border-radius: 999px;
         font-size: 11px;
-        font-weight: 850;
+        font-weight: 700;
         border: 1px solid #d8e5dd;
         background: #f6faf7;
         color: #4d6358;
@@ -271,7 +271,7 @@
     .search-group-title {
         margin-bottom: 8px;
         color: var(--text);
-        font-weight: 900;
+        font-weight: 700;
     }
     .search-result-list { display: grid; gap: 9px; }
     .search-result-item {

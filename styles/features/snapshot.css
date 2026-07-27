@@ -77,7 +77,7 @@
         align-items: center;
         gap: 7px;
         flex-wrap: wrap;
-        font-weight: 850;
+        font-weight: 700;
         color: var(--text);
         margin-bottom: 4px;
         overflow-wrap: anywhere;
@@ -91,7 +91,7 @@
         background: #e3f0e8;
         color: var(--accent);
         font-size: 12px;
-        font-weight: 900;
+        font-weight: 700;
     }
     .snapshot-meta {
         color: var(--faint);
@@ -138,7 +138,7 @@
         margin-bottom: 9px;
     }
     .snapshot-version {
-        font-weight: 900;
+        font-weight: 700;
         color: var(--text);
         overflow-wrap: anywhere;
     }

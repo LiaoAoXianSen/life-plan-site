@@ -56,7 +56,7 @@
         gap: 16px;
         margin-bottom: 18px;
     }
-    .page-title { font-size: 24px; font-weight: 800; color: var(--text); }
+    .page-title { font-size: 24px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
     .page-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
     .card {
@@ -69,7 +69,7 @@
     }
     .card-title {
         font-size: 15px;
-        font-weight: 800;
+        font-weight: 650;
         color: var(--text);
         margin-bottom: 13px;
         display: flex;
@@ -82,8 +82,8 @@
         font-size: 12px;
         color: var(--faint);
         margin-bottom: 10px;
-        font-weight: 800;
-        letter-spacing: .04em;
+        font-weight: 600;
+        letter-spacing: .06em;
         text-transform: uppercase;
     }
 
@@ -102,7 +102,7 @@
         border-radius: 7px;
         padding: 7px 12px;
         cursor: pointer;
-        font-weight: 850;
+        font-weight: 700;
         transition: color .18s ease, background .18s ease;
     }
     .segmented button:hover { color: var(--text); }
@@ -136,7 +136,7 @@
     .modal-md { width: min(700px, 100%); }
     .modal-lg { width: min(880px, 100%); }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 14px; }
-    .modal-title { font-size: 18px; font-weight: 850; color: var(--text); }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--text); }
     .close-btn { background: var(--surface-soft); border: 1px solid var(--line); border-radius: var(--radius-pill); width: 34px; height: 34px; cursor: pointer; color: var(--muted); line-height: 1; transition: color .18s ease, background .18s ease, border-color .18s ease; }
     .close-btn:hover { color: var(--text); background: #fff; border-color: #d6d0bd; }
     .form-group { margin-bottom: 15px; }
@@ -161,7 +161,7 @@
         margin: 18px 0 10px;
         color: var(--text);
         font-size: 13px;
-        font-weight: 900;
+        font-weight: 700;
     }
     .mini-link {
         margin-top: 7px;
