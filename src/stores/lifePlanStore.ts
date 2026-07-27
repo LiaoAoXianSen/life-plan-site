@@ -37,5 +37,13 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
     commit(reason, source);
   }
 
-  return { data, isLoaded, lastError, openTodos, load, commit, mutate, replace };
+  function importData(raw: unknown) {
+    data.value = lifePlanRepository.mergeImport(data.value, raw);
+  }
+
+  function exportData() {
+    lifePlanRepository.exportData(data.value);
+  }
+
+  return { data, isLoaded, lastError, openTodos, load, commit, mutate, replace, importData, exportData };
 });

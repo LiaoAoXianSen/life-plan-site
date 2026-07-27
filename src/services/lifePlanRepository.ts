@@ -53,6 +53,12 @@ export class LifePlanRepository {
     return this.commit(merged, 'import-merge', 'sync');
   }
 
+  exportData(data: LifePlanData) {
+    this.createSnapshot('手动导出备份', data, { action: 'export' });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    this.services.snapshots.downloadJsonFile(`life-plan-backup-${stamp}.json`, data);
+  }
+
   private rebuildTodoMirror(data: LifePlanData, reason: string) {
     const sourceHash = this.services.sync.getDataHash({ todos: data.todos, deletedItems: data.deletedItems.filter(item => item.collection === 'todos') });
     const built = this.services.todos.buildTodoAppLocalMirror(data, {
