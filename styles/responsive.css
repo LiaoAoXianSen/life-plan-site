@@ -1,0 +1,192 @@
+    @media (max-width: 980px) {
+        body { display: block; height: auto; overflow: auto; overflow-x: hidden; }
+        .sidebar {
+            width: 100%;
+            display: block;
+            position: relative;
+            top: auto;
+            z-index: 1;
+            padding: 10px 12px;
+            border-right: none;
+            border-bottom: 1px solid var(--line);
+            overflow: visible;
+        }
+        .sidebar h2 {
+            margin-bottom: 8px;
+            padding: 0 4px 8px;
+            font-size: 16px;
+        }
+        .sidebar h2::after { display: none; }
+        .nav-list {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 0 0 6px;
+            margin: 0 -2px;
+            scrollbar-width: thin;
+        }
+        .nav-item {
+            display: inline-flex;
+            flex: 0 0 auto;
+            width: auto;
+            margin: 0;
+            padding: 8px 10px;
+            white-space: nowrap;
+        }
+        .nav-item.active { box-shadow: inset 0 -3px 0 var(--accent); }
+        .sidebar-bottom {
+            margin-top: 6px;
+            padding-top: 8px;
+            display: block;
+        }
+        .sidebar-primary-action {
+            margin-top: 6px;
+            padding-top: 8px;
+        }
+        .sidebar-primary-action .btn {
+            min-height: 34px;
+            padding: 7px 10px;
+        }
+        .sidebar-bottom summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+            min-height: 30px;
+            padding: 5px 7px 5px 10px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: rgba(255,255,255,.76);
+        }
+        .sync-status-stack {
+            flex: 0 1 auto;
+        }
+        .sync-status-inline {
+            max-width: 82px;
+            padding: 3px 6px;
+            font-size: 10px;
+        }
+        .sidebar-bottom[open] {
+            display: grid;
+            grid-template-columns: minmax(0, .8fr) minmax(0, 1.1fr) minmax(0, 1.1fr);
+            gap: 6px;
+            align-items: start;
+        }
+        .sidebar-bottom[open] summary { grid-column: 1 / -1; }
+        .sidebar-button-row {
+            margin-top: 0;
+            gap: 6px;
+        }
+        .sidebar-button-row .btn {
+            min-height: 32px;
+            padding: 6px 8px;
+            font-size: 12px;
+        }
+        .sync-status {
+            grid-column: 1 / -1;
+            min-height: 0;
+            max-height: none;
+            margin-top: 0;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+        .main { width: 100%; height: auto; overflow: visible; padding: 18px 14px 38px; }
+        .page, .card, .hero-panel { max-width: 100%; }
+        .dashboard-hero, .today-grid, .command-center { grid-template-columns: 1fr; }
+        .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .habit-center-hero { grid-template-columns: 1fr; }
+        .habit-center-sync-note { align-content: start; }
+        .habit-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .habit-kpi-card.wide { grid-column: 1 / -1; }
+        .habit-center-toolbar { align-items: stretch; }
+        .habit-center-toolbar-actions { justify-content: flex-start; }
+        .habit-library-row { min-width: 820px; }
+        .habit-diagnostics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .habit-diagnostics-layout { grid-template-columns: 1fr; }
+        .todo-table { min-width: 860px; }
+        #page-todos { overflow-x: auto; }
+    }
+
+    @media (max-width: 640px) {
+        .page-header, .heatmap-header, .goal-card, .period-item { grid-template-columns: 1fr; display: grid; align-items: stretch; }
+        .page-actions { justify-content: stretch; }
+        .page-actions .btn, .page-header .btn { width: 100%; }
+        .summary-grid, .stats-grid, .type-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .habit-center-hero { padding: 16px; border-radius: 20px; }
+        .habit-center-title-block h2 { font-size: 22px; }
+        .habit-kpi-grid { grid-template-columns: 1fr; }
+        .habit-kpi-card.wide { grid-column: auto; }
+        .habit-center-toolbar { gap: 10px; }
+        .habit-center-tabs { width: 100%; overflow-x: auto; justify-content: flex-start; }
+        .habit-center-tabs button { flex: 0 0 auto; }
+        .habit-center-toolbar-actions { width: 100%; }
+        .habit-center-toolbar-actions input[type="date"],
+        .habit-center-toolbar-actions select { flex: 1 1 150px; max-width: none !important; }
+        .habit-diagnostics-guard { display: grid; }
+        .habit-diagnostics-pill { justify-self: flex-start; }
+        .habit-diagnostics-grid { grid-template-columns: 1fr; }
+        .habit-mapping-row { grid-template-columns: 1fr; }
+        .habit-mapping-target { text-align: left; }
+        .habit-dualwrite-path-row { grid-template-columns: 1fr; }
+        .habit-dualwrite-path-row b { justify-self: flex-start; }
+        .habit-consistency-row,
+        .habit-consistency-balance-row {
+            grid-template-columns: 1fr 1fr;
+        }
+        .habit-consistency-row b,
+        .habit-consistency-balance-row b {
+            grid-column: 1 / -1;
+            justify-self: flex-start;
+        }
+        .habit-remote-preview-head,
+        .habit-remote-preview-verdict { display: grid; }
+        .habit-remote-preview-head .habit-dualwrite-status { justify-self: flex-start; }
+        .habit-remote-preview-verdict span { text-align: left; }
+        .habit-section-head { display: grid; grid-template-columns: 1fr; }
+        .habit-section-head .btn { width: 100%; }
+        .form-row { grid-template-columns: 1fr; }
+        .quick-create { grid-template-columns: 1fr; }
+        .filter-bar input, .filter-bar select { width: 100%; }
+        .todo-item { align-items: flex-start; flex-wrap: wrap; }
+        .todo-text { flex-basis: calc(100% - 34px); }
+        .todo-actions { width: 100%; padding-left: 26px; justify-content: flex-start; }
+        .section-title-row { align-items: center; }
+        .todo-pool-toolbar { gap: 3px; }
+        .todo-pool-toolbar .btn { padding-inline: 5px; font-size: 10px; }
+        .todo-session-editor { grid-template-columns: 1fr; }
+        .todo-session-item { align-items: stretch; flex-direction: column; }
+        .todo-session-item .btn { align-self: flex-start; }
+        .modal-action-row { align-items: stretch; flex-direction: column; }
+        .modal-action-right { justify-content: stretch; }
+        .modal-action-row .btn { width: 100%; }
+        .global-search-panel { grid-template-columns: 1fr; }
+        .idea-detail-grid { grid-template-columns: 1fr; }
+        .search-result-item { grid-template-columns: 1fr; }
+        .modal { padding: 18px; }
+        .ai-result-head { flex-direction: column; align-items: stretch; }
+        .ai-result-head .btn { width: 100%; }
+        .ai-result-draft-meta { grid-template-columns: 1fr; }
+        .habit-wallet-card,
+        .habit-shop-grid {
+            grid-template-columns: 1fr;
+        }
+        .habit-wallet-actions {
+            justify-content: stretch;
+        }
+        .habit-wallet-actions .btn {
+            flex: 1 1 140px;
+        }
+        .habit-quick-head { flex-direction: column; align-items: stretch; }
+        .habit-quick-status { align-self: flex-start; }
+        .habit-quick-actions { justify-content: flex-start; flex-wrap: wrap; width: 100%; }
+        .habit-quick-btn { width: auto; padding-inline: 12px; }
+        .habit-history-item { grid-template-columns: 1fr; align-items: stretch; }
+        .habit-history-item .btn { width: 100%; justify-content: center; }
+        .sidebar-button-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .sidebar-bottom[open] { grid-template-columns: 1fr 1fr; }
+        .card-title { display: block; }
+        .record-row { grid-template-columns: 48px minmax(0, 1fr); gap: 8px; }
+        .calendar-grid { grid-template-columns: repeat(7, minmax(96px, 1fr)); overflow-x: auto; }
+    }

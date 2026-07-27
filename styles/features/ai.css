@@ -1,0 +1,396 @@
+    .ai-settings-note {
+        padding: 12px 13px;
+        border: 1px solid #d9e5de;
+        border-radius: var(--radius);
+        background: #f6faf7;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.65;
+        margin-bottom: 14px;
+    }
+    .ai-key-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+    }
+    .ai-key-storage-status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: #f2f7f4;
+        border: 1px solid #d8e4dc;
+        color: #61756b;
+        font-size: 12px;
+        font-weight: 750;
+    }
+    .ai-key-storage-status.is-warning {
+        background: #fff7e7;
+        border-color: #e8d18d;
+        color: #8c6821;
+    }
+    .ai-assistant-subtitle {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .ai-mode-tabs {
+        margin-bottom: 14px;
+    }
+    .ai-context-panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface-soft);
+        padding: 13px;
+        margin-bottom: 14px;
+    }
+    .ai-context-title {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 900;
+        margin-bottom: 9px;
+        letter-spacing: .03em;
+    }
+    .ai-context-panel select {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    .ai-context-metrics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-bottom: 10px;
+    }
+    .ai-context-metrics span {
+        min-height: 24px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid #d8e5dd;
+        background: #fff;
+        color: #456354;
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .ai-context-summary {
+        color: #44554a;
+        font-size: 13px;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+    }
+    .ai-action-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .ai-run-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-width: 110px;
+    }
+    .ai-run-button:disabled {
+        cursor: wait;
+        opacity: .88;
+        transform: none;
+    }
+    .ai-run-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,.42);
+        border-top-color: #fff;
+        border-radius: 999px;
+        display: none;
+    }
+    .ai-run-button.is-loading .ai-run-spinner {
+        display: inline-block;
+        animation: aiSpin .72s linear infinite;
+    }
+    @keyframes aiSpin {
+        to { transform: rotate(360deg); }
+    }
+    .ai-result-panel {
+        margin-top: 14px;
+    }
+    .ai-result-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 14px;
+        border: 1px solid #d8e5dd;
+        border-radius: var(--radius);
+        background: #fff;
+        padding: 13px;
+        margin-bottom: 10px;
+    }
+    .ai-result-title {
+        font-weight: 900;
+        color: var(--text);
+        line-height: 1.35;
+    }
+    .ai-result-summary {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+    }
+    .ai-target-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+    }
+    .ai-target-row span {
+        padding: 3px 9px;
+        border: 1px solid #d8e5dd;
+        border-radius: 999px;
+        background: #f6faf7;
+        color: #456354;
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .ai-result-list {
+        display: grid;
+        gap: 9px;
+    }
+    .ai-result-item {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+        padding: 12px 13px;
+        display: grid;
+        gap: 7px;
+    }
+    .ai-result-item-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+    }
+    .ai-result-item-head .ai-result-select {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .ai-result-item-head .btn {
+        flex: 0 0 auto;
+    }
+    .ai-result-select {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        min-width: 0;
+        cursor: pointer;
+    }
+    .ai-result-select input[type="checkbox"] {
+        width: 17px;
+        height: 17px;
+        margin: 2px 0 0;
+        accent-color: var(--accent);
+        flex: 0 0 auto;
+        cursor: pointer;
+    }
+    .ai-result-item strong {
+        color: var(--text);
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+    .ai-result-item span {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+    }
+    .ai-result-draft {
+        gap: 8px;
+    }
+    .ai-result-draft label {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+    }
+    .ai-result-draft .ai-result-select {
+        display: flex;
+    }
+    .ai-result-draft label span {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 800;
+    }
+    .ai-result-draft input:not([type="checkbox"]),
+    .ai-result-draft textarea,
+    .ai-result-draft select {
+        width: 100%;
+        border: 1px solid #d8e4dc;
+        border-radius: 10px;
+        background: #fbfdfb;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.55;
+        padding: 8px 10px;
+        outline: none;
+    }
+    .ai-result-draft textarea {
+        resize: vertical;
+    }
+    .ai-result-draft input:not([type="checkbox"]):focus,
+    .ai-result-draft textarea:focus,
+    .ai-result-draft select:focus {
+        border-color: #8bb79a;
+        box-shadow: 0 0 0 3px rgba(139, 183, 154, .18);
+        background: #fff;
+    }
+    .ai-result-draft-meta {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 110px 150px;
+        gap: 8px;
+    }
+    .ai-capture-section-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .ai-capture-section {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: start;
+        padding: 12px;
+        border: 1px solid #dfe8e2;
+        border-radius: var(--radius);
+        background: rgba(255,255,255,.9);
+    }
+    .ai-capture-section strong {
+        display: block;
+        color: var(--accent);
+        font-size: 13px;
+        margin-bottom: 5px;
+    }
+    .ai-capture-section p {
+        margin: 0;
+        color: #44554a;
+        line-height: 1.65;
+        overflow-wrap: anywhere;
+    }
+    .ai-capture-draft,
+    .ai-capture-todo-draft input:not([type="checkbox"]),
+    .ai-capture-todo-draft textarea {
+        width: 100%;
+        border: 1px solid #d8e4dc;
+        border-radius: 10px;
+        background: #fbfdfb;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.55;
+        padding: 8px 10px;
+        outline: none;
+        resize: vertical;
+    }
+    .ai-capture-draft:focus,
+    .ai-capture-todo-draft input:not([type="checkbox"]):focus,
+    .ai-capture-todo-draft textarea:focus {
+        border-color: #8bb79a;
+        box-shadow: 0 0 0 3px rgba(139, 183, 154, .18);
+        background: #fff;
+    }
+    .ai-capture-todo-draft {
+        gap: 8px;
+    }
+    .ai-capture-todo-draft label {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+    }
+    .ai-capture-todo-draft .ai-result-select {
+        display: flex;
+    }
+    .ai-capture-todo-draft label span {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 800;
+    }
+    .ai-capture-todo-meta {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
+    .ai-capture-todo-dates {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .ai-capture-todo-dates label,
+    .ai-result-draft .ai-capture-todo-dates label {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+    }
+    .ai-date-hint {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 700;
+    }
+    .ai-capture-todo-draft.is-existing {
+        border-color: #f0d9a8;
+        background: linear-gradient(180deg, rgba(255, 248, 230, .95), rgba(255,255,255,.92));
+    }
+    .ai-existing-hint {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255, 241, 214, .9);
+        color: #8a5a00;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+    @media (max-width: 720px) {
+        .ai-capture-todo-dates {
+            grid-template-columns: 1fr;
+        }
+    }
+    .ai-capture-todos {
+        margin-top: 12px;
+    }
+    .diary-ai-section-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .diary-ai-section {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: start;
+        padding: 12px;
+        border: 1px solid #dfe8e2;
+        border-radius: var(--radius);
+        background: rgba(255,255,255,.88);
+    }
+    .diary-ai-section strong {
+        display: block;
+        color: var(--accent);
+        font-size: 13px;
+        margin-bottom: 6px;
+    }
+    .diary-ai-draft {
+        min-height: 92px;
+    }
+    .diary-ai-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 12px;
+        flex-wrap: wrap;
+    }
