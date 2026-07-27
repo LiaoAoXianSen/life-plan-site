@@ -28,6 +28,7 @@ export const useTodosStore = defineStore('todos', () => {
     }) as Todo;
     lifePlan.data.todos.unshift(todo);
     lifePlan.commit('create-todo');
+    return todo;
   }
 
   function remove(id: string) {
