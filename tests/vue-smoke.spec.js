@@ -110,6 +110,58 @@ test('todo detail preserves subtasks sessions relationships tombstones and mirro
     ]));
 });
 
+test('todo legacy filters and linked record navigation stay read-only', async ({ page }) => {
+    const todo = (id, text, overrides = {}) => ({
+        id, text, note: '', done: false, dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他',
+        subTodos: [], sessions: [], completedAt: '', sourceType: 'manual', sourceRecordId: '', sourceMatchKey: text,
+        createdAt: '2026-07-27T08:00:00', updatedAt: '2026-07-27T08:00:00', ...overrides,
+    });
+    const source = emptyData({
+        records: [{ id: 'record-filter', type: '日记', title: '筛选关联记录', content: '只读导航目标', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: ['todo-exclusive'] }],
+        todos: [
+            todo('todo-exclusive', '专属工作待办', { dueDate: '2026-07-27', planStartDate: '2026-07-26', planEndDate: '2026-07-28', urgency: 'high', group: '工作', isExclusive: true, sourceRecordId: 'record-filter' }),
+            todo('todo-life', '下周生活待办', { dueDate: '2026-08-03', planStartDate: '2026-08-01', planEndDate: '2026-08-03', urgency: 'low', group: '生活' }),
+            todo('todo-done', '已完成学习待办', { done: true, dueDate: '2026-07-27', planStartDate: '2026-07-27', planEndDate: '2026-07-27', group: '学习', completedAt: '2026-07-27T09:00:00' }),
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/todos');
+    const rows = page.locator('.todo-table tbody tr');
+
+    await page.getByLabel('筛选开始日期').fill('2026-07-27');
+    await page.getByLabel('筛选结束日期').fill('2026-07-27');
+    await expect(rows).toHaveCount(2);
+    await expect(page.locator('.todo-table')).toContainText('专属工作待办');
+    await expect(page.locator('.todo-table')).toContainText('已完成学习待办');
+
+    await page.getByLabel('待办状态').selectOption('open');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('专属工作待办');
+
+    await page.getByLabel('筛选开始日期').fill('');
+    await page.getByLabel('筛选结束日期').fill('');
+    await page.getByLabel('待办状态').selectOption('all');
+    await page.getByLabel('待办分组').selectOption('生活');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('下周生活待办');
+
+    await page.getByLabel('待办分组').selectOption('all');
+    await page.getByLabel('待办类型').selectOption('exclusive');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('专属');
+    await page.getByRole('button', { name: /专属工作待办/ }).click();
+    await page.getByRole('button', { name: /筛选关联记录/ }).click();
+
+    await expect(page).toHaveURL(/#\/records\?record=record-filter$/);
+    const editor = page.locator('.record-editor-panel');
+    await expect(editor).toBeVisible();
+    await expect(editor.getByLabel('标题')).toHaveValue('筛选关联记录');
+    const persisted = await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), mirror: localStorage.getItem('todoAppData') }));
+    expect(persisted.data).toBe(original);
+    expect(persisted.mirror).toBeNull();
+});
+
 test('habit quick check-in writes the legacy fields and rebuilds its local mirror', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({

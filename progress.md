@@ -14,6 +14,13 @@
 - Final standard `scripts/check.ps1` passed all 7 Vue migration tests; `npm run build` completed with 80 transformed modules, and `git diff --check` passed.
 - Updated `docs/vue-migration-parity-checklist.md` with the verified Todo detail contract slice and explicit remaining Todo blockers; this stage does not claim complete Todo parity.
 - Completed migration phases 50-52 and prepared the verified Todo detail parity stage for a local commit on `migration/vue-app-v1`.
+- Committed the verified Todo detail parity stage as `30d274e`.
+- Started phases 53-55 to close legacy Todo filter parity and linked-record deep navigation while keeping all filter/navigation operations read-only.
+- Added start/end date, status, urgency, group, exclusive/shared, and text filters; the date range delegates to the legacy Todo service and the table now exposes exclusive/shared state.
+- Added `record=<id>` deep links between Todo relationships and the Records editor, including direct-load restoration and query cleanup when closing.
+- Added a read-only regression proving all filters and the deep link work while the exact `lifePlanData` string remains unchanged and no Todo mirror is generated.
+- Focused filtering/navigation coverage passed, the full Vue suite passed 8/8, and desktop/mobile screenshot checks confirmed visible date labels and zero page-level horizontal overflow.
+- Final `scripts/check.ps1`, `npm run build`, and `git diff --check` passed for phases 53-55; prepared the verified filter/deep-link stage for a local commit.
 
 
 ## 2026-07-23

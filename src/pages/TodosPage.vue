@@ -12,8 +12,12 @@ const router = useRouter();
 const lifePlan = useLifePlanStore();
 const todosStore = useTodosStore();
 const query = ref('');
+const startDate = ref('');
+const endDate = ref('');
 const status = ref<'all' | 'open' | 'done'>('all');
 const urgency = ref('all');
+const group = ref('all');
+const mode = ref<'all' | 'exclusive' | 'shared'>('all');
 const selectedId = ref('');
 const editing = ref(false);
 const detailError = ref('');
@@ -23,9 +27,13 @@ const form = reactive({ text: '', note: '', dueDate: '', planStartDate: '', plan
 const detailForm = reactive({ text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium' as Todo['urgency'], group: '其他', subTodos: [] as TodoSubTodo[] });
 const sessionForm = reactive({ date: getTodayStr(), startTime: new Date().toTimeString().slice(0, 5), endTime: '', note: '' });
 
+const groupOptions = computed(() => [...new Set(todosStore.todos.map(todo => todo.group || '其他'))].sort((left, right) => left.localeCompare(right, 'zh-CN')));
 const filteredTodos = computed(() => todosStore.todos
+  .filter(todo => (!startDate.value && !endDate.value) || todosStore.services.todos.isTodoInDateRange(todo, startDate.value, endDate.value))
   .filter(todo => status.value === 'all' || (status.value === 'done' ? todo.done : !todo.done))
   .filter(todo => urgency.value === 'all' || todo.urgency === urgency.value)
+  .filter(todo => group.value === 'all' || todo.group === group.value)
+  .filter(todo => mode.value === 'all' || (mode.value === 'exclusive' ? !!todo.isExclusive : !todo.isExclusive))
   .filter(todo => [todo.text, todo.note, todo.group].join(' ').toLowerCase().includes(query.value.trim().toLowerCase()))
   .slice().sort(todosStore.services.todos.compareTodosForFocus));
 const selectedTodo = computed(() => todosStore.todos.find(todo => todo.id === selectedId.value) ?? null);
@@ -138,6 +146,10 @@ function deleteSelectedTodo() {
   selectedId.value = '';
   editing.value = false;
 }
+
+function openLinkedRecord(recordId: string) {
+  void router.push({ path: '/records', query: { record: recordId } });
+}
 </script>
 
 <template>
@@ -162,9 +174,13 @@ function deleteSelectedTodo() {
     </form>
 
     <div class="filter-bar">
-      <input v-model="query" type="search" aria-label="搜索待办" placeholder="搜索待办" />
+      <input v-model="query" class="todo-filter-query" type="search" aria-label="搜索待办" placeholder="搜索待办" />
+      <label class="todo-filter-date"><span>开始</span><input v-model="startDate" type="date" aria-label="筛选开始日期" /></label>
+      <label class="todo-filter-date"><span>结束</span><input v-model="endDate" type="date" aria-label="筛选结束日期" /></label>
       <select v-model="status" aria-label="待办状态"><option value="all">全部状态</option><option value="open">未完成</option><option value="done">已完成</option></select>
       <select v-model="urgency" aria-label="待办紧急度"><option value="all">全部紧急度</option><option value="urgent">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select>
+      <select v-model="group" aria-label="待办分组"><option value="all">全部分组</option><option v-for="item in groupOptions" :key="item" :value="item">{{ item }}</option></select>
+      <select v-model="mode" aria-label="待办类型"><option value="all">全部类型</option><option value="exclusive">专属待办</option><option value="shared">通用待办</option></select>
     </div>
 
     <div class="todo-workspace" :class="{ 'has-detail': selectedTodo }">
@@ -228,7 +244,7 @@ function deleteSelectedTodo() {
 
           <section class="todo-detail-section" aria-labelledby="todo-records-heading">
             <div class="todo-section-heading"><h3 id="todo-records-heading">关联记录</h3><span>{{ linkedRecords.length }} 条</span></div>
-            <button v-for="record in linkedRecords" :key="String(record.id)" class="todo-record-link" type="button" @click="router.push('/records')"><span>{{ record.title || record.type || '未命名记录' }}</span><small>{{ record.type }}{{ record.ideaTodoId === selectedTodo.id ? ' · 灵感来源' : '' }}</small></button>
+            <button v-for="record in linkedRecords" :key="String(record.id)" class="todo-record-link" type="button" @click="openLinkedRecord(String(record.id))"><span>{{ record.title || record.type || '未命名记录' }}</span><small>{{ record.type }}{{ record.ideaTodoId === selectedTodo.id ? ' · 灵感来源' : '' }}</small></button>
             <p v-if="!linkedRecords.length" class="todo-detail-empty">暂无关联记录。</p>
           </section>
 

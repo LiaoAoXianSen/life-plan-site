@@ -17,7 +17,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Area | Legacy baseline | Vue baseline | Blocking gaps | Replacement acceptance |
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview exists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
-| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail editing, subtask completion, execution sessions, relationship visibility, and `todoAppData` mirror rebuild. | Date/group/exclusive filters, relationship editing, direct record-preview navigation, presets, and Todo independent remote flows remain incomplete. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
+| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail editing, subtask completion, execution sessions, legacy date/group/exclusive filters, linked-record deep navigation, and `todoAppData` mirror rebuild. | Relationship editing from Todo detail, date presets/remaining entry points, and Todo independent remote flows remain incomplete. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
 | Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | List/calendar views plus basic create/delete. Day view preserves fixed 160px timed event width and hover title. | Full editor, preview, templates, linked todos, detail interactions, and legacy filters are incomplete. | Users can create, preview, edit, delete, and link records/todos with legacy-compatible `todoIds`, tombstones, and snapshots where applicable. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Status filtering, colors, tags/search, and basic todo conversion exist. | Detail editing and old AI/next-action flows need parity audit. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
@@ -80,7 +80,17 @@ Status: verified locally
 
 Remaining Todo scope:
 
-- Legacy date-range, group, and exclusive/shared filters.
-- Relationship creation/removal from the Todo detail and direct opening of a specific linked record preview.
+- Relationship creation/removal from the Todo detail.
 - Legacy date presets and any remaining dashboard/calendar Todo detail entry points.
 - Independent Todo remote preview/apply/upload diagnostics and conflict handling.
+
+### Todo Filters And Record Deep Links
+
+Status: verified locally
+
+- Reuse `todos-service.js.isTodoInDateRange` for legacy-compatible start/end filtering, alongside status, urgency, group, exclusive/shared, and text filters.
+- Show the legacy `isExclusive` distinction as a dedicated table column instead of keeping it as hidden filter-only state.
+- Navigate linked Todo records through `#/records?record=<id>` and restore the exact record editor from that query on direct load or refresh.
+- Remove the `record` query when the editor closes, preserving predictable back/refresh behavior.
+- Keep filtering and navigation read-only: regression coverage asserts the exact `lifePlanData` storage string remains unchanged and no `todoAppData` mirror is created.
+- Verify the seven-control filter surface at 390px and 1440px widths, including visible start/end date labels and zero page-level horizontal overflow.

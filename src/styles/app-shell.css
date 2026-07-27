@@ -80,7 +80,9 @@
 }
 
 .todo-page-summary { margin-top: 4px; color: var(--muted); font-size: 13px; }
-#page-todos .filter-bar { grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, .45fr)); }
+#page-todos .filter-bar { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+#page-todos .filter-bar .todo-filter-query { grid-column: span 2; }
+#page-todos .filter-bar .todo-filter-date { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; min-width: 0; }
 .todo-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 14px; align-items: start; }
 .todo-list-pane { min-width: 0; overflow-x: auto; }
 .todo-table tbody tr.selected td { background: var(--accent-soft); }
@@ -137,6 +139,7 @@
 
 @media (max-width: 640px) {
   #page-todos .filter-bar { grid-template-columns: minmax(0, 1fr); }
+  #page-todos .filter-bar .todo-filter-query { grid-column: 1; }
   .todo-detail-panel { padding: 13px; }
   .todo-session-form { grid-template-columns: minmax(0, 1fr); }
   .todo-session-form input, .todo-session-form input[aria-label="执行备注"], .todo-session-form button { grid-column: 1; }

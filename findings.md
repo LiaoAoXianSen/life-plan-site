@@ -10,6 +10,8 @@
 - No development or Playwright process was running when this continuation began, and the worktree had no staged or unstaged changes.
 - Desktop/mobile screenshot review found that the legacy Todo filter grid assumed eight controls while Vue renders three, compressing the mobile controls. Vue now overrides that grid to three desktop columns and one mobile column.
 - Screenshot review also found unstyled detail-row delete actions; the Vue detail panel now supplies local link-button danger/focus states without changing legacy styles.
+- The legacy Todo filters can be reused directly through `todos-service.js.isTodoInDateRange`; Vue only lacks start/end, group, and exclusive/shared controls.
+- `RecordsPage.vue` already owns `openEditor()`. A `record` route query can restore a specific editor without changing record data, and clearing the editor should remove that query so back/refresh behavior stays predictable.
 
 
 ## 2026-07-23

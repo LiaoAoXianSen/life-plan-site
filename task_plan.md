@@ -68,6 +68,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 50. Status: complete - Audit and implement the next bounded replacement blocker, prioritizing Todo detail/subtask/session/relationship parity, with legacy-vs-Vue data-contract tests.
 51. Status: complete - Run focused Vue tests, production build, full Vue suite, isolated master legacy verification, and `git diff --check`; fix all regressions in scope.
 52. Status: complete - Update parity acceptance evidence and migration progress, then commit the verified stage without touching protected branches or stash.
+53. Status: complete - Add legacy-compatible Todo date/group/exclusive filters and linked-record deep navigation without mutating persisted data.
+54. Status: complete - Add read-only filtering/navigation regression coverage and rerun Vue build/check plus responsive verification.
+55. Status: complete - Update parity evidence and commit the verified Todo navigation/filter stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

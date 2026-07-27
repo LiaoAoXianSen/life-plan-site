@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
 import { buildScheduleItems, addDays, getMonthStart, getWeekStart } from '../utils/schedule';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -22,6 +23,8 @@ type RecordEntity = DataEntity & {
 
 const lifePlan = useLifePlanStore();
 const records = useRecordsStore();
+const route = useRoute();
+const router = useRouter();
 const today = () => new Date().toISOString().slice(0, 10);
 const form = reactive({ title: '', content: '', type: '记录', startDate: today(), recordTime: '', recordEndTime: '' });
 const editForm = reactive({
@@ -82,7 +85,14 @@ function recordTodoIds(record: DataEntity): string[] {
   return Array.isArray(record.todoIds) ? record.todoIds.map(String).filter(Boolean) : [];
 }
 
-function openEditor(record: DataEntity) {
+function updateRecordQuery(recordId = '') {
+  const query = { ...route.query };
+  if (recordId) query.record = recordId;
+  else delete query.record;
+  void router.replace({ path: route.path, query });
+}
+
+function openEditor(record: DataEntity, updateRoute = true) {
   const item = record as RecordEntity;
   activeRecordId.value = item.id;
   Object.assign(editForm, {
@@ -99,11 +109,13 @@ function openEditor(record: DataEntity) {
     newTodoText: '',
   });
   editorNotice.value = '';
+  if (updateRoute && route.query.record !== item.id) updateRecordQuery(item.id);
 }
 
 function closeEditor() {
   activeRecordId.value = '';
   editorNotice.value = '';
+  if (route.query.record) updateRecordQuery();
 }
 
 function saveEditor() {
@@ -148,6 +160,13 @@ function removeRecord(id: string) {
   records.remove('records', id);
   if (activeRecordId.value === id) closeEditor();
 }
+
+watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) => {
+  const recordId = Array.isArray(value) ? value[0] : value;
+  if (!recordId || activeRecordId.value === recordId) return;
+  const record = lifePlan.data.records.find(item => item.id === recordId);
+  if (record) openEditor(record, false);
+}, { immediate: true });
 </script>
 
 <template>

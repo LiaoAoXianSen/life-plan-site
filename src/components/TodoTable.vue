@@ -16,7 +16,7 @@ function subTodoSummary(todo: Todo) {
   <div v-if="todos.length" class="todo-table-shell">
     <table class="todo-table">
       <thead>
-        <tr><th>完成</th><th>任务</th><th>计划 / 截止</th><th>紧急度</th><th>分组</th><th aria-label="操作"></th></tr>
+        <tr><th>完成</th><th>任务</th><th>计划 / 截止</th><th>紧急度</th><th>分组</th><th>类型</th><th aria-label="操作"></th></tr>
       </thead>
       <tbody>
         <tr v-for="todo in todos" :key="todo.id" :class="{ done: todo.done, selected: todo.id === selectedId }">
@@ -25,6 +25,7 @@ function subTodoSummary(todo: Todo) {
           <td><span class="todo-due">{{ todo.dueDate || todo.planStartDate || '无日期' }}</span></td>
           <td><span :class="`todo-urgency todo-urgency-${todo.urgency}`">{{ urgencyLabel[todo.urgency] }}</span></td>
           <td>{{ todo.group || '其他' }}</td>
+          <td>{{ todo.isExclusive ? '专属' : '通用' }}</td>
           <td><button class="btn btn-secondary" type="button" @click="emit('select', todo.id)">详情</button></td>
         </tr>
       </tbody>
