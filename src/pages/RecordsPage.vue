@@ -20,6 +20,9 @@ type RecordEntity = DataEntity & {
   todoIds?: string[];
   ideaStatus?: string;
   ideaTags?: string[];
+  ideaNextAction?: string;
+  ideaTodoId?: string;
+  ideaConclusion?: string;
 };
 
 const lifePlan = useLifePlanStore();
@@ -39,6 +42,11 @@ const editForm = reactive({
   recordEndTime: '',
   templateId: '',
   todoIds: [] as string[],
+  ideaStatus: '待整理',
+  ideaTagsInput: '',
+  ideaNextAction: '',
+  ideaTodoId: '',
+  ideaConclusion: '',
   linkedTodoId: '',
   newTodoText: '',
 });
@@ -61,6 +69,13 @@ const openTodos = computed(() => lifePlan.data.todos
   .slice()
   .sort(records.services.todos.compareTodosForFocus));
 const linkedTodos = computed(() => lifePlan.data.todos.filter(todo => editForm.todoIds.includes(todo.id)));
+const ideaTodoOptions = computed(() => lifePlan.data.todos
+  .filter(todo => !todo.done || todo.id === editForm.ideaTodoId)
+  .slice()
+  .sort(records.services.todos.compareTodosForFocus));
+const ideaLinkedTodo = computed(() => editForm.ideaTodoId
+  ? lifePlan.data.todos.find(todo => todo.id === editForm.ideaTodoId)
+  : undefined);
 const builtInTemplates = computed(() => records.services.records.getBuiltInTemplates(editForm.type));
 const customTemplates = computed(() => lifePlan.data.templates.filter(template => template.type === editForm.type));
 const activeBuiltInTemplate = computed(() => editForm.templateId
@@ -201,6 +216,11 @@ function openEditor(record: DataEntity, updateRoute = true) {
     recordEndTime: item.recordEndTime || '',
     templateId: item.templateId || '',
     todoIds: recordTodoIds(item),
+    ideaStatus: records.services.records.getIdeaStatus(item),
+    ideaTagsInput: records.services.records.getIdeaTags(item).join(', '),
+    ideaNextAction: item.ideaNextAction || '',
+    ideaTodoId: item.ideaTodoId && lifePlan.data.todos.some(todo => todo.id === item.ideaTodoId) ? item.ideaTodoId : '',
+    ideaConclusion: item.ideaConclusion || '',
     linkedTodoId: '',
     newTodoText: '',
   });
@@ -220,6 +240,15 @@ function closeEditor() {
 
 function saveEditor() {
   if (!editForm.id || !editForm.title.trim()) return;
+  const ideaFields = editForm.type === '灵感碎片'
+    ? {
+        ideaStatus: editForm.ideaStatus || '待整理',
+        ideaTags: records.services.records.getIdeaTags({ ideaTags: editForm.ideaTagsInput }),
+        ideaNextAction: editForm.ideaNextAction.trim(),
+        ideaTodoId: editForm.ideaTodoId,
+        ideaConclusion: editForm.ideaConclusion.trim(),
+      }
+    : { ideaStatus: '', ideaTags: [], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '' };
   records.updateRecord(editForm.id, {
     title: editForm.title.trim(),
     content: editForm.content,
@@ -230,8 +259,14 @@ function saveEditor() {
     recordEndTime: editForm.recordEndTime,
     templateId: editForm.templateId,
     todoIds: editForm.todoIds,
+    ...ideaFields,
   });
   editorNotice.value = '记录已保存';
+}
+
+function openIdeaTodo() {
+  if (!editForm.ideaTodoId) return;
+  void router.push({ path: '/todos', query: { todo: editForm.ideaTodoId } });
 }
 
 function linkExistingTodo() {
@@ -376,6 +411,16 @@ watch(() => editForm.type, type => {
             </details>
           </section>
           <label class="form-group"><span>内容</span><textarea v-model="editForm.content" rows="8" :readonly="Boolean(activeBuiltInTemplate)" :class="{ 'is-preview': activeBuiltInTemplate }" /></label>
+          <section v-if="editForm.type === '灵感碎片'" class="record-idea-fields" aria-labelledby="record-idea-fields-title">
+            <div class="record-preview-heading" id="record-idea-fields-title">灵感推进</div>
+            <div class="form-row">
+              <label class="form-group"><span>状态</span><select v-model="editForm.ideaStatus"><option v-for="item in ['待整理','待实践','实践中','已验证','已放弃']" :key="item" :value="item">{{ item }}</option></select></label>
+              <label class="form-group"><span>标签</span><input v-model="editForm.ideaTagsInput" placeholder="例如：写作, 产品, 实验" /></label>
+            </div>
+            <label class="form-group"><span>下一步</span><textarea v-model="editForm.ideaNextAction" rows="3" /></label>
+            <label class="form-group"><span>关联待办</span><select v-model="editForm.ideaTodoId"><option value="">不关联</option><option v-for="todo in ideaTodoOptions" :key="todo.id" :value="todo.id">{{ todo.text }}</option></select></label>
+            <label class="form-group"><span>结果结论</span><textarea v-model="editForm.ideaConclusion" rows="4" /></label>
+          </section>
           <div class="record-link-tools">
             <label class="form-group"><span>关联已有待办</span><select v-model="editForm.linkedTodoId"><option value="">选择待办</option><option v-for="todo in openTodos" :key="todo.id" :value="todo.id">{{ todo.text }}</option></select></label>
             <button class="btn btn-secondary" type="button" @click="linkExistingTodo">关联待办</button>
@@ -417,6 +462,15 @@ watch(() => editForm.type, type => {
               </section>
             </div>
             <div v-else class="record-preview-empty">还没有内容</div>
+          </div>
+          <div v-if="editForm.type === '灵感碎片'" class="record-preview-content">
+            <div class="record-preview-heading">灵感推进</div>
+            <div class="record-idea-badges"><span>{{ editForm.ideaStatus || '待整理' }}</span><span v-for="tag in records.services.records.getIdeaTags({ ideaTags: editForm.ideaTagsInput })" :key="tag">{{ tag }}</span></div>
+            <div class="record-idea-preview-grid">
+              <div><strong>下一步</strong><span>{{ editForm.ideaNextAction || '未设置' }}</span></div>
+              <div><strong>关联待办</strong><button v-if="ideaLinkedTodo" class="link-button" type="button" @click="openIdeaTodo">{{ ideaLinkedTodo.text }}</button><span v-else>未关联</span></div>
+              <div><strong>结果结论</strong><span>{{ editForm.ideaConclusion || '还没有结论' }}</span></div>
+            </div>
           </div>
         </aside>
       </div>
@@ -470,6 +524,14 @@ watch(() => editForm.type, type => {
 .record-template-field summary { cursor: pointer; font-weight: 650; }
 .record-template-field textarea { margin-top: 9px; }
 .is-preview { background: #f7f9f7; color: var(--muted); }
+.record-idea-fields { display: grid; gap: 10px; padding-block: 12px; border-block: 1px solid rgba(42, 75, 56, .13); }
+.record-idea-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.record-idea-badges span { padding: 3px 7px; border-radius: 999px; background: var(--surface-soft); color: var(--muted); font-size: 12px; font-weight: 700; }
+.record-idea-preview-grid { display: grid; gap: 10px; }
+.record-idea-preview-grid > div { display: grid; gap: 3px; }
+.record-idea-preview-grid strong { font-size: 12px; }
+.record-idea-preview-grid span,
+.record-idea-preview-grid button { overflow-wrap: anywhere; white-space: pre-wrap; }
 .record-link-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
 .record-linked-list { display: grid; gap: 8px; }
 .linked-todo-list { display: grid; gap: 6px; }

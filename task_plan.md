@@ -87,6 +87,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 69. Status: complete - Implement custom record template creation, application, and protected deletion with tombstones.
 70. Status: complete - Add template contract tests and run Vue build/check plus desktop/mobile visual verification.
 71. Status: complete - Update parity evidence and commit the verified Records template stage.
+72. Status: complete - Audit legacy idea-specific record fields, filters, Todo linkage, and Vue navigation gaps.
+73. Status: complete - Implement idea-specific editing and preview in the shared Vue Records editor.
+74. Status: complete - Implement Ideas filters, Records deep navigation, and linked Todo detail routing with legacy-compatible status updates.
+75. Status: complete - Add idea persistence/navigation contracts and run build/check plus desktop/mobile verification.
+76. Status: complete - Update parity evidence and commit the verified idea-detail stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -123,3 +128,4 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | Session-authorization fixture patch first matched the existing-upload setup | Reused sync setup lines were not unique enough | Kept that compatibility coverage and added the stale authorized config explicitly to the first-creation fixture before rerunning it |
 | First built-in Records template contract timed out on a nested `details.filter({ has: scoped locator })` selector | Focused two-test run; custom template contract passed | Replaced the over-scoped matcher with exact `summary` text locators and retained the browser-visible interaction path |
 | Second built-in Records template contract expected one fewer newline between consecutive empty sections | Focused rerun reached the persisted-data assertion | Corrected the expected value to the legacy `fields.map(...).join('\\n\\n') + '\\n'` contract; implementation already matched legacy output |
+| First idea-detail contract could see the labeled combobox in the accessibility snapshot but `getByLabel(..., { exact: true })` did not resolve it | Focused two-test run; idea conversion contract passed | Scoped the locator to the `灵感推进` region and selected its named combobox by role, avoiding the adjacent generic relationship controls |

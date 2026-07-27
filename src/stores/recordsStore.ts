@@ -183,7 +183,17 @@ export const useRecordsStore = defineStore('records', () => {
     lifePlan.commit('create-idea');
   }
   function setIdeaStatus(id: string, status: string) { const idea = lifePlan.data.records.find(record => record.id === id); if (!idea) return; idea.ideaStatus = status; idea.updatedAt = getNowLocal(); lifePlan.commit('update-idea-status'); }
-  function linkIdeaTodo(id: string, todoId: string) { const idea = lifePlan.data.records.find(record => record.id === id); if (!idea) return; idea.ideaTodoId = todoId; idea.updatedAt = getNowLocal(); lifePlan.commit('link-idea-todo'); }
+  function linkIdeaTodo(id: string, todoId: string) {
+    lifePlan.mutate('link-idea-todo', data => {
+      const idea = data.records.find(record => record.id === id && record.type === '灵感碎片');
+      const todo = data.todos.find(item => item.id === todoId);
+      if (!idea || !todo) return;
+      idea.ideaTodoId = todoId;
+      if (!String(idea.ideaNextAction || '').trim()) idea.ideaNextAction = todo.text;
+      if (services.records.getIdeaStatus(idea) === '待整理') idea.ideaStatus = '待实践';
+      idea.updatedAt = getNowLocal();
+    });
+  }
   function addMaterial(input: { title: string; content: string; type: string; tags: string[]; source: string; note: string }) { const now = getNowLocal(); lifePlan.data.materials.unshift({ id: genId(), ...input, createdAt: now, updatedAt: now }); lifePlan.commit('create-material'); }
   function remove(collection: 'records' | 'materials', id: string) {
     const item = lifePlan.data[collection].find(entity => entity.id === id);

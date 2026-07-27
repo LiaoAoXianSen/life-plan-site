@@ -414,6 +414,94 @@ test('custom record templates clone todos and delete with a template tombstone',
     ]));
 });
 
+test('idea filters deep-link to one Records editor and persist all legacy idea fields', async ({ page }) => {
+    const source = emptyData({
+        records: [
+            { id: 'idea-unprocessed', type: '灵感碎片', title: '待整理想法', content: '先收集', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [], ideaStatus: '待整理', ideaTags: ['收集'], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '', updatedAt: '2026-07-27T08:00:00' },
+            { id: 'idea-needs-conclusion', type: '灵感碎片', title: '需要结论的实践', content: '已经试过一次', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [], ideaStatus: '实践中', ideaTags: ['ProjectX'], ideaNextAction: '旧下一步', ideaTodoId: 'todo-linked-complete', ideaConclusion: '', updatedAt: '2026-07-27T09:00:00' },
+            { id: 'idea-verified', type: '灵感碎片', title: '已有结论', content: '完成', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [], ideaStatus: '已验证', ideaTags: ['ProjectX'], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '有效', updatedAt: '2026-07-27T10:00:00' },
+        ],
+        todos: [
+            todoFixture('todo-linked-complete', '已完成的关联待办', { done: true, completedAt: '2026-07-27T10:00:00' }),
+            todoFixture('todo-open-idea', '可选待办'),
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/ideas');
+
+    await page.getByLabel('灵感状态筛选').selectOption('unprocessed');
+    await expect(page.getByRole('heading', { name: '待整理想法' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '需要结论的实践' })).toHaveCount(0);
+    await page.getByLabel('灵感状态筛选').selectOption('needsConclusion');
+    await page.getByLabel('灵感标签筛选').fill('project');
+    await expect(page.getByRole('heading', { name: '需要结论的实践' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '已有结论' })).toHaveCount(0);
+
+    const ideaCard = page.locator('.idea-card').filter({ hasText: '需要结论的实践' });
+    await ideaCard.getByRole('button', { name: '编辑推进' }).click();
+    await expect(page).toHaveURL(/#\/records\?record=idea-needs-conclusion$/);
+    const editor = page.locator('.record-editor-panel');
+    const ideaFields = editor.getByRole('region', { name: '灵感推进' });
+    await expect(editor.getByLabel('状态')).toHaveValue('实践中');
+    await expect(editor.getByLabel('标签')).toHaveValue('ProjectX');
+    await expect(ideaFields.getByRole('combobox', { name: '关联待办' })).toHaveValue('todo-linked-complete');
+    await editor.getByLabel('状态').selectOption('已验证');
+    await editor.getByLabel('标签').fill('ProjectX, 迁移 ProjectX');
+    await editor.getByLabel('下一步').fill('整理实验数据');
+    await ideaFields.getByRole('combobox', { name: '关联待办' }).selectOption('todo-open-idea');
+    await editor.getByLabel('结果结论').fill('新版路径可用');
+    await editor.getByRole('button', { name: '保存修改' }).click();
+
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.find(item => item.id === 'idea-needs-conclusion'));
+    expect(saved).toMatchObject({
+        ideaStatus: '已验证',
+        ideaTags: ['ProjectX', '迁移'],
+        ideaNextAction: '整理实验数据',
+        ideaTodoId: 'todo-open-idea',
+        ideaConclusion: '新版路径可用',
+    });
+    await editor.getByRole('button', { name: '可选待办' }).click();
+    await expect(page).toHaveURL(/#\/todos\?todo=todo-open-idea$/);
+    await expect(page.locator('.todo-detail-panel')).toContainText('可选待办');
+
+    await page.goto('/#/records?record=idea-needs-conclusion');
+    await editor.getByLabel('类型').fill('日记');
+    await editor.getByRole('button', { name: '保存修改' }).click();
+    const converted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.find(item => item.id === 'idea-needs-conclusion'));
+    expect(converted).toMatchObject({
+        type: '日记', ideaStatus: '', ideaTags: [], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '',
+    });
+});
+
+test('idea conversion updates status and next action while rebuilding the Todo mirror', async ({ page }) => {
+    const source = emptyData({
+        records: [{
+            id: 'idea-convert', type: '灵感碎片', title: '把灵感变成行动', content: '记录转换背景',
+            startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [], ideaStatus: '待整理',
+            ideaTags: ['行动'], ideaNextAction: '', ideaTodoId: 'missing-todo', ideaConclusion: '', updatedAt: '2026-07-27T08:00:00',
+        }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/ideas');
+    await page.locator('.idea-card').filter({ hasText: '把灵感变成行动' }).getByRole('button', { name: '转成待办' }).click();
+    await expect(page).toHaveURL(/#\/todos\?todo=/);
+    await expect(page.locator('.todo-detail-panel')).toContainText('把灵感变成行动');
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    const idea = stored.data.records.find(item => item.id === 'idea-convert');
+    const todo = stored.data.todos.find(item => item.id === idea.ideaTodoId);
+    expect(idea).toMatchObject({ ideaStatus: '待实践', ideaNextAction: '把灵感变成行动' });
+    expect(idea.ideaTodoId).not.toBe('missing-todo');
+    expect(todo).toMatchObject({ text: '把灵感变成行动', group: '学习' });
+    expect(todo.note).toContain('来源灵感：把灵感变成行动');
+    expect(todo.note).toContain('记录转换背景');
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.mirror.todos.map(item => item.id)).toContain(todo.id);
+});
+
 test('todo remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {
     const local = emptyData({ todos: [todoFixture('todo-local-sync', '本机独立待办')] });
     const remote = todoRemoteSnapshot([todoFixture('todo-remote-sync', '云端独立待办', { updatedAt: '2026-07-27T09:00:00' })]);

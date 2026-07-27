@@ -18,8 +18,8 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview plus exact Todo detail links from today and floating lists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
 | Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
-| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | Persisted editor/preview, date ranges, linked/exclusive todos, list/calendar views, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | AI diary writeback, full legacy autosave behavior, idea-specific editor fields, and remaining filters need parity work. | Users can create, preview, edit, delete, template, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, and tombstones. |
-| Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Status filtering, colors, tags/search, and basic todo conversion exist. | Detail editing and old AI/next-action flows need parity audit. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
+| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | Persisted editor/preview, date ranges, linked/exclusive todos, idea-specific fields, list/calendar views, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | AI diary writeback, full legacy autosave behavior, and remaining filters need parity work. | Users can create, preview, edit, delete, template, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
+| Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, and compatible Todo conversion exist. | AI next-action generation and the legacy editable pre-create Todo draft remain incomplete. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation. | Basic global search and tag center exist. | Needs full index parity including templates and wheel items. | Search covers legacy modules with matching labels and navigation targets. |
 | Goals | CRUD/progress/status and tombstones. | Basic CRUD/progress exists. | Needs detail parity audit. | Goal writes keep existing fields and delete tombstones. |
@@ -58,6 +58,17 @@ Status: verified locally
 - Confirm custom-template deletion and write a `deletedItems(collection=templates)` tombstone.
 - Verify exact persistence, Todo mirror-compatible repository commits, and custom-template deletion in Playwright.
 - Verify 1440px and 390px layouts with no document, `.vue-main`, or editor horizontal overflow.
+
+### Idea Detail And Navigation Slice
+
+Status: verified locally
+
+- Edit `ideaStatus`, `ideaTags`, `ideaNextAction`, `ideaTodoId`, and `ideaConclusion` in the shared Records editor and clear those fields when the record changes away from `灵感碎片`.
+- Filter Ideas by ordinary status, `unprocessed`, `needsConclusion`, keyword, and partial case-insensitive tag matches through `records-service.js`.
+- Deep-link from Ideas to `record=<id>` and from idea previews or cards to `todo=<id>` without duplicating detail state.
+- On conversion, replace stale `ideaTodoId` references, fill an empty next action from the Todo title, move `待整理` to `待实践`, and rebuild `todoAppData` through repository commits.
+- Verify all five persisted idea fields, stale-link recovery, special filters, deep navigation, and Todo mirror output in Playwright.
+- Verify Ideas and Records at 1440px and 390px with long tags/content and no horizontal overflow.
 
 ### Sync Protected Main Upload Slice
 

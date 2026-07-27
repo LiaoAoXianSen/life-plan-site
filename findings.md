@@ -127,3 +127,7 @@
 - Legacy Records defines six built-in structured templates with stable IDs: `builtin-diary-daily-review`, `builtin-day-plan-focus`, `builtin-weekly-review`, `builtin-monthly-review`, `builtin-idea-capture`, and `builtin-work-log-daily`.
 - Structured field values are transient editor state. Legacy persistence stores generated heading-based Markdown in `record.content` plus the built-in `record.templateId`; normalization reconstructs old `templateFields` only when content is empty, then deletes `templateFields`.
 - Custom templates persist `{ id, name, type, content, todos }`. Applying one clones Todo IDs; deleting one removes it from `templates` and writes a `deletedItems` tombstone for collection `templates`.
+- Legacy idea detail state remains record-owned through `ideaStatus`, `ideaTags`, `ideaNextAction`, `ideaTodoId`, and `ideaConclusion`; changing a record away from `灵感碎片` clears all five fields on save.
+- Legacy Ideas filters support ordinary statuses plus `unprocessed` (`待整理` / `待实践`), `needsConclusion` (`实践中` / `已验证` without a conclusion), and partial case-insensitive tag matching through `records-service.js`.
+- Vue `IdeasPage.vue` currently updates status and creates a Todo directly, but cannot edit the other idea fields, filter by tag/special states, deep-link to the Records editor, or open the linked Todo detail.
+- Legacy considers `ideaTodoId` linked only when the referenced Todo still exists; a stale imported ID must not block creating a replacement Todo or navigating to a valid detail.

@@ -221,3 +221,9 @@
 - Full `scripts/check.ps1` passed syntax checks and 16/16 Vue Playwright tests.
 - Desktop 1440px template editing had no overflow. The first 390px screenshot exposed the legacy six-column Records filter grid; a Vue-scoped three-column/one-column override removed the overflow, and the final document, `.vue-main`, and editor all reported `scrollWidth === clientWidth`.
 - Final production build, JavaScript syntax checks, `git diff --check`, and the full 16/16 Vue Playwright suite passed before the Records template stage commit.
+- Committed the Records template stage as `f9e251f feat: add record template parity`; opened phases 72-76 for idea-specific Records editing, Ideas filters/navigation, contract tests, responsive verification, docs, and commit.
+- Implemented idea-specific Records editing/preview, Ideas special-state and tag filters, Records/Todo deep navigation, and legacy-compatible conversion updates; the first focused run passed conversion and exposed only an ambiguous test locator, then both focused contracts passed 2/2.
+- Full `scripts/check.ps1` passed syntax checks and 18/18 Vue Playwright tests after the idea-detail implementation.
+- Ideas and Records screenshots at 1440px and 390px showed long tags, next actions, conclusions, filters, and detail controls without overlap; document, `.vue-main`, and active page all reported `scrollWidth === clientWidth`.
+- Extended the focused contract to prove changing an idea record to `日记` clears all five idea-only fields; both focused contracts remained 2/2 green.
+- Final production build, `git diff --check`, and the full 18/18 Vue Playwright suite passed before the idea-detail stage commit; protected branch and stash pointers remained unchanged.
