@@ -8265,8 +8265,9 @@
             list.innerHTML = `<div class="idea-grid">${ideas.map(record => {
                 const todo = getIdeaTodo(record);
                 const preview = truncateIdeaPreview(record.content || '', 80);
+                const statusClass = toSafeClassName(getIdeaStatus(record), 'idea-status-card');
                 return `
-                    <article class="idea-card">
+                    <article class="idea-card status-${statusClass}">
                         <div class="idea-card-head">
                             <span class="item-type type-灵感碎片">灵感碎片</span>
                             ${renderIdeaBadges(record)}
