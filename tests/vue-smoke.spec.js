@@ -502,6 +502,44 @@ test('idea conversion updates status and next action while rebuilding the Todo m
     expect(stored.mirror.todos.map(item => item.id)).toContain(todo.id);
 });
 
+test('record editor autosaves after three seconds and flushes before close switch and navigation', async ({ page }) => {
+    const source = emptyData({
+        records: [
+            { id: 'record-autosave', type: '工作记录', title: '自动保存记录', content: '旧内容', startDate: '2026-07-27', endDate: '2026-07-27', recordTime: '', recordEndTime: '', todoIds: [], updatedAt: '2026-07-27T08:00:00' },
+            { id: 'record-switch', type: '工作记录', title: '切换目标记录', content: '切换旧内容', startDate: '2026-07-27', endDate: '2026-07-27', recordTime: '', recordEndTime: '', todoIds: [], updatedAt: '2026-07-27T08:00:00' },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: /自动保存记录/ }).first().click();
+    const editor = page.locator('.record-editor-panel');
+    await editor.getByLabel('内容').fill('三秒后保存的内容');
+    await expect(editor.getByRole('status')).toHaveText('有未保存修改');
+    await page.getByRole('button', { name: /自动保存记录/ }).first().click();
+    await expect(editor.getByLabel('内容')).toHaveValue('三秒后保存的内容');
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.find(item => item.id === 'record-autosave').content)).toBe('旧内容');
+    await expect(editor.getByRole('status')).toContainText('已自动保存于', { timeout: 5000 });
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.find(item => item.id === 'record-autosave')).toMatchObject({ content: '三秒后保存的内容' });
+    expect(stored.records.find(item => item.id === 'record-autosave').updatedAt).not.toBe('2026-07-27T08:00:00');
+
+    await editor.getByLabel('标题').fill('关闭前刷新记录');
+    await editor.getByRole('button', { name: '关闭' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.find(item => item.id === 'record-autosave').title).toBe('关闭前刷新记录');
+
+    await page.getByRole('button', { name: /关闭前刷新记录/ }).first().click();
+    await editor.getByLabel('内容').fill('切换记录前刷新');
+    await page.getByRole('button', { name: /切换目标记录/ }).first().click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.find(item => item.id === 'record-autosave').content).toBe('切换记录前刷新');
+
+    await editor.getByLabel('内容').fill('离开页面前刷新');
+    await page.getByRole('link', { name: '灵感池' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.find(item => item.id === 'record-switch').content).toBe('离开页面前刷新');
+});
+
 test('todo remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {
     const local = emptyData({ todos: [todoFixture('todo-local-sync', '本机独立待办')] });
     const remote = todoRemoteSnapshot([todoFixture('todo-remote-sync', '云端独立待办', { updatedAt: '2026-07-27T09:00:00' })]);

@@ -227,3 +227,8 @@
 - Ideas and Records screenshots at 1440px and 390px showed long tags, next actions, conclusions, filters, and detail controls without overlap; document, `.vue-main`, and active page all reported `scrollWidth === clientWidth`.
 - Extended the focused contract to prove changing an idea record to `日记` clears all five idea-only fields; both focused contracts remained 2/2 green.
 - Final production build, `git diff --check`, and the full 18/18 Vue Playwright suite passed before the idea-detail stage commit; protected branch and stash pointers remained unchanged.
+- Committed the idea-detail stage as `30175c5 feat: add idea detail parity`; opened phases 77-80 for repository-backed existing-record autosave, close/switch/navigation flush, contract tests, docs, and commit.
+- Implemented one-path existing-record persistence for manual save, 3-second autosave, and close/switch/navigation flush; same-record reselection preserves dirty input and active-record deletion cancels the pending write.
+- Focused autosave coverage passed, then full `scripts/check.ps1` passed syntax checks and 19/19 Vue Playwright tests.
+- Desktop dirty-state and mobile auto-saved-state screenshots showed clear status text with no overlap; document, `.vue-main`, and active Records page all reported `scrollWidth === clientWidth`.
+- Final production build and `git diff --check` passed before the existing-record autosave stage commit; protected branch and stash pointers remained unchanged.

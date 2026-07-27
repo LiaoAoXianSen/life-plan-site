@@ -131,3 +131,5 @@
 - Legacy Ideas filters support ordinary statuses plus `unprocessed` (`待整理` / `待实践`), `needsConclusion` (`实践中` / `已验证` without a conclusion), and partial case-insensitive tag matching through `records-service.js`.
 - Vue `IdeasPage.vue` currently updates status and creates a Todo directly, but cannot edit the other idea fields, filter by tag/special states, deep-link to the Records editor, or open the linked Todo detail.
 - Legacy considers `ideaTodoId` linked only when the referenced Todo still exists; a stale imported ID must not block creating a replacement Todo or navigating to a valid detail.
+- Legacy record autosave debounces editor changes for 3 seconds, persists dirty changes immediately when closing, cancels the pending timer before preview/close, and reports the autosave clock time after success.
+- The current Vue Records editor edits existing records inline, while new records still use a separate explicit-submit form. Existing-record autosave can match debounce and close/switch/navigation flush semantics without creating a second draft store; new-record modal/draft parity remains a later scope.

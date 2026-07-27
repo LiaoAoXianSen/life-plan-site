@@ -92,6 +92,10 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 74. Status: complete - Implement Ideas filters, Records deep navigation, and linked Todo detail routing with legacy-compatible status updates.
 75. Status: complete - Add idea persistence/navigation contracts and run build/check plus desktop/mobile verification.
 76. Status: complete - Update parity evidence and commit the verified idea-detail stage.
+77. Status: complete - Audit legacy record autosave debounce, dirty-state, close/switch flush, and current Vue editor lifecycle.
+78. Status: complete - Implement repository-backed existing-record autosave with manual save and navigation flush semantics.
+79. Status: complete - Add autosave timing/flush contracts and run build/check plus responsive status verification.
+80. Status: complete - Update parity evidence and commit the verified existing-record autosave stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -129,3 +133,4 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First built-in Records template contract timed out on a nested `details.filter({ has: scoped locator })` selector | Focused two-test run; custom template contract passed | Replaced the over-scoped matcher with exact `summary` text locators and retained the browser-visible interaction path |
 | Second built-in Records template contract expected one fewer newline between consecutive empty sections | Focused rerun reached the persisted-data assertion | Corrected the expected value to the legacy `fields.map(...).join('\\n\\n') + '\\n'` contract; implementation already matched legacy output |
 | First idea-detail contract could see the labeled combobox in the accessibility snapshot but `getByLabel(..., { exact: true })` did not resolve it | Focused two-test run; idea conversion contract passed | Scoped the locator to the `灵感推进` region and selected its named combobox by role, avoiding the adjacent generic relationship controls |
+| First autosave build rejected `@click="closeEditor"` after the function gained a boolean flush parameter | `vue-tsc` treated Vue's click payload as the first argument | Changed the template binding to `@click="closeEditor()"` so no `MouseEvent` is passed into the flush flag |

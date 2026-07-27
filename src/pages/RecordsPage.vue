@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
 import { buildScheduleItems, addDays, getMonthStart, getWeekStart, type ScheduleItem } from '../utils/schedule';
@@ -61,6 +61,9 @@ const selectedTemplateKey = ref('');
 const templateValues = reactive<Record<string, string>>({});
 const showTemplateManager = ref(false);
 const templateEditorRef = ref<HTMLElement | null>(null);
+const editorDirty = ref(false);
+let editorHydrating = false;
+let recordAutoSaveTimer: number | undefined;
 
 const typeOptions = computed(() => [...new Set(lifePlan.data.records.map(record => String(record.type || '')).filter(Boolean))]);
 const activeRecord = computed(() => lifePlan.data.records.find(record => record.id === activeRecordId.value) as RecordEntity | undefined);
@@ -204,6 +207,13 @@ function updateRecordQuery(recordId = '') {
 
 function openEditor(record: DataEntity, updateRoute = true) {
   const item = record as RecordEntity;
+  if (activeRecordId.value === item.id) {
+    if (updateRoute && route.query.record !== item.id) updateRecordQuery(item.id);
+    return;
+  }
+  if (activeRecordId.value && activeRecordId.value !== item.id) flushPendingEditorSave();
+  editorHydrating = true;
+  window.clearTimeout(recordAutoSaveTimer);
   activeRecordId.value = item.id;
   Object.assign(editForm, {
     id: item.id,
@@ -228,18 +238,22 @@ function openEditor(record: DataEntity, updateRoute = true) {
   selectedTemplateKey.value = template ? `builtin:${template.id}` : '';
   setTemplateValues(template ? records.services.records.parseTemplateContent(template, item.content || '') : {});
   showTemplateManager.value = false;
+  editorHydrating = false;
+  editorDirty.value = false;
   editorNotice.value = '';
   if (updateRoute && route.query.record !== item.id) updateRecordQuery(item.id);
 }
 
-function closeEditor() {
+function closeEditor(flush = true) {
+  if (flush) flushPendingEditorSave();
+  window.clearTimeout(recordAutoSaveTimer);
+  editorDirty.value = false;
   activeRecordId.value = '';
   editorNotice.value = '';
   if (route.query.record) updateRecordQuery();
 }
 
-function saveEditor() {
-  if (!editForm.id || !editForm.title.trim()) return;
+function getEditorUpdateInput() {
   const ideaFields = editForm.type === '灵感碎片'
     ? {
         ideaStatus: editForm.ideaStatus || '待整理',
@@ -249,7 +263,7 @@ function saveEditor() {
         ideaConclusion: editForm.ideaConclusion.trim(),
       }
     : { ideaStatus: '', ideaTags: [], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '' };
-  records.updateRecord(editForm.id, {
+  return {
     title: editForm.title.trim(),
     content: editForm.content,
     type: editForm.type || '记录',
@@ -260,8 +274,35 @@ function saveEditor() {
     templateId: editForm.templateId,
     todoIds: editForm.todoIds,
     ...ideaFields,
-  });
-  editorNotice.value = '记录已保存';
+  };
+}
+
+function persistEditor(mode: 'manual' | 'auto' | 'silent' = 'manual') {
+  if (!editForm.id) return false;
+  window.clearTimeout(recordAutoSaveTimer);
+  records.updateRecord(editForm.id, getEditorUpdateInput());
+  editorDirty.value = false;
+  if (mode === 'manual') editorNotice.value = '记录已保存';
+  if (mode === 'auto') editorNotice.value = `已自动保存于 ${new Date().toTimeString().slice(0, 8)}`;
+  return true;
+}
+
+function saveEditor() {
+  if (!editForm.id || !editForm.title.trim()) return;
+  persistEditor('manual');
+}
+
+function scheduleEditorAutoSave() {
+  if (editorHydrating || !activeRecordId.value) return;
+  editorDirty.value = true;
+  editorNotice.value = '有未保存修改';
+  window.clearTimeout(recordAutoSaveTimer);
+  recordAutoSaveTimer = window.setTimeout(() => persistEditor('auto'), 3000);
+}
+
+function flushPendingEditorSave() {
+  if (!editorDirty.value) return false;
+  return persistEditor('silent');
 }
 
 function openIdeaTodo() {
@@ -294,8 +335,10 @@ function unlinkTodo(todo: Todo) {
 
 function removeRecord(id: string) {
   records.remove('records', id);
-  if (activeRecordId.value === id) closeEditor();
+  if (activeRecordId.value === id) closeEditor(false);
 }
+
+watch(editForm, scheduleEditorAutoSave, { deep: true, flush: 'sync' });
 
 watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) => {
   const recordId = Array.isArray(value) ? value[0] : value;
@@ -314,6 +357,11 @@ watch(() => editForm.type, type => {
   selectedTemplateKey.value = '';
   editForm.templateId = '';
   setTemplateValues();
+});
+
+onBeforeUnmount(() => {
+  flushPendingEditorSave();
+  window.clearTimeout(recordAutoSaveTimer);
 });
 </script>
 
@@ -370,7 +418,7 @@ watch(() => editForm.type, type => {
           <h2 id="record-editor-title">编辑记录</h2>
           <p class="section-hint">保存会写入原有 records 字段；关联待办会同步重建 todoAppData 镜像。</p>
         </div>
-        <button class="btn btn-secondary" type="button" @click="closeEditor">关闭</button>
+        <button class="btn btn-secondary" type="button" @click="closeEditor()">关闭</button>
       </div>
       <p v-if="editorNotice" class="notice success" role="status">{{ editorNotice }}</p>
       <div class="record-editor-grid">
