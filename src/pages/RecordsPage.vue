@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
-import { buildScheduleItems, addDays, getMonthStart, getWeekStart } from '../utils/schedule';
+import { buildScheduleItems, addDays, getMonthStart, getWeekStart, type ScheduleItem } from '../utils/schedule';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import type { DataEntity, Todo } from '../types/lifePlan';
@@ -73,6 +73,17 @@ function shift(amount: number) {
   cursor.value = view.value === 'month'
     ? (() => { const date = new Date(`${cursor.value.slice(0, 7)}-01T12:00:00`); date.setMonth(date.getMonth() + amount); return date.toISOString().slice(0, 10); })()
     : addDays(cursor.value, view.value === 'week' ? amount * 7 : amount);
+}
+
+function selectCalendarItem(item: ScheduleItem) {
+  if (item.sourceType === 'record') {
+    const record = lifePlan.data.records.find(candidate => candidate.id === item.id);
+    if (record) openEditor(record);
+    return;
+  }
+  if (item.sourceType.startsWith('todo-')) {
+    void router.push({ path: '/todos', query: { todo: item.id } });
+  }
 }
 
 function addRecord() {
@@ -304,7 +315,7 @@ watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) 
         </div>
         <div v-else class="empty-state">暂无匹配记录。</div>
       </template>
-      <CalendarViews v-else :mode="view" :cursor="cursor" :items="calendarItems" />
+      <CalendarViews v-else :mode="view" :cursor="cursor" :items="calendarItems" @select="selectCalendarItem" />
     </div>
   </section>
 </template>

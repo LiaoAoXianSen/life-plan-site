@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import TodoTable from '../components/TodoTable.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useTodosStore } from '../stores/todosStore';
 import type { Todo, TodoSubTodo } from '../types/lifePlan';
+import { addDays, getWeekStart } from '../utils/schedule';
 
+const route = useRoute();
 const router = useRouter();
 const lifePlan = useLifePlanStore();
 const todosStore = useTodosStore();
@@ -66,7 +68,14 @@ function loadDetailForm(todo: Todo) {
   });
 }
 
-function selectTodo(id: string) {
+function updateTodoQuery(todoId = '') {
+  const nextQuery = { ...route.query };
+  if (todoId) nextQuery.todo = todoId;
+  else delete nextQuery.todo;
+  void router.replace({ path: route.path, query: nextQuery });
+}
+
+function selectTodo(id: string, updateRoute = true) {
   const todo = todosStore.todos.find(item => item.id === id);
   if (!todo) return;
   selectedId.value = id;
@@ -74,6 +83,15 @@ function selectTodo(id: string) {
   detailError.value = '';
   detailStatus.value = '';
   loadDetailForm(todo);
+  if (updateRoute && route.query.todo !== id) updateTodoQuery(id);
+}
+
+function closeDetail() {
+  selectedId.value = '';
+  editing.value = false;
+  detailError.value = '';
+  detailStatus.value = '';
+  if (route.query.todo) updateTodoQuery();
 }
 
 function startEditing() {
@@ -107,6 +125,27 @@ function addSubTodo() {
   if (!text) return;
   detailForm.subTodos.push({ text, done: false });
   newSubTodo.value = '';
+}
+
+function applyDatePreset(preset: 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'no-date') {
+  const today = getTodayStr();
+  if (preset === 'no-date') {
+    Object.assign(detailForm, { planStartDate: '', planEndDate: '', dueDate: '' });
+    return;
+  }
+  if (preset === 'today' || preset === 'tomorrow') {
+    const date = preset === 'today' ? today : addDays(today, 1);
+    Object.assign(detailForm, { planStartDate: date, planEndDate: date, dueDate: date });
+    return;
+  }
+  if (preset === 'this-week') {
+    const end = addDays(getWeekStart(today), 6);
+    Object.assign(detailForm, { planStartDate: today, planEndDate: end, dueDate: end });
+    return;
+  }
+  const start = addDays(getWeekStart(today), 7);
+  const end = addDays(start, 6);
+  Object.assign(detailForm, { planStartDate: start, planEndDate: end, dueDate: end });
 }
 
 function toggleSubTodo(index: number, done: boolean) {
@@ -143,13 +182,18 @@ function toggleSelectedTodo() {
 function deleteSelectedTodo() {
   if (!selectedTodo.value || !window.confirm('确定删除这个待办吗？关联记录会保留，但会移除待办引用。')) return;
   todosStore.remove(selectedTodo.value.id);
-  selectedId.value = '';
-  editing.value = false;
+  closeDetail();
 }
 
 function openLinkedRecord(recordId: string) {
   void router.push({ path: '/records', query: { record: recordId } });
 }
+
+watch([() => route.query.todo, () => todosStore.todos.length], ([value]) => {
+  const todoId = Array.isArray(value) ? value[0] : value;
+  if (!todoId || selectedId.value === todoId) return;
+  if (todosStore.todos.some(todo => todo.id === todoId)) selectTodo(todoId, false);
+}, { immediate: true });
 </script>
 
 <template>
@@ -194,12 +238,19 @@ function openLinkedRecord(recordId: string) {
             <span :class="`todo-urgency todo-urgency-${selectedTodo.urgency}`">{{ todosStore.services.todos.getTodoUrgencyMeta(selectedTodo.urgency).label }}</span>
             <h2 id="todo-detail-heading">{{ editing ? '编辑待办' : selectedTodo.text }}</h2>
           </div>
-          <button class="close-btn" type="button" aria-label="关闭待办详情" title="关闭" @click="selectedId = ''">×</button>
+          <button class="close-btn" type="button" aria-label="关闭待办详情" title="关闭" @click="closeDetail">×</button>
         </div>
 
         <form v-if="editing" class="todo-detail-form" @submit.prevent="saveDetail">
           <div class="form-group"><label for="todo-detail-text">任务</label><input id="todo-detail-text" v-model="detailForm.text" required /></div>
           <div class="form-group"><label for="todo-detail-note">备注</label><textarea id="todo-detail-note" v-model="detailForm.note" /></div>
+          <div class="todo-date-presets" aria-label="日期预设">
+            <button type="button" @click="applyDatePreset('today')">今天</button>
+            <button type="button" @click="applyDatePreset('tomorrow')">明天</button>
+            <button type="button" @click="applyDatePreset('this-week')">本周</button>
+            <button type="button" @click="applyDatePreset('next-week')">下周</button>
+            <button type="button" @click="applyDatePreset('no-date')">无日期</button>
+          </div>
           <div class="form-row">
             <div class="form-group"><label for="todo-detail-plan-start">计划开始</label><input id="todo-detail-plan-start" v-model="detailForm.planStartDate" type="date" /></div>
             <div class="form-group"><label for="todo-detail-plan-end">计划结束</label><input id="todo-detail-plan-end" v-model="detailForm.planEndDate" type="date" /></div>

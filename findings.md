@@ -12,6 +12,11 @@
 - Screenshot review also found unstyled detail-row delete actions; the Vue detail panel now supplies local link-button danger/focus states without changing legacy styles.
 - The legacy Todo filters can be reused directly through `todos-service.js.isTodoInDateRange`; Vue only lacks start/end, group, and exclusive/shared controls.
 - `RecordsPage.vue` already owns `openEditor()`. A `record` route query can restore a specific editor without changing record data, and clearing the editor should remove that query so back/refresh behavior stays predictable.
+- Legacy schedule parity requires three Todo item types: `todo-plan` for every date in the plan range, `todo-due` on the due date, and `todo-session` for each execution record. Vue currently has only sessions.
+- Dashboard today/floating Todo labels are not detail links in Vue, while legacy opens the same Todo detail from both lists.
+- Legacy date presets are draft-only until save: today, tomorrow, this week (today through Sunday), next week (Monday through Sunday), and no date.
+- `CalendarViews` can keep navigation policy outside the generic renderer by emitting the selected `ScheduleItem`; `RecordsPage` opens record items locally and routes all `todo-*` items to the shared Todo detail URL.
+- A focused Playwright contract now proves Dashboard navigation, direct URL restoration, query cleanup, draft-only presets, and plan/due/session calendar navigation all target one Todo without changing `lifePlanData` or creating `todoAppData`.
 
 
 ## 2026-07-23

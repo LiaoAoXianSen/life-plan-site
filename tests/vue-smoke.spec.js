@@ -162,6 +162,61 @@ test('todo legacy filters and linked record navigation stay read-only', async ({
     expect(persisted.mirror).toBeNull();
 });
 
+test('todo dashboard route presets and calendar entries preserve one read-only detail target', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(`${today}T12:00:00`);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowDate = tomorrow.toISOString().slice(0, 10);
+    const source = emptyData({
+        todos: [{
+            id: 'todo-cross-entry', text: '跨入口待办', note: '保持只读导航', done: false,
+            dueDate: today, planStartDate: today, planEndDate: today, urgency: 'high', group: '工作',
+            subTodos: [], sessions: [{ id: 'session-cross-entry', date: today, startTime: '10:00', endTime: '10:30', note: '日历执行项' }],
+            completedAt: '', sourceType: 'manual', sourceRecordId: '', sourceMatchKey: '跨入口待办',
+            createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/');
+    await page.getByRole('button', { name: '跨入口待办', exact: true }).click();
+    await expect(page).toHaveURL(/#\/todos\?todo=todo-cross-entry$/);
+    await expect(page.locator('.todo-detail-panel').getByRole('heading', { name: '跨入口待办' })).toBeVisible();
+    await page.getByRole('button', { name: '关闭待办详情' }).click();
+    await expect(page).toHaveURL(/#\/todos$/);
+
+    await page.goto('/#/todos?todo=todo-cross-entry');
+    const detail = page.locator('.todo-detail-panel');
+    await expect(detail.getByRole('heading', { name: '跨入口待办' })).toBeVisible();
+    await detail.getByRole('button', { name: '编辑待办' }).click();
+    await detail.getByRole('button', { name: '明天', exact: true }).click();
+    await expect(detail.getByLabel('计划开始')).toHaveValue(tomorrowDate);
+    await expect(detail.getByLabel('计划结束')).toHaveValue(tomorrowDate);
+    await expect(detail.getByLabel('截止日期')).toHaveValue(tomorrowDate);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('todoAppData'))).toBeNull();
+    await detail.getByRole('button', { name: '取消', exact: true }).click();
+
+    const openCalendarEntry = async (selector, name) => {
+        await page.goto('/#/records');
+        await page.getByRole('button', { name: '日', exact: true }).click();
+        const entry = page.locator(selector).filter({ hasText: name });
+        await expect(entry).toBeVisible();
+        await entry.click();
+        await expect(page).toHaveURL(/#\/todos\?todo=todo-cross-entry$/);
+        await expect(page.locator('.todo-detail-panel').getByRole('heading', { name: '跨入口待办' })).toBeVisible();
+    };
+
+    await openCalendarEntry('.agenda-all-day-item', '计划：跨入口待办');
+    await openCalendarEntry('.agenda-all-day-item', '截止：跨入口待办');
+    await openCalendarEntry('.agenda-event-block', '执行：跨入口待办');
+
+    const persisted = await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), mirror: localStorage.getItem('todoAppData') }));
+    expect(persisted.data).toBe(original);
+    expect(persisted.mirror).toBeNull();
+});
+
 test('habit quick check-in writes the legacy fields and rebuilds its local mirror', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({

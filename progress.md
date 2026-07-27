@@ -21,6 +21,8 @@
 - Added a read-only regression proving all filters and the deep link work while the exact `lifePlanData` string remains unchanged and no Todo mirror is generated.
 - Focused filtering/navigation coverage passed, the full Vue suite passed 8/8, and desktop/mobile screenshot checks confirmed visible date labels and zero page-level horizontal overflow.
 - Final `scripts/check.ps1`, `npm run build`, and `git diff --check` passed for phases 53-55; prepared the verified filter/deep-link stage for a local commit.
+- Committed the verified Todo filter and linked-record deep-navigation stage as `db9dcd9`.
+- Started phases 56-58 after confirming the legacy calendar emits a Todo plan item for every day in the plan range, a due item on the deadline, and execution items for sessions; all three open Todo detail.
 
 
 ## 2026-07-23
@@ -187,3 +189,13 @@
 - Targeted cloud-to-PC apply tests passed, and the broader habit diagnostics/protected sync regression group passed 12/12.
 - An overlapping full `scripts/check.ps1` run still used the earlier too-strict post-apply hash gate and failed 1/67; after removing that gate, the targeted cloud-to-PC apply tests passed again. A fresh full check is required before packaging.
 - Added post-apply diagnostics guidance so the UI now tells the user whether the next step after applying cloud changes to PC is a protected cloud sync or no further action; added smoke coverage for that hint.
+## 2026-07-27 - Todo cross-entry parity continuation
+
+- Completed phase 56 by wiring `todo=<id>` detail restoration and cleanup, Dashboard Todo links, record-calendar selection, plan/due/session schedule items, and legacy date presets.
+- `npm run build` passed after the calendar selection integration.
+- Added and passed the focused Playwright test `todo dashboard route presets and calendar entries preserve one read-only detail target` (1/1).
+- Phase 57 is in progress: full Vue checks and responsive visual verification remain.
+- Full `scripts/check.ps1` passed all syntax checks and 9/9 Vue Playwright tests.
+- Desktop 1440px and mobile 390px Todo edit/detail and day-calendar screenshots showed the date presets and all three schedule item types without overlap; all four page checks reported `scrollWidth === clientWidth`.
+- Updated the migration parity checklist and moved phase 58 into progress for final review and commit.
+- Final `npm run build` and `git diff --check` passed; protected branch and stash pointers remained unchanged before commit.

@@ -71,6 +71,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 53. Status: complete - Add legacy-compatible Todo date/group/exclusive filters and linked-record deep navigation without mutating persisted data.
 54. Status: complete - Add read-only filtering/navigation regression coverage and rerun Vue build/check plus responsive verification.
 55. Status: complete - Update parity evidence and commit the verified Todo navigation/filter stage.
+56. Status: complete - Add `todo=<id>` detail deep links, Dashboard and calendar Todo entry points, legacy plan/due schedule items, and date presets.
+57. Status: complete - Add route/preset/schedule contract coverage and run Vue build/check plus desktop/mobile verification.
+58. Status: complete - Update parity evidence and commit the verified Todo cross-entry stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
