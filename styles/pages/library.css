@@ -267,19 +267,51 @@
         gap: 14px;
     }
     #page-ideas .idea-card {
+        --idea-tint: rgba(250,248,242,.74);
+        --idea-mark: rgba(33,110,78,.38);
         min-height: 210px;
         display: flex;
         flex-direction: column;
-        padding: 16px;
+        position: relative;
+        padding: 18px 16px 16px;
         border-radius: var(--radius-lg);
-        background: linear-gradient(135deg, rgba(255,255,255,.92), rgba(250,248,242,.74));
+        background: linear-gradient(135deg, rgba(255,255,255,.94), var(--idea-tint));
         box-shadow: 0 2px 8px rgba(60,55,40,.06);
         transition: transform .16s ease, border-color .18s ease, background .18s ease;
+        overflow: hidden;
+    }
+    #page-ideas .idea-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto;
+        height: 3px;
+        background: var(--idea-mark);
+    }
+    #page-ideas .idea-card.status-待整理,
+    #page-ideas .idea-card.status-未处理 {
+        --idea-tint: #fff8e8;
+        --idea-mark: #d8a12d;
+    }
+    #page-ideas .idea-card.status-待实践 {
+        --idea-tint: #fff3d7;
+        --idea-mark: #c98216;
+    }
+    #page-ideas .idea-card.status-实践中 {
+        --idea-tint: #edf5ff;
+        --idea-mark: #3d82d6;
+    }
+    #page-ideas .idea-card.status-已验证 {
+        --idea-tint: #edf8f0;
+        --idea-mark: var(--accent);
+    }
+    #page-ideas .idea-card.status-已放弃 {
+        --idea-tint: #f1f2ee;
+        --idea-mark: #9aa39c;
     }
     #page-ideas .idea-card:hover {
         transform: translateY(-1px);
-        border-color: rgba(33,110,78,.18);
-        background: #fff;
+        border-color: color-mix(in srgb, var(--idea-mark) 32%, var(--line));
+        background: linear-gradient(135deg, #fff, color-mix(in srgb, var(--idea-tint) 82%, #fff));
     }
     #page-ideas .idea-card-head {
         justify-content: flex-start;
