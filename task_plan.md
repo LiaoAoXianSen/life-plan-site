@@ -1,7 +1,11 @@
 # Task Plan
 
 ## Goal
-Add configurable AI support to `D:\project\life-plan-site` after saving the current version, using URL + key + model settings and a small first set of AI-assisted planning actions.
+Continue the formal Vue migration on `migration/vue-app-v1` until the Vue app is a credible replacement candidate for the legacy static app on `master`, with explicit feature-parity acceptance criteria and persisted-data contract coverage.
+
+## Current Goal (2026-07-27, Vue replacement candidate)
+
+Preserve `master`, `experiment/vue-preview-poc`, and the protected materials-page stash while closing one bounded parity blocker at a time. Each completed slice must preserve `lifePlanData` authority, compatibility mirrors, tombstones, snapshots, and existing remote paths; it must pass focused contract tests plus the applicable build/test/check gates before commit.
 
 ## Current Goal (2026-07-23)
 Continue the habit migration by turning the diagnostic sync skeleton into a strictly read-only remote pull and merge preview for `/apps/habit-app/data.json`, without changing `lifePlanData`, `localStorage.habitAppData`, or issuing PUT requests.
@@ -56,7 +60,14 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 42. Status: complete - Validate the new habit cloud-sync flow, package a clean runtime zip, and commit/push the result.
 43. Status: complete - Add protected manual cloud-to-PC habit merge apply flow without changing sync endpoint or Worker.
 44. Status: complete - Validate the cloud-to-PC apply flow, package a clean runtime zip, then commit and push.
-45. Status: in_progress - Add post-apply habit sync guidance so the diagnostics UI clearly tells the user whether the next step is cloud sync or no action.
+45. Status: complete - Add post-apply habit sync guidance so the diagnostics UI clearly tells the user whether the next step is cloud sync or no action.
+46. Status: complete - Establish the Vue migration branch, smoke suite, deployment/rollback guide, and module-by-module parity checklist.
+47. Status: complete - Migrate and verify initial dashboard, todos, records, libraries, search, goals, habits, fitness, wheel, AI, import/export, and protected main-sync slices without importing `app.js`.
+48. Status: complete - Add the first records editor parity slice with persisted record/todo relationship contract coverage.
+49. Status: complete - Add protected main-sync upload with ETag conflict handling, snapshots, tombstone preservation, and persisted-state contract coverage.
+50. Status: complete - Audit and implement the next bounded replacement blocker, prioritizing Todo detail/subtask/session/relationship parity, with legacy-vs-Vue data-contract tests.
+51. Status: complete - Run focused Vue tests, production build, full Vue suite, isolated master legacy verification, and `git diff --check`; fix all regressions in scope.
+52. Status: complete - Update parity acceptance evidence and migration progress, then commit the verified stage without touching protected branches or stash.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -83,3 +94,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | Subagent spawn failed through local proxy on inherited `gpt-5.5` | First read-only explorer used inherited model | Restarted parallel explorers with `gpt-5.4-mini` and continued main-thread work |
 | GitHub HTTPS push failed from direct network | `git push origin master` failed with `Connection was reset` / `Couldn't connect to server`; `Test-NetConnection github.com -Port 443` also failed, while `ssh.github.com:443` was reachable but local SSH auth lacked a GitHub key | Detected local proxy service on `127.0.0.1:7897` and pushed with temporary per-command Git proxy: `git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin master`; do not change global Git config |
 | First final full site check reported 3 merge regressions | Latest `app-sync-kit` life-plan adapter used remote-wins `>=` ties, unlike the site's local-safe `>` fallback, so unstamped old backups could overwrite local items | Changed adapter ties to preserve local data, added life-plan adapter regression checks, rebuilt/copied the browser bundle, passed the 3 focused tests, then passed all 63 site tests |
+| Parallel source-reading wrapper exited with no nested output | First 2026-07-27 Todo parity audit batch combined six large reads | Retried in smaller batches and kept the failed wrapper read-only; no project state changed |
+| Todo detail CSS patch anchor was absent | First style patch assumed a `.sync-actions` line in `src/styles/app-shell.css` | Inspected the actual file tail and reapplied at an existing end-of-file boundary; failed patch made no changes |
+| Focused Todo contract test had an ambiguous `任务` label locator | First Playwright run matched task, subtask region, and subtask inputs | Changed the main task locator to exact label matching; application reached the editor without runtime errors |
+| Focused Todo contract test used the edit-state subtask name in view state | Second run proved both subtasks persisted, but native wrapped labels exposed checkbox names as the subtask text | Switched view-state checks to role/name locators matching the accessibility tree |
+| `npm run test:legacy` exceeded the 5-minute command timeout and later loaded the Vue entry | Direct legacy regression attempts from `migration/vue-app-v1` | Exported protected `master` to ignored `.tmp`, ran master syntax checks, then passed all 73 master Playwright tests with its own static server/config; current-branch legacy command is not a valid gate because `index.html` is intentionally Vue |

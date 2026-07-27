@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-07-27 - Vue migration continuation
+
+- Restored the project, planning, and memory workflows and inspected the current branch, worktree, recent migration commits, protected branches, and stash.
+- Confirmed `migration/vue-app-v1` is clean at `cc18d62` and matches its remote tracking branch; no protected state was modified.
+- Read the Vue parity and deployment/rollback documents. Selected Todo detail/subtask/session/relationship parity as the next bounded candidate pending source-level contract audit.
+- Replaced the stale active goal in `task_plan.md` with the formal Vue replacement-candidate objective and added phases 46-52 for the current migration stream.
+- A large parallel source-reading wrapper failed before returning nested command output; logged it and split the read-only audit into smaller batches.
+- Implemented Todo detail editing, subtask completion sync, one-per-day execution sessions, record/idea relationship visibility, and reference-cleaning deletion through the Vue store/repository boundary.
+- Added a full lifecycle Playwright contract covering persisted Todo fields, subtask-driven completion, sessions, `todoAppData`, tombstones, and record/idea reference cleanup; the focused test and full Vue suite passed.
+- Verified protected `master` in an isolated `.tmp` export because current-branch legacy tests load the Vue entry: all script syntax checks and all 73 master Playwright tests passed.
+- Visually inspected desktop and mobile Todo detail layouts, then corrected the Vue-specific filter grid and detail delete-button styling found by the screenshots.
+- Final standard `scripts/check.ps1` passed all 7 Vue migration tests; `npm run build` completed with 80 transformed modules, and `git diff --check` passed.
+- Updated `docs/vue-migration-parity-checklist.md` with the verified Todo detail contract slice and explicit remaining Todo blockers; this stage does not claim complete Todo parity.
+- Completed migration phases 50-52 and prepared the verified Todo detail parity stage for a local commit on `migration/vue-app-v1`.
+
+
 ## 2026-07-23
 
 - Investigated the user's real diagnostics screenshot and identified the upload blocker as a tombstone comparison-scope bug, not a Sync URL, Worker, or actual mirror-data mismatch.

@@ -32,6 +32,84 @@ test('todo writes main data and the compatible todo mirror', async ({ page }) =>
     expect(stored.mirror.todos[0].text).toBe('Vue 待办');
 });
 
+test('todo detail preserves subtasks sessions relationships tombstones and mirror contracts', async ({ page }) => {
+    const source = emptyData({
+        records: [
+            { id: 'record-linked', type: '日记', title: '关联日记', content: '', startDate: '2026-07-26', endDate: '2026-07-26', todoIds: ['todo-detail'], updatedAt: '2026-07-26T08:00:00' },
+            { id: 'idea-linked', type: '灵感碎片', title: '来源灵感', content: '', startDate: '2026-07-26', endDate: '2026-07-26', todoIds: [], ideaTodoId: 'todo-detail', updatedAt: '2026-07-26T09:00:00' },
+        ],
+        todos: [{
+            id: 'todo-detail', text: '旧待办标题', note: '旧备注', done: false,
+            dueDate: '2026-07-30', planStartDate: '2026-07-26', planEndDate: '2026-07-30',
+            urgency: 'medium', group: '其他', subTodos: [{ text: '旧步骤', done: false }], sessions: [],
+            completedAt: '', sourceType: 'manual', sourceRecordId: '', sourceMatchKey: '旧待办标题',
+            createdAt: '2026-07-26T07:00:00', updatedAt: '2026-07-26T07:00:00',
+        }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/todos');
+
+    await page.getByRole('button', { name: /旧待办标题/ }).first().click();
+    const detail = page.locator('.todo-detail-panel');
+    await expect(detail).toContainText('关联日记');
+    await expect(detail).toContainText('来源灵感');
+    await detail.getByRole('button', { name: '编辑待办' }).click();
+    await detail.getByLabel('任务', { exact: true }).fill('更新后的待办');
+    await detail.getByLabel('备注').fill('更新后的备注');
+    await detail.getByLabel('计划开始').fill('2026-07-27');
+    await detail.getByLabel('计划结束').fill('2026-07-29');
+    await detail.getByLabel('截止日期').fill('2026-07-31');
+    await detail.getByLabel('紧急度').selectOption('high');
+    await detail.getByLabel('分组').fill('工作');
+    await detail.getByLabel('新子任务').fill('新增步骤');
+    await detail.getByRole('button', { name: '添加', exact: true }).click();
+    await detail.getByRole('button', { name: '保存修改' }).click();
+    await expect(detail.getByRole('heading', { name: '更新后的待办' })).toBeVisible();
+
+    await detail.getByRole('checkbox', { name: '旧步骤' }).check();
+    await detail.getByRole('checkbox', { name: '新增步骤' }).check();
+    await expect(detail.getByRole('button', { name: '恢复未完成' })).toBeVisible();
+    await detail.getByLabel('执行日期').fill('2026-07-27');
+    await detail.getByLabel('开始时间').fill('10:00');
+    await detail.getByLabel('结束时间').fill('10:45');
+    await detail.getByLabel('执行备注').fill('完成契约测试');
+    await detail.getByRole('button', { name: '记录执行' }).click();
+    await expect(detail).toContainText('完成契约测试');
+
+    const saved = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    expect(saved.data.todos[0]).toMatchObject({
+        id: 'todo-detail', text: '更新后的待办', note: '更新后的备注', done: true,
+        dueDate: '2026-07-31', planStartDate: '2026-07-27', planEndDate: '2026-07-29',
+        urgency: 'high', group: '工作', completedAt: expect.any(String),
+        subTodos: [{ text: '旧步骤', done: true }, { text: '新增步骤', done: true }],
+        sessions: [expect.objectContaining({ date: '2026-07-27', startTime: '10:00', endTime: '10:45', note: '完成契约测试' })],
+    });
+    expect(saved.mirror.authority).toBe('lifePlanData.todos');
+    expect(saved.mirror.todos[0]).toMatchObject({ id: 'todo-detail', text: '更新后的待办', done: true });
+
+    page.once('dialog', dialog => dialog.accept());
+    await detail.getByRole('button', { name: '删除待办' }).click();
+    await expect(page.locator('.todo-detail-panel')).toHaveCount(0);
+    const removed = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    expect(removed.data.todos).toHaveLength(0);
+    expect(removed.data.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'todos', id: 'todo-detail', reason: 'vue-delete-todo', text: '更新后的待办' }),
+    ]));
+    expect(removed.data.records.find(item => item.id === 'record-linked').todoIds).toEqual([]);
+    expect(removed.data.records.find(item => item.id === 'idea-linked').ideaTodoId).toBe('');
+    expect(removed.data.records.find(item => item.id === 'idea-linked').updatedAt).not.toBe('2026-07-26T09:00:00');
+    expect(removed.mirror.todos).toHaveLength(0);
+    expect(removed.mirror.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'todos', id: 'todo-detail' }),
+    ]));
+});
+
 test('habit quick check-in writes the legacy fields and rebuilds its local mirror', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({

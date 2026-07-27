@@ -17,7 +17,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Area | Legacy baseline | Vue baseline | Blocking gaps | Replacement acceptance |
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview exists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
-| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete with `todoAppData` mirror rebuild. | Todo detail/session editing and relationship views remain incomplete. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
+| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail editing, subtask completion, execution sessions, relationship visibility, and `todoAppData` mirror rebuild. | Date/group/exclusive filters, relationship editing, direct record-preview navigation, presets, and Todo independent remote flows remain incomplete. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
 | Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | List/calendar views plus basic create/delete. Day view preserves fixed 160px timed event width and hover title. | Full editor, preview, templates, linked todos, detail interactions, and legacy filters are incomplete. | Users can create, preview, edit, delete, and link records/todos with legacy-compatible `todoIds`, tombstones, and snapshots where applicable. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Status filtering, colors, tags/search, and basic todo conversion exist. | Detail editing and old AI/next-action flows need parity audit. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
@@ -65,3 +65,22 @@ Remaining Sync scope:
 - Automatic sync and visibility-resume sync.
 - Independent todo/habit/wheel remote preview/apply/upload flows.
 - WebDAV verification readback for independent app mirrors.
+
+### Todo Detail Contract Slice
+
+Status: verified locally
+
+- Select a Todo from the overview and edit title, note, plan range, due date, urgency, group, and subtasks in an inline detail panel.
+- Toggle subtasks in view mode and reuse `todos-service.js` completion rules so all-complete and reopened states preserve legacy `done` / `completedAt` behavior.
+- Add and remove execution sessions while preserving legacy session fields, time validation, and one-session-per-day behavior.
+- Show records and ideas that reference the Todo through `todoIds` or `ideaTodoId`.
+- Delete through the existing tombstone service, remove record/idea references, update touched record timestamps, and rebuild `todoAppData` from `lifePlanData`.
+- Add Playwright coverage for the complete persisted lifecycle: detail fields, subtasks, sessions, mirror contents, Todo tombstone, and relationship cleanup.
+- Verify desktop and mobile layouts with old-format fixture data; the page remains within the viewport at 1440px and 390px widths.
+
+Remaining Todo scope:
+
+- Legacy date-range, group, and exclusive/shared filters.
+- Relationship creation/removal from the Todo detail and direct opening of a specific linked record preview.
+- Legacy date presets and any remaining dashboard/calendar Todo detail entry points.
+- Independent Todo remote preview/apply/upload diagnostics and conflict handling.

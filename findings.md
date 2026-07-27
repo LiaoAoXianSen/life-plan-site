@@ -1,5 +1,17 @@
 # Findings
 
+## 2026-07-27 - Vue migration continuation
+
+- Current authoritative branch is `migration/vue-app-v1` at `cc18d62`, clean and matching `origin/migration/vue-app-v1`.
+- Protected state is intact: `master` remains at `38f885f`, `experiment/vue-preview-poc` remains at `d5daf32`, and `stash@{0}` remains `wip-materials-page-v1-before-vue-preview-experiment`.
+- `docs/vue-migration-parity-checklist.md` is the current replacement-candidate acceptance source. It explicitly requires persisted data-shape regression coverage and treats build/route smoke success as insufficient.
+- The last verified slices are the records editor contract (`50898e7`) and protected main sync (`cc18d62`).
+- Todos are the next bounded blocker: Vue has basic CRUD/filter/toggle/delete and `todoAppData` mirror rebuild, while detail editing, subtasks, sessions, and record/idea relationship views remain incomplete.
+- No development or Playwright process was running when this continuation began, and the worktree had no staged or unstaged changes.
+- Desktop/mobile screenshot review found that the legacy Todo filter grid assumed eight controls while Vue renders three, compressing the mobile controls. Vue now overrides that grid to three desktop columns and one mobile column.
+- Screenshot review also found unstyled detail-row delete actions; the Vue detail panel now supplies local link-button danger/focus states without changing legacy styles.
+
+
 ## 2026-07-23
 
 - Real-data verification screenshot exposed a false consistency blocker: legacy `deletedItems` counted all 284 application tombstones, while the habit mirror correctly contained only canonicalizable habit-related tombstones, producing `旧 284 / 镜像 0` despite habits, records, ledger, and balance matching.

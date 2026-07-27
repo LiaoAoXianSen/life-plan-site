@@ -1,5 +1,19 @@
 export type DataEntity = Record<string, unknown> & { id?: string; updatedAt?: string; createdAt?: string };
 
+export interface TodoSubTodo {
+  text: string;
+  done: boolean;
+}
+
+export interface TodoSession extends Record<string, unknown> {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  note: string;
+  createdAt: string;
+}
+
 export interface Todo extends DataEntity {
   id: string;
   text: string;
@@ -10,8 +24,8 @@ export interface Todo extends DataEntity {
   planEndDate: string;
   urgency: 'urgent' | 'high' | 'medium' | 'low';
   group: string;
-  subTodos: Array<{ text: string; done: boolean }>;
-  sessions: Array<Record<string, unknown>>;
+  subTodos: TodoSubTodo[];
+  sessions: TodoSession[];
   completedAt: string;
   sourceType: string;
   sourceRecordId: string;
