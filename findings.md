@@ -19,6 +19,12 @@
 - A focused Playwright contract now proves Dashboard navigation, direct URL restoration, query cleanup, draft-only presets, and plan/due/session calendar navigation all target one Todo without changing `lifePlanData` or creating `todoAppData`.
 - Record/Todo relationships remain record-owned: ordinary links use `record.todoIds`, while idea-origin links use `record.ideaTodoId`.
 - The legacy Todo detail can delete a Todo and clean both fields but does not expose relationship unlink controls. Vue Todo-side editing should therefore mutate record fields directly and protect an exclusive Todo's source relationship from unlinking.
+- Legacy Todo independent sync uses fixed `/apps/todo-app/data.json`, `todoAppSyncConfig`, and `todoAppSyncState`; it reuses the unified main endpoint and keeps auto-sync disabled.
+- The required network contracts are GET-only preview, preview-bound merge apply with a second GET, `If-Match` for an existing remote file, and session-armed `If-None-Match: *` for first creation, followed by GET verification.
+- `todos-service.js` already owns canonicalization, hash payloads, dual-write consistency, and tombstone-aware snapshot merging. Vue should call these APIs rather than reproduce merge rules.
+- `LifePlanRepository` already rebuilds `todoAppData` after commits; exposing that existing method gives independent-sync preflights the same mirror contract without importing `app.js`.
+- Applying an independent Todo remote merge changes authoritative `lifePlanData` and must mark the main `lifePlanSyncState.dirty` flag true; treating it like a main-remote pull would silently skip propagation to `/life-plan.json`.
+- Legacy Todo cloud apply explicitly asks again when its rollback snapshot cannot be created; the Vue port must not silently continue without that recovery point.
 
 
 ## 2026-07-23

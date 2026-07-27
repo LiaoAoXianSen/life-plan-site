@@ -6,6 +6,18 @@ function emptyData(overrides = {}) {
     };
 }
 
+function todoFixture(id, text, overrides = {}) {
+    return {
+        id, text, note: '', done: false, dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他',
+        subTodos: [], sessions: [], completedAt: '', sourceType: 'manual', sourceRecordId: '', sourceMatchKey: text,
+        createdAt: '2026-07-27T08:00:00', updatedAt: '2026-07-27T08:00:00', ...overrides,
+    };
+}
+
+function todoRemoteSnapshot(todos, deletedItems = []) {
+    return { schemaVersion: 1, generatedAt: '2026-07-27T09:00:00.000Z', todos, deletedItems };
+}
+
 test('Vue shell navigates through migrated pages without browser errors', async ({ page }) => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -323,6 +335,192 @@ test('record editor persists linked and exclusive todos through the main data co
     expect(record.todoIds).toContain(exclusive.id);
     expect(stored.mirror.authority).toBe('lifePlanData.todos');
     expect(stored.mirror.todos.map(item => item.id)).toEqual(expect.arrayContaining(['todo-1', exclusive.id]));
+});
+
+test('todo remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {
+    const local = emptyData({ todos: [todoFixture('todo-local-sync', '本机独立待办')] });
+    const remote = todoRemoteSnapshot([todoFixture('todo-remote-sync', '云端独立待办', { updatedAt: '2026-07-27T09:00:00' })]);
+    const original = JSON.stringify(local);
+    await page.addInitScript(({ localData, remoteData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
+        window.__todoSyncRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__todoSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'GET') return new Response(JSON.stringify(remoteData), { status: 200, headers: { ETag: '"todo-v1"', 'Content-Type': 'application/json' } });
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, remoteData: remote });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.todo-sync-card');
+    await panel.getByRole('button', { name: '检查 Todo 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('已生成');
+    await expect(panel).toContainText('本机');
+    await expect(panel).toContainText('云端');
+    const previewed = await page.evaluate(() => ({
+        data: localStorage.getItem('lifePlanData'),
+        methods: window.__todoSyncRequests.map(item => item.method),
+        config: JSON.parse(localStorage.getItem('todoAppSyncConfig')),
+        state: JSON.parse(localStorage.getItem('todoAppSyncState')),
+    }));
+    expect(previewed.data).toBe(original);
+    expect(previewed.methods).toEqual(['GET']);
+    expect(previewed.config).toMatchObject({ remotePath: '/apps/todo-app/data.json', autoSync: false, remoteUploadEnabled: false });
+    expect(previewed.state.lastRemoteEtag).toBe('"todo-v1"');
+
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '应用合并到本机' }).click();
+    await expect(panel.getByRole('status')).toContainText('已应用');
+    const applied = await page.evaluate(() => ({
+        methods: window.__todoSyncRequests.map(item => item.method),
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+        state: JSON.parse(localStorage.getItem('todoAppSyncState')),
+        mainState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'),
+    }));
+    expect(applied.methods).toEqual(['GET', 'GET']);
+    expect(applied.data.todos.map(item => item.id)).toEqual(expect.arrayContaining(['todo-local-sync', 'todo-remote-sync']));
+    expect(applied.mirror.todos.map(item => item.id)).toEqual(expect.arrayContaining(['todo-local-sync', 'todo-remote-sync']));
+    expect(applied.mirror.authority).toBe('lifePlanData.todos');
+    expect(applied.state.dirty).toBe(true);
+    expect(applied.mainState.dirty).toBe(true);
+    expect(applied.snapshots.some(item => item.reason === '应用 Todo 云端合并结果前')).toBe(true);
+});
+
+test('todo existing remote upload uses If-Match and verifies the written mirror', async ({ page }) => {
+    const local = emptyData({ todos: [todoFixture('todo-existing-sync', '本机新版待办', { updatedAt: '2026-07-27T10:00:00' })] });
+    const remote = todoRemoteSnapshot([todoFixture('todo-existing-sync', '云端旧版待办', { updatedAt: '2026-07-27T08:00:00' })]);
+    await page.addInitScript(({ localData, remoteData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-old-path.json', autoSync: true, remoteUploadEnabled: true }));
+        window.__todoSyncRequests = [];
+        window.__todoUploaded = null;
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__todoSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'PUT') {
+                window.__todoUploaded = JSON.parse(options.body);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"todo-v2"' } });
+            }
+            if (method === 'GET') {
+                const fileGets = window.__todoSyncRequests.filter(item => item.method === 'GET').length;
+                const body = fileGets >= 3 && window.__todoUploaded ? window.__todoUploaded : remoteData;
+                return new Response(JSON.stringify(body), { status: 200, headers: { ETag: fileGets >= 3 ? '"todo-v2"' : '"todo-v1"', 'Content-Type': 'application/json' } });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, remoteData: remote });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.todo-sync-card');
+    await panel.getByRole('button', { name: '检查 Todo 云端' }).click();
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '受保护上传' }).click();
+    await expect(panel.getByRole('status')).toContainText('回读核验一致');
+
+    const result = await page.evaluate(() => ({
+        requests: window.__todoSyncRequests,
+        uploaded: window.__todoUploaded,
+        state: JSON.parse(localStorage.getItem('todoAppSyncState')),
+        config: JSON.parse(localStorage.getItem('todoAppSyncConfig')),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/todo-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET', 'PUT', 'GET']);
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(put.headers['If-Match'] || put.headers['if-match']).toBe('"todo-v1"');
+    expect(result.uploaded.todos[0].text).toBe('本机新版待办');
+    expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"todo-v2"' });
+    expect(result.config).toMatchObject({ autoSync: false, remoteUploadEnabled: false });
+});
+
+test('todo existing upload stops before PUT when the remote changed after preview', async ({ page }) => {
+    const local = emptyData({ todos: [todoFixture('todo-race-local', '竞态本机待办', { updatedAt: '2026-07-27T10:00:00' })] });
+    const remoteBefore = todoRemoteSnapshot([todoFixture('todo-race-remote', '预览云端待办')]);
+    const remoteAfter = todoRemoteSnapshot([
+        ...remoteBefore.todos,
+        todoFixture('todo-race-new', '另一设备新增待办', { updatedAt: '2026-07-27T11:00:00' }),
+    ]);
+    await page.addInitScript(({ localData, firstRemote, secondRemote }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        window.__todoSyncRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__todoSyncRequests.push({ url: String(url), method, headers: options.headers || {} });
+            if (method === 'GET') {
+                const count = window.__todoSyncRequests.filter(item => item.method === 'GET').length;
+                return new Response(JSON.stringify(count === 1 ? firstRemote : secondRemote), {
+                    status: 200,
+                    headers: { ETag: count === 1 ? '"todo-v1"' : '"todo-v2"', 'Content-Type': 'application/json' },
+                });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, firstRemote: remoteBefore, secondRemote: remoteAfter });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.todo-sync-card');
+    await panel.getByRole('button', { name: '检查 Todo 云端' }).click();
+    await panel.getByRole('button', { name: '受保护上传' }).click();
+    await expect(panel.getByRole('status')).toContainText('云端自上次检查后已变化');
+    const result = await page.evaluate(() => ({
+        methods: window.__todoSyncRequests.map(item => item.method),
+        state: JSON.parse(localStorage.getItem('todoAppSyncState')),
+    }));
+    expect(result.methods).toEqual(['GET', 'GET']);
+    expect(result.state.lastConflictAt).toBeTruthy();
+});
+
+test('todo first remote creation requires session arm and uses If-None-Match', async ({ page }) => {
+    const local = emptyData({ todos: [todoFixture('todo-first-sync', '首次云端待办')] });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-old-path.json', autoSync: true, remoteUploadEnabled: true }));
+        window.__todoSyncRequests = [];
+        window.__todoUploaded = null;
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__todoSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'PUT') {
+                window.__todoUploaded = JSON.parse(options.body);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"todo-created"' } });
+            }
+            if (method === 'GET') {
+                if (!window.__todoUploaded) return new Response('missing', { status: 404 });
+                return new Response(JSON.stringify(window.__todoUploaded), { status: 200, headers: { ETag: '"todo-created"', 'Content-Type': 'application/json' } });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, local);
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.todo-sync-card');
+    await panel.getByRole('button', { name: '检查 Todo 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('不存在');
+    await expect(panel.getByRole('checkbox', { name: '本次会话允许首次创建' })).not.toBeChecked();
+    expect(await page.evaluate(() => window.__todoSyncRequests.filter(item => item.method === 'PUT').length)).toBe(0);
+    await panel.getByRole('checkbox', { name: '本次会话允许首次创建' }).check();
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '首次创建' }).click();
+    await expect(panel.getByRole('status')).toContainText('回读核验一致');
+
+    const result = await page.evaluate(() => ({
+        requests: window.__todoSyncRequests,
+        state: JSON.parse(localStorage.getItem('todoAppSyncState')),
+        config: JSON.parse(localStorage.getItem('todoAppSyncConfig')),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/todo-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET', 'PUT', 'GET']);
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(put.headers['If-None-Match'] || put.headers['if-none-match']).toBe('*');
+    expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"todo-created"' });
+    expect(result.config).toMatchObject({ autoSync: false, remoteUploadEnabled: false });
 });
 
 test('main sync upload uses If-Match and merges after a 412 conflict', async ({ page }) => {

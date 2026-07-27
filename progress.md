@@ -206,3 +206,12 @@
 - Full `scripts/check.ps1` passed syntax checks and 10/10 Vue Playwright tests.
 - Relationship controls passed desktop 1440px and mobile 390px visual review. The desktop `.vue-main` scroll container exposed the full sticky panel (`scrollHeight 1540`, `clientHeight 1000`) with no horizontal overflow; the mobile full page also had `scrollWidth === clientWidth`.
 - Updated Todo parity evidence; final `npm run build` and `git diff --check` passed before the phase 61 commit.
+- Committed Todo relationship editing as `fcfcf72 feat: edit todo record relationships`.
+- Audited the legacy Todo independent sync state machine and opened phases 62-66 for a faithful Vue port using existing canonical/merge services.
+- Implemented the Vue Todo sync panel with fixed-path preview, merge apply, `If-Match` existing upload, session-armed `If-None-Match` first creation, and post-PUT verification; production build passed.
+- Added three focused network/persistence contracts; preview/apply, existing upload, and first creation passed 3/3 on their first run.
+- Added a preview-to-upload remote race regression proving the flow stops after two GETs, sends no PUT, and records `lastConflictAt`; all four focused Todo sync contracts passed 4/4.
+- Full `scripts/check.ps1` passed 14/14 Vue Playwright tests; final production build also passed after correcting independent-apply main dirty semantics.
+- Desktop 1440px and mobile 390px Todo sync previews showed all actions and comparison states without overlap; document and `.vue-main` both reported `scrollWidth === clientWidth`.
+- Verified stale persisted Todo upload authorization is reset on load and remains unchecked until the current session explicitly arms first creation.
+- Final review restored the legacy second confirmation when an application-before snapshot cannot be created; the focused apply contract, production build, and `git diff --check` passed afterward.

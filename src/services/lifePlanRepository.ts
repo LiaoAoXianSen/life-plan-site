@@ -93,8 +93,12 @@ export class LifePlanRepository {
     this.services.snapshots.downloadJsonFile(`life-plan-backup-${stamp}.json`, data);
   }
 
-  private rebuildTodoMirror(data: LifePlanData, reason: string) {
-    const sourceHash = this.services.sync.getDataHash({ todos: data.todos, deletedItems: data.deletedItems.filter(item => item.collection === 'todos') });
+  getTodoSourceHash(data: LifePlanData) {
+    return this.services.sync.getDataHash({ todos: data.todos, deletedItems: data.deletedItems.filter(item => item.collection === 'todos') });
+  }
+
+  rebuildTodoMirror(data: LifePlanData, reason: string) {
+    const sourceHash = this.getTodoSourceHash(data);
     const built = this.services.todos.buildTodoAppLocalMirror(data, {
       reason,
       sourceHash,
@@ -103,12 +107,14 @@ export class LifePlanRepository {
         .filter((item: { dualWrite?: string }) => item.dualWrite === 'enabled')
         .map((item: { id: string }) => item.id),
     });
-    localStorage.setItem(todoMirrorKey, JSON.stringify({
+    const mirror = {
       ...built.snapshot,
       localMirror: true,
       remoteUploadEnabled: false,
       authority: 'lifePlanData.todos',
-    }));
+    };
+    localStorage.setItem(todoMirrorKey, JSON.stringify(mirror));
+    return mirror;
   }
 
   private updateMainSyncState(data: LifePlanData, source: CommitSource) {

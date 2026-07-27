@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 
+import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -248,5 +249,7 @@ async function importFile(event: Event) {
       </div>
       <p v-if="status" class="sync-status active">{{ status }}</p>
     </article>
+
+    <TodoSyncPanel :sync-config="config" />
   </section>
 </template>

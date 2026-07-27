@@ -17,7 +17,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Area | Legacy baseline | Vue baseline | Blocking gaps | Replacement acceptance |
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview plus exact Todo detail links from today and floating lists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
-| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record deep navigation, and `todoAppData` mirror rebuild. | Todo independent remote flows remain incomplete. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
+| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
 | Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | List/calendar views plus basic create/delete. Day view preserves fixed 160px timed event width and hover title. | Full editor, preview, templates, linked todos, detail interactions, and legacy filters are incomplete. | Users can create, preview, edit, delete, and link records/todos with legacy-compatible `todoIds`, tombstones, and snapshots where applicable. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Status filtering, colors, tags/search, and basic todo conversion exist. | Detail editing and old AI/next-action flows need parity audit. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
@@ -26,7 +26,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Habits | Full rule editor, archive/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic create and quick check-in with `habitAppData` local mirror. | Most advanced workflows remain blockers. | Habit workflows produce the same `habits`, `checkins`, `habitPointLedger`, currency, milestone, mirror, and conflict data as legacy. |
 | Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, single-exercise plan, live workout basics, history. | Multi-exercise plan editing, timer UX, complete history editing, plan writeback. | Fitness writes are delegated to `fitness-service.js` and support old multi-exercise workflows. |
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, tag two-stage spin, history, todo conversion, JSON/CSV. | Canvas parity, batch public-item flows, independent sync/conflict handling. | Wheel collections and independent sync path remain compatible with old `wheel-tool.js` behavior. |
-| Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Basic main sync and import/export exist. | Auto sync, conditional writes/conflict retry, habit/wheel/todo independent flows. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
+| Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo independent preview/apply/conditional upload flows. | Auto sync and Habit/Wheel independent flows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice and remote/local request path. | Old modes and confirmation writeback are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
 | Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists. | Needs broader contract tests with mirrors/tombstones. | Import/export round-trips complete data with snapshots and merge semantics intact. |
 
@@ -80,7 +80,7 @@ Status: verified locally
 
 Remaining Todo scope:
 
-- Independent Todo remote preview/apply/upload diagnostics and conflict handling.
+- No open blocker in the current Todo parity audit. Reopen this section only when a concrete legacy/data-contract difference is found.
 
 ### Todo Filters And Record Deep Links
 
@@ -114,3 +114,15 @@ Status: verified locally
 - Persist touched record timestamps and rebuild `todoAppData` through the existing `lifePlan.mutate` repository path.
 - Add Playwright coverage for added/removed record fields, timestamps, mirror authority, and the protected exclusive-source UI.
 - Verify the relationship controls at 1440px and 390px widths, including the desktop internal scroll container and zero horizontal overflow.
+
+### Todo Independent Sync Slice
+
+Status: verified locally
+
+- Reuse `lifePlanSyncConfig.webdavUrl` and keep the independent path fixed at `/apps/todo-app/data.json`; no second endpoint is stored.
+- Force `todoAppSyncConfig.autoSync` and restored upload authorization off, with first creation unlocked only by a current-session checkbox.
+- Keep preview GET-only for authoritative data, then require a second GET before applying the tombstone-aware `todos-service.js` merge to `lifePlanData`.
+- Create an application-before snapshot, rebuild `todoAppData`, persist `todoAppSyncState`, and mark the main `lifePlanSyncState` dirty after an independent Todo merge changes authority.
+- Upload an existing file only against an unchanged preview baseline with `If-Match`; create a missing file with `If-None-Match: *`; always GET-verify the written Todo hash and never auto-retry an uncertain PUT.
+- Add Playwright coverage for GET-only preview, merge persistence, snapshots, both conditional headers, post-write verification, restored authorization reset, and pre-PUT refusal when the remote changes.
+- Pass the complete 14-test Vue suite and verify the comparison/action surface at 1440px and 390px with zero document or main-container horizontal overflow.
