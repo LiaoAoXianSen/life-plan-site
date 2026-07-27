@@ -2,10 +2,10 @@
     .record-calendar { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
     .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); }
     .calendar-head, .calendar-cell { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
-    .calendar-head { padding: 10px 12px; color: var(--muted); font-size: 12px; font-weight: 850; background: var(--surface-soft); }
+    .calendar-head { padding: 10px 12px; color: var(--muted); font-size: 12px; font-weight: 700; background: var(--surface-soft); }
     .calendar-cell { min-height: 172px; padding: 10px; background: #fff; }
     .calendar-cell.is-today { background: #edf7f1; }
-    .calendar-date { color: var(--text); font-weight: 850; margin-bottom: 8px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .calendar-date { color: var(--text); font-weight: 700; margin-bottom: 8px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .calendar-date small { color: var(--faint); font-weight: 700; }
     .calendar-cell-body { display: grid; gap: 6px; }
     .calendar-event {
@@ -50,8 +50,8 @@
     }
     .agenda-day-head.is-today { background: #edf7f3; }
     .agenda-day-head:last-child { border-right: none; }
-    .agenda-day-label { font-size: 13px; color: #333; font-weight: 850; margin-bottom: 8px; }
-    .agenda-day-number { font-size: 15px; font-weight: 900; color: #333; line-height: 1; }
+    .agenda-day-label { font-size: 13px; color: #333; font-weight: 700; margin-bottom: 8px; }
+    .agenda-day-number { font-size: 15px; font-weight: 700; color: #333; line-height: 1; }
     .agenda-day-extra { font-size: 12px; color: #779287; margin-left: 7px; font-weight: 800; }
     .agenda-all-day {
         display: grid;
@@ -62,7 +62,7 @@
         background: #fff;
         color: #333;
         font-size: 12px;
-        font-weight: 850;
+        font-weight: 700;
         padding: 12px 10px;
     }
     .agenda-all-day-cell {
@@ -87,7 +87,7 @@
         border-radius: 4px;
         padding: 4px 6px;
         font-size: 12px;
-        font-weight: 850;
+        font-weight: 700;
         cursor: pointer;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -168,7 +168,7 @@
     .agenda-event-time {
         font-size: 10px;
         color: rgba(49, 69, 56, .68);
-        font-weight: 850;
+        font-weight: 700;
         margin-bottom: 1px;
         line-height: 1.25;
         white-space: nowrap;
@@ -177,7 +177,7 @@
     }
     .agenda-event-title {
         font-size: 12px;
-        font-weight: 900;
+        font-weight: 700;
         line-height: 1.25;
         white-space: nowrap;
         overflow: hidden;

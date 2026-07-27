@@ -73,7 +73,7 @@
         min-height: 26px;
         padding: 3px 10px;
         font-size: 12px;
-        font-weight: 850;
+        font-weight: 700;
         cursor: pointer;
         transition: .16s ease;
     }
@@ -140,7 +140,7 @@
         border-spacing: 0;
     }
     .todo-table th, .todo-table td { padding: 12px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-    .todo-table th { background: var(--surface-soft); font-weight: 850; color: var(--muted); font-size: 12px; }
+    .todo-table th { background: var(--surface-soft); font-weight: 700; color: var(--muted); font-size: 12px; }
     .todo-table tr:last-child td { border-bottom: none; }
     .todo-table tbody tr:hover td { background: #fbfdfb; }
     .todo-title-cell { cursor: pointer; font-weight: 750; color: var(--text); overflow-wrap: anywhere; }
@@ -219,7 +219,7 @@
         padding: 2px 9px;
         border-radius: 999px;
         font-size: 12px;
-        font-weight: 850;
+        font-weight: 700;
         white-space: nowrap;
         flex: 0 0 auto;
     }

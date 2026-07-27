@@ -51,7 +51,7 @@
     .ai-context-title {
         font-size: 12px;
         color: var(--muted);
-        font-weight: 900;
+        font-weight: 700;
         margin-bottom: 9px;
         letter-spacing: .03em;
     }
@@ -129,7 +129,7 @@
         margin-bottom: 10px;
     }
     .ai-result-title {
-        font-weight: 900;
+        font-weight: 700;
         color: var(--text);
         line-height: 1.35;
     }
