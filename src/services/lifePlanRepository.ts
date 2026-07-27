@@ -13,21 +13,55 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+/**
+ * The legacy app normalizes data before every persisted write. Keep that
+ * boundary here so a Vue mutation or an imported backup cannot bypass the
+ * existing service-owned Todo/Fitness normalizers or resurrect tombstoned
+ * entities. This intentionally returns plain JSON-compatible data.
+ */
+function normalizePersistedData(value: unknown, services: ReturnType<typeof createLegacyServices>): LifePlanData {
+  const target = normalizeTopLevelData(value);
+  services.sync.pruneDeletedItems(target);
+  target.todos = target.todos
+    .map((item: Record<string, unknown>, index: number) => services.todos.normalizeTodoEntity(item, index))
+    .filter(Boolean);
+  target.records = target.records.filter(record => !record.isHabitRecord).map(record => ({
+    ...record,
+    todoIds: Array.isArray(record.todoIds) ? record.todoIds : [],
+    content: typeof record.content === 'string' ? record.content : '',
+    ideaTags: Array.isArray(record.ideaTags) ? record.ideaTags : [],
+  }));
+  target.materials = target.materials.map(item => ({
+    ...item,
+    type: typeof item.type === 'string' && item.type ? item.type : '摘抄',
+    content: typeof item.content === 'string' ? item.content : '',
+    tags: Array.isArray(item.tags) ? item.tags : [],
+    source: typeof item.source === 'string' ? item.source : '',
+    note: typeof item.note === 'string' ? item.note : '',
+  }));
+  target.goals = target.goals.map(item => ({
+    ...item,
+    progress: Number.isFinite(Number(item.progress)) ? Number(item.progress) : item.status === '已完成' ? 100 : 0,
+  }));
+  services.fitness.normalizeFitnessData(target);
+  return target;
+}
+
 export class LifePlanRepository {
   private readonly services = createLegacyServices();
 
   load(): LifePlanData {
     try {
       const raw = localStorage.getItem(mainDataKey);
-      return normalizeTopLevelData(raw ? JSON.parse(raw) : {});
+      return normalizePersistedData(raw ? JSON.parse(raw) : {}, this.services);
     } catch (error) {
       console.warn('lifePlanData 读取失败，已使用空数据加载', error);
-      return normalizeTopLevelData({});
+      return normalizePersistedData({}, this.services);
     }
   }
 
   commit(sourceData: LifePlanData, reason: string, source: CommitSource = 'user'): LifePlanData {
-    const next = normalizeTopLevelData(clone(sourceData));
+    const next = normalizePersistedData(clone(sourceData), this.services);
     const previous = localStorage.getItem(mainDataKey);
     try {
       localStorage.setItem(mainDataKey, JSON.stringify(next));
@@ -46,9 +80,9 @@ export class LifePlanRepository {
   }
 
   mergeImport(data: LifePlanData, imported: unknown): LifePlanData {
-    const incoming = normalizeTopLevelData(imported);
+    const incoming = normalizePersistedData(imported, this.services);
     this.createSnapshot('导入前自动备份', data, { action: 'before-import' });
-    const merged = normalizeTopLevelData(this.services.sync.mergeCloudData(data, incoming));
+    const merged = normalizePersistedData(this.services.sync.mergeCloudData(data, incoming), this.services);
     this.createSnapshot('导入合并结果', merged, { action: 'merge-result', mergedWith: { label: '导入文件' } });
     return this.commit(merged, 'import-merge', 'sync');
   }
