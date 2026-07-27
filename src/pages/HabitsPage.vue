@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { useHabitsStore } from '../stores/habitsStore';
 
 const habits = useHabitsStore();
+const route = useRoute();
 const name = ref('');
 const tag = ref('');
 const timesPerDay = ref(1);
 const formError = ref('');
+const focusedHabitId = computed(() => String(route.query.habit || ''));
 const todayItems = computed(() => habits.todayHabits.map(habit => ({
   habit,
   count: habits.getCheckinCount(habit.id),
@@ -68,7 +71,7 @@ function checkin(id: string) {
         </div>
       </div>
       <div class="habit-quick-list">
-        <article v-for="item in todayItems" :key="item.habit.id" class="habit-quick-card compact" :class="{ done: item.count > 0, multi: item.target > 1 }">
+        <article v-for="item in todayItems" :key="item.habit.id" class="habit-quick-card compact" :class="{ done: item.count > 0, multi: item.target > 1, 'is-target': focusedHabitId === item.habit.id }" :aria-current="focusedHabitId === item.habit.id ? 'true' : undefined">
           <div class="habit-quick-head">
             <div class="habit-quick-main">
               <div class="habit-quick-title-row">
@@ -104,3 +107,7 @@ function checkin(id: string) {
     </section>
   </section>
 </template>
+
+<style scoped>
+.habit-quick-card.is-target { outline: 3px solid rgba(47, 128, 237, .24); outline-offset: 2px; }
+</style>

@@ -133,6 +133,14 @@
 - Legacy considers `ideaTodoId` linked only when the referenced Todo still exists; a stale imported ID must not block creating a replacement Todo or navigating to a valid detail.
 - Legacy record autosave debounces editor changes for 3 seconds, persists dirty changes immediately when closing, cancels the pending timer before preview/close, and reports the autosave clock time after success.
 - The current Vue Records editor edits existing records inline, while new records still use a separate explicit-submit form. Existing-record autosave can match debounce and close/switch/navigation flush semantics without creating a second draft store; new-record modal/draft parity remains a later scope.
+- Legacy Records filtering is a real remaining blocker, not only missing documentation: the page has fixed record type options plus `待办` / `习惯`, a day-order selector, idea status and partial tag filters, and a 7/30/90/all list range defaulting to 30 days.
+- Legacy record keyword matching covers type, title, content, start/end dates, normalized idea status/tags, next action, and conclusion. Vue currently omits both dates and the idea next/conclusion fields.
+- The legacy Records list and day/week/month views include records, Todo execution sessions, and one aggregated checked-habit event per habit/date. Legacy excludes Todo plan-range and due-date events, but Vue commit `43c36a2` intentionally added those two calendar entry points and protects them with a read-only cross-entry test; this accepted calendar superset must remain while the list follows legacy inclusion exactly.
+- Applying either idea-only filter excludes Todo and habit operation events, and all Records filters are transient read-only UI state: they must not rewrite `lifePlanData` or create compatibility mirrors.
+- Legacy `全部历史` has no date predicate at all, so undated historical records remain visible there even though every bounded recent/calendar view excludes them; Vue now keeps that compatibility edge instead of simulating unbounded dates with sentinel strings.
+- Parallel review found that Records and CalendarViews still derived today through UTC ISO dates, which is wrong before 08:00 in Asia/Shanghai; both now use the shared local `getTodayStr()` contract, and the test fixture independently formats local dates.
+- Same-day all-day records need `getRecordSortValue`-compatible secondary ordering when their minute values tie. Schedule items now carry that stable value, while timed layout remains chronological.
+- Mobile visual measurement found long unbroken titles widened the Records list and overlapping fixed-width day events extended beyond a hidden agenda boundary. Record titles now wrap anywhere, and the mobile agenda exposes horizontal scrolling while desktop keeps the accepted 160px event width.
 
 ## 2026-07-27 Diary AI parity
 

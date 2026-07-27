@@ -5,7 +5,21 @@ export interface ScheduleItem {
   key: string; id: string; sourceType: 'record' | 'todo-plan' | 'todo-due' | 'todo-session' | 'habit'; type: string; date: string;
   title: string; preview: string; meta: string; done: boolean; allDay: boolean;
   startMinutes: number | null; endMinutes: number | null; timeLabel: string; tone: ScheduleTone;
+  sortValue?: string;
   layoutColumn?: number; layoutColumns?: number;
+}
+
+export interface ScheduleBuildOptions {
+  keyword?: string;
+  typeFilter?: string;
+  includeRecords?: boolean;
+  includeTodos?: boolean;
+  includeHabits?: boolean;
+  includeTodoPlans?: boolean;
+  includeTodoDue?: boolean;
+  includeTodoSessions?: boolean;
+  recordFilter?: (record: DataEntity) => boolean;
+  isHabitDueOnDate?: (habit: DataEntity, date: string) => boolean;
 }
 
 const tones: Record<string, ScheduleTone> = {
@@ -35,7 +49,18 @@ function makeRecordItem(record: DataEntity): ScheduleItem {
   const start = parseTimeToMinutes(entityString(record, 'recordTime'));
   const end = parseTimeToMinutes(entityString(record, 'recordEndTime'));
   const type = entityString(record, 'type') || '记录';
-  return { key: `record:${record.id}`, id: String(record.id || ''), sourceType: 'record', type, date: entityString(record, 'startDate'), title: entityString(record, 'title') || type, preview: entityString(record, 'content'), meta: type === '灵感碎片' ? entityString(record, 'ideaStatus') : '', done: false, allDay: start === null, startMinutes: start, endMinutes: end !== null && start !== null && end > start ? end : null, timeLabel: entityString(record, 'recordTime') || '全天', tone: tone(type) };
+  const startDate = entityString(record, 'startDate');
+  const endDate = entityString(record, 'endDate');
+  const meta = [
+    endDate && endDate !== startDate ? `${startDate} ~ ${endDate}` : '',
+    type === '灵感碎片' ? `状态 ${entityString(record, 'ideaStatus') || '待整理'}` : '',
+    type === '灵感碎片' && entityString(record, 'ideaNextAction') ? `下一步：${entityString(record, 'ideaNextAction')}` : '',
+    type === '灵感碎片' && entityString(record, 'ideaConclusion') ? '已有结论' : '',
+  ].filter(Boolean).join(' · ');
+  const sortValue = startDate && entityString(record, 'recordTime')
+    ? `${startDate}T${entityString(record, 'recordTime')}:00`
+    : entityString(record, 'createdAt') || entityString(record, 'updatedAt') || `${startDate || endDate || '0000-00-00'}T00:00:00`;
+  return { key: `record:${record.id}`, id: String(record.id || ''), sourceType: 'record', type, date: startDate, title: entityString(record, 'title') || type, preview: entityString(record, 'content'), meta, done: false, allDay: start === null, startMinutes: start, endMinutes: end !== null && start !== null && end > start ? end : null, timeLabel: entityString(record, 'recordTime') || '全天', tone: tone(type), sortValue };
 }
 function makeTodoPlanItem(todo: Todo, date: string): ScheduleItem {
   return { key: `todo-plan:${todo.id}:${date}`, id: todo.id, sourceType: 'todo-plan', type: '待办计划', date, title: `计划：${todo.text}`, preview: `${todo.planStartDate || date} ~ ${todo.planEndDate || date}`, meta: `${todo.group || '其他'} · ${urgencyLabels[todo.urgency]}`, done: todo.done, allDay: true, startMinutes: null, endMinutes: null, timeLabel: '计划', tone: tone('待办计划') };
@@ -45,39 +70,111 @@ function makeTodoDueItem(todo: Todo): ScheduleItem {
 }
 function makeTodoItem(todo: Todo, session: Record<string, unknown>): ScheduleItem {
   const start = parseTimeToMinutes(session.startTime); const end = parseTimeToMinutes(session.endTime);
-  return { key: `todo-session:${todo.id}:${session.id}`, id: todo.id, sourceType: 'todo-session', type: '待办执行', date: String(session.date || ''), title: `执行：${todo.text}`, preview: String(session.note || ''), meta: todo.group, done: todo.done, allDay: start === null, startMinutes: start, endMinutes: end !== null && start !== null && end > start ? end : null, timeLabel: String(session.startTime || '执行'), tone: tone('待办执行') };
+  const startLabel = String(session.startTime || '--:--');
+  const endLabel = String(session.endTime || '');
+  return { key: `todo-session:${todo.id}:${session.id}`, id: todo.id, sourceType: 'todo-session', type: '待办执行', date: String(session.date || ''), title: `执行：${todo.text}`, preview: String(session.note || `${todo.group || '其他'} 待办`), meta: endLabel ? `${startLabel} ~ ${endLabel}` : String(session.startTime || '执行记录'), done: todo.done, allDay: start === null, startMinutes: start, endMinutes: end !== null && start !== null && end > start ? end : null, timeLabel: String(session.startTime || '执行'), tone: tone('待办执行') };
 }
-function makeHabitItem(habit: DataEntity, checkin: DataEntity): ScheduleItem {
-  const start = parseTimeToMinutes(String(checkin.time || String(checkin.checkinAt || '').slice(11, 16)));
-  return { key: `habit:${habit.id}:${checkin.id}`, id: String(habit.id || ''), sourceType: 'habit', type: '习惯', date: String(checkin.date || ''), title: entityString(habit, 'name') || '习惯打卡', preview: entityString(checkin, 'note'), meta: entityString(habit, 'tag'), done: true, allDay: start === null, startMinutes: start, endMinutes: null, timeLabel: start === null ? '已打卡' : formatMinutesLabel(start), tone: tone('习惯') };
+function checkinSortValue(checkin: DataEntity): string {
+  return entityString(checkin, 'checkinAt')
+    || (entityString(checkin, 'time') ? `${entityString(checkin, 'date')}T${entityString(checkin, 'time')}:00` : '')
+    || entityString(checkin, 'createdAt')
+    || entityString(checkin, 'updatedAt');
+}
+function makeHabitItem(habit: DataEntity, date: string, checkins: DataEntity[]): ScheduleItem {
+  const sorted = [...checkins].sort((a, b) => checkinSortValue(a).localeCompare(checkinSortValue(b)));
+  const latest = sorted[sorted.length - 1];
+  const clock = entityString(latest, 'time') || (entityString(latest, 'checkinAt') || entityString(latest, 'createdAt') || entityString(latest, 'updatedAt')).match(/T(\d{2}:\d{2})/)?.[1] || '';
+  const start = parseTimeToMinutes(clock);
+  const tag = entityString(habit, 'tag') || '习惯';
+  const note = entityString(latest, 'note').replace(/\s+/g, ' ').trim();
+  const target = Math.max(1, Number.parseInt(String(habit.timesPerDay || '1'), 10) || 1);
+  return { key: `habit:${habit.id}:${date}:${latest.id || 'checked'}`, id: String(habit.id || ''), sourceType: 'habit', type: '习惯', date, title: entityString(habit, 'name') || '习惯打卡', preview: `${tag} · 打卡 ${clock || '已记录'}${note ? ` · ${note.slice(0, 42)}` : ''}`, meta: `已打卡 ${checkins.length}/${target}`, done: true, allDay: start === null, startMinutes: start, endMinutes: null, timeLabel: start === null ? '已打卡' : formatMinutesLabel(start), tone: tone('习惯') };
 }
 
-export function buildScheduleItems(data: LifePlanData, startDate: string, endDate: string, keyword = '', typeFilter = 'all'): ScheduleItem[] {
+function defaultHabitDueOnDate(habit: DataEntity, dateText: string): boolean {
+  const startDate = entityString(habit, 'startDate');
+  if (!dateText || (startDate && dateText < startDate)) return false;
+  const date = new Date(`${dateText}T12:00:00`);
+  switch (entityString(habit, 'rule')) {
+    case 'weekly-fixed': return Array.isArray(habit.weekdays) && habit.weekdays.map(String).includes(String(date.getDay()));
+    case 'weekly-count': return (date.getDay() || 7) === 1;
+    case 'monthly-count': return date.getDate() === 1;
+    case 'interval': {
+      if (!startDate) return true;
+      const elapsed = Math.floor((date.getTime() - new Date(`${startDate}T12:00:00`).getTime()) / 86_400_000);
+      const every = Math.max(1, Number.parseInt(String(habit.count || 1), 10) || 1);
+      return elapsed >= 0 && elapsed % every === 0;
+    }
+    default: return true;
+  }
+}
+
+function recordMatchesKeyword(record: DataEntity, clean: string): boolean {
+  if (!clean) return true;
+  const tags = Array.isArray(record.ideaTags) ? record.ideaTags : String(record.ideaTags || '').split(/[,，、;；/\s]+/);
+  return [record.type, record.title, record.content, record.startDate, record.endDate, record.ideaStatus || '待整理', ...tags, record.ideaNextAction, record.ideaConclusion]
+    .filter(Boolean).join(' ').toLowerCase().includes(clean);
+}
+
+function itemMatchesKeyword(item: ScheduleItem, clean: string): boolean {
+  return !clean || [item.type, item.title, item.preview, item.meta, item.date, item.timeLabel].join(' ').toLowerCase().includes(clean);
+}
+
+function dateInRange(date: string, startDate: string, endDate: string): boolean {
+  return (!startDate || date >= startDate) && (!endDate || date <= endDate);
+}
+
+export function buildScheduleItems(data: LifePlanData, startDate: string, endDate: string, options: ScheduleBuildOptions = {}): ScheduleItem[] {
+  const {
+    keyword = '', typeFilter = 'all', includeRecords = true, includeTodos = true, includeHabits = true,
+    includeTodoPlans = true, includeTodoDue = true, includeTodoSessions = true,
+    recordFilter = () => true, isHabitDueOnDate = defaultHabitDueOnDate,
+  } = options;
   const clean = keyword.trim().toLowerCase();
-  const records = data.records.filter(record => {
+  const records = includeRecords ? data.records.filter(record => {
     const date = entityString(record, 'startDate'); const type = entityString(record, 'type');
-    return date >= startDate && date <= endDate && (typeFilter === 'all' || typeFilter === type || (typeFilter === '待办' && false));
-  }).map(makeRecordItem);
-  const todoItems = typeFilter === 'all' || typeFilter === '待办' ? data.todos.flatMap(todo => {
+    return !record.isHabitRecord && dateInRange(date, startDate, endDate)
+      && (typeFilter === 'all' || typeFilter === type)
+      && recordFilter(record)
+      && recordMatchesKeyword(record, clean);
+  }).map(makeRecordItem) : [];
+  const todoItems = includeTodos && (typeFilter === 'all' || typeFilter === '待办') ? data.todos.flatMap(todo => {
     const items: ScheduleItem[] = [];
-    if (todo.planStartDate && todo.planEndDate) {
+    if (includeTodoPlans && todo.planStartDate && todo.planEndDate) {
       const rangeStart = todo.planStartDate < startDate ? startDate : todo.planStartDate;
       const rangeEnd = todo.planEndDate > endDate ? endDate : todo.planEndDate;
       for (let date = rangeStart; date <= rangeEnd; date = addDays(date, 1)) items.push(makeTodoPlanItem(todo, date));
     }
-    if (todo.dueDate && todo.dueDate >= startDate && todo.dueDate <= endDate) items.push(makeTodoDueItem(todo));
-    todo.sessions
-      .filter(session => String(session.date || '') >= startDate && String(session.date || '') <= endDate)
+    if (includeTodoDue && todo.dueDate && todo.dueDate >= startDate && todo.dueDate <= endDate) items.push(makeTodoDueItem(todo));
+    if (includeTodoSessions) (todo.sessions || [])
+      .filter(session => Boolean(session.date) && dateInRange(String(session.date), startDate, endDate))
       .forEach(session => items.push(makeTodoItem(todo, session)));
     return items;
   }) : [];
-  const habits = typeFilter === 'all' || typeFilter === '习惯' ? data.checkins.filter(checkin => String(checkin.date || '') >= startDate && String(checkin.date || '') <= endDate).map(checkin => {
-    const habit = data.habits.find(item => item.id === checkin.habitId); return habit ? makeHabitItem(habit, checkin) : null;
-  }).filter((item): item is ScheduleItem => item !== null) : [];
-  return [...records, ...todoItems, ...habits].filter(item => !clean || [item.type, item.title, item.preview, item.meta].join(' ').toLowerCase().includes(clean));
+  const habitGroups = new Map<string, DataEntity[]>();
+  if (includeHabits && (typeFilter === 'all' || typeFilter === '习惯')) data.checkins.forEach(checkin => {
+    const date = entityString(checkin, 'date');
+    const habitId = entityString(checkin, 'habitId');
+    if (!habitId || !date || !dateInRange(date, startDate, endDate)) return;
+    const key = `${habitId}\u0000${date}`;
+    const values = habitGroups.get(key) || [];
+    values.push(checkin);
+    habitGroups.set(key, values);
+  });
+  const habits = [...habitGroups.entries()].map(([key, checkins]) => {
+    const [habitId, date] = key.split('\u0000');
+    const habit = data.habits.find(item => String(item.id || '') === habitId);
+    return habit && isHabitDueOnDate(habit, date) ? makeHabitItem(habit, date, checkins) : null;
+  }).filter((item): item is ScheduleItem => item !== null);
+  return [...records, ...todoItems, ...habits].filter(item => item.sourceType === 'record' || itemMatchesKeyword(item, clean));
 }
 
-export function sortScheduleItems(items: ScheduleItem[]): ScheduleItem[] { return [...items].sort((a, b) => (a.allDay === b.allDay ? (a.startMinutes ?? 0) - (b.startMinutes ?? 0) : a.allDay ? -1 : 1)); }
+export function sortScheduleItems(items: ScheduleItem[], order: 'asc' | 'desc' = 'asc'): ScheduleItem[] { return [...items].sort((a, b) => {
+  if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+  const timeResult = (a.startMinutes ?? 0) - (b.startMinutes ?? 0);
+  const result = timeResult || String(a.sortValue || '').localeCompare(String(b.sortValue || ''));
+  return order === 'asc' ? result : -result;
+}); }
 function endMinutes(item: ScheduleItem): number { return item.endMinutes !== null && item.endMinutes > (item.startMinutes ?? 0) ? item.endMinutes : Math.min((item.startMinutes ?? 0) + 15, 1439); }
 export function layoutTimedItems(items: ScheduleItem[]): ScheduleItem[] {
   const clusters: ScheduleItem[][] = []; let cluster: ScheduleItem[] = []; let clusterEnd = -1;

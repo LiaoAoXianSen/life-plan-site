@@ -303,6 +303,128 @@ test('records day view maintains a fixed-width timed event with a complete hover
     await expect(event).toHaveCSS('width', '160px');
 });
 
+test('records legacy filters and operation events stay read-only', async ({ page }) => {
+    const dateAt = amount => {
+        const date = new Date();
+        date.setDate(date.getDate() + amount);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const today = dateAt(0);
+    const rangeBoundary = dateAt(-29);
+    const historyDate = dateAt(-31);
+    const futureDate = dateAt(1);
+    const source = emptyData({
+        records: [
+            { id: 'record-all-day', type: '日记', title: '今日全天记录', content: '普通内容', startDate: today, endDate: today, recordTime: '', recordEndTime: '', createdAt: `${today}T08:00:00`, todoIds: [] },
+            { id: 'record-all-day-late', type: '日记', title: '较晚创建的全天记录', content: '普通内容', startDate: today, endDate: today, recordTime: '', recordEndTime: '', createdAt: `${today}T20:00:00`, todoIds: [] },
+            { id: 'record-early', type: '工作记录', title: '早间记录', content: '普通内容', startDate: today, endDate: today, recordTime: '08:00', recordEndTime: '08:30', todoIds: [] },
+            { id: 'record-late', type: '工作记录', title: '晚间记录', content: '普通内容', startDate: today, endDate: today, recordTime: '18:00', recordEndTime: '18:30', todoIds: [] },
+            { id: 'record-boundary', type: '周复盘', title: '三十天边界记录', content: '边界内容', startDate: rangeBoundary, endDate: rangeBoundary, todoIds: [] },
+            { id: 'record-history', type: '月复盘', title: '历史范围外记录', content: '旧内容', startDate: historyDate, endDate: historyDate, todoIds: [] },
+            { id: 'record-future', type: '日计划', title: '未来范围外记录', content: '未来内容', startDate: futureDate, endDate: futureDate, todoIds: [] },
+            { id: 'record-undated', type: '工作记录', title: '未设置日期记录', content: '兼容旧数据', startDate: '', endDate: '', todoIds: [] },
+            { id: 'idea-unprocessed', type: '灵感碎片', title: '待处理迁移灵感', content: '灵感内容', startDate: today, endDate: futureDate, ideaStatus: '待整理', ideaTags: ['ProjectAlpha'], ideaNextAction: 'NEXT-ACTION-MARKER', ideaConclusion: '', todoIds: [] },
+            { id: 'idea-conclusion', type: '灵感碎片', title: '等待结论灵感', content: '实验完成', startDate: today, endDate: today, ideaStatus: '实践中', ideaTags: ['ProjectBeta'], ideaNextAction: '', ideaConclusion: '', todoIds: [] },
+            { id: 'idea-verified', type: '灵感碎片', title: '已有结论灵感', content: '实验完成', startDate: today, endDate: today, ideaStatus: '已验证', ideaTags: ['ProjectAlpha'], ideaNextAction: '', ideaConclusion: 'CONCLUSION-MARKER', todoIds: [] },
+            { id: 'habit-record-shadow', type: '习惯记录', title: '旧习惯影子记录', content: '', startDate: today, endDate: today, isHabitRecord: true, todoIds: [] },
+        ],
+        todos: [
+            todoFixture('todo-session-filter', '迁移执行事项', { dueDate: today, planStartDate: today, planEndDate: futureDate, sessions: [{ id: 'session-filter', date: today, startTime: '10:00', endTime: '10:45', note: 'SESSION-NOTE-MARKER', createdAt: `${today}T10:00:00` }] }),
+            todoFixture('todo-plan-only', '只应出现在待办日程', { dueDate: today, planStartDate: today, planEndDate: today, sessions: [] }),
+        ],
+        habits: [
+            { id: 'habit-filter', name: '聚合阅读习惯', rule: 'daily', timesPerDay: '2', startDate: historyDate, tag: '学习' },
+        ],
+        checkins: [
+            { id: 'checkin-early', habitId: 'habit-filter', date: today, time: '07:00', checkinAt: `${today}T07:00:00`, note: '第一轮' },
+            { id: 'checkin-late', habitId: 'habit-filter', date: today, time: '09:00', checkinAt: `${today}T09:00:00`, note: '第二轮' },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records');
+    const recordsPage = page.locator('#page-records');
+    const results = page.locator('#all-records');
+    const storedBefore = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+
+    await expect(recordsPage.getByLabel('记录日期范围')).toHaveValue('30');
+    await expect(results).toContainText('三十天边界记录');
+    await expect(results).not.toContainText('历史范围外记录');
+    await expect(results).not.toContainText('未来范围外记录');
+    await expect(results).not.toContainText('未设置日期记录');
+    await expect(results).not.toContainText('旧习惯影子记录');
+    await expect(results).toContainText('执行：迁移执行事项');
+    await expect(results).not.toContainText('计划：只应出现在待办日程');
+    await expect(results).not.toContainText('截止：只应出现在待办日程');
+    await expect(results.getByText('聚合阅读习惯', { exact: true })).toHaveCount(1);
+    await expect(results).toContainText('已打卡 2/2');
+
+    const typeValues = await recordsPage.getByLabel('记录类型筛选').locator('option').evaluateAll(options => options.map(option => option.value));
+    expect(typeValues).toEqual(['all', '日记', '日计划', '工作记录', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景', '待办', '习惯']);
+
+    const todayGroup = results.locator('.timeline-group').filter({ hasText: '早间记录' });
+    let titles = await todayGroup.locator('.item-title').allTextContents();
+    expect(titles.indexOf('较晚创建的全天记录')).toBeLessThan(titles.indexOf('今日全天记录'));
+    expect(titles.indexOf('晚间记录')).toBeLessThan(titles.indexOf('早间记录'));
+    await recordsPage.getByLabel('当日顺序').selectOption('asc');
+    titles = await todayGroup.locator('.item-title').allTextContents();
+    expect(titles.indexOf('今日全天记录')).toBeLessThan(titles.indexOf('较晚创建的全天记录'));
+    expect(titles.indexOf('早间记录')).toBeLessThan(titles.indexOf('晚间记录'));
+
+    const search = recordsPage.getByLabel('搜索记录');
+    await search.fill(futureDate);
+    await expect(results).toContainText('待处理迁移灵感');
+    await expect(results).not.toContainText('早间记录');
+    await search.fill('NEXT-ACTION-MARKER');
+    await expect(results).toContainText('待处理迁移灵感');
+    await search.fill('CONCLUSION-MARKER');
+    await expect(results).toContainText('已有结论灵感');
+    await search.fill('');
+
+    await recordsPage.getByLabel('记录灵感状态筛选').selectOption('unprocessed');
+    await recordsPage.getByLabel('记录灵感标签筛选').fill('projectalpha');
+    await expect(results).toContainText('待处理迁移灵感');
+    await expect(results).not.toContainText('等待结论灵感');
+    await expect(results).not.toContainText('执行：迁移执行事项');
+    await expect(results).not.toContainText('聚合阅读习惯');
+    await recordsPage.getByLabel('记录灵感状态筛选').selectOption('needsConclusion');
+    await recordsPage.getByLabel('记录灵感标签筛选').fill('projectbeta');
+    await expect(results).toContainText('等待结论灵感');
+    await expect(results).not.toContainText('已有结论灵感');
+
+    await recordsPage.getByLabel('记录灵感状态筛选').selectOption('all');
+    await recordsPage.getByLabel('记录灵感标签筛选').fill('');
+    await recordsPage.getByLabel('记录类型筛选').selectOption('待办');
+    await expect(results).toContainText('执行：迁移执行事项');
+    await expect(results).not.toContainText('只应出现在待办日程');
+    await recordsPage.getByLabel('记录类型筛选').selectOption('all');
+    await results.getByRole('button', { name: /聚合阅读习惯/ }).click();
+    await expect(page).toHaveURL(/#\/habits\?habit=habit-filter$/);
+    await expect(page.locator('.habit-quick-card.is-target')).toContainText('聚合阅读习惯');
+    await page.goto('/#/records');
+    await recordsPage.getByLabel('记录日期范围').selectOption('all');
+    await expect(results).toContainText('历史范围外记录');
+    await expect(results).toContainText('未来范围外记录');
+    await expect(results).toContainText('未设置日期记录');
+
+    await recordsPage.getByRole('button', { name: '日', exact: true }).click();
+    await expect(recordsPage.getByLabel('记录日期范围')).toHaveCount(0);
+    await expect(results).toContainText('执行：迁移执行事项');
+    await expect(results).toContainText('聚合阅读习惯');
+    await recordsPage.getByLabel('记录类型筛选').selectOption('待办');
+    await expect(results).toContainText('计划：迁移执行事项');
+    await expect(results).toContainText('截止：迁移执行事项');
+    await expect(results).toContainText('执行：迁移执行事项');
+
+    const storageAfter = await page.evaluate(() => ({
+        lifePlanData: localStorage.getItem('lifePlanData'),
+        todoMirror: localStorage.getItem('todoAppData'),
+        habitMirror: localStorage.getItem('habitAppData'),
+    }));
+    expect(storageAfter.lifePlanData).toBe(storedBefore);
+    expect(storageAfter.todoMirror).toBeNull();
+    expect(storageAfter.habitMirror).toBeNull();
+});
+
 test('record editor persists linked and exclusive todos through the main data contract', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({

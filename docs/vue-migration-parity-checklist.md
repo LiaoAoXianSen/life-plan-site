@@ -18,7 +18,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview plus exact Todo detail links from today and floating lists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
 | Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
-| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | New-record modal with meaningful-input autosave plus persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, list/calendar views, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | Remaining legacy filters need parity work. | Users can create, preview, edit, delete, template, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
+| Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | New-record modal with meaningful-input autosave plus persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, legacy filters/day ordering, list/calendar operation events, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | No open blocker in the current Records parity audit; replacement remains blocked by other modules. | Users can create, preview, edit, delete, template, filter, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, and compatible Todo conversion exist. | AI next-action generation and the legacy editable pre-create Todo draft remain incomplete. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation. | Basic global search and tag center exist. | Needs full index parity including templates and wheel items. | Search covers legacy modules with matching labels and navigation targets. |
@@ -45,7 +45,7 @@ Status: verified in `50898e7`
 
 Remaining Records scope:
 
-- Remaining legacy record filters.
+- No open blocker in the current Records audit.
 
 ### Records Template Slice
 
@@ -103,6 +103,17 @@ Status: verified locally
 - Redirect an already-existing scoped period to the shared editor instead of creating a duplicate diary/plan/review/work record.
 - Persist exact built-in-template Markdown and all idea-specific fields; relationship editing remains available through the shared editor immediately after the first save.
 - Verify blank close, delayed first save, close and route-leave flush, scoped reuse, template/idea contracts, and 1440px/390px layouts in Playwright and browser screenshots.
+
+### Records Filter And Schedule Slice
+
+Status: verified locally
+
+- Restore the fixed legacy type options, same-day ascending/descending order, idea status/special-state filter, partial case-insensitive idea tag filter, and 7/30/90/all list ranges.
+- Match record keywords across title, content, type, start/end dates, normalized idea status/tags, next action, and conclusion; preserve undated records in `全部历史` while bounded ranges stop at today.
+- Include Todo execution sessions and one aggregated checked-habit item per habit/date in the Records list, while excluding Todo plan/due rows there.
+- Retain the previously accepted Vue calendar superset for Todo plan, due, and execution detail entry points; idea-only filters remove all Todo/habit operation events.
+- Prove filter interactions preserve the exact `lifePlanData` string and do not create `todoAppData` or `habitAppData` mirrors.
+- Verify all filter controls and mixed event rows at 1440px and 390px with no horizontal overflow.
 
 ### Sync Protected Main Upload Slice
 

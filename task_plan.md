@@ -106,6 +106,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 88. Status: complete - Add Playwright contracts for blank close, three-second first persistence, close/navigation flush, structured template fields, idea fields, and scoped reuse.
 89. Status: complete - Run production build, focused/full checks, and desktop/mobile modal verification without horizontal overflow.
 90. Status: complete - Update parity evidence, package, commit the verified new-record stage, and append dual-store memory.
+91. Status: complete - Audit the legacy Records keyword, type, day-order, idea-status, idea-tag, range, and schedule-inclusion contracts against Vue.
+92. Status: complete - Implement the legacy Records filter controls and shared list/calendar event inclusion semantics without persistence side effects.
+93. Status: complete - Add read-only Playwright contracts for search fields, idea filters, day ordering, ranges, type semantics, and schedule entries.
+94. Status: complete - Run production build, focused/full checks, and desktop/mobile visual verification without horizontal overflow.
+95. Status: complete - Update parity evidence, package, commit the verified Records filter stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -145,6 +150,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First idea-detail contract could see the labeled combobox in the accessibility snapshot but `getByLabel(..., { exact: true })` did not resolve it | Focused two-test run; idea conversion contract passed | Scoped the locator to the `灵感推进` region and selected its named combobox by role, avoiding the adjacent generic relationship controls |
 | First autosave build rejected `@click="closeEditor"` after the function gained a boolean flush parameter | `vue-tsc` treated Vue's click payload as the first argument | Changed the template binding to `@click="closeEditor()"` so no `MouseEvent` is passed into the flush flag |
 | First diary AI build could not narrow a result assigned inside the Pinia mutation callback and inferred AI urgency as arbitrary text | Initial production build after the store/UI patch | Switched the callback result to an explicit holder and constrained the draft urgency to `Todo['urgency']` before rebuilding |
+| First full Records-filter check failed the existing Todo calendar cross-entry contract | The initial legacy audit removed plan/due events from both list and calendar | Kept the legacy exclusion for the list, restored the already-accepted Vue plan/due calendar entry points, and documented the intentional calendar superset |
+| Parallel visual screenshots were not readable from the main workspace | The visual worker produced paths inside its isolated environment | Used its DOM overflow measurements as the defect evidence and scheduled fresh main-workspace measurements after the responsive fixes |
 | First focused diary AI contract timed out locating the tomorrow checkbox through an outer-scoped nested `has` selector | The test had already passed request, normalized draft, and no-mutation assertions | Used the stable generated section order and scoped the checkbox to the second diary field item |
 | Second focused diary AI contract received `medium` after the remote response specified `high` | Vue's legacy-service adapter passed `urgencyMeta`, while `ai-service.js` expects `todoUrgencyMeta`; it also omitted the local fallback's `addDays` dependency | Corrected both injected option names/implementations in `legacyServices.ts` and retained the persisted urgency assertion |
 | First new-record visual pass showed structured textareas at their intrinsic narrow width | Desktop and mobile screenshots had no overflow but exposed an impractical editing width | Scoped template-field textareas inside the create modal to the full available width and reran responsive screenshots |

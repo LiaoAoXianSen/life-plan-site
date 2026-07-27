@@ -3,7 +3,8 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
 import RecordCreateModal from '../components/RecordCreateModal.vue';
-import { buildScheduleItems, addDays, getMonthStart, getWeekStart, type ScheduleItem } from '../utils/schedule';
+import { buildScheduleItems, addDays, getMonthStart, getWeekStart, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
+import { formatDate, getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import type { DataEntity, Todo } from '../types/lifePlan';
@@ -51,7 +52,7 @@ const lifePlan = useLifePlanStore();
 const records = useRecordsStore();
 const route = useRoute();
 const router = useRouter();
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => getTodayStr();
 const editForm = reactive({
   id: '',
   title: '',
@@ -75,6 +76,9 @@ const view = ref<'list' | 'day' | 'week' | 'month'>('list');
 const cursor = ref(today());
 const keyword = ref('');
 const typeFilter = ref('all');
+const dayOrder = ref<'asc' | 'desc'>('desc');
+const ideaStatusFilter = ref('all');
+const ideaTagFilter = ref('');
 const listRange = ref<'7' | '30' | '90' | 'all'>('30');
 const activeRecordId = ref('');
 const editorNotice = ref('');
@@ -95,7 +99,7 @@ const diaryAiSections = ref<DiaryAiSectionDraft[]>([]);
 const diaryAiTodos = ref<DiaryAiTodoDraft[]>([]);
 let diaryAiRequestToken = 0;
 
-const typeOptions = computed(() => [...new Set(lifePlan.data.records.map(record => String(record.type || '')).filter(Boolean))]);
+const typeOptions = ['日记', '日计划', '工作记录', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
 const activeRecord = computed(() => lifePlan.data.records.find(record => record.id === activeRecordId.value) as RecordEntity | undefined);
 const openTodos = computed(() => lifePlan.data.todos
   .filter(todo => !todo.done || editForm.todoIds.includes(todo.id))
@@ -115,17 +119,46 @@ const activeBuiltInTemplate = computed(() => editForm.templateId
   ? records.services.records.getBuiltInTemplate(editForm.templateId)
   : null);
 const previewSections = computed(() => records.services.records.parseRecordContentSections(editForm.content || ''));
-const listRecords = computed(() => {
-  const min = listRange.value === 'all' ? '' : addDays(today(), -Number(listRange.value) + 1);
-  const query = keyword.value.trim().toLowerCase();
-  return lifePlan.data.records.filter(record => !record.isHabitRecord)
-    .filter(record => !min || String(record.startDate || '') >= min)
-    .filter(record => typeFilter.value === 'all' || record.type === typeFilter.value)
-    .filter(record => !query || [record.title, record.content, record.type, record.ideaStatus, ...(Array.isArray(record.ideaTags) ? record.ideaTags : [])].filter(Boolean).join(' ').toLowerCase().includes(query))
-    .slice().sort((a, b) => String(b.updatedAt || b.createdAt || b.startDate || '').localeCompare(String(a.updatedAt || a.createdAt || a.startDate || '')));
+const hasIdeaOnlyFilter = computed(() => ideaStatusFilter.value !== 'all' || Boolean(ideaTagFilter.value.trim()));
+
+function matchesIdeaFilters(record: DataEntity) {
+  if (!hasIdeaOnlyFilter.value) return true;
+  if (record.type !== '灵感碎片') return false;
+  if (ideaStatusFilter.value === 'unprocessed' && !records.services.records.isIdeaUnprocessed(record)) return false;
+  if (ideaStatusFilter.value === 'needsConclusion' && !records.services.records.ideaNeedsConclusion(record)) return false;
+  if (!['all', 'unprocessed', 'needsConclusion'].includes(ideaStatusFilter.value)
+    && records.services.records.getIdeaStatus(record) !== ideaStatusFilter.value) return false;
+  const tagQuery = ideaTagFilter.value.trim().toLowerCase();
+  return !tagQuery || records.services.records.getIdeaTags(record).some((tag: string) => tag.toLowerCase().includes(tagQuery));
+}
+
+function buildRecordViewItems(startDate: string, endDate: string, includeTodoMilestones = false) {
+  return buildScheduleItems(lifePlan.data, startDate, endDate, {
+    keyword: keyword.value,
+    typeFilter: typeFilter.value,
+    includeTodos: !hasIdeaOnlyFilter.value,
+    includeHabits: !hasIdeaOnlyFilter.value,
+    includeTodoPlans: includeTodoMilestones,
+    includeTodoDue: includeTodoMilestones,
+    includeTodoSessions: true,
+    recordFilter: matchesIdeaFilters,
+  });
+}
+
+const listItems = computed(() => {
+  const start = listRange.value === 'all' ? '' : addDays(today(), -Number(listRange.value) + 1);
+  const end = listRange.value === 'all' ? '' : today();
+  return buildRecordViewItems(start, end);
+});
+const listGroups = computed(() => {
+  const groups = listItems.value.reduce<Record<string, ScheduleItem[]>>((result, item) => {
+    (result[item.date] ??= []).push(item);
+    return result;
+  }, {});
+  return Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(date => ({ date, items: sortScheduleItems(groups[date], dayOrder.value) }));
 });
 const calendarRange = computed(() => view.value === 'day' ? [cursor.value, cursor.value] : view.value === 'week' ? (() => { const start = getWeekStart(cursor.value); return [start, addDays(start, 6)] as const; })() : [getWeekStart(getMonthStart(cursor.value)), addDays(getMonthStart(cursor.value), 41)] as const);
-const calendarItems = computed(() => buildScheduleItems(lifePlan.data, calendarRange.value[0], calendarRange.value[1], keyword.value, typeFilter.value));
+const calendarItems = computed(() => buildRecordViewItems(calendarRange.value[0], calendarRange.value[1], true));
 const viewTitle = computed(() => view.value === 'list' ? '全部记录' : view.value === 'day' ? cursor.value : view.value === 'week' ? `${calendarRange.value[0]} ~ ${calendarRange.value[1]}` : cursor.value.slice(0, 7));
 
 function shift(amount: number) {
@@ -142,7 +175,15 @@ function selectCalendarItem(item: ScheduleItem) {
   }
   if (item.sourceType.startsWith('todo-')) {
     void router.push({ path: '/todos', query: { todo: item.id } });
+    return;
   }
+  if (item.sourceType === 'habit') void router.push({ path: '/habits', query: { habit: item.id } });
+}
+
+function recordForItem(item: ScheduleItem) {
+  return item.sourceType === 'record'
+    ? lifePlan.data.records.find(record => String(record.id || '') === item.id) as RecordEntity | undefined
+    : undefined;
 }
 
 function recordTodoIds(record: DataEntity): string[] {
@@ -591,15 +632,26 @@ onBeforeUnmount(() => {
 
     <RecordCreateModal v-model="showRecordCreate" @open-existing="openExistingFromCreate" />
 
-    <div class="filter-bar">
-      <input v-model="keyword" type="search" placeholder="搜索标题、内容、类型" />
-      <select v-model="typeFilter">
+    <div class="filter-bar record-filter-bar">
+      <input v-model="keyword" type="search" aria-label="搜索记录" placeholder="搜索标题、内容、类型" />
+      <select v-model="typeFilter" aria-label="记录类型筛选">
         <option value="all">全部类型</option>
         <option v-for="type in typeOptions" :key="type" :value="type">{{ type }}</option>
-        <option value="待办">待办执行</option>
+        <option value="待办">待办完成/执行</option>
         <option value="习惯">习惯打卡</option>
       </select>
-      <select v-if="view === 'list'" v-model="listRange">
+      <select v-model="dayOrder" aria-label="当日顺序">
+        <option value="desc">当日倒序</option>
+        <option value="asc">当日正序</option>
+      </select>
+      <select v-model="ideaStatusFilter" aria-label="记录灵感状态筛选">
+        <option value="all">全部灵感状态</option>
+        <option v-for="status in ['待整理','待实践','实践中','已验证','已放弃']" :key="status" :value="status">{{ status }}</option>
+        <option value="unprocessed">未处理灵感</option>
+        <option value="needsConclusion">已实践未写结论</option>
+      </select>
+      <input v-model="ideaTagFilter" type="search" aria-label="记录灵感标签筛选" placeholder="灵感标签筛选" />
+      <select v-if="view === 'list'" v-model="listRange" aria-label="记录日期范围">
         <option value="7">最近 7 天</option>
         <option value="30">最近 30 天</option>
         <option value="90">最近 90 天</option>
@@ -771,34 +823,37 @@ onBeforeUnmount(() => {
 
     <div id="all-records">
       <template v-if="view === 'list'">
-        <div v-if="listRecords.length">
-          <article v-for="record in listRecords" :key="String(record.id)" class="record-row">
-            <div class="record-time">{{ String(record.recordTime || record.startDate || '').slice(0, 10) }}</div>
-            <div class="timeline-item">
-              <button class="record-open-button" type="button" @click="openEditor(record)">
-                <span class="item-type">{{ record.type || '记录' }}</span>
-                <span class="item-title">{{ record.title || '无标题' }}</span>
-                <div v-if="record.ideaStatus" class="item-meta"><span>{{ record.ideaStatus }}</span><span v-for="tag in Array.isArray(record.ideaTags) ? record.ideaTags : []" :key="String(tag)">{{ tag }}</span></div>
-                <p v-if="record.content" class="item-preview">{{ record.content }}</p>
-                <div v-if="recordTodoIds(record).length" class="item-meta"><span>关联待办 {{ recordTodoIds(record).length }}</span></div>
-              </button>
-              <div class="record-row-actions">
-                <button class="btn btn-secondary" type="button" @click="openEditor(record)">编辑/预览</button>
-                <button class="btn btn-danger" type="button" @click="removeRecord(String(record.id))">删除</button>
+        <div v-if="listGroups.length">
+          <section v-for="group in listGroups" :key="group.date" class="timeline-group">
+            <div class="timeline-date">{{ formatDate(group.date) || '未设置日期' }}</div>
+            <article v-for="item in group.items" :key="item.key" class="record-row">
+              <div class="record-time">{{ item.timeLabel }}</div>
+              <div class="timeline-item" :style="{ '--event-bg': item.tone.bg, '--event-border': item.tone.border, '--event-ink': item.tone.ink }">
+                <button class="record-open-button" type="button" @click="selectCalendarItem(item)">
+                  <span class="item-type">{{ item.sourceType === 'todo-session' ? '待办' : item.type }}</span>
+                  <span class="item-title">{{ item.title }}</span>
+                  <div v-if="item.meta" class="item-meta"><span>{{ item.meta }}</span></div>
+                  <p v-if="item.preview" class="item-preview">{{ item.preview }}</p>
+                  <div v-if="recordForItem(item) && recordTodoIds(recordForItem(item)!).length" class="item-meta"><span>关联待办 {{ recordTodoIds(recordForItem(item)!).length }}</span></div>
+                </button>
+                <div v-if="recordForItem(item)" class="record-row-actions">
+                  <button class="btn btn-secondary" type="button" @click="openEditor(recordForItem(item)!)">编辑/预览</button>
+                  <button class="btn btn-danger" type="button" @click="removeRecord(item.id)">删除</button>
+                </div>
               </div>
-            </div>
-          </article>
+            </article>
+          </section>
         </div>
         <div v-else class="empty-state">暂无匹配记录。</div>
       </template>
-      <CalendarViews v-else :mode="view" :cursor="cursor" :items="calendarItems" @select="selectCalendarItem" />
+      <CalendarViews v-else :mode="view" :cursor="cursor" :items="calendarItems" :order="dayOrder" @select="selectCalendarItem" />
     </div>
   </section>
 </template>
 
 <style scoped>
 .record-editor-panel { margin-bottom: 18px; }
-#page-records .filter-bar { grid-template-columns: minmax(0, 1fr) minmax(128px, .45fr) minmax(128px, .45fr); }
+#page-records .record-filter-bar { grid-template-columns: minmax(200px, 1.4fr) minmax(145px, .8fr) minmax(120px, .65fr) minmax(155px, .9fr) minmax(150px, .9fr) minmax(120px, .65fr); }
 .record-editor-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
 .record-edit-form { display: grid; gap: 13px; }
 .record-template-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 10px; align-items: end; }
@@ -828,7 +883,8 @@ onBeforeUnmount(() => {
 .record-link-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
 .record-linked-list { display: grid; gap: 8px; }
 .linked-todo-list { display: grid; gap: 6px; }
-.record-open-button { display: block; width: 100%; border: 0; background: transparent; padding: 0; text-align: left; color: inherit; cursor: pointer; }
+.record-open-button { display: block; width: 100%; min-width: 0; border: 0; background: transparent; padding: 0; text-align: left; color: inherit; cursor: pointer; }
+.record-open-button .item-title { overflow-wrap: anywhere; word-break: break-word; }
 .record-row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .record-preview-text { white-space: pre-wrap; }
 .record-preview-todo-item { gap: 8px; }
@@ -836,12 +892,14 @@ onBeforeUnmount(() => {
 .link-button { border: 0; background: transparent; color: #316c4a; cursor: pointer; padding: 3px; }
 .danger-text { color: #b84f45; }
 @media (max-width: 900px) {
+  #page-records .record-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .record-editor-grid,
   .record-link-tools,
   .record-template-toolbar { grid-template-columns: 1fr; }
   .record-template-editor-head { flex-direction: column; }
 }
 @media (max-width: 640px) {
-  #page-records .filter-bar { grid-template-columns: minmax(0, 1fr); }
+  #page-records .record-filter-bar { grid-template-columns: minmax(0, 1fr); }
+  #page-records :deep(.agenda-shell) { overflow-x: auto; overflow-y: hidden; }
 }
 </style>
