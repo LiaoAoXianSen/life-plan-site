@@ -819,6 +819,113 @@ test('habit note backfill edit and undo keep local mirror and ledger contracts',
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('habit base edit and delete preserve legacy management contracts', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const source = emptyData({
+        records: [
+            { id: 'record-keep', type: '日记', title: '普通记录保留', content: '', startDate: today, endDate: today, todoIds: [], updatedAt: '2026-07-27T08:00:00' },
+            { id: 'record-habit-shadow', type: '习惯打卡-旧分组', title: '旧习惯影子', content: '', startDate: today, endDate: today, isHabitRecord: true, habitId: 'habit-manage', todoIds: [], updatedAt: '2026-07-27T08:00:00' },
+        ],
+        habits: [{
+            id: 'habit-manage',
+            name: '旧习惯',
+            rule: 'daily',
+            weekdays: [],
+            count: 3,
+            timesPerDay: '1',
+            tag: '旧分组',
+            goalCount: 0,
+            noteMode: 'ask',
+            rewardPoints: 7,
+            rewardCurrency: '星星',
+            penaltyPoints: 2,
+            penaltyCurrency: '星星',
+            randomReward: false,
+            rewardMin: 7,
+            rewardMax: 7,
+            breakPenaltyMode: 'fixed',
+            breakPenaltyPoints: 1,
+            breakPenaltyCurrency: '星星',
+            startDate: today,
+            createdAt: '2026-07-27T08:00:00',
+            updatedAt: '2026-07-27T08:00:00',
+        }],
+        checkins: [{ id: 'checkin-manage', habitId: 'habit-manage', date: today, time: '07:00', checkinAt: `${today}T07:00:00`, note: '历史备注', createdAt: `${today}T07:00:00`, updatedAt: `${today}T07:00:00` }],
+        habitPointLedger: [{ id: 'ledger-manage', habitId: 'habit-manage', sourceId: 'checkin-manage', date: today, amount: 7, currency: '星星', type: 'checkin', createdAt: `${today}T07:00:00`, updatedAt: `${today}T07:00:00` }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'habit-manage-before' }));
+        localStorage.setItem('habitAppData', JSON.stringify({ localMirror: true, remoteUploadEnabled: true, mirror: { reason: 'stale' } }));
+    }, source);
+
+    await page.goto('/#/habits?habit=habit-manage');
+    const management = page.locator('.habit-management-card');
+    await expect(management.getByRole('heading', { name: '编辑基础习惯' })).toBeVisible();
+    await management.getByLabel('习惯名称').fill('更新习惯');
+    await management.getByLabel('分组标签').fill('新分组');
+    await management.getByLabel('规则').selectOption('weekly-count');
+    await management.getByLabel('目标次数', { exact: true }).fill('4');
+    await management.getByLabel('每天次数').fill('3');
+    await management.getByLabel('总目标次数').fill('30');
+    await management.getByLabel('备注模式').selectOption('never');
+    await management.getByRole('button', { name: '保存习惯' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已保存「更新习惯」');
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.habits).toHaveLength(1);
+    expect(stored.data.habits[0]).toMatchObject({
+        id: 'habit-manage',
+        name: '更新习惯',
+        rule: 'weekly-count',
+        count: 4,
+        timesPerDay: '3',
+        tag: '新分组',
+        goalCount: 30,
+        noteMode: 'never',
+        rewardPoints: 7,
+        rewardCurrency: '星星',
+        penaltyPoints: 2,
+        breakPenaltyMode: 'fixed',
+        createdAt: '2026-07-27T08:00:00',
+    });
+    expect(stored.data.habits[0].updatedAt).not.toBe('2026-07-27T08:00:00');
+    expect(stored.data.records.map(item => item.id)).toEqual(['record-keep']);
+    expect(stored.mirror.localMirror).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('vue-update-habit');
+    expect(stored.mirror.habits).toEqual(expect.arrayContaining([expect.objectContaining({ id: expect.stringContaining('habit-manage') })]));
+    expect(stored.syncState.dirty).toBe(true);
+
+    page.once('dialog', dialog => dialog.accept());
+    await management.locator('.habit-library-row').filter({ hasText: '更新习惯' }).getByRole('button', { name: '删除' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已删除「更新习惯」');
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.habits).toHaveLength(0);
+    expect(stored.data.checkins).toHaveLength(0);
+    expect(stored.data.records.map(item => item.id)).toEqual(['record-keep']);
+    expect(stored.data.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'habits', id: 'habit-manage', reason: 'manual-delete', name: '更新习惯' }),
+        expect.objectContaining({ collection: 'checkins', id: 'checkin-manage', reason: 'habit-delete', habitId: 'habit-manage' }),
+    ]));
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('vue-delete-habit');
+    expect(stored.mirror.habits.some(item => String(item.id || '').includes('habit-manage'))).toBe(false);
+    expect(stored.mirror.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'habits', id: expect.stringContaining('habit-manage') }),
+        expect.objectContaining({ collection: 'habitRecords', id: expect.stringContaining('checkin-manage'), parentId: expect.stringContaining('habit-manage') }),
+    ]));
+    expect(stored.syncState.dirty).toBe(true);
+});
+
 test('records day view maintains a fixed-width timed event with a complete hover title', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({ ...data, records: [{ id: 'record-1', type: '日记', title: '这是一个完整的日程标题', content: '', startDate: date, endDate: date, recordTime: '09:00', recordEndTime: '10:00' }] })), { data: emptyData(), date: today });

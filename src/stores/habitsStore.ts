@@ -9,7 +9,7 @@ const DEFAULT_CURRENCY = '金币';
 const MILESTONE_DAYS = [7, 15, 21, 30, 90, 180, 365];
 const habitServices = createLegacyServices();
 
-type HabitRule = 'daily' | 'weekly-fixed' | 'weekly-count' | 'monthly-count' | 'interval';
+export type HabitRule = 'daily' | 'weekly-fixed' | 'weekly-count' | 'monthly-count' | 'interval';
 
 interface Habit extends DataEntity {
   id: string;
@@ -58,7 +58,14 @@ export interface CreateHabitInput {
   name: string;
   tag?: string;
   timesPerDay?: number;
+  rule?: HabitRule;
+  weekdays?: string[];
+  count?: number;
+  goalCount?: number;
+  noteMode?: 'ask' | 'never';
 }
+
+export interface UpdateHabitInput extends CreateHabitInput {}
 
 function asHabit(value: DataEntity): Habit {
   return value as Habit;
@@ -136,6 +143,48 @@ function normalizedMilestones(raw: unknown): HabitMilestone[] {
       penaltyAmount,
       penaltyCurrency: normalizeCurrency(item.penaltyCurrency || item.currency),
     };
+  });
+}
+
+function normalizeRule(value: unknown): HabitRule {
+  return ['daily', 'weekly-fixed', 'weekly-count', 'monthly-count', 'interval'].includes(String(value))
+    ? String(value) as HabitRule
+    : 'daily';
+}
+
+function normalizeHabitBaseInput(input: CreateHabitInput | UpdateHabitInput) {
+  const name = input.name.trim();
+  if (!name) throw new Error('请输入习惯名称');
+  const rule = normalizeRule(input.rule);
+  const weekdays = rule === 'weekly-fixed'
+    ? (Array.isArray(input.weekdays) ? input.weekdays.map(String).filter(value => /^[0-6]$/.test(value)) : [])
+    : [];
+  if (rule === 'weekly-fixed' && !weekdays.length) throw new Error('请至少选择一天');
+  const timesPerDay = Math.max(1, Math.min(99, Math.trunc(Number(input.timesPerDay) || 1)));
+  const count = Math.max(1, Math.min(99, Math.trunc(Number(input.count) || 3)));
+  const goalCount = Math.max(0, Math.trunc(Number(input.goalCount) || 0));
+  return {
+    name,
+    rule,
+    weekdays,
+    count,
+    timesPerDay: String(timesPerDay),
+    tag: String(input.tag || '').trim(),
+    goalCount,
+    noteMode: input.noteMode === 'never' ? 'never' as const : 'ask' as const,
+  };
+}
+
+function habitComparable(habit: Partial<Habit>) {
+  return JSON.stringify({
+    name: habit.name || '',
+    rule: habit.rule || 'daily',
+    weekdays: Array.isArray(habit.weekdays) ? habit.weekdays : [],
+    count: Number(habit.count || 0),
+    timesPerDay: String(habit.timesPerDay || '1'),
+    tag: habit.tag || '',
+    goalCount: Number(habit.goalCount || 0),
+    noteMode: habit.noteMode || 'ask',
   });
 }
 
@@ -343,19 +392,11 @@ export const useHabitsStore = defineStore('habits', () => {
   }
 
   function create(input: CreateHabitInput): Habit {
-    const name = input.name.trim();
-    if (!name) throw new Error('请输入习惯名称');
+    const base = normalizeHabitBaseInput(input);
     const now = getNowLocal();
     const habit: Habit = {
       id: genId(),
-      name,
-      rule: 'daily',
-      weekdays: [],
-      count: 3,
-      timesPerDay: String(Math.max(1, Math.min(99, Math.trunc(input.timesPerDay || 1))),),
-      tag: input.tag?.trim() || '',
-      goalCount: 0,
-      noteMode: 'ask',
+      ...base,
       rewardPoints: 0,
       rewardCurrency: DEFAULT_CURRENCY,
       penaltyPoints: 0,
@@ -385,6 +426,76 @@ export const useHabitsStore = defineStore('habits', () => {
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : String(error);
       throw error;
+    }
+  }
+
+  function updateHabit(habitId: string, input: UpdateHabitInput): boolean {
+    const base = normalizeHabitBaseInput(input);
+    const current = habits.value.find(item => item.id === habitId);
+    if (!current) {
+      lastError.value = '未找到该习惯，未保存修改。';
+      return false;
+    }
+    if (habitComparable(current) === habitComparable(base)) {
+      lastAction.value = '习惯没有变化';
+      lastError.value = '';
+      return true;
+    }
+
+    try {
+      lifePlan.mutate('vue-update-habit', data => {
+        const target = data.habits.find(item => item.id === habitId) as Habit | undefined;
+        if (!target) throw new Error('习惯已不存在，未保存修改。');
+        const previousTag = String(target.tag || '');
+        Object.assign(target, {
+          ...base,
+          startDate: target.startDate || getTodayStr(),
+          createdAt: target.createdAt || getNowLocal(),
+          updatedAt: getNowLocal(),
+        });
+        if (previousTag !== base.tag) {
+          data.records.forEach(record => {
+            if (record.isHabitRecord && record.habitId === habitId) {
+              record.type = `习惯打卡-${base.tag}`;
+              record.updatedAt = getNowLocal();
+            }
+          });
+        }
+      });
+      rebuildLocalMirror('vue-update-habit');
+      lastAction.value = `已保存「${base.name}」`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
+  function deleteHabit(habitId: string): boolean {
+    const habit = habits.value.find(item => item.id === habitId);
+    if (!habit) {
+      lastError.value = '未找到该习惯，未执行删除。';
+      return false;
+    }
+    try {
+      lifePlan.mutate('vue-delete-habit', data => {
+        const target = data.habits.find(item => item.id === habitId) as Habit | undefined;
+        habitServices.sync.markDeletedItem(data, 'habits', habitId, { reason: 'manual-delete', name: String(target?.name || habit.name || '') });
+        data.checkins
+          .filter(checkin => checkin.habitId === habitId)
+          .forEach(checkin => habitServices.sync.markDeletedItem(data, 'checkins', checkin.id, { reason: 'habit-delete', habitId }));
+        data.records = data.records.filter(record => !(record.isHabitRecord && record.habitId === habitId));
+        data.habits = data.habits.filter(item => item.id !== habitId);
+        data.checkins = data.checkins.filter(checkin => checkin.habitId !== habitId);
+      });
+      rebuildLocalMirror('vue-delete-habit');
+      lastAction.value = `已删除「${habit.name}」`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
     }
   }
 
@@ -505,6 +616,8 @@ export const useHabitsStore = defineStore('habits', () => {
     getCheckinCount,
     targetCount,
     create,
+    updateHabit,
+    deleteHabit,
     appendCheckin,
     editCheckinNote,
     undoLatestCheckin,

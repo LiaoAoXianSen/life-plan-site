@@ -360,3 +360,15 @@
 - Desktop 1440x1000 and mobile 390x844 Habit correction screenshot/overflow checks passed with no overflow in `html`, `body`, `.vue-main`, `#page-habits`, Habit cards, correction form, or note rows. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\habit-correction-final`.
 - Read-only sidecar `Poincare` failed before review with upstream `429 Too Many Requests`; main-thread review and verification continued, and the sidecar made no file changes.
 - `git diff --check` passed with only LF/CRLF warnings. Created clean runtime package `life-plan-site-runtime-20260728-140806.zip`; package retention removed `life-plan-site-runtime-20260728-113854.zip`.
+
+## 2026-07-28 - Habit base management stage
+
+- Started phases 133-137 after the Habit correction commit `6f439c3`; two attempted read-only sidecars for Habit contract/UI audit failed with model-capacity errors, so the main thread continued the bounded audit and implementation.
+- Audited legacy `openHabitModal`, `editCurrentHabit`, `saveHabit`, and `deleteCurrentHabit`: base edit updates comparable habit fields and retags habit shadow records, while delete writes a `habits` tombstone plus related `checkins` tombstones and removes related checkins/shadow records.
+- Implemented Vue Habit base create/edit/delete through `src/stores/habitsStore.ts` and `src/pages/HabitsPage.vue`, preserving reward/penalty/milestone fields, keeping `lifePlanData` authoritative, dirtying main sync state, and rebuilding local-only `habitAppData`.
+- Polished the Habit page by adding a unified base-management form, an all-habits management table, a small edit shortcut on today cards, and a narrower correction panel that stays usable on desktop and mobile.
+- Added focused Playwright coverage proving habit update fields, preserved wallet fields, stale habit-record cleanup, delete tombstones, checkin removal, dirty state, and canonical `habitAppData` mirror tombstones.
+- Focused `npx playwright test tests/vue-smoke.spec.js -g "habit quick|habit note|habit base"` passed 3/3. `npm run build` passed with 92 transformed modules. Full `.\scripts\check.ps1` passed syntax checks and all 33 Vue Playwright tests.
+- Desktop 1440x1000 and mobile 390x920 Habit management screenshot checks passed for the edit form, all-habits table, and correction panel. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\019fa748-12b4-7f41-9a97-394d8bc2a01c`.
+- `git diff --check` passed with only LF/CRLF warnings. Created clean runtime package `life-plan-site-runtime-20260728-153553.zip`; package retention removed `life-plan-site-runtime-20260728-120106.zip`.
+- Protected refs remained unchanged before the Habit base management commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

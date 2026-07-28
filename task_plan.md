@@ -148,6 +148,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 130. Status: complete - Add focused Habit local contract tests for checkins, ledger rewards/reversals, deletedItems, dirty state, and `habitAppData` mirror.
 131. Status: complete - Run build/check plus 1440px/390px responsive verification for the Habit correction surface.
 132. Status: complete - Update parity evidence, package, commit the verified Habit correction stage, and append dual-store memory.
+133. Status: complete - Audit legacy Habit base edit/delete fields, record retagging, tombstones, mirror, and current Vue page UX gaps.
+134. Status: complete - Implement Vue Habit base edit/delete plus scoped form polish without touching reward/wallet/remote flows.
+135. Status: complete - Add focused Habit base management contract tests for update, delete, checkin tombstones, record cleanup, dirty state, and `habitAppData` mirror.
+136. Status: complete - Run build/check plus 1440px/390px responsive verification for the polished Habit management surface.
+137. Status: complete - Update parity evidence, package, commit, push the verified Habit base management stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

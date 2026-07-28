@@ -185,6 +185,9 @@
 - Legacy Habit checkins have three local correction paths before remote sync: `append-checkin` for today notes/backfill, `edit-checkin-note` for note-only edits, and `decrease-checkin` / `toggle-checkin` for undoing the latest checkin on a date.
 - Undoing a checkin removes the row from `lifePlanData.checkins`, writes a `deletedItems(collection=checkins, reason=manual-decrease, habitId)` tombstone, and adds `reverse` ledger rows for prior checkin and milestone rewards keyed by the removed checkin ID.
 - Backfill/checkin must reject future dates, preserve single-per-day habits by refusing duplicate checkins, reverse existing miss/break penalties for that date, update the habit timestamp, mark main sync dirty, and rebuild `habitAppData` as a local mirror with `remoteUploadEnabled: false`.
+- Legacy Habit base edit loads and saves the comparable payload for `name`, `rule`, `weekdays`, `count`, `timesPerDay`, `tag`, `goalCount`, `noteMode`, reward/penalty fields, break penalties, and milestone rewards. The bounded Vue base form now edits the non-wallet fields and deliberately preserves existing reward/penalty/milestone fields instead of exposing a partial wallet editor.
+- Legacy Habit tag changes retag `records[].type` for `isHabitRecord` rows, while the Vue repository already normalizes stored records by pruning `isHabitRecord` shadow rows and derives habit schedule/list events from `checkins`; Habit base parity should therefore prove stale shadow cleanup, not reintroduce persistent shadow records.
+- Legacy Habit deletion writes `deletedItems(collection=habits, reason=manual-delete, name)` plus one `deletedItems(collection=checkins, reason=habit-delete, habitId)` for each related checkin, then removes the habit, checkins, and habit shadow records. The `habitAppData` mirror canonicalizes those checkin tombstones as `habitRecords` with path-prefixed IDs.
 
 ## 2026-07-27 Diary AI parity
 
