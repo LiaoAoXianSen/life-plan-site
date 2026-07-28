@@ -81,10 +81,11 @@ bounded recent timeline; Goals now covers detail deep links and legacy
 tombstones; Search/Tags now restore grouped module indexes and read-only tag
 entry points across migrated modules; Import/Export now covers snapshots,
 tombstone-aware merge, dirty-state updates, and Todo/Habit mirror rebuilds;
-Fitness now covers multi-exercise plan editing and explicit plan writeback.
+Fitness now covers multi-exercise plan editing, explicit plan writeback, and
+workout history create/edit.
 Replacement remains blocked until the remaining module audits and write-heavy
 specialist flows are closed. The following specialist controls still live in the
 proven static app and should be migrated only as separately tested follow-up
 releases: habit wallet/reward administration and protected remote flow, wheel
-Canvas/remote auto-sync, Fitness history editing/rest timer details, and
+Canvas/remote auto-sync, Fitness rest timer/history suggestion details, and
 non-diary AI writeback modes. They are not replaced by incompatible shortcuts.

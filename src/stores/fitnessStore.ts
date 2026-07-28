@@ -142,6 +142,16 @@ export const useFitnessStore = defineStore('fitness', () => {
     return result.workout as FitnessEntity;
   }
 
+  function saveWorkout(input: FitnessEntity, existingId = '') {
+    const result = services.fitness.upsertFitnessWorkout(lifePlan.data.fitnessWorkouts, input, existingId);
+    if (!result.ok) return fail(result.message);
+    lifePlan.mutate(existingId ? 'update-fitness-workout' : 'create-fitness-workout', data => {
+      data.fitnessWorkouts = result.workouts;
+    });
+    succeed(existingId ? '训练日志已更新' : '训练日志已保存');
+    return result.workout as FitnessEntity;
+  }
+
   function completeSet(exerciseIndex: number, setIndex: number, input: { weight?: unknown; reps?: unknown; done?: boolean } = {}) {
     const current = activeWorkout.value;
     if (!current) return fail('当前没有进行中的训练');
@@ -199,7 +209,7 @@ export const useFitnessStore = defineStore('fitness', () => {
   return {
     metrics, plans, workouts, library, activeWorkout, lastError, lastAction,
     normalize, saveMetric, removeMetric, ensureLibrary, saveLibraryItem, removeLibraryItem,
-    savePlan, removePlan, startFromPlan, startFreeWorkout, completeSet, finishWorkout, removeWorkout,
+    savePlan, removePlan, startFromPlan, startFreeWorkout, saveWorkout, completeSet, finishWorkout, removeWorkout,
     services,
   };
 });

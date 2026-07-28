@@ -177,6 +177,8 @@
 - Legacy live workouts can start from an entire plan, preserve `planId` / `planName`, complete sets across multiple exercises, and after finish ask whether changed prescription data should be written back through `fitness-service.js#updatePlanFromWorkout`.
 - Current Vue `FitnessPage.vue` only creates one-exercise plans and one-exercise free workouts, while `fitness-service.js` already exposes the needed multi-exercise and writeback contract helpers.
 - The next bounded Fitness slice should reuse `fitness-service.js` rather than adding new data rules: implement multi-exercise plan editing and user-confirmed plan writeback on finish, leaving full rest timer/history editing polish for later audited slices.
+- Legacy workout history editing supports completed/planned/skipped logs with `date`, `status`, `title`, `durationMin`, `notes`, plan association, multi-exercise rows, per-set `weight`/`reps`/`done`, and manual-delete tombstones. Vue can close this without a modal by using an inline repository-backed form that calls `fitness-service.js#upsertFitnessWorkout`.
+- Fitness should not create a `fitnessAppData` mirror. Any create/edit/delete must dirty the main sync state through the shared repository path and keep `lifePlanData` authoritative.
 
 ## 2026-07-27 Diary AI parity
 

@@ -138,6 +138,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 120. Status: complete - Implement Vue Fitness finish-time plan writeback control without automatic persisted mutation before user confirmation.
 121. Status: complete - Add focused Fitness persisted-data contract coverage and run build/check plus responsive verification.
 122. Status: complete - Update parity evidence, package, commit the verified Fitness stage, and append dual-store memory.
+123. Status: complete - Audit legacy Fitness workout history create/edit contract and select a bounded Vue history editor shape.
+124. Status: complete - Implement Vue Fitness completed/planned workout history create/edit through `fitness-service.js` without adding a new authority.
+125. Status: complete - Add focused history persistence, tombstone, dirty-state, and no-mirror contract coverage.
+126. Status: complete - Run build/check plus 1440px/390px responsive verification for the Fitness history editor.
+127. Status: complete - Update parity evidence, package, commit the verified Fitness history stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

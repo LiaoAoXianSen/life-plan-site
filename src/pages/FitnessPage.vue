@@ -10,16 +10,24 @@ type PlanExerciseDraft = {
   name: string;
   note: string;
   restSec?: unknown;
+  targetSets?: unknown;
+  targetReps?: unknown;
+  targetWeight?: unknown;
+  plannedSets?: PlanSetDraft[];
   sets: PlanSetDraft[];
 };
+type WorkoutSetDraft = PlanSetDraft & { done?: boolean };
+type WorkoutExerciseDraft = Omit<PlanExerciseDraft, 'sets'> & { sets: WorkoutSetDraft[] };
 
 const fitness = useFitnessStore();
 const metricForm = reactive({ date: getTodayStr(), weight: '', bodyFat: '', waist: '', note: '' });
 const libraryForm = reactive({ name: '', muscle: 'other', defaultSets: 3, defaultReps: '8-12', defaultWeight: '', restSec: 90, note: '' });
 const planForm = reactive({ name: '', goal: 'general', status: 'active', notes: '', exercises: [] as PlanExerciseDraft[] });
+const workoutForm = reactive({ date: getTodayStr(), status: 'done', title: '', planId: '', durationMin: '', notes: '', exercises: [] as WorkoutExerciseDraft[] });
 const freeForm = reactive({ title: '自由训练', exerciseId: '' });
 const formError = ref('');
 const planEditingId = ref('');
+const workoutEditingId = ref('');
 const writeBackPlan = ref(false);
 
 const doneHistory = computed(() => fitness.workouts.filter(item => item.status === 'done' || item.status === 'skipped'));
@@ -32,6 +40,7 @@ const activePlanDiff = computed(() => activePlan.value && fitness.activeWorkout
 const muscleOptions = computed(() => fitness.services.fitness.EXERCISE_MUSCLE_OPTIONS);
 const goalOptions = computed(() => fitness.services.fitness.PLAN_GOAL_OPTIONS);
 const planStatusOptions = computed(() => fitness.services.fitness.PLAN_STATUS_OPTIONS);
+const workoutStatusOptions = computed(() => fitness.services.fitness.WORKOUT_STATUS_OPTIONS.filter((option: Record<string, string>) => option.value !== 'inProgress'));
 
 function localDraftId() {
   return `plan-draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -82,10 +91,48 @@ function createPlanExerciseFromLibrary(item: Record<string, any>): PlanExerciseD
   };
 }
 
+function toWorkoutSet(set: Record<string, unknown> = {}, done = false): WorkoutSetDraft {
+  return fitness.services.fitness.normalizeWorkoutSet({ ...set, done }) as WorkoutSetDraft;
+}
+
+function createWorkoutExerciseDraft(source: Record<string, any> = {}): WorkoutExerciseDraft {
+  const normalized = fitness.services.fitness.normalizeWorkoutExercise({
+    name: source.name || '',
+    targetSets: source.targetSets || 3,
+    targetReps: source.targetReps || '8-12',
+    targetWeight: source.targetWeight,
+    note: source.note || '',
+    restSec: source.restSec,
+    plannedSets: source.plannedSets,
+    sets: Array.isArray(source.sets) && source.sets.length ? source.sets : fitness.services.fitness.createDefaultSets(source.targetSets || 3, source),
+  }) as Record<string, any>;
+  return {
+    localId: localDraftId(),
+    name: String(normalized.name || ''),
+    note: String(normalized.note || ''),
+    restSec: normalized.restSec,
+    targetSets: normalized.targetSets,
+    targetReps: normalized.targetReps,
+    targetWeight: normalized.targetWeight,
+    plannedSets: normalized.plannedSets,
+    sets: (normalized.sets || []).map((set: Record<string, unknown>) => toWorkoutSet(set, set.done === true)),
+  };
+}
+
+function createWorkoutExerciseFromLibrary(item: Record<string, any>): WorkoutExerciseDraft {
+  return createWorkoutExerciseDraft(fitness.services.fitness.createWorkoutExerciseFromLibrary(item));
+}
+
 function resetPlanForm() {
   Object.assign(planForm, { name: '', goal: 'general', status: 'active', notes: '' });
   planForm.exercises.splice(0, planForm.exercises.length, createBlankPlanExercise());
   planEditingId.value = '';
+}
+
+function resetWorkoutForm() {
+  Object.assign(workoutForm, { date: getTodayStr(), status: 'done', title: '', planId: '', durationMin: '', notes: '' });
+  workoutForm.exercises.splice(0, workoutForm.exercises.length, createWorkoutExerciseDraft());
+  workoutEditingId.value = '';
 }
 
 function saveMetric() {
@@ -168,10 +215,47 @@ function editPlan(plan: Record<string, any>) {
   });
 }
 
+function applyPlanToWorkout(planId: string) {
+  const plan = fitness.services.fitness.findFitnessPlan(fitness.plans, planId);
+  workoutForm.planId = plan?.id || '';
+  if (!plan) return;
+  const generated = fitness.services.fitness.createWorkoutFromPlan(plan, {
+    date: workoutForm.date,
+    status: workoutForm.status,
+    title: workoutForm.title || plan.name,
+    durationMin: workoutForm.durationMin || undefined,
+    notes: workoutForm.notes,
+  });
+  workoutForm.title = generated.title || plan.name || workoutForm.title;
+  workoutForm.exercises.splice(0, workoutForm.exercises.length, ...generated.exercises.map((exercise: Record<string, any>) => createWorkoutExerciseDraft(exercise)));
+}
+
+function editWorkout(workout: Record<string, any>) {
+  run(() => {
+    Object.assign(workoutForm, {
+      date: workout.date || getTodayStr(),
+      status: workout.status || 'done',
+      title: workout.title || '',
+      planId: workout.planId || '',
+      durationMin: workout.durationMin ?? '',
+      notes: workout.notes || '',
+    });
+    workoutForm.exercises.splice(0, workoutForm.exercises.length, ...(workout.exercises || []).map((exercise: Record<string, any>) => createWorkoutExerciseDraft(exercise)));
+    if (!workoutForm.exercises.length) workoutForm.exercises.push(createWorkoutExerciseDraft());
+    workoutEditingId.value = workout.id || '';
+  });
+}
+
 function applyLibraryToPlanExercise(index: number, exerciseId: string) {
   const item = fitness.library.find(entry => entry.id === exerciseId);
   if (!item || !planForm.exercises[index]) return;
   planForm.exercises.splice(index, 1, createPlanExerciseFromLibrary(item));
+}
+
+function applyLibraryToWorkoutExercise(index: number, exerciseId: string) {
+  const item = fitness.library.find(entry => entry.id === exerciseId);
+  if (!item || !workoutForm.exercises[index]) return;
+  workoutForm.exercises.splice(index, 1, createWorkoutExerciseFromLibrary(item));
 }
 
 function addPlanExercise() {
@@ -193,6 +277,56 @@ function removePlanSet(exercise: PlanExerciseDraft, setIndex: number) {
   exercise.sets.splice(setIndex, 1);
 }
 
+function addWorkoutExercise() {
+  workoutForm.exercises.push(createWorkoutExerciseDraft());
+}
+
+function removeWorkoutExercise(index: number) {
+  if (workoutForm.exercises.length <= 1) return;
+  workoutForm.exercises.splice(index, 1);
+}
+
+function addWorkoutSet(exercise: WorkoutExerciseDraft) {
+  const lastSet = exercise.sets[exercise.sets.length - 1] || {};
+  exercise.sets.push(toWorkoutSet(lastSet as Record<string, unknown>, false));
+}
+
+function removeWorkoutSet(exercise: WorkoutExerciseDraft, setIndex: number) {
+  if (exercise.sets.length <= 1) return;
+  exercise.sets.splice(setIndex, 1);
+}
+
+function saveWorkoutLog() {
+  run(() => {
+    const plan = workoutForm.planId ? fitness.services.fitness.findFitnessPlan(fitness.plans, workoutForm.planId) : null;
+    const exercises = workoutForm.exercises
+      .map(exercise => fitness.services.fitness.normalizeWorkoutExercise({
+        name: exercise.name,
+        note: exercise.note,
+        restSec: exercise.restSec,
+        targetSets: exercise.sets.length,
+        targetReps: exercise.targetReps,
+        targetWeight: exercise.targetWeight,
+        plannedSets: exercise.plannedSets,
+        sets: exercise.sets.map(set => fitness.services.fitness.normalizeWorkoutSet(set)),
+      }))
+      .filter(exercise => String(exercise.name || '').trim());
+    fitness.saveWorkout({
+      date: workoutForm.date,
+      status: workoutForm.status,
+      title: workoutForm.title,
+      durationMin: workoutForm.durationMin || undefined,
+      notes: workoutForm.notes,
+      planId: plan?.id || '',
+      planName: plan?.name || '',
+      dayId: plan?.days?.[0]?.id || '',
+      dayName: '',
+      exercises,
+    }, workoutEditingId.value);
+    resetWorkoutForm();
+  });
+}
+
 function setDone(exerciseIndex: number, setIndex: number, done: boolean, weight: unknown, reps: unknown) {
   run(() => fitness.completeSet(exerciseIndex, setIndex, { done, weight, reps }));
 }
@@ -206,6 +340,7 @@ function planGoalLabel(goal: string) {
 }
 
 resetPlanForm();
+resetWorkoutForm();
 </script>
 
 <template>
@@ -379,11 +514,83 @@ resetPlanForm();
       </form>
     </div>
 
+    <form class="card" @submit.prevent="saveWorkoutLog">
+      <div class="section-title-row">
+        <div>
+          <div class="card-title">{{ workoutEditingId ? '编辑训练日志' : '补记训练日志' }}</div>
+          <p class="section-hint">可记录已完成或计划中的训练，动作与组数据仍由旧版健身服务规范化。</p>
+        </div>
+        <button v-if="workoutEditingId" class="btn btn-secondary" type="button" @click="resetWorkoutForm">取消编辑</button>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>训练日期</label><input v-model="workoutForm.date" type="date" required /></div>
+        <div class="form-group"><label>状态</label><select v-model="workoutForm.status"><option v-for="option in workoutStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+        <div class="form-group"><label>训练标题</label><input v-model="workoutForm.title" maxlength="80" placeholder="例如 下肢力量" /></div>
+        <div class="form-group"><label>时长 分钟</label><input v-model="workoutForm.durationMin" type="number" min="1" step="1" /></div>
+        <div class="form-group">
+          <label>关联计划</label>
+          <select v-model="workoutForm.planId" @change="applyPlanToWorkout(($event.target as HTMLSelectElement).value)">
+            <option value="">不关联计划</option>
+            <option v-for="plan in fitness.plans" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>训练备注</label><input v-model="workoutForm.notes" /></div>
+      <div class="fitness-plan-exercise-list">
+        <section v-for="(exercise, exerciseIndex) in workoutForm.exercises" :key="exercise.localId" class="fitness-plan-exercise-card">
+          <div class="fitness-plan-exercise-card-head">
+            <input v-model="exercise.name" type="text" list="fitness-exercise-datalist" placeholder="动作名称" required />
+            <button class="btn btn-secondary fitness-icon-btn" type="button" :disabled="workoutForm.exercises.length <= 1" title="删除动作" @click="removeWorkoutExercise(exerciseIndex)">×</button>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>套用动作库</label>
+              <select @change="applyLibraryToWorkoutExercise(exerciseIndex, ($event.target as HTMLSelectElement).value)">
+                <option value="">手动输入</option>
+                <option v-for="item in fitness.library" :key="item.id" :value="item.id">{{ item.name }}</option>
+              </select>
+            </div>
+            <div class="form-group"><label>动作备注</label><input v-model="exercise.note" placeholder="动作备注" /></div>
+          </div>
+          <div class="fitness-workout-set-list">
+            <div class="fitness-workout-set-head">
+              <span>组</span>
+              <span>重量</span>
+              <span>次数</span>
+              <span>完成</span>
+              <span></span>
+            </div>
+            <div v-for="(set, setIndex) in exercise.sets" :key="set.id || setIndex" class="fitness-workout-set-row">
+              <span class="fitness-set-index">{{ setIndex + 1 }}</span>
+              <label class="fitness-live-field">
+                <input v-model="set.weight" type="number" min="0" step="0.5" placeholder="kg" />
+                <span class="fitness-live-unit">kg</span>
+              </label>
+              <label class="fitness-live-field">
+                <input v-model="set.reps" type="number" min="0" step="1" placeholder="次" />
+                <span class="fitness-live-unit">次</span>
+              </label>
+              <label class="fitness-check-chip compact"><input v-model="set.done" type="checkbox" />完成</label>
+              <button class="btn btn-secondary fitness-icon-btn" type="button" :disabled="exercise.sets.length <= 1" title="删除组" @click="removeWorkoutSet(exercise, setIndex)">×</button>
+            </div>
+          </div>
+          <div class="fitness-plan-day-actions compact">
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="addWorkoutSet(exercise)">+ 加一组</button>
+          </div>
+        </section>
+      </div>
+      <div class="fitness-plan-day-actions">
+        <button class="btn btn-secondary" type="button" @click="addWorkoutExercise">添加动作</button>
+        <button class="btn btn-primary">{{ workoutEditingId ? '保存训练日志' : '保存训练日志' }}</button>
+      </div>
+    </form>
+
     <article class="card">
       <div class="card-title">训练历史</div>
       <div v-if="doneHistory.length" class="fitness-metric-list">
         <div v-for="workout in doneHistory" :key="workout.id" class="fitness-metric-row">
           <div><strong>{{ workout.date }} · {{ workout.title || '自由训练' }}</strong><span>{{ workoutStatusLabel(workout.status) }} · {{ fitness.services.fitness.countCompletedSets(workout) }}/{{ fitness.services.fitness.countTotalSets(workout) }} 组<span v-if="workout.durationMin"> · {{ workout.durationMin }} 分钟</span></span></div>
+          <button class="btn btn-secondary" type="button" @click="editWorkout(workout)">编辑</button>
           <button class="btn btn-danger" type="button" @click="run(() => fitness.removeWorkout(workout.id))">删除</button>
         </div>
       </div>

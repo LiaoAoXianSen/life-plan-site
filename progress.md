@@ -337,3 +337,14 @@
 - Read-only sidecar audits agreed the current bounded slice should close multi-exercise plans and explicit writeback while leaving full history editing, rest timer UX, history suggestion controls, and complete body-metric field editing for later Fitness slices.
 - Created clean runtime package `life-plan-site-runtime-20260728-130141.zip`; package retention removed `life-plan-site-runtime-20260728-090558.zip`.
 - Protected refs remained unchanged before the Fitness commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+- Committed the Fitness multi-exercise plan stage as `84d425c feat: add fitness plan parity`; branch is now ahead of origin by 17 local commits.
+
+## 2026-07-28 - Fitness history editor stage
+
+- Started phases 123-127 after the Fitness plan commit. Selected Fitness workout history create/edit because legacy supports manual completed/planned workout logging while Vue currently only lists and deletes completed/skipped workouts.
+- Implemented repository-backed Fitness workout history create/edit with date, status, title, duration, plan association, notes, multi-exercise rows, per-set weight/reps/done, and existing-history editing.
+- Added focused history coverage proving plan-derived `plannedSets`, create/edit in place, dirty sync state, no `fitnessAppData` mirror, and legacy `manual-delete` workout tombstones.
+- Focused `npx playwright test tests/vue-smoke.spec.js --grep "fitness history"` passed 1/1. `npm run build` passed with 92 transformed modules. Full `.\scripts\check.ps1` passed syntax checks and all 31 Vue Playwright tests.
+- Desktop 1440x1000 and mobile 390x844 Fitness history create/edit screenshot/overflow checks passed with no overflow in `html`, `body`, `.vue-main`, `#page-fitness`, history forms, exercise cards, workout set rows, or history metric rows. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\fitness-history-final`.
+- Created clean runtime package `life-plan-site-runtime-20260728-131237.zip`; package retention removed `life-plan-site-runtime-20260728-111421.zip`.
+- Protected refs remained unchanged before the Fitness history commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

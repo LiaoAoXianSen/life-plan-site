@@ -592,6 +592,79 @@ test('fitness plans support multiple exercises and explicit plan writeback', asy
     ]));
 });
 
+test('fitness history editor saves edits through the legacy workout contract', async ({ page }) => {
+    const source = emptyData({
+        exerciseLibrary: [
+            { id: 'ex-row', name: '坐姿划船', muscle: 'back', defaultSets: 2, defaultReps: '10', defaultWeight: 45, restSec: 90, createdAt: '2026-07-28T07:00:00', updatedAt: '2026-07-28T07:00:00' },
+        ],
+        fitnessPlans: [{
+            id: 'plan-row', name: '背部训练', goal: 'hypertrophy', status: 'active', weekdays: [], notes: '', createdAt: '2026-07-28T07:00:00', updatedAt: '2026-07-28T07:00:00',
+            exercises: [{ id: 'plan-row-ex', name: '坐姿划船', targetSets: 2, targetReps: '10', targetWeight: 45, restSec: 90, note: '', sets: [{ id: 'row-set-1', weight: 45, reps: 10 }, { id: 'row-set-2', weight: 47.5, reps: 10 }] }],
+            days: [{ id: 'plan-row-day', name: '训练', exercises: [{ id: 'plan-row-ex', name: '坐姿划船', targetSets: 2, targetReps: '10', targetWeight: 45, restSec: 90, note: '', sets: [{ id: 'row-set-1', weight: 45, reps: 10 }, { id: 'row-set-2', weight: 47.5, reps: 10 }] }] }],
+        }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-history-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    let historyForm = page.locator('form.card').filter({ hasText: '补记训练日志' });
+    await historyForm.locator('.form-group').filter({ hasText: '训练日期' }).locator('input').fill('2026-07-28');
+    await historyForm.locator('.form-group').filter({ hasText: '状态' }).locator('select').selectOption('done');
+    await historyForm.locator('.form-group').filter({ hasText: '关联计划' }).locator('select').selectOption('plan-row');
+    await historyForm.locator('.form-group').filter({ hasText: '训练标题' }).locator('input').fill('补记背部训练');
+    await historyForm.locator('.form-group').filter({ hasText: '时长 分钟' }).locator('input').fill('48');
+    await historyForm.locator('.form-group').filter({ hasText: '训练备注' }).locator('input').fill('补记完成');
+    await historyForm.locator('.fitness-workout-set-row').nth(0).locator('input').nth(0).fill('50');
+    await historyForm.locator('.fitness-workout-set-row').nth(0).locator('input').nth(1).fill('9');
+    await historyForm.locator('.fitness-workout-set-row').nth(0).locator('input[type="checkbox"]').check();
+    await historyForm.getByRole('button', { name: '保存训练日志' }).click();
+    await expect(page.locator('.notice.success')).toContainText('训练日志已保存');
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        fitnessMirror: localStorage.getItem('fitnessAppData'),
+    }));
+    expect(stored.data.fitnessWorkouts).toHaveLength(1);
+    const workoutId = stored.data.fitnessWorkouts[0].id;
+    expect(stored.data.fitnessWorkouts[0]).toEqual(expect.objectContaining({
+        date: '2026-07-28',
+        status: 'done',
+        title: '补记背部训练',
+        durationMin: 48,
+        planId: 'plan-row',
+        planName: '背部训练',
+    }));
+    expect(stored.data.fitnessWorkouts[0].exercises[0].plannedSets[0]).toEqual(expect.objectContaining({ weight: 45, reps: 10 }));
+    expect(stored.data.fitnessWorkouts[0].exercises[0].sets[0]).toEqual(expect.objectContaining({ weight: 50, reps: 9, done: true }));
+    expect(stored.syncState.dirty).toBe(true);
+    expect(stored.fitnessMirror).toBeNull();
+
+    await page.locator('article.card').filter({ hasText: '训练历史' }).locator('.fitness-metric-row').filter({ hasText: '补记背部训练' }).getByRole('button', { name: '编辑' }).click();
+    historyForm = page.locator('form.card').filter({ hasText: '编辑训练日志' });
+    await historyForm.locator('.form-group').filter({ hasText: '训练标题' }).locator('input').fill('编辑后的背部训练');
+    await historyForm.locator('.fitness-workout-set-row').nth(1).locator('input').nth(0).fill('52.5');
+    await historyForm.locator('.fitness-workout-set-row').nth(1).locator('input').nth(1).fill('8');
+    await historyForm.locator('.fitness-workout-set-row').nth(1).locator('input[type="checkbox"]').check();
+    await historyForm.getByRole('button', { name: '保存训练日志' }).click();
+    await expect(page.locator('.notice.success')).toContainText('训练日志已更新');
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts).toHaveLength(1);
+    expect(stored.fitnessWorkouts[0].id).toBe(workoutId);
+    expect(stored.fitnessWorkouts[0].title).toBe('编辑后的背部训练');
+    expect(stored.fitnessWorkouts[0].exercises[0].sets[1]).toEqual(expect.objectContaining({ weight: 52.5, reps: 8, done: true }));
+
+    await page.locator('article.card').filter({ hasText: '训练历史' }).locator('.fitness-metric-row').filter({ hasText: '编辑后的背部训练' }).getByRole('button', { name: '删除' }).click();
+    const afterDelete = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(afterDelete.fitnessWorkouts).toHaveLength(0);
+    expect(afterDelete.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'fitnessWorkouts', id: workoutId, reason: 'manual-delete' }),
+    ]));
+});
+
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
     const source = emptyData({
         records: [

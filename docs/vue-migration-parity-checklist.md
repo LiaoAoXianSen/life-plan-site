@@ -24,7 +24,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Tags/Search | Cross-module search and tag navigation across records, todos, goals, materials, templates, and wheel public items; tag center with idea/material/wheel scopes. | Grouped module search with scope filtering, exact detail/query navigation, template-management and wheel-library/tag entry points, and combined tag center with summaries, search, scopes, previews, and read-only module jumps. | No open blocker in the current Search/Tags parity audit; replacement remains blocked by other modules. | Search covers legacy modules with matching labels and navigation targets without mutating persisted data. |
 | Goals | CRUD/progress/status, detail modal entry points, search/Dashboard deep links, and tombstones. | Detail modal create/edit/delete, `goal=<id>` deep links, Dashboard goal-row restoration, legacy `createDate` and tombstones, and progress/status persistence exist. | No open blocker in the current Goals parity audit; replacement remains blocked by other modules. | Goal writes keep existing fields, avoid Vue-only timestamp churn, and delete with legacy `manual-delete` tombstones. |
 | Habits | Full rule editor, archive/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic create and quick check-in with `habitAppData` local mirror. | Most advanced workflows remain blockers. | Habit workflows produce the same `habits`, `checkins`, `habitPointLedger`, currency, milestone, mirror, and conflict data as legacy. |
-| Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, multi-exercise plan create/edit, plan-start live workouts, explicit finish-time plan writeback, manual-delete tombstones, and history list/delete. | Rest timer UX, complete workout history create/edit, history suggestion controls, and full body-metric field editing remain incomplete. | Fitness writes are delegated to `fitness-service.js` and preserve old plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
+| Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, multi-exercise plan create/edit, plan-start live workouts, explicit finish-time plan writeback, workout history create/edit/delete, manual-delete tombstones, and dirty-state coverage. | Rest timer UX, history suggestion controls, and full body-metric field editing remain incomplete. | Fitness writes are delegated to `fitness-service.js` and preserve old plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, tag two-stage spin, history, todo conversion, JSON/CSV. | Canvas parity, batch public-item flows, independent sync/conflict handling. | Wheel collections and independent sync path remain compatible with old `wheel-tool.js` behavior. |
 | Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo independent preview/apply/conditional upload flows. | Auto sync and Habit/Wheel independent flows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice plus Records diary analysis with remote/local generation, editable section/Todo drafts, overwrite confirmation, duplicate hints, and repository-backed writeback. | Idea next action, Todo breakdown, chat capture, and remaining legacy mode writebacks are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
@@ -180,9 +180,18 @@ Status: verified locally
 - Delete Fitness entities with legacy `manual-delete` tombstones rather than Vue-specific tombstone reasons.
 - Verify plan persistence, planned-set preservation, no-writeback behavior, explicit writeback behavior, dirty sync state, plan deletion tombstone output, and 1440px/390px Fitness layouts with Playwright.
 
+### Fitness History Editor Slice
+
+Status: verified locally
+
+- Add a Vue workout-history create/edit form for completed, planned, or skipped training logs while keeping `lifePlanData.fitnessWorkouts` authoritative.
+- Allow history logs to be created from an existing plan so `planId`, `planName`, exercise rows, and `plannedSets` persist like legacy workouts.
+- Preserve multi-exercise, multi-set `weight`, `reps`, `done`, `durationMin`, `notes`, and timestamp-normalized workout fields through `fitness-service.js#upsertFitnessWorkout`.
+- Keep Fitness deletes on legacy `manual-delete` tombstones and avoid introducing any `fitnessAppData` mirror.
+- Verify create, edit-in-place, dirty sync state, no mirror creation, deletion tombstone output, and 1440px/390px create/edit layouts with Playwright.
+
 Remaining Fitness scope:
 
-- Complete workout-history create/edit modal or inline editor for old completed/planned logs.
 - Rest timer and history-suggestion controls during live workouts.
 - Full body-metric field editing beyond the current weight/body-fat/waist subset.
 
