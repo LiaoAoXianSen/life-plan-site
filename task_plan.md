@@ -111,6 +111,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 93. Status: complete - Add read-only Playwright contracts for search fields, idea filters, day ordering, ranges, type semantics, and schedule entries.
 94. Status: complete - Run production build, focused/full checks, and desktop/mobile visual verification without horizontal overflow.
 95. Status: complete - Update parity evidence, package, commit the verified Records filter stage, and append dual-store memory.
+96. Status: complete - Audit legacy Materials fields, modal lifecycle, filtering, random review, sorting, deep-link, and tombstone contracts against Vue.
+97. Status: complete - Implement repository-backed Material create/edit/delete plus legacy keyword/type/tag filters and random review.
+98. Status: complete - Add exact persistence, tombstone, read-only filtering/randomization, and route restoration Playwright contracts.
+99. Status: complete - Run production build, focused/full checks, and 1440px/390px visual verification for Materials.
+100. Status: complete - Update parity evidence, package, commit the verified Materials stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -155,3 +160,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First focused diary AI contract timed out locating the tomorrow checkbox through an outer-scoped nested `has` selector | The test had already passed request, normalized draft, and no-mutation assertions | Used the stable generated section order and scoped the checkbox to the second diary field item |
 | Second focused diary AI contract received `medium` after the remote response specified `high` | Vue's legacy-service adapter passed `urgencyMeta`, while `ai-service.js` expects `todoUrgencyMeta`; it also omitted the local fallback's `addDays` dependency | Corrected both injected option names/implementations in `legacyServices.ts` and retained the persisted urgency assertion |
 | First new-record visual pass showed structured textareas at their intrinsic narrow width | Desktop and mobile screenshots had no overflow but exposed an impractical editing width | Scoped template-field textareas inside the create modal to the full available width and reran responsive screenshots |
+| Planning session-catchup helper was unavailable in the local `.claude` skill path | Resume step looked for `C:\Users\lihao\.claude\skills\planning-with-files\scripts\session-catchup.py` | Logged the missing helper and continued from current planning files plus `git status` evidence |
+| First Materials random-review focused test timed out locating the tag group | The tag picker had `aria-label` but no `role=group`, so `getByRole('group')` could not resolve it | Added `role="group"` to the random tag picker and reran the Materials focused tests green |
+| PTY dev-server start was rejected by Windows | `exec_command` with `tty: true` failed with access denied through the shell wrapper | Restarted the same `npm run dev` command as a normal non-interactive process |
+| First correct mobile Materials visual pass clipped the bottom save action | Long dialog content plus stacked mobile action buttons left the final button only partially visible | Added a Materials-scoped sticky modal action row and reran desktop/mobile overflow screenshots green |
+| First dev-server stop script failed on `$pid` | PowerShell reserves `$PID`/`$pid` as a read-only process ID variable | Renamed the loop variable to `$listenerId` and stopped the exact node listener on port 5174 |

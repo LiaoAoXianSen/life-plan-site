@@ -1,4 +1,4 @@
-import { createLegacyServices, getNowLocal } from './legacyServices';
+import { createLegacyServices, genId, getNowLocal } from './legacyServices';
 import { normalizeTopLevelData, type LifePlanData } from '../types/lifePlan';
 
 export type CommitSource = 'user' | 'sync';
@@ -21,6 +21,8 @@ function clone<T>(value: T): T {
  */
 function normalizePersistedData(value: unknown, services: ReturnType<typeof createLegacyServices>): LifePlanData {
   const target = normalizeTopLevelData(value);
+  const normalizedAt = getNowLocal();
+  const materialTypes = new Set(['金句', '提示词', '摘抄', '观点', '方法']);
   services.sync.pruneDeletedItems(target);
   target.todos = target.todos
     .map((item: Record<string, unknown>, index: number) => services.todos.normalizeTodoEntity(item, index))
@@ -33,11 +35,14 @@ function normalizePersistedData(value: unknown, services: ReturnType<typeof crea
   }));
   target.materials = target.materials.map(item => ({
     ...item,
-    type: typeof item.type === 'string' && item.type ? item.type : '摘抄',
+    id: typeof item.id === 'string' && item.id ? item.id : genId(),
+    type: materialTypes.has(String(item.type || '')) ? item.type : '摘抄',
     content: typeof item.content === 'string' ? item.content : '',
-    tags: Array.isArray(item.tags) ? item.tags : [],
+    tags: services.records.getIdeaTags({ ideaTags: item.tags }),
     source: typeof item.source === 'string' ? item.source : '',
     note: typeof item.note === 'string' ? item.note : '',
+    createdAt: typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : normalizedAt,
+    updatedAt: typeof item.updatedAt === 'string' && item.updatedAt ? item.updatedAt : (typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : normalizedAt),
   }));
   target.goals = target.goals.map(item => ({
     ...item,

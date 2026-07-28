@@ -256,4 +256,16 @@
 - Parallel visual recheck passed after the responsive fixes: mobile document/Records/list containers measured 390/390, 362/362, and 362/362 with the long title contained; the 360px agenda exposes its 402px content through 42px of horizontal scrolling, making the second 160px event fully reachable. Desktop retained 160px event width and 1440/1440 document width.
 - Final production build and `git diff --check` passed; final `scripts/check.ps1` passed syntax checks and all 23 Vue Playwright tests after local-date, ordering, habit-target, and responsive fixes.
 - Created clean runtime package `life-plan-site-runtime-20260727-232101.zip` and retained the newest five packages per project policy.
+- Opened phases 96-100 for Materials parity after comparing the remaining Dashboard and Materials blockers. Selected Materials because the current Vue page uses the wrong required `title` contract and lacks legacy edit, advanced filters, random review, and deletion semantics.
 - Final production build, all 22 Vue Playwright tests, and `git diff --check` passed after the textarea correction; created `life-plan-site-runtime-20260727-224426.zip` and retained the newest five packages.
+2026-07-27 - Materials visual probe first attempt stopped because Playwright `getByLabel('内容')` also matched a long edit button aria-label containing that word; switched the probe to exact dialog-scoped labels. Product state was unchanged.
+
+## 2026-07-28 - Materials parity closeout
+
+- Resumed the Materials parity stage with phases 97-100 active, worktree changes limited to Materials implementation/tests/docs/planning, and a read-only sidecar reviewing documentation gaps.
+- Focused Materials Playwright initially exposed a missing `role="group"` on the random tag picker; added the semantic role and reran `npx playwright test tests/vue-smoke.spec.js --grep "materials"` successfully with 2/2 tests passing.
+- Correct 1440x1000 and 390x844 Playwright screenshots/measurements verified the Materials page, filters, random/list grids, long content/tags/source/note wrapping, and editor dialog. The first mobile dialog pass clipped the save button; a Materials-scoped sticky action row fixed it, and the rerun reported no layout-level horizontal overflow.
+- `npm run build` passed with 88 transformed modules. `.\scripts\check.ps1` passed syntax checks and all 25 Vue Playwright tests, including both Materials contracts. `git diff --check` passed with only CRLF working-copy warnings.
+- Updated the parity checklist and preview guide to record the verified Materials contract while preserving Dashboard and other remaining blockers.
+- Created clean runtime package `life-plan-site-runtime-20260728-090558.zip`; package retention removed `life-plan-site-runtime-20260723-230023.zip`.
+- Protected refs remained unchanged before commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

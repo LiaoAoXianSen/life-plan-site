@@ -18,6 +18,13 @@ function todoRemoteSnapshot(todos, deletedItems = []) {
     return { schemaVersion: 1, generatedAt: '2026-07-27T09:00:00.000Z', todos, deletedItems };
 }
 
+async function expectHashRoute(page, path, query = {}) {
+    await expect.poll(() => page.evaluate(() => {
+        const [hashPath, rawQuery = ''] = location.hash.replace(/^#/, '').split('?');
+        return { path: hashPath, query: Object.fromEntries(new URLSearchParams(rawQuery)) };
+    })).toEqual({ path, query });
+}
+
 test('Vue shell navigates through migrated pages without browser errors', async ({ page }) => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -423,6 +430,161 @@ test('records legacy filters and operation events stay read-only', async ({ page
     expect(storageAfter.lifePlanData).toBe(storedBefore);
     expect(storageAfter.todoMirror).toBeNull();
     expect(storageAfter.habitMirror).toBeNull();
+});
+
+test('materials create edit filter and delete preserve the legacy data contract', async ({ page }) => {
+    const source = emptyData({
+        materials: [
+            { id: 'material-old', type: '摘抄', content: '较早素材', tags: ['阅读'], source: '旧书', note: '旧备注', createdAt: '2026-07-25T08:00:00', updatedAt: '2026-07-25T08:00:00' },
+            { id: 'material-newer', type: '方法', content: '较新方法素材', tags: ['工作'], source: '实践', note: '新备注', createdAt: '2026-07-26T08:00:00', updatedAt: '2026-07-26T08:00:00' },
+            { type: '旧分类', content: '旧格式素材', tags: '旧标签, AI，迁移', source: '旧数据源', note: '等待规范化' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/materials');
+    const materialsPage = page.locator('#page-materials');
+    const list = materialsPage.locator('.material-list');
+    let contents = await list.locator('.material-content').allTextContents();
+    expect(contents.indexOf('较新方法素材')).toBeLessThan(contents.indexOf('较早素材'));
+
+    await materialsPage.getByRole('button', { name: '新增素材' }).click();
+    const editor = materialsPage.getByRole('dialog', { name: '新增素材' });
+    await expect(editor.getByLabel('标题')).toHaveCount(0);
+    await editor.getByLabel('内容').fill('   ');
+    await editor.getByRole('button', { name: '保存' }).click();
+    await expect(editor.getByRole('alert')).toHaveText('请输入素材内容');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await editor.getByLabel('类型').selectOption('金句');
+    await editor.getByLabel('内容').fill('真正的素材正文');
+    await editor.getByLabel('标签').fill('AI, 工作 AI，迁移');
+    await editor.getByLabel('来源').fill('迁移手册');
+    await editor.getByLabel('备注').fill('用于验证旧字段');
+    await editor.getByRole('button', { name: '保存' }).click();
+    await expect(list).toContainText('真正的素材正文');
+
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const created = stored.materials.find(item => item.content === '真正的素材正文');
+    expect(created).toMatchObject({ type: '金句', tags: ['AI', '工作', '迁移'], source: '迁移手册', note: '用于验证旧字段', createdAt: expect.any(String), updatedAt: expect.any(String) });
+    expect(created).not.toHaveProperty('title');
+    const createdAt = created.createdAt;
+    const normalizedLegacy = stored.materials.find(item => item.content === '旧格式素材');
+    expect(normalizedLegacy).toMatchObject({
+        type: '摘抄',
+        tags: ['旧标签', 'AI', '迁移'],
+        source: '旧数据源',
+        note: '等待规范化',
+        id: expect.any(String),
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+    });
+    expect(normalizedLegacy.id).not.toBe('');
+    expect(normalizedLegacy.createdAt).not.toBe('');
+    expect(normalizedLegacy.updatedAt).not.toBe('');
+
+    await list.getByRole('button', { name: '编辑素材 真正的素材正文' }).click();
+    const editDialog = materialsPage.getByRole('dialog', { name: '编辑素材' });
+    await expectHashRoute(page, '/materials', { material: created.id });
+    await expect(editDialog.getByLabel('内容')).toHaveValue('真正的素材正文');
+    await editDialog.getByLabel('类型').selectOption('观点');
+    await editDialog.getByLabel('内容').fill('更新后的观点正文');
+    await editDialog.getByLabel('标签').fill('AI, 复盘');
+    await editDialog.getByLabel('来源').fill('更新来源');
+    await editDialog.getByLabel('备注').fill('更新备注');
+    await editDialog.getByRole('button', { name: '保存' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const updated = stored.materials.find(item => item.id === created.id);
+    expect(updated).toMatchObject({ type: '观点', content: '更新后的观点正文', tags: ['AI', '复盘'], source: '更新来源', note: '更新备注', createdAt });
+    expect(updated.updatedAt).toEqual(expect.any(String));
+
+    await materialsPage.getByLabel('素材类型筛选').selectOption('观点');
+    await materialsPage.getByLabel('素材标签筛选').fill('复');
+    await materialsPage.getByLabel('搜索素材').fill('更新来源');
+    await expect(list).toContainText('更新后的观点正文');
+    await expect(list).not.toContainText('较新方法素材');
+    await materialsPage.getByLabel('搜索素材').fill('不存在');
+    await expect(list).toContainText('暂无匹配素材');
+    await materialsPage.getByLabel('搜索素材').fill('');
+
+    await list.getByRole('button', { name: '编辑素材 更新后的观点正文' }).click();
+    page.once('dialog', dialog => dialog.accept());
+    await materialsPage.getByRole('dialog', { name: '编辑素材' }).getByRole('button', { name: '删除' }).click();
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.materials.find(item => item.id === created.id)).toBeUndefined();
+    expect(stored.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'materials', id: created.id, reason: 'manual-delete' }),
+    ]));
+    expect(stored.materials.find(item => item.id === 'material-old').content).toBe('较早素材');
+});
+
+test('materials deep links filters and random review remain read-only', async ({ page }) => {
+    const source = emptyData({
+        materials: [
+            { id: 'material-alpha', type: '金句', content: 'Alpha 内容', tags: ['Alpha'], source: '作者甲', note: '', createdAt: '2026-07-21T08:00:00', updatedAt: '2026-07-21T08:00:00' },
+            { id: 'material-beta', type: '提示词', content: 'Beta 主素材', tags: ['Beta'], source: '作者乙', note: 'Beta 备注', createdAt: '2026-07-22T08:00:00', updatedAt: '2026-07-22T08:00:00' },
+            { id: 'material-beta-two', type: '方法', content: 'Beta 次素材', tags: ['Beta', 'Gamma'], source: '', note: '', createdAt: '2026-07-23T08:00:00', updatedAt: '2026-07-23T08:00:00' },
+            { id: 'material-gamma', type: '摘抄', content: 'Gamma 内容', tags: ['Gamma'], source: '', note: '', createdAt: '2026-07-24T08:00:00', updatedAt: '2026-07-24T08:00:00' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/materials?material=material-beta&tag=beta');
+    const materialsPage = page.locator('#page-materials');
+    const list = materialsPage.locator('.material-list');
+    const editor = materialsPage.getByRole('dialog', { name: '编辑素材' });
+    await expect(editor.getByLabel('内容')).toHaveValue('Beta 主素材');
+    await expect(materialsPage.getByLabel('素材标签筛选')).toHaveValue('beta');
+    await expect(list).toContainText('Beta 主素材');
+    await expect(list).toContainText('Beta 次素材');
+    await expect(list).not.toContainText('Alpha 内容');
+    await editor.getByRole('button', { name: '关闭素材编辑' }).click();
+    await expect(page).toHaveURL(/#\/materials\?tag=beta$/);
+
+    const randomPicker = materialsPage.getByRole('group', { name: '随机展示标签' });
+    for (const checkbox of await randomPicker.getByRole('checkbox').all()) await checkbox.uncheck();
+    const randomList = materialsPage.locator('.material-random-list');
+    await expect(randomList.locator('.material-card')).toHaveCount(3);
+    await randomPicker.getByRole('checkbox', { name: 'Beta' }).check();
+    await expect(randomList.locator('.material-card')).toHaveCount(2);
+    await expect(randomList).toContainText('Beta 主素材');
+    await expect(randomList).toContainText('Beta 次素材');
+    await materialsPage.getByRole('button', { name: '换一批' }).click();
+
+    await page.goto('/#/tags');
+    const materialTags = page.locator('.card').filter({ has: page.getByText('素材标签', { exact: true }) });
+    await materialTags.getByRole('button', { name: 'Beta 2', exact: true }).click();
+    await expectHashRoute(page, '/materials', { tag: 'Beta' });
+    await expect(materialsPage.getByLabel('素材标签筛选')).toHaveValue('Beta');
+    await expect(list).toContainText('Beta 主素材');
+    await expect(list).toContainText('Beta 次素材');
+    await page.reload();
+    await expectHashRoute(page, '/materials', { tag: 'Beta' });
+    await expect(materialsPage.getByLabel('素材标签筛选')).toHaveValue('Beta');
+    await page.goBack();
+    await expectHashRoute(page, '/tags');
+    await expect(page.getByText('素材标签', { exact: true })).toBeVisible();
+
+    await page.goto('/#/search');
+    const searchInput = page.locator('.global-search-panel input[type="search"]');
+    await searchInput.fill('Beta 主素材');
+    await page.getByRole('button', { name: '搜索', exact: true }).click();
+    await expectHashRoute(page, '/search', { q: 'Beta 主素材' });
+    await page.locator('.search-result-item').filter({ hasText: 'Beta 主素材' }).click();
+    await expectHashRoute(page, '/materials', { material: 'material-beta' });
+    await expect(editor.getByLabel('内容')).toHaveValue('Beta 主素材');
+    await page.reload();
+    await expectHashRoute(page, '/materials', { material: 'material-beta' });
+    await expect(editor.getByLabel('内容')).toHaveValue('Beta 主素材');
+    await page.goBack();
+    await expectHashRoute(page, '/search', { q: 'Beta 主素材' });
+    await expect(searchInput).toHaveValue('Beta 主素材');
+    await expect(page.locator('.search-result-item').filter({ hasText: 'Beta 主素材' })).toBeVisible();
+
+    const persisted = await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), mirror: localStorage.getItem('todoAppData') }));
+    expect(persisted.data).toBe(original);
+    expect(persisted.mirror).toBeNull();
 });
 
 test('record editor persists linked and exclusive todos through the main data contract', async ({ page }) => {

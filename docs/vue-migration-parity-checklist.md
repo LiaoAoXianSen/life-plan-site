@@ -20,7 +20,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
 | Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | New-record modal with meaningful-input autosave plus persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, legacy filters/day ordering, list/calendar operation events, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | No open blocker in the current Records parity audit; replacement remains blocked by other modules. | Users can create, preview, edit, delete, template, filter, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, and compatible Todo conversion exist. | AI next-action generation and the legacy editable pre-create Todo draft remain incomplete. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
-| Materials | Material CRUD, type colors, source/note/tags, search. | Basic material CRUD/search exists. | Edit/detail parity and advanced filters need audit. | Material fields and tombstones remain compatible and searchable. |
+| Materials | Material CRUD, type colors, source/note/tags, search. | Legacy-compatible create/edit/delete, content-only required field, type/tag normalization, keyword/type/tag filters, descending sort, random review, `material`/`tag` deep links, and tombstones. | No open blocker in the current Materials parity audit; replacement remains blocked by Dashboard and other modules. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation. | Basic global search and tag center exist. | Needs full index parity including templates and wheel items. | Search covers legacy modules with matching labels and navigation targets. |
 | Goals | CRUD/progress/status and tombstones. | Basic CRUD/progress exists. | Needs detail parity audit. | Goal writes keep existing fields and delete tombstones. |
 | Habits | Full rule editor, archive/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic create and quick check-in with `habitAppData` local mirror. | Most advanced workflows remain blockers. | Habit workflows produce the same `habits`, `checkins`, `habitPointLedger`, currency, milestone, mirror, and conflict data as legacy. |
@@ -114,6 +114,18 @@ Status: verified locally
 - Retain the previously accepted Vue calendar superset for Todo plan, due, and execution detail entry points; idea-only filters remove all Todo/habit operation events.
 - Prove filter interactions preserve the exact `lifePlanData` string and do not create `todoAppData` or `habitAppData` mirrors.
 - Verify all filter controls and mixed event rows at 1440px and 390px with no horizontal overflow.
+
+### Materials Contract Slice
+
+Status: verified locally
+
+- Persist `lifePlanData.materials[]` with the legacy `{ id, type, content, tags, source, note, createdAt, updatedAt }` contract; Vue no longer writes or requires a `title` field.
+- Normalize old material rows with string tags, invalid types, missing IDs, and missing timestamps through the repository load path.
+- Preserve `id` and `createdAt` on edit, refresh `updatedAt`, and delete with `{ collection: 'materials', id, reason: 'manual-delete' }` tombstones.
+- Restore transient keyword/type/tag filtering, descending `createdAt` ordering, and read-only random review over the selected-tag union.
+- Support `#/materials?material=<id>` editor restoration and `#/materials?tag=<tag>` filtering, while invalid material queries are cleaned without writing data.
+- Route Material search results and Material tag chips to the Materials page; this is a bounded entry-point fix and does not claim full Search/Tags parity.
+- Verify exact persistence, tombstone output, read-only filters/random review, route restoration, Search/Tags entry points, and 1440px/390px layouts with Playwright and screenshots.
 
 ### Sync Protected Main Upload Slice
 

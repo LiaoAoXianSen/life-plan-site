@@ -5,6 +5,7 @@ import type { DataEntity, Todo } from '../types/lifePlan';
 import { useLifePlanStore } from './lifePlanStore';
 
 const services = createLegacyServices();
+const materialTypes = new Set(['金句', '提示词', '摘抄', '观点', '方法']);
 type RecordUpdateInput = Partial<{
   title: string;
   content: string;
@@ -41,6 +42,13 @@ type RecordDraftInput = {
 
 type DiaryAiSectionKey = 'oneLine' | 'review' | 'tomorrow' | 'improve' | 'thinking' | 'smallJoy';
 type DiaryAiTodoInput = Partial<Todo> & Pick<Todo, 'text'>;
+type MaterialInput = {
+  type: string;
+  content: string;
+  tags: string[];
+  source: string;
+  note: string;
+};
 
 export const useRecordsStore = defineStore('records', () => {
   const lifePlan = useLifePlanStore();
@@ -298,7 +306,44 @@ export const useRecordsStore = defineStore('records', () => {
       idea.updatedAt = getNowLocal();
     });
   }
-  function addMaterial(input: { title: string; content: string; type: string; tags: string[]; source: string; note: string }) { const now = getNowLocal(); lifePlan.data.materials.unshift({ id: genId(), ...input, createdAt: now, updatedAt: now }); lifePlan.commit('create-material'); }
+  function saveMaterial(id: string, input: MaterialInput) {
+    const content = input.content.trim();
+    if (!content) throw new Error('请输入素材内容');
+    let savedId = id;
+    lifePlan.mutate(id ? 'update-material' : 'create-material', data => {
+      const now = getNowLocal();
+      const next = {
+        type: materialTypes.has(input.type) ? input.type : '摘抄',
+        content,
+        tags: services.records.getIdeaTags({ ideaTags: input.tags }),
+        source: input.source.trim(),
+        note: input.note.trim(),
+        updatedAt: now,
+      };
+      const existing = id ? data.materials.find(item => item.id === id) : null;
+      if (existing) {
+        Object.assign(existing, next);
+        return;
+      }
+      savedId = genId();
+      data.materials.unshift({ id: savedId, ...next, createdAt: now });
+    });
+    return savedId;
+  }
+
+  function addMaterial(input: MaterialInput) {
+    return saveMaterial('', input);
+  }
+
+  function deleteMaterial(id: string) {
+    const material = lifePlan.data.materials.find(item => item.id === id);
+    if (!material) return false;
+    lifePlan.mutate('delete-material', data => {
+      services.sync.markDeletedItem(data, 'materials', id, { reason: 'manual-delete' });
+      data.materials = data.materials.filter(item => item.id !== id);
+    });
+    return true;
+  }
   function remove(collection: 'records' | 'materials', id: string) {
     const item = lifePlan.data[collection].find(entity => entity.id === id);
     if (!item) return;
@@ -314,5 +359,5 @@ export const useRecordsStore = defineStore('records', () => {
       data[collection] = data[collection].filter(entity => entity.id !== id) as never;
     });
   }
-  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, remove, services };
+  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
 });

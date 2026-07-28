@@ -72,10 +72,10 @@ changes. Keep a manually exported data file before testing complex data flows.
 
 ## Advanced legacy controls retained on master
 
-The Vue branch has operational Dashboard, Todos, Records, Libraries, Search,
-Goals, basic Habits, Fitness, Wheel, AI and main Sync workflows. The following
-specialist controls still live in the proven static app and should be migrated
-only as separately tested follow-up releases: habit wallet/reward administration
-and protected remote flow, wheel Canvas/remote auto-sync, and non-diary AI
-writeback modes. They are not replaced
-by incompatible shortcuts.
+The Vue branch has operational Dashboard, Todos, Records, Materials, Libraries,
+Search, Goals, basic Habits, Fitness, Wheel, AI and main Sync workflows. The
+Dashboard parity audit remains a blocker before any replacement decision. The
+following specialist controls still live in the proven static app and should be
+migrated only as separately tested follow-up releases: habit wallet/reward
+administration and protected remote flow, wheel Canvas/remote auto-sync, and
+non-diary AI writeback modes. They are not replaced by incompatible shortcuts.

@@ -141,6 +141,13 @@
 - Parallel review found that Records and CalendarViews still derived today through UTC ISO dates, which is wrong before 08:00 in Asia/Shanghai; both now use the shared local `getTodayStr()` contract, and the test fixture independently formats local dates.
 - Same-day all-day records need `getRecordSortValue`-compatible secondary ordering when their minute values tie. Schedule items now carry that stable value, while timed layout remains chronological.
 - Mobile visual measurement found long unbroken titles widened the Records list and overlapping fixed-width day events extended beyond a hidden agenda boundary. Record titles now wrap anywhere, and the mobile agenda exposes horizontal scrolling while desktop keeps the accepted 160px event width.
+- Legacy Materials has no `title` field: `content` is the only required user field, alongside fixed `type`, normalized `tags`, `source`, `note`, `createdAt`, and `updatedAt`. The current Vue form incorrectly requires a title and cannot edit existing old-format rows.
+- Legacy Materials filters type exactly, tags by partial case-insensitive match, keywords across type/content/source/note/tags, and sorts by `createdAt` descending. All filtering is transient and read-only.
+- Random review selects up to three unique rows from the union of materials matching any selected tag; no selected tag means the whole collection. Random refresh and tag selection must never persist data.
+- Material deletion writes a `deletedItems(collection=materials)` tombstone with `reason: manual-delete`. A dedicated store path is needed because the generic Vue remover currently emits `vue-delete-materials`.
+- Vue Materials now normalizes old string tags, invalid types, missing IDs, and missing timestamps into the legacy contract while keeping `content` as the only required field and omitting `title`.
+- Search routes Material results to `#/materials?material=<id>` and Tags exposes a separate Material-tags section to `#/materials?tag=<tag>`; this closes the bounded Material entry-point gap without claiming full Search/Tags parity.
+- Correct 1440px and 390px visual checks show Materials page, filter controls, random/list grids, long content/tags/source/note, and the editor dialog within viewport width; the mobile dialog uses a sticky action row so delete/cancel/save remain visible.
 
 ## 2026-07-27 Diary AI parity
 
