@@ -159,6 +159,11 @@
 - Vue Dashboard recent timeline now uses the shared schedule builder over a bounded 14-day window with records, Todo execution sessions, and checked-habit events, while excluding Todo plan/due-only items for this page.
 - Dashboard quick-write parity remains intentionally open: legacy actions such as direct Todo completion, habit check-in, and other write-heavy shortcuts need a separate audited slice before any replacement decision.
 - Read-only Dashboard review found no blocking data-contract issue after implementation. Follow-up parity can deepen Ideas metric links from plain `#/ideas` into filtered states, Goals rows from plain `#/goals` into target detail, and Habit timeline links once the migrated Habits page has a fuller historical/detail landing surface.
+- Legacy Goals uses a modal/detail flow for both create and edit. Saves persist `name`, `period`, `target`, `status`, `progress`, and new `createDate`; existing saves do not add Vue-only timestamp fields.
+- Legacy Goals deletion uses `markDeletedItem('goals', id, { reason: 'manual-delete', name })`; the current Vue page used `vue-delete-goal`, so Goals parity needs a tombstone contract correction before replacement.
+- Legacy search and Dashboard goal rows call `openGoalDetail(goal.id)`. Vue Goals should restore a `goal=<id>` route/deep-link target so cross-module entry points can land on a specific editable goal.
+- Read-only Goals review found no blocking issue after implementation. It caught two useful legacy-depth corrections that were included in the slice: new Goals preserve the legacy empty `period` default, and Dashboard goal rows now route to `#/goals?goal=<id>`.
+- A separate read-only replacement audit estimated Vue replacement readiness at roughly 72%-78% by risk-weighted surface after Dashboard and near-closed Goals. The largest remaining blockers are advanced Habits and Habit remote flow, full Sync auto/independent flows, Wheel canvas/remote conflict parity, Fitness advanced planning/history, non-diary AI writebacks, Search/Tags full index parity, and broader Import/Export contracts.
 
 ## 2026-07-27 Diary AI parity
 

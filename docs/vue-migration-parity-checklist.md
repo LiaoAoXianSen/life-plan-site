@@ -22,7 +22,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, and compatible Todo conversion exist. | AI next-action generation and the legacy editable pre-create Todo draft remain incomplete. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Legacy-compatible create/edit/delete, content-only required field, type/tag normalization, keyword/type/tag filters, descending sort, random review, `material`/`tag` deep links, and tombstones. | No open blocker in the current Materials parity audit; replacement remains blocked by Dashboard and other modules. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation. | Basic global search and tag center exist. | Needs full index parity including templates and wheel items. | Search covers legacy modules with matching labels and navigation targets. |
-| Goals | CRUD/progress/status and tombstones. | Basic CRUD/progress exists. | Needs detail parity audit. | Goal writes keep existing fields and delete tombstones. |
+| Goals | CRUD/progress/status, detail modal entry points, search/Dashboard deep links, and tombstones. | Detail modal create/edit/delete, `goal=<id>` deep links, Dashboard goal-row restoration, legacy `createDate` and tombstones, and progress/status persistence exist. | No open blocker in the current Goals parity audit; replacement remains blocked by other modules. | Goal writes keep existing fields, avoid Vue-only timestamp churn, and delete with legacy `manual-delete` tombstones. |
 | Habits | Full rule editor, archive/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic create and quick check-in with `habitAppData` local mirror. | Most advanced workflows remain blockers. | Habit workflows produce the same `habits`, `checkins`, `habitPointLedger`, currency, milestone, mirror, and conflict data as legacy. |
 | Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, single-exercise plan, live workout basics, history. | Multi-exercise plan editing, timer UX, complete history editing, plan writeback. | Fitness writes are delegated to `fitness-service.js` and support old multi-exercise workflows. |
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, tag two-stage spin, history, todo conversion, JSON/CSV. | Canvas parity, batch public-item flows, independent sync/conflict handling. | Wheel collections and independent sync path remain compatible with old `wheel-tool.js` behavior. |
@@ -137,6 +137,16 @@ Status: verified locally
 - Surface active period records for weekly/monthly/yearly reviews/plans, `3年计划`, and `终身愿景`, routing to `#/records?record=<id>`.
 - Build a bounded recent timeline from records, Todo execution sessions, and checked-habit events while excluding Todo plan/due-only events for Dashboard.
 - Verify navigation restoration and exact `lifePlanData` / `todoAppData` immutability in Playwright, plus 1440px/390px screenshots with no horizontal overflow after long-title wrapping fixes.
+
+### Goals Detail Contract Slice
+
+Status: verified locally
+
+- Restore the legacy modal/detail flow for Goals create and edit, including `#/goals?goal=<id>` restoration from Dashboard and direct loads.
+- Persist existing Goals through the legacy field contract: `name`, `period`, `target`, `status`, `progress`, and existing `createDate`; Vue does not add `createdAt` or `updatedAt` timestamp churn for old Goal rows.
+- Preserve the legacy empty default `period` for new Goals unless the user selects a period, and write `createDate: getTodayStr()` on creation.
+- Delete Goals through `sync-service.js.markDeletedItem` with `{ collection: 'goals', reason: 'manual-delete', name }`, then rebuild compatibility mirrors through the repository commit path.
+- Verify route restoration, save payload, create defaults, tombstone output, mirror authority, and 1440px/390px modal/list layouts with Playwright and screenshots.
 
 ### Sync Protected Main Upload Slice
 

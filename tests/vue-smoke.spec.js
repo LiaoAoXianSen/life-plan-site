@@ -303,9 +303,68 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     await page.getByRole('button', { name: /Dashboard 习惯/ }).click();
     await expectHashRoute(page, '/habits', { habit: 'habit-dashboard' });
 
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /Dashboard 目标/ }).click();
+    await expectHashRoute(page, '/goals', { goal: 'goal-dashboard' });
+
     const persisted = await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), mirror: localStorage.getItem('todoAppData') }));
     expect(persisted.data).toBe(original);
     expect(persisted.mirror).toBeNull();
+});
+
+test('goals detail route save and delete preserve the legacy contract', async ({ page }) => {
+    const today = (() => {
+        const date = new Date();
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    })();
+    const source = emptyData({
+        goals: [{ id: 'goal-existing', name: '旧目标', period: '年度', target: '旧描述', status: '进行中', progress: 35, createDate: '2026-01-01' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/goals?goal=goal-existing');
+    const dialog = page.getByRole('dialog', { name: '编辑目标' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('目标', { exact: true }).fill('更新后的目标');
+    await dialog.getByLabel('周期').selectOption('长期');
+    await dialog.getByLabel('目标描述').fill('新的目标描述');
+    await dialog.getByLabel('状态').selectOption('已完成');
+    await dialog.getByRole('slider').fill('70');
+    await dialog.getByRole('button', { name: '保存' }).click();
+    await expect(page.getByRole('button', { name: /更新后的目标/ })).toContainText('70%');
+
+    let persisted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    let existing = persisted.goals.find(goal => goal.id === 'goal-existing');
+    expect(existing).toMatchObject({ id: 'goal-existing', name: '更新后的目标', period: '长期', target: '新的目标描述', status: '已完成', progress: 70, createDate: '2026-01-01' });
+    expect(existing.updatedAt).toBeUndefined();
+    expect(existing.createdAt).toBeUndefined();
+
+    await page.getByRole('button', { name: '新建目标' }).click();
+    const createDialog = page.getByRole('dialog', { name: '新建目标' });
+    await createDialog.getByLabel('目标', { exact: true }).fill('新增季度目标');
+    await createDialog.getByLabel('目标描述').fill('季度描述');
+    await createDialog.getByLabel('状态').selectOption('暂停');
+    await createDialog.getByRole('slider').fill('20');
+    await createDialog.getByRole('button', { name: '保存' }).click();
+
+    persisted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const created = persisted.goals.find(goal => goal.name === '新增季度目标');
+    expect(created).toMatchObject({ period: '', target: '季度描述', status: '暂停', progress: 20, createDate: today });
+    expect(created.createdAt).toBeUndefined();
+    expect(created.updatedAt).toBeUndefined();
+
+    await page.goto('/#/goals?goal=goal-existing');
+    page.once('dialog', dialogEvent => dialogEvent.accept());
+    await page.getByRole('dialog', { name: '编辑目标' }).getByRole('button', { name: '删除' }).click();
+
+    persisted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(persisted.goals.some(goal => goal.id === 'goal-existing')).toBe(false);
+    expect(persisted.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'goals', id: 'goal-existing', reason: 'manual-delete', name: '更新后的目标' }),
+    ]));
+    const mirror = await page.evaluate(() => JSON.parse(localStorage.getItem('todoAppData')));
+    expect(mirror.authority).toBe('lifePlanData.todos');
+    expect(mirror.todos).toEqual([]);
 });
 
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {

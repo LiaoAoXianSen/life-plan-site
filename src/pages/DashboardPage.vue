@@ -249,7 +249,7 @@ const timelineGroups = computed(() => {
           <button class="btn btn-secondary todo-mini-btn" type="button" @click="router.push('/goals')">看目标</button>
         </div>
         <div v-if="goalFocusList.length" class="command-list">
-          <button v-for="goal in goalFocusList" :key="String(goal.id)" class="command-row" type="button" @click="router.push('/goals')">
+          <button v-for="goal in goalFocusList" :key="String(goal.id)" class="command-row" type="button" @click="router.push({ path: '/goals', query: { goal: String(goal.id) } })">
             <span>{{ goal.name || '未命名目标' }}</span>
             <strong>{{ Number(goal.progress || 0) }}%</strong>
           </button>

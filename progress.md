@@ -285,3 +285,15 @@
 - A read-only subagent review found no blocking Dashboard slice issue. It noted non-blocking follow-ups for filtered Idea metric links, Goal detail links, and richer Habit timeline landing once those target pages support the deeper route contracts.
 - Created clean runtime package `life-plan-site-runtime-20260728-111421.zip`; package retention removed `life-plan-site-runtime-20260724-092318.zip`.
 - Protected refs remained unchanged before the Dashboard commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-28 - Goals parity stage
+
+- Started phases 106-109 after committing Dashboard stage `a3269ee`. Selected Goals as the next bounded replacement blocker because the surface is smaller than Habit/Wheel but still has concrete legacy detail and tombstone contract gaps.
+- Audited legacy `openGoalModal`, `openGoalDetail`, `saveGoal`, `renderGoalList`, `deleteGoal`, and `deleteCurrentGoal` in `app.js`; confirmed the needed Vue fixes are detail/deep-link editing, legacy save payload shape, and `manual-delete` tombstones with the deleted goal name.
+- Implemented the Vue Goals detail modal, `goal=<id>` route restoration, legacy empty-period creation default, existing-row save payload without Vue-only timestamps, manual-delete tombstones through `sync-service.js`, and Dashboard goal deep links.
+- Added and passed the focused Goals contract test. It covers direct detail restoration, edit payload shape, creation defaults, delete tombstone, and compatible `todoAppData` mirror authority.
+- Focused Dashboard+Goals run passed 2/2 after wiring Dashboard goal rows to `#/goals?goal=<id>`.
+- `npm run build` passed, then full `.\scripts\check.ps1` passed syntax checks and 27/27 Vue Playwright tests. `git diff --check` passed with only LF/CRLF warnings.
+- Goals 1440x1000 and 390x844 visual/overflow checks passed against long goal names/descriptions with no overflow in `html`, `body`, `.vue-main`, `#page-goals`, summary grid, goal cards, modal, editor, or sticky action row. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\goals-parity-final`.
+- Final `npm run build` and `git diff --check` passed before packaging. Created clean runtime package `life-plan-site-runtime-20260728-113854.zip`; package retention removed `life-plan-site-runtime-20260727-222706.zip`.
+- Protected refs remained unchanged before the Goals commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
