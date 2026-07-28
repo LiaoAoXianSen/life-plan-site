@@ -311,3 +311,14 @@
 - Search and Tags 1440x1000 and 390x844 visual/overflow checks passed against long titles/tags/content with no overflow in page, main, search panel/results, or tag-center cards/previews. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\search-tags-parity-final`.
 - Final `npm run build` and `git diff --check` passed before packaging. Created clean runtime package `life-plan-site-runtime-20260728-120106.zip`; package retention removed `life-plan-site-runtime-20260727-224426.zip`.
 - Protected refs remained unchanged before the Search/Tags commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-28 - Import/Export contract stage
+
+- Started phases 114-117 after committing Search/Tags stage `0f779e7`. Selected Import/Export because the UI already exists but checklist still requires broader contracts for mirrors, tombstones, snapshots, and merge semantics.
+- Audited legacy `exportData` / `importData` and Vue `lifePlanRepository.mergeImport` / `exportData`. Found two Vue contract gaps: manual import submitted as `source: sync`, leaving main sync dirty state false, and repository commits rebuilt `todoAppData` but not `habitAppData`.
+- Implemented the repository fix: all commits now rebuild the Habit compatibility mirror through `LifePlanHabitService`, and manual import merge commits use the default user source so `lifePlanSyncState.dirty` is set for later `/life-plan.json` propagation.
+- Added a real Sync-page Import/Export Playwright contract covering file input import, tombstone preservation, before/after snapshots, Todo and Habit mirror rebuilds, dirty sync state, and backup download snapshot/filename.
+- Focused `npx playwright test tests/vue-smoke.spec.js --grep "main import export"` passed 1/1. `npm run build` passed. Full `.\scripts\check.ps1` passed syntax checks and all 29 Vue Playwright tests. `git diff --check` passed with only LF/CRLF working-copy warnings.
+- Updated the Vue migration checklist and preview guide to close the Import/Export data-safety blocker while leaving replacement blocked by Habits, Wheel, Fitness, remaining Sync, and non-diary AI flows.
+- Created clean runtime package `life-plan-site-runtime-20260728-123540.zip`; package retention removed `life-plan-site-runtime-20260727-232101.zip`.
+- Protected refs remained unchanged before the Import/Export commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

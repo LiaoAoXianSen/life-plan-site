@@ -28,7 +28,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, tag two-stage spin, history, todo conversion, JSON/CSV. | Canvas parity, batch public-item flows, independent sync/conflict handling. | Wheel collections and independent sync path remain compatible with old `wheel-tool.js` behavior. |
 | Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo independent preview/apply/conditional upload flows. | Auto sync and Habit/Wheel independent flows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice plus Records diary analysis with remote/local generation, editable section/Todo drafts, overwrite confirmation, duplicate hints, and repository-backed writeback. | Idea next action, Todo breakdown, chat capture, and remaining legacy mode writebacks are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
-| Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists. | Needs broader contract tests with mirrors/tombstones. | Import/export round-trips complete data with snapshots and merge semantics intact. |
+| Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists, import merge creates before/after snapshots, preserves tombstones, refreshes Todo/Habit mirrors, and marks main sync dirty. | No open blocker in the current Import/Export contract audit; replacement remains blocked by other modules. | Import/export round-trips complete data with snapshots, mirror rebuilds, dirty-state updates, and merge semantics intact. |
 
 ## Completed Implementation Slices
 
@@ -158,6 +158,17 @@ Status: verified locally
 - Restore the combined tag center with all/idea/material/wheel summaries, keyword and scope filters, per-tag preview snippets, and separate read-only jumps to `#/ideas?tag=`, `#/materials?tag=`, and `#/wheel?tag=`.
 - Add supporting route restoration for Ideas tag filtering, Records template-manager focus, and Wheel tag/library form focus without writing data.
 - Verify Search/Tags navigation, module counts, Tags material regression compatibility, exact `lifePlanData` immutability, no compatibility mirror creation, and 1440px/390px long-text layouts with Playwright and screenshots.
+
+### Import Export Contract Slice
+
+Status: verified locally
+
+- Keep manual export as a complete `lifePlanData` backup and create the legacy `手动导出备份` local snapshot before downloading.
+- Keep manual import merge-based: create `导入前自动备份`, merge through `sync-service.js.mergeCloudData`, then create `导入合并结果`.
+- Preserve `deletedItems` tombstones so stale imported rows do not revive locally deleted records.
+- Treat manual imports as local/user data changes: update `lifePlanSyncState.lastLocalHash` and set `dirty: true` so `/life-plan.json` propagation is not skipped.
+- Rebuild both compatibility mirrors from authoritative `lifePlanData`: `todoAppData` and `habitAppData` remain local mirrors with remote upload disabled.
+- Verify the real Sync page file-input/download flow in Playwright, including snapshots, tombstones, Todo/Habit mirror contents, dirty state, and backup filename.
 
 ### Sync Protected Main Upload Slice
 

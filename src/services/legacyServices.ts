@@ -92,6 +92,16 @@ export function createLegacyServices() {
     getHash: (data: LifePlanData) => sync.getDataHash(data),
     getNowLocal,
   });
+  const habit = window.LifePlanHabitService.create({
+    defaultCurrency: '金币',
+    getTodayStr,
+    addDays,
+    getHabitTargetCount: (habit: Record<string, unknown>) => {
+      const count = Number.parseInt(String(habit.timesPerDay ?? habit.targetCount ?? '1'), 10);
+      return Math.max(1, Number.isFinite(count) ? count : 1);
+    },
+    isHabitDueOnDate: (habit: Record<string, unknown>) => habit.archived !== true,
+  });
   const fitness = window.LifePlanFitnessService.create({ getTodayStr, getNowLocal, genId });
   const ai = window.LifePlanAiService.create({
     todoUrgencyMeta: urgencyMeta,
@@ -101,5 +111,5 @@ export function createLegacyServices() {
     fetchImpl: (...args: Parameters<typeof fetch>) => fetch(...args),
   });
 
-  return { sync, todos, records, snapshots, fitness, ai, urgencyMeta };
+  return { sync, todos, records, snapshots, habit, fitness, ai, urgencyMeta };
 }

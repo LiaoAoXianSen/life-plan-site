@@ -6,6 +6,7 @@ export type CommitSource = 'user' | 'sync';
 const mainDataKey = 'lifePlanData';
 const syncStateKey = 'lifePlanSyncState';
 const todoMirrorKey = 'todoAppData';
+const habitMirrorKey = 'habitAppData';
 
 function clone<T>(value: T): T {
   // Vue store values are reactive proxies. JSON cloning mirrors the legacy
@@ -71,6 +72,7 @@ export class LifePlanRepository {
     try {
       localStorage.setItem(mainDataKey, JSON.stringify(next));
       this.rebuildTodoMirror(next, reason);
+      this.rebuildHabitMirror(next, reason);
       this.updateMainSyncState(next, source);
       return next;
     } catch (error) {
@@ -89,7 +91,7 @@ export class LifePlanRepository {
     this.createSnapshot('导入前自动备份', data, { action: 'before-import' });
     const merged = normalizePersistedData(this.services.sync.mergeCloudData(data, incoming), this.services);
     this.createSnapshot('导入合并结果', merged, { action: 'merge-result', mergedWith: { label: '导入文件' } });
-    return this.commit(merged, 'import-merge', 'sync');
+    return this.commit(merged, 'import-merge');
   }
 
   exportData(data: LifePlanData) {
@@ -119,6 +121,38 @@ export class LifePlanRepository {
       authority: 'lifePlanData.todos',
     };
     localStorage.setItem(todoMirrorKey, JSON.stringify(mirror));
+    return mirror;
+  }
+
+  rebuildHabitMirror(data: LifePlanData, reason: string) {
+    const source = typeof this.services.habit.getHabitLegacySourceSlice === 'function'
+      ? this.services.habit.getHabitLegacySourceSlice(data)
+      : {
+        habits: data.habits,
+        checkins: data.checkins,
+        habitPointLedger: data.habitPointLedger,
+        habitRewards: data.habitRewards,
+        habitCurrencies: data.habitCurrencies,
+        deletedItems: data.deletedItems,
+      };
+    const sourceHash = this.services.sync.getDataHash(source);
+    const enabledPaths = typeof this.services.habit.getHabitDualWritePathInventory === 'function'
+      ? this.services.habit.getHabitDualWritePathInventory()
+        .filter((item: { dualWrite?: string }) => item.dualWrite === 'enabled')
+        .map((item: { id: string }) => item.id)
+      : [];
+    const built = this.services.habit.buildHabitAppLocalMirror(data, {
+      reason,
+      sourceHash,
+      generatedAt: new Date().toISOString(),
+      dualWriteEnabledPaths: enabledPaths,
+    });
+    const mirror = {
+      ...built.snapshot,
+      localMirror: true,
+      remoteUploadEnabled: false,
+    };
+    localStorage.setItem(habitMirrorKey, JSON.stringify(mirror));
     return mirror;
   }
 

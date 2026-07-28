@@ -41,7 +41,9 @@ export a user backup first because browser `localStorage` is origin-scoped.
 
 - Authority remains `localStorage['lifePlanData']`; `todoAppData` and
   `habitAppData` are rebuilt compatibility mirrors.
-- Main-data import remains merge-based and makes before/after snapshots.
+- Main-data import remains merge-based, makes before/after snapshots, preserves
+  tombstones, rebuilds Todo/Habit compatibility mirrors, and marks main sync
+  dirty for later `/life-plan.json` propagation.
 - Main WebDAV keeps `/life-plan.json`; wheel/habit/todo legacy remote paths are
   unchanged in the static production application.
 - The root legacy service files are loaded as side-effect services by
@@ -77,9 +79,11 @@ Search, Goals, basic Habits, Fitness, Wheel, AI and main Sync workflows. The
 Dashboard now covers the read-only command center, active-period links, and
 bounded recent timeline; Goals now covers detail deep links and legacy
 tombstones; Search/Tags now restore grouped module indexes and read-only tag
-entry points across migrated modules. Replacement remains blocked until the
-remaining module audits and write-heavy specialist flows are closed. The following
-specialist controls still live in the proven static app and should be migrated
-only as separately tested follow-up releases: habit wallet/reward administration
-and protected remote flow, wheel Canvas/remote auto-sync, and non-diary AI
-writeback modes. They are not replaced by incompatible shortcuts.
+entry points across migrated modules; Import/Export now covers snapshots,
+tombstone-aware merge, dirty-state updates, and Todo/Habit mirror rebuilds.
+Replacement remains blocked until the remaining module audits and write-heavy
+specialist flows are closed. The following specialist controls still live in the
+proven static app and should be migrated only as separately tested follow-up
+releases: habit wallet/reward administration and protected remote flow, wheel
+Canvas/remote auto-sync, and non-diary AI writeback modes. They are not replaced
+by incompatible shortcuts.

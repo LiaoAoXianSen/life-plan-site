@@ -166,6 +166,9 @@
 - A separate read-only replacement audit estimated Vue replacement readiness at roughly 72%-78% by risk-weighted surface after Dashboard and near-closed Goals. The largest remaining blockers are advanced Habits and Habit remote flow, full Sync auto/independent flows, Wheel canvas/remote conflict parity, Fitness advanced planning/history, non-diary AI writebacks, Search/Tags full index parity, and broader Import/Export contracts.
 - Legacy Search builds grouped module results for records, todos, goals, materials, templates, and wheel public items. The replacement-critical Vue gap was not raw search existence, but precise module labels, tag/meta matching, and navigation to migrated detail/query targets.
 - Legacy Tag Center aggregates only idea tags, material tags, wheel tag definitions, and wheel public items by tag. Vue now mirrors that read-only scope and routes to Ideas, Materials, and Wheel tag/library landing states without mutating `lifePlanData`.
+- Legacy manual import snapshots before and after merge, uses tombstone-aware `mergeCloudData`, then saves as a local/user data change. Vue Import/Export needed broader proof that manual imports mark the main sync state dirty, refresh compatibility mirrors, and do not revive tombstoned rows.
+- Vue repository commits previously rebuilt only `todoAppData`; Import/Export parity requires habit imports to refresh `habitAppData` as a compatibility mirror while keeping `remoteUploadEnabled: false`.
+- The verified Vue fix keeps `lifePlanData` authoritative, rebuilds `todoAppData` and `habitAppData` from that authority on repository commits, and treats manual file import as a user-side dirty change rather than a clean remote sync pull.
 
 ## 2026-07-27 Diary AI parity
 

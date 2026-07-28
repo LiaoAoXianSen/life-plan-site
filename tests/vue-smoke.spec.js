@@ -430,6 +430,75 @@ test('search and tag center restore legacy read-only index navigation', async ({
     expect(persisted.mirror).toBeNull();
 });
 
+test('main import export keeps snapshots tombstones mirrors and dirty state compatible', async ({ page }) => {
+    const local = emptyData({
+        records: [
+            { id: 'record-local', type: '日记', title: '本机保留记录', content: '本机正文', startDate: '2026-07-28', endDate: '2026-07-28', updatedAt: '2026-07-28T10:00:00' },
+        ],
+        deletedItems: [
+            { collection: 'records', id: 'record-deleted', deletedAt: '2026-07-28T11:00:00', reason: 'manual-delete' },
+        ],
+    });
+    const imported = emptyData({
+        records: [
+            { id: 'record-deleted', type: '日记', title: '不应复活记录', content: '旧备份正文', startDate: '2026-07-27', endDate: '2026-07-27', updatedAt: '2026-07-27T08:00:00' },
+            { id: 'record-imported', type: '工作记录', title: '导入记录', content: '导入正文', startDate: '2026-07-28', endDate: '2026-07-28', updatedAt: '2026-07-28T12:00:00' },
+        ],
+        todos: [todoFixture('todo-imported', '导入待办', { note: '导入备注', updatedAt: '2026-07-28T12:00:00' })],
+        habits: [{ id: 'habit-imported', name: '导入习惯', rule: 'daily', startDate: '2026-07-01', timesPerDay: 1, reward: 2, rewardCurrency: '金币', createdAt: '2026-07-01T08:00:00', updatedAt: '2026-07-28T12:00:00' }],
+        checkins: [{ id: 'checkin-imported', habitId: 'habit-imported', date: '2026-07-28', time: '08:00', checkinAt: '2026-07-28T08:00:00', amount: 2, currency: '金币' }],
+        habitPointLedger: [{ id: 'ledger-imported', habitId: 'habit-imported', sourceId: 'checkin-imported', date: '2026-07-28', amount: 2, currency: '金币', type: 'reward', createdAt: '2026-07-28T08:00:00' }],
+        materials: [{ id: 'material-imported', type: '摘抄', content: '导入素材', tags: ['导入'], source: '备份', note: '', createdAt: '2026-07-28T09:00:00', updatedAt: '2026-07-28T09:00:00' }],
+    });
+    await page.addInitScript(({ localData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'remote-before' }));
+        localStorage.setItem('habitAppData', JSON.stringify({ localMirror: true, habits: [], mirror: { reason: 'stale' } }));
+    }, { localData: local });
+
+    await page.goto('/#/sync');
+    await page.locator('input[type="file"]').setInputFiles({
+        name: 'import-contract.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
+    });
+    await expect(page.locator('.sync-status')).toContainText('导入已按合并规则完成');
+
+    const state = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        todoMirror: JSON.parse(localStorage.getItem('todoAppData')),
+        habitMirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'),
+    }));
+    expect(state.data.records.some(record => record.id === 'record-deleted')).toBe(false);
+    expect(state.data.records.some(record => record.id === 'record-local')).toBe(true);
+    expect(state.data.records.some(record => record.id === 'record-imported')).toBe(true);
+    expect(state.data.todos.find(todo => todo.id === 'todo-imported').text).toBe('导入待办');
+    expect(state.data.habits.find(habit => habit.id === 'habit-imported').name).toBe('导入习惯');
+    expect(state.data.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'records', id: 'record-deleted', reason: 'manual-delete' }),
+    ]));
+    expect(state.todoMirror.authority).toBe('lifePlanData.todos');
+    expect(state.todoMirror.remoteUploadEnabled).toBe(false);
+    expect(state.todoMirror.todos).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'todo-imported', text: '导入待办' })]));
+    expect(state.habitMirror.localMirror).toBe(true);
+    expect(state.habitMirror.remoteUploadEnabled).toBe(false);
+    expect(state.habitMirror.habits).toEqual(expect.arrayContaining([expect.objectContaining({ id: expect.stringContaining('habit-imported') })]));
+    expect(state.habitMirror.habitRecords.length).toBeGreaterThan(0);
+    expect(state.habitMirror.mirror.reason).toBe('import-merge');
+    expect(state.syncState.dirty).toBe(true);
+    expect(state.syncState.lastLocalHash).toBeTruthy();
+    expect(state.snapshots.map(snapshot => snapshot.reason)).toEqual(expect.arrayContaining(['导入前自动备份', '导入合并结果']));
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: '导出备份' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^life-plan-backup-.*\.json$/);
+    const afterExport = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
+    expect(afterExport.map(snapshot => snapshot.reason)).toContain('手动导出备份');
+});
+
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
     const source = emptyData({
         records: [

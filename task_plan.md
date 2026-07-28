@@ -129,6 +129,10 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 111. Status: complete - Implement read-only Vue Search/Tags full-index grouping, module scope, tag scope, and precise route entry points.
 112. Status: complete - Add Search/Tags read-only navigation contract coverage and run build/check/responsive gates.
 113. Status: complete - Update parity evidence, package, commit the verified Search/Tags stage, and append dual-store memory.
+114. Status: complete - Audit legacy Import/Export snapshots, merge, tombstone, dirty-state, and mirror contracts against Vue.
+115. Status: complete - Implement any missing Vue Import/Export data-safety contract fixes.
+116. Status: complete - Add focused Import/Export Playwright contract coverage and run build/check gates.
+117. Status: complete - Update parity evidence, package, commit the verified Import/Export stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
