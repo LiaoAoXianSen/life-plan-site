@@ -607,6 +607,17 @@ watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) 
   if (record) openEditor(record, false);
 }, { immediate: true });
 
+watch(() => route.query.template, value => {
+  const templateId = String(Array.isArray(value) ? value[0] || '' : value || '');
+  if (!templateId) return;
+  const template = lifePlan.data.templates.find(item => item.id === templateId);
+  showTemplateManager.value = true;
+  if (template) {
+    selectedTemplateKey.value = templateId;
+    editorNotice.value = `已定位模板：${String(template.name || '未命名模板')}`;
+  }
+}, { immediate: true });
+
 watch(() => editForm.type, type => {
   if (type !== '日记') resetDiaryAiState();
   const selected = selectedTemplateKey.value;

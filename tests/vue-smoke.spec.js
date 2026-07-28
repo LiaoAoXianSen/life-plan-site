@@ -367,6 +367,69 @@ test('goals detail route save and delete preserve the legacy contract', async ({
     expect(mirror.todos).toEqual([]);
 });
 
+test('search and tag center restore legacy read-only index navigation', async ({ page }) => {
+    const source = emptyData({
+        records: [
+            { id: 'record-search', type: '日记', title: '搜索日记入口', content: '路线记录正文', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] },
+            { id: 'idea-search', type: '灵感碎片', title: '标签灵感入口', content: '共享标签灵感', startDate: '2026-07-28', endDate: '2026-07-28', ideaStatus: '待整理', ideaTags: ['共享标签'], todoIds: [] },
+        ],
+        todos: [todoFixture('todo-search', '搜索待办入口', { note: '路线待办备注', group: '路线组' })],
+        goals: [{ id: 'goal-search', name: '搜索目标 OKR', period: '年度', target: '路线目标', status: '进行中', progress: 42, createDate: '2026-01-01' }],
+        materials: [{ id: 'material-search', type: '摘抄', content: '共享标签素材内容', tags: ['共享标签'], source: '路线素材', note: '素材备注', createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' }],
+        templates: [{ id: 'template-search', name: '搜索模板入口', type: '工作记录', content: '模板路线内容', todos: [{ text: '模板下一步' }] }],
+        wheelTags: [{ id: 'wheel-tag-search', name: '共享标签', color: '#216e4e', weight: 1, enabled: true }],
+        wheelLibraryItems: [{ id: 'wheel-library-search', name: '搜索转盘公共项', note: '路线转盘备注', tagIds: ['wheel-tag-search'], weight: 3, enabled: true }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/search?q=路线');
+    await expect(page.locator('.search-group-title').filter({ hasText: '记录' })).toContainText('1');
+    await expect(page.locator('.search-group-title').filter({ hasText: '待办' })).toContainText('1');
+    await expect(page.locator('.search-group-title').filter({ hasText: '目标' })).toContainText('1');
+    await expect(page.locator('.search-group-title').filter({ hasText: '素材库' })).toContainText('1');
+    await expect(page.locator('.search-group-title').filter({ hasText: '模板' })).toContainText('1');
+    await expect(page.locator('.search-group-title').filter({ hasText: '转盘公共项' })).toContainText('1');
+
+    await page.locator('.search-result-item').filter({ hasText: '搜索目标 OKR' }).click();
+    await expectHashRoute(page, '/goals', { goal: 'goal-search' });
+    await expect(page.getByRole('dialog', { name: '编辑目标' })).toBeVisible();
+
+    await page.goto('/#/search?q=模板下一步&scope=templates');
+    await expect(page.locator('.search-result-item')).toHaveCount(1);
+    await page.locator('.search-result-item').filter({ hasText: '搜索模板入口' }).click();
+    await expectHashRoute(page, '/records', { template: 'template-search' });
+
+    await page.goto('/#/search?q=路线转盘&scope=wheel');
+    await page.locator('.search-result-item').filter({ hasText: '搜索转盘公共项' }).click();
+    await expectHashRoute(page, '/wheel', { library: 'wheel-library-search' });
+    await expect(page.getByPlaceholder('公共项名称')).toHaveValue('搜索转盘公共项');
+
+    await page.goto('/#/tags');
+    await expect(page.locator('.mini-summary-card').filter({ hasText: '全部标签' })).toContainText('1');
+    const sharedCard = page.locator('.tag-center-card').filter({ hasText: '共享标签' });
+    await expect(sharedCard).toContainText('标签灵感入口');
+    await expect(sharedCard).toContainText('共享标签素材内容');
+    await expect(sharedCard).toContainText('搜索转盘公共项');
+
+    await sharedCard.getByRole('button').filter({ hasText: '灵感' }).click();
+    await expectHashRoute(page, '/ideas', { tag: '共享标签' });
+    await expect(page.locator('.idea-card')).toContainText('标签灵感入口');
+
+    await page.goto('/#/tags');
+    await page.locator('.tag-center-card').filter({ hasText: '共享标签' }).getByRole('button').filter({ hasText: '素材' }).click();
+    await expectHashRoute(page, '/materials', { tag: '共享标签' });
+
+    await page.goto('/#/tags');
+    await page.locator('.tag-center-card').filter({ hasText: '共享标签' }).getByRole('button').filter({ hasText: '转盘项' }).click();
+    await expectHashRoute(page, '/wheel', { tag: 'wheel-tag-search' });
+    await expect(page.getByPlaceholder('标签名称')).toHaveValue('共享标签');
+
+    const persisted = await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), mirror: localStorage.getItem('todoAppData') }));
+    expect(persisted.data).toBe(original);
+    expect(persisted.mirror).toBeNull();
+});
+
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
     const source = emptyData({
         records: [
@@ -684,8 +747,9 @@ test('materials deep links filters and random review remain read-only', async ({
     await materialsPage.getByRole('button', { name: '换一批' }).click();
 
     await page.goto('/#/tags');
-    const materialTags = page.locator('.card').filter({ has: page.getByText('素材标签', { exact: true }) });
-    await materialTags.getByRole('button', { name: 'Beta 2', exact: true }).click();
+    const betaTagCard = page.locator('.tag-center-card').filter({ has: page.locator('.tag-pill', { hasText: /^Beta$/ }) });
+    await expect(betaTagCard).toContainText('Beta 主素材');
+    await betaTagCard.getByRole('button').filter({ hasText: '素材' }).click();
     await expectHashRoute(page, '/materials', { tag: 'Beta' });
     await expect(materialsPage.getByLabel('素材标签筛选')).toHaveValue('Beta');
     await expect(list).toContainText('Beta 主素材');
@@ -695,7 +759,7 @@ test('materials deep links filters and random review remain read-only', async ({
     await expect(materialsPage.getByLabel('素材标签筛选')).toHaveValue('Beta');
     await page.goBack();
     await expectHashRoute(page, '/tags');
-    await expect(page.getByText('素材标签', { exact: true })).toBeVisible();
+    await expect(page.locator('.tag-center-card').filter({ has: page.locator('.tag-pill', { hasText: /^Beta$/ }) })).toBeVisible();
 
     await page.goto('/#/search');
     const searchInput = page.locator('.global-search-panel input[type="search"]');

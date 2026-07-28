@@ -164,6 +164,8 @@
 - Legacy search and Dashboard goal rows call `openGoalDetail(goal.id)`. Vue Goals should restore a `goal=<id>` route/deep-link target so cross-module entry points can land on a specific editable goal.
 - Read-only Goals review found no blocking issue after implementation. It caught two useful legacy-depth corrections that were included in the slice: new Goals preserve the legacy empty `period` default, and Dashboard goal rows now route to `#/goals?goal=<id>`.
 - A separate read-only replacement audit estimated Vue replacement readiness at roughly 72%-78% by risk-weighted surface after Dashboard and near-closed Goals. The largest remaining blockers are advanced Habits and Habit remote flow, full Sync auto/independent flows, Wheel canvas/remote conflict parity, Fitness advanced planning/history, non-diary AI writebacks, Search/Tags full index parity, and broader Import/Export contracts.
+- Legacy Search builds grouped module results for records, todos, goals, materials, templates, and wheel public items. The replacement-critical Vue gap was not raw search existence, but precise module labels, tag/meta matching, and navigation to migrated detail/query targets.
+- Legacy Tag Center aggregates only idea tags, material tags, wheel tag definitions, and wheel public items by tag. Vue now mirrors that read-only scope and routes to Ideas, Materials, and Wheel tag/library landing states without mutating `lifePlanData`.
 
 ## 2026-07-27 Diary AI parity
 

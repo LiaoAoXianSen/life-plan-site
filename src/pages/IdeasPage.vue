@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
 
 const records = useRecordsStore();
 const todos = useTodosStore();
+const route = useRoute();
 const router = useRouter();
 const query = ref('');
 const status = ref('all');
-const tag = ref('');
+const tag = ref(String(route.query.tag || ''));
 const title = ref('');
 const content = ref('');
 const statusOptions = ['待整理', '待实践', '实践中', '已验证', '已放弃'];
@@ -65,6 +66,8 @@ function removeIdea(idea: Record<string, unknown>) {
   if (!window.confirm(`删除灵感“${String(idea.title || '无标题灵感')}”吗？`)) return;
   records.remove('records', String(idea.id));
 }
+
+watch(() => route.query.tag, value => { tag.value = String(value || ''); });
 </script>
 
 <template>

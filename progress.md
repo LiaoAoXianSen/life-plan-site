@@ -297,3 +297,17 @@
 - Goals 1440x1000 and 390x844 visual/overflow checks passed against long goal names/descriptions with no overflow in `html`, `body`, `.vue-main`, `#page-goals`, summary grid, goal cards, modal, editor, or sticky action row. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\goals-parity-final`.
 - Final `npm run build` and `git diff --check` passed before packaging. Created clean runtime package `life-plan-site-runtime-20260728-113854.zip`; package retention removed `life-plan-site-runtime-20260727-222706.zip`.
 - Protected refs remained unchanged before the Goals commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-28 - Search and Tags parity stage
+
+- Started phases 110-113 after committing Goals stage `b475600`. Chose Search/Tags because it is a small-to-medium read-only blocker that ties together already-migrated detail entry points.
+- Audited legacy `buildGlobalSearchIndex`, `renderGlobalSearch`, `getTagCenterItems`, and `renderTagCenter`; identified missing Vue parity around grouped module labels, scope filters, exact target routes, template/wheel public item entry points, and combined tag-center scope/search summaries.
+- Implemented grouped Vue Search over records, todos, goals, materials, templates, and wheel public items with module scope filtering and exact routes to `record`, `todo`, `goal`, `material`, `template`, and `library` query targets.
+- Implemented combined Vue Tags with all/idea/material/wheel summaries, keyword/scope filters, per-tag previews, and read-only jumps to `#/ideas?tag=`, `#/materials?tag=`, and `#/wheel?tag=`.
+- Added supporting route restoration for Ideas tag filtering, Records template-manager focus, and Wheel library/tag form focus.
+- Added and passed the focused Search/Tags contract. It proves grouped module counts, exact navigation targets, tag-center category jumps, read-only `lifePlanData` immutability, and no mirror creation.
+- First full Search/Tags check exposed an old Materials test targeting the removed standalone `素材标签` card; updated it to click the new tag-center card's `素材` button. The focused Search/Tags + Materials regression run then passed 2/2.
+- `npm run build` passed, then full `.\scripts\check.ps1` passed syntax checks and 28/28 Vue Playwright tests. `git diff --check` passed with only LF/CRLF warnings.
+- Search and Tags 1440x1000 and 390x844 visual/overflow checks passed against long titles/tags/content with no overflow in page, main, search panel/results, or tag-center cards/previews. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\search-tags-parity-final`.
+- Final `npm run build` and `git diff --check` passed before packaging. Created clean runtime package `life-plan-site-runtime-20260728-120106.zip`; package retention removed `life-plan-site-runtime-20260727-224426.zip`.
+- Protected refs remained unchanged before the Search/Tags commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

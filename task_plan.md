@@ -125,6 +125,10 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 107. Status: complete - Implement Vue Goals detail modal/deep link and legacy-compatible save/delete contracts.
 108. Status: complete - Add focused Goals Playwright contract coverage and run build/check gates.
 109. Status: complete - Update parity evidence, package, commit the verified Goals stage, and append dual-store memory.
+110. Status: complete - Audit legacy global search and tag-center indexing/navigation contracts against Vue.
+111. Status: complete - Implement read-only Vue Search/Tags full-index grouping, module scope, tag scope, and precise route entry points.
+112. Status: complete - Add Search/Tags read-only navigation contract coverage and run build/check/responsive gates.
+113. Status: complete - Update parity evidence, package, commit the verified Search/Tags stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -176,3 +180,5 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First correct mobile Materials visual pass clipped the bottom save action | Long dialog content plus stacked mobile action buttons left the final button only partially visible | Added a Materials-scoped sticky modal action row and reran desktop/mobile overflow screenshots green |
 | First dev-server stop script failed on `$pid` | PowerShell reserves `$PID`/`$pid` as a read-only process ID variable | Renamed the loop variable to `$listenerId` and stopped the exact node listener on port 5174 |
 | First Goals contract test expected no `todoAppData` after a Goal write | Vue repository commits rebuild the compatible Todo mirror for writes even when the Todo collection is empty | Changed the assertion to require mirror authority `lifePlanData.todos` with an empty `todos` array |
+| First full Search/Tags check left an old Materials test targeting the removed standalone `素材标签` card | Search/Tags slice intentionally changed Tags to the legacy combined tag-center card layout | Updated the Materials test to click the new Beta tag-center card's `素材` count button |
+| Search/Tags read-only subagent failed through local proxy | Spawned agent inherited `gpt-5.5` and upstream returned HTTP 503 auth unavailable | Continued the Search/Tags audit in the main thread using legacy `app.js`, Vue pages, and focused Playwright evidence |

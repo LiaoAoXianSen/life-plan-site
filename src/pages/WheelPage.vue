@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 import { useWheelStore, type WheelItem, type WheelMode, type WheelTag } from '../stores/wheelStore';
 
 const wheelStore = useWheelStore();
+const route = useRoute();
 const selectedId = ref('');
 const stageTag = ref<WheelTag | null>(null);
 const resultId = ref('');
@@ -32,6 +34,24 @@ watch(() => wheelStore.wheels, wheels => {
   if (!wheels.some(wheel => wheel.id === selectedId.value)) selectedId.value = wheels[0]?.id || '';
 }, { immediate: true, deep: true });
 watch(selectedId, () => { stageTag.value = null; resultId.value = ''; notice.value = ''; });
+watch([() => route.query.library, () => wheelStore.libraryItems.length], ([value]) => {
+  const id = String(Array.isArray(value) ? value[0] || '' : value || '');
+  if (!id || libraryForm.id === id) return;
+  const item = wheelStore.libraryItems.find(entry => entry.id === id);
+  if (item) {
+    editLibrary(item);
+    say(`已定位公共项：${item.name}`);
+  }
+}, { immediate: true });
+watch([() => route.query.tag, () => wheelStore.tags.length], ([value]) => {
+  const id = String(Array.isArray(value) ? value[0] || '' : value || '');
+  if (!id || tagForm.id === id) return;
+  const tag = wheelStore.tags.find(entry => entry.id === id);
+  if (tag) {
+    editTag(tag);
+    say(`已定位转盘标签：${tag.name}`);
+  }
+}, { immediate: true });
 onBeforeUnmount(() => { if (spinTimer) window.clearTimeout(spinTimer); });
 
 function say(message: string) { notice.value = message; }
