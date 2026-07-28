@@ -162,7 +162,7 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 144. Status: complete - Implement Vue Wheel public-library filter, selection, and bounded batch operations without touching independent remote sync.
 145. Status: complete - Add focused Wheel public-library batch contract tests for tag add/remove, only-tag guard, enable/disable, tombstones, and dirty state.
 146. Status: complete - Run build/check plus 1440px/390px responsive verification for the public-library management surface.
-147. Status: in_progress - Update parity evidence, package, commit, push the verified Wheel public-library stage, and append dual-store memory.
+147. Status: complete - Update parity evidence, package, commit, push the verified Wheel public-library stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
