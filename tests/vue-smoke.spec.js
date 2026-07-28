@@ -499,6 +499,99 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     expect(afterExport.map(snapshot => snapshot.reason)).toContain('手动导出备份');
 });
 
+test('fitness plans support multiple exercises and explicit plan writeback', async ({ page }) => {
+    const source = emptyData({
+        exerciseLibrary: [
+            { id: 'ex-squat', name: '杠铃深蹲', muscle: 'leg', defaultSets: 2, defaultReps: '5', defaultWeight: 80, restSec: 150, createdAt: '2026-07-28T07:00:00', updatedAt: '2026-07-28T07:00:00' },
+            { id: 'ex-bench', name: '杠铃卧推', muscle: 'chest', defaultSets: 2, defaultReps: '6', defaultWeight: 60, restSec: 120, createdAt: '2026-07-28T07:10:00', updatedAt: '2026-07-28T07:10:00' },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-remote-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    const planForm = page.locator('form.card').filter({ hasText: '创建训练计划' });
+    await planForm.locator('.form-group').filter({ hasText: '计划名称' }).locator('input').fill('力量计划');
+    await planForm.locator('.form-group').filter({ hasText: '目标' }).locator('select').selectOption('strength');
+    await planForm.locator('.form-group').filter({ hasText: '状态' }).locator('select').selectOption('active');
+    await planForm.locator(':scope > .form-group input').fill('保留多动作处方');
+
+    let planCards = planForm.locator('.fitness-plan-exercise-card');
+    await planCards.nth(0).locator('.fitness-plan-exercise-card-head input').fill('杠铃深蹲');
+    await planCards.nth(0).locator('.fitness-plan-set-row').nth(0).locator('input').nth(0).fill('80');
+    await planCards.nth(0).locator('.fitness-plan-set-row').nth(0).locator('input').nth(1).fill('5');
+    await planCards.nth(0).locator('.fitness-plan-set-row').nth(1).locator('input').nth(0).fill('82.5');
+    await planCards.nth(0).locator('.fitness-plan-set-row').nth(1).locator('input').nth(1).fill('5');
+    await planForm.getByRole('button', { name: '添加动作' }).click();
+    planCards = planForm.locator('.fitness-plan-exercise-card');
+    await planCards.nth(1).locator('.fitness-plan-exercise-card-head input').fill('杠铃卧推');
+    await planCards.nth(1).locator('.fitness-plan-set-row').nth(0).locator('input').nth(0).fill('60');
+    await planCards.nth(1).locator('.fitness-plan-set-row').nth(0).locator('input').nth(1).fill('6');
+    await planCards.nth(1).locator('.fitness-plan-set-row').nth(1).locator('input').nth(0).fill('62.5');
+    await planCards.nth(1).locator('.fitness-plan-set-row').nth(1).locator('input').nth(1).fill('6');
+    await planForm.getByRole('button', { name: '创建计划' }).click();
+    await expect(page.locator('.notice.success')).toContainText('训练计划已创建');
+
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessPlans).toHaveLength(1);
+    expect(stored.fitnessPlans[0].exercises.map(exercise => exercise.name)).toEqual(['杠铃深蹲', '杠铃卧推']);
+    expect(stored.fitnessPlans[0].days[0].exercises).toHaveLength(2);
+    expect(stored.fitnessPlans[0].exercises[0].sets.map(set => set.weight)).toEqual([80, 82.5]);
+
+    await page.locator('.fitness-metric-row').filter({ hasText: '力量计划' }).getByRole('button', { name: '按计划开练' }).click();
+    await expect(page.getByText('正在训练：力量计划')).toBeVisible();
+    let active = page.locator('#page-fitness > article.card').first();
+    let activeRows = active.locator('.fitness-metric-row');
+    await activeRows.nth(0).locator('input').nth(0).fill('85');
+    await activeRows.nth(0).locator('input').nth(0).dispatchEvent('change');
+    await activeRows.nth(0).locator('input').nth(1).fill('5');
+    await activeRows.nth(0).locator('input').nth(1).dispatchEvent('change');
+    await activeRows.nth(0).getByRole('button', { name: '完成本组' }).click();
+    await activeRows.nth(2).locator('input').nth(0).fill('65');
+    await activeRows.nth(2).locator('input').nth(0).dispatchEvent('change');
+    await activeRows.nth(2).locator('input').nth(1).fill('6');
+    await activeRows.nth(2).locator('input').nth(1).dispatchEvent('change');
+    await activeRows.nth(2).getByRole('button', { name: '完成本组' }).click();
+    await expect(page.getByLabel(/结束时回写到计划/)).toBeVisible();
+    await page.getByRole('button', { name: '结束训练' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts[0].status).toBe('done');
+    expect(stored.fitnessWorkouts[0].planId).toBe(stored.fitnessPlans[0].id);
+    expect(stored.fitnessWorkouts[0].exercises).toHaveLength(2);
+    expect(stored.fitnessWorkouts[0].exercises[0].plannedSets[0].weight).toBe(80);
+    expect(stored.fitnessPlans[0].exercises[0].sets[0].weight).toBe(80);
+
+    await page.locator('.fitness-metric-row').filter({ hasText: '力量计划' }).getByRole('button', { name: '按计划开练' }).click();
+    active = page.locator('#page-fitness > article.card').first();
+    activeRows = active.locator('.fitness-metric-row');
+    await activeRows.nth(0).locator('input').nth(0).fill('87.5');
+    await activeRows.nth(0).locator('input').nth(0).dispatchEvent('change');
+    await activeRows.nth(0).locator('input').nth(1).fill('4');
+    await activeRows.nth(0).locator('input').nth(1).dispatchEvent('change');
+    await activeRows.nth(0).getByRole('button', { name: '完成本组' }).click();
+    await page.getByLabel(/结束时回写到计划/).check();
+    await page.getByRole('button', { name: '结束训练' }).click();
+
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.fitnessPlans[0].exercises[0].sets[0]).toEqual(expect.objectContaining({ weight: 87.5, reps: 4 }));
+    expect(stored.data.fitnessPlans[0].exercises[1].sets[0]).toEqual(expect.objectContaining({ weight: 60, reps: 6 }));
+    expect(stored.data.fitnessWorkouts).toHaveLength(2);
+    expect(stored.syncState.dirty).toBe(true);
+
+    await page.locator('article.card').filter({ hasText: '开始计划训练' }).locator('.fitness-metric-row').filter({ hasText: '力量计划' }).getByRole('button', { name: '删除' }).click();
+    const afterDelete = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(afterDelete.fitnessPlans).toHaveLength(0);
+    expect(afterDelete.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'fitnessPlans', id: stored.data.fitnessPlans[0].id, reason: 'manual-delete' }),
+    ]));
+});
+
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
     const source = emptyData({
         records: [

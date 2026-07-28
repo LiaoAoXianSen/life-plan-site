@@ -133,6 +133,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 115. Status: complete - Implement any missing Vue Import/Export data-safety contract fixes.
 116. Status: complete - Add focused Import/Export Playwright contract coverage and run build/check gates.
 117. Status: complete - Update parity evidence, package, commit the verified Import/Export stage, and append dual-store memory.
+118. Status: complete - Audit legacy Fitness multi-exercise plan, live workout, history, and plan writeback contracts against Vue.
+119. Status: complete - Implement Vue Fitness multi-exercise plan editing and plan-start workout coverage through existing fitness-service contracts.
+120. Status: complete - Implement Vue Fitness finish-time plan writeback control without automatic persisted mutation before user confirmation.
+121. Status: complete - Add focused Fitness persisted-data contract coverage and run build/check plus responsive verification.
+122. Status: complete - Update parity evidence, package, commit the verified Fitness stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -186,3 +191,6 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First Goals contract test expected no `todoAppData` after a Goal write | Vue repository commits rebuild the compatible Todo mirror for writes even when the Todo collection is empty | Changed the assertion to require mirror authority `lifePlanData.todos` with an empty `todos` array |
 | First full Search/Tags check left an old Materials test targeting the removed standalone `素材标签` card | Search/Tags slice intentionally changed Tags to the legacy combined tag-center card layout | Updated the Materials test to click the new Beta tag-center card's `素材` count button |
 | Search/Tags read-only subagent failed through local proxy | Spawned agent inherited `gpt-5.5` and upstream returned HTTP 503 auth unavailable | Continued the Search/Tags audit in the main thread using legacy `app.js`, Vue pages, and focused Playwright evidence |
+| First Fitness build failed on removed `planForm.exerciseId` | Multi-exercise plan form replaced the old single-action field, but the action-library save path still filled the removed property | Routed new library items into the first blank plan exercise draft and reran `npm run build` green |
+| First Fitness focused contract used inaccessible separated-label locators | Vue form labels are rendered as sibling text, not associated `label for` controls | Scoped the test to the Fitness plan form and used DOM locators inside the form |
+| Second Fitness focused contract hit duplicate `删除` buttons | The plan row and workout history rows both contained the long plan title | Scoped the deletion assertion to the `开始计划训练` card |

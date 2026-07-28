@@ -53,7 +53,7 @@ export const useFitnessStore = defineStore('fitness', () => {
     const metric = lifePlan.data.bodyMetrics.find(item => item.id === id);
     if (!metric) return;
     lifePlan.mutate('delete-body-metric', data => {
-      services.sync.markDeletedItem(data, 'bodyMetrics', id, { reason: 'vue-delete-body-metric' });
+      services.sync.markDeletedItem(data, 'bodyMetrics', id, { reason: 'manual-delete' });
       data.bodyMetrics = services.fitness.removeBodyMetric(data.bodyMetrics, id);
     });
     succeed('身体指标已删除');
@@ -83,7 +83,7 @@ export const useFitnessStore = defineStore('fitness', () => {
     const item = lifePlan.data.exerciseLibrary.find(entry => entry.id === id);
     if (!item) return;
     lifePlan.mutate('delete-exercise-library-item', data => {
-      services.sync.markDeletedItem(data, 'exerciseLibrary', id, { name: item.name, reason: 'vue-delete-exercise-library-item' });
+      services.sync.markDeletedItem(data, 'exerciseLibrary', id, { name: item.name, reason: 'manual-delete' });
       data.exerciseLibrary = services.fitness.removeExerciseLibraryItem(data.exerciseLibrary, id);
     });
     succeed('动作已从动作库删除；历史训练不会受影响');
@@ -103,7 +103,7 @@ export const useFitnessStore = defineStore('fitness', () => {
     const plan = lifePlan.data.fitnessPlans.find(item => item.id === id);
     if (!plan) return;
     lifePlan.mutate('delete-fitness-plan', data => {
-      services.sync.markDeletedItem(data, 'fitnessPlans', id, { name: plan.name, reason: 'vue-delete-fitness-plan' });
+      services.sync.markDeletedItem(data, 'fitnessPlans', id, { name: plan.name, reason: 'manual-delete' });
       data.fitnessPlans = services.fitness.removeFitnessPlan(data.fitnessPlans, id);
     });
     succeed('训练计划已删除；既有训练历史会保留');
@@ -166,24 +166,31 @@ export const useFitnessStore = defineStore('fitness', () => {
     return { workout: result.workout as FitnessEntity, restSec: completed.restSec as number };
   }
 
-  function finishWorkout() {
+  function finishWorkout(options: { updatePlanFromWorkout?: boolean } = {}) {
     const current = activeWorkout.value;
     if (!current) return fail('当前没有进行中的训练');
     const finished = services.fitness.finishLiveWorkout(current);
     const result = services.fitness.upsertFitnessWorkout(lifePlan.data.fitnessWorkouts, finished, current.id);
     if (!result.ok) return fail(result.message);
+    let planResult: FitnessEntity | null = null;
+    if (options.updatePlanFromWorkout && result.workout?.planId) {
+      const updatedPlan = services.fitness.updatePlanFromWorkout(lifePlan.data.fitnessPlans, result.workout.planId, result.workout);
+      if (!updatedPlan.ok) return fail(updatedPlan.message || '计划回写失败');
+      planResult = updatedPlan;
+    }
     lifePlan.mutate('finish-live-workout', data => {
       data.fitnessWorkouts = result.workouts;
+      if (planResult) data.fitnessPlans = planResult.plans;
     });
-    succeed('训练已结束并写入历史');
-    return result.workout as FitnessEntity;
+    succeed(planResult?.changed ? '训练已结束并已回写计划' : '训练已结束并写入历史');
+    return { workout: result.workout as FitnessEntity, planUpdated: planResult?.changed === true };
   }
 
   function removeWorkout(id: string) {
     const workout = lifePlan.data.fitnessWorkouts.find(item => item.id === id);
     if (!workout) return;
     lifePlan.mutate('delete-fitness-workout', data => {
-      services.sync.markDeletedItem(data, 'fitnessWorkouts', id, { title: workout.title, reason: 'vue-delete-fitness-workout' });
+      services.sync.markDeletedItem(data, 'fitnessWorkouts', id, { title: workout.title, reason: 'manual-delete' });
       data.fitnessWorkouts = services.fitness.removeFitnessWorkout(data.fitnessWorkouts, id);
     });
     succeed('训练历史已删除');

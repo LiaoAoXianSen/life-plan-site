@@ -80,10 +80,11 @@ Dashboard now covers the read-only command center, active-period links, and
 bounded recent timeline; Goals now covers detail deep links and legacy
 tombstones; Search/Tags now restore grouped module indexes and read-only tag
 entry points across migrated modules; Import/Export now covers snapshots,
-tombstone-aware merge, dirty-state updates, and Todo/Habit mirror rebuilds.
+tombstone-aware merge, dirty-state updates, and Todo/Habit mirror rebuilds;
+Fitness now covers multi-exercise plan editing and explicit plan writeback.
 Replacement remains blocked until the remaining module audits and write-heavy
 specialist flows are closed. The following specialist controls still live in the
 proven static app and should be migrated only as separately tested follow-up
 releases: habit wallet/reward administration and protected remote flow, wheel
-Canvas/remote auto-sync, and non-diary AI writeback modes. They are not replaced
-by incompatible shortcuts.
+Canvas/remote auto-sync, Fitness history editing/rest timer details, and
+non-diary AI writeback modes. They are not replaced by incompatible shortcuts.

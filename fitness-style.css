@@ -172,6 +172,22 @@
     gap: 10px;
 }
 
+.fitness-inline-check {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: 64ch;
+    margin-top: 8px;
+    color: var(--text, #17211b);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.fitness-inline-check input {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
 .fitness-metric-card {
     padding: 14px 16px;
     cursor: pointer;

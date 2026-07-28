@@ -24,7 +24,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Tags/Search | Cross-module search and tag navigation across records, todos, goals, materials, templates, and wheel public items; tag center with idea/material/wheel scopes. | Grouped module search with scope filtering, exact detail/query navigation, template-management and wheel-library/tag entry points, and combined tag center with summaries, search, scopes, previews, and read-only module jumps. | No open blocker in the current Search/Tags parity audit; replacement remains blocked by other modules. | Search covers legacy modules with matching labels and navigation targets without mutating persisted data. |
 | Goals | CRUD/progress/status, detail modal entry points, search/Dashboard deep links, and tombstones. | Detail modal create/edit/delete, `goal=<id>` deep links, Dashboard goal-row restoration, legacy `createDate` and tombstones, and progress/status persistence exist. | No open blocker in the current Goals parity audit; replacement remains blocked by other modules. | Goal writes keep existing fields, avoid Vue-only timestamp churn, and delete with legacy `manual-delete` tombstones. |
 | Habits | Full rule editor, archive/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic create and quick check-in with `habitAppData` local mirror. | Most advanced workflows remain blockers. | Habit workflows produce the same `habits`, `checkins`, `habitPointLedger`, currency, milestone, mirror, and conflict data as legacy. |
-| Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, single-exercise plan, live workout basics, history. | Multi-exercise plan editing, timer UX, complete history editing, plan writeback. | Fitness writes are delegated to `fitness-service.js` and support old multi-exercise workflows. |
+| Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, multi-exercise plan create/edit, plan-start live workouts, explicit finish-time plan writeback, manual-delete tombstones, and history list/delete. | Rest timer UX, complete workout history create/edit, history suggestion controls, and full body-metric field editing remain incomplete. | Fitness writes are delegated to `fitness-service.js` and preserve old plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, tag two-stage spin, history, todo conversion, JSON/CSV. | Canvas parity, batch public-item flows, independent sync/conflict handling. | Wheel collections and independent sync path remain compatible with old `wheel-tool.js` behavior. |
 | Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo independent preview/apply/conditional upload flows. | Auto sync and Habit/Wheel independent flows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice plus Records diary analysis with remote/local generation, editable section/Todo drafts, overwrite confirmation, duplicate hints, and repository-backed writeback. | Idea next action, Todo breakdown, chat capture, and remaining legacy mode writebacks are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
@@ -169,6 +169,22 @@ Status: verified locally
 - Treat manual imports as local/user data changes: update `lifePlanSyncState.lastLocalHash` and set `dirty: true` so `/life-plan.json` propagation is not skipped.
 - Rebuild both compatibility mirrors from authoritative `lifePlanData`: `todoAppData` and `habitAppData` remain local mirrors with remote upload disabled.
 - Verify the real Sync page file-input/download flow in Playwright, including snapshots, tombstones, Todo/Habit mirror contents, dirty state, and backup filename.
+
+### Fitness Multi-Exercise Plan Slice
+
+Status: verified locally
+
+- Create and edit Fitness plans with multiple exercises and per-set weight/reps rows while preserving `fitnessPlans[].exercises` plus mirrored `days[0].exercises`.
+- Start a live workout from the whole plan so `fitnessWorkouts[]` keeps `planId`, `planName`, multiple exercises, set rows, and `plannedSets`.
+- Finish plan workouts without silently changing the source plan; only an explicit checked writeback updates the plan prescription through `fitness-service.js#updatePlanFromWorkout`.
+- Delete Fitness entities with legacy `manual-delete` tombstones rather than Vue-specific tombstone reasons.
+- Verify plan persistence, planned-set preservation, no-writeback behavior, explicit writeback behavior, dirty sync state, plan deletion tombstone output, and 1440px/390px Fitness layouts with Playwright.
+
+Remaining Fitness scope:
+
+- Complete workout-history create/edit modal or inline editor for old completed/planned logs.
+- Rest timer and history-suggestion controls during live workouts.
+- Full body-metric field editing beyond the current weight/body-fat/waist subset.
 
 ### Sync Protected Main Upload Slice
 

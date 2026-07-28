@@ -322,3 +322,18 @@
 - Updated the Vue migration checklist and preview guide to close the Import/Export data-safety blocker while leaving replacement blocked by Habits, Wheel, Fitness, remaining Sync, and non-diary AI flows.
 - Created clean runtime package `life-plan-site-runtime-20260728-123540.zip`; package retention removed `life-plan-site-runtime-20260727-232101.zip`.
 - Protected refs remained unchanged before the Import/Export commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+- Committed the Import/Export contract stage as `ebd3bd6 feat: harden import export parity`; branch is now ahead of origin by 16 local commits.
+
+## 2026-07-28 - Fitness parity stage
+
+- Started phases 118-122 after committing Import/Export. Selected Fitness because the legacy service already contains bounded multi-exercise plan and plan-writeback contracts, while the Vue page currently exposes only one-exercise plan creation.
+- Spawned read-only sidecar agents `Plato` for legacy Fitness contract audit and `Mill` for Vue Fitness/test gap audit.
+- Main-thread audit confirmed legacy `fitness-ui.js` supports multi-exercise plan editing, plan-start live workouts, per-set completion, and user-confirmed plan prescription writeback through `fitness-service.js#updatePlanFromWorkout`.
+- Implemented Vue Fitness multi-exercise plan create/edit, per-set prescription rows, plan-row editing, explicit finish-time plan writeback, and legacy `manual-delete` tombstone reasons for Fitness deletes.
+- Added focused Fitness contract coverage proving multi-exercise plan shape, mirrored `days[0].exercises`, plan-start workout `plannedSets`, no implicit writeback, explicit writeback, dirty sync state, and plan deletion tombstone output.
+- First build failed on a removed `planForm.exerciseId` reference and the first two focused contract runs exposed locator scope issues; all were corrected without changing the intended data contract.
+- Focused `npx playwright test tests/vue-smoke.spec.js --grep "fitness plans"` passed 1/1. `npm run build` passed with 92 transformed modules. Full `.\scripts\check.ps1` passed syntax checks and all 30 Vue Playwright tests.
+- Desktop 1440x1000 and mobile 390x844 Fitness plan-editor and active-workout screenshot/overflow checks passed with no overflow in `html`, `body`, `.vue-main`, `#page-fitness`, forms, plan exercise cards, plan set rows, metric rows, or writeback checkbox. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\fitness-parity-final`.
+- Read-only sidecar audits agreed the current bounded slice should close multi-exercise plans and explicit writeback while leaving full history editing, rest timer UX, history suggestion controls, and complete body-metric field editing for later Fitness slices.
+- Created clean runtime package `life-plan-site-runtime-20260728-130141.zip`; package retention removed `life-plan-site-runtime-20260728-090558.zip`.
+- Protected refs remained unchanged before the Fitness commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

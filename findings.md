@@ -170,6 +170,14 @@
 - Vue repository commits previously rebuilt only `todoAppData`; Import/Export parity requires habit imports to refresh `habitAppData` as a compatibility mirror while keeping `remoteUploadEnabled: false`.
 - The verified Vue fix keeps `lifePlanData` authoritative, rebuilds `todoAppData` and `habitAppData` from that authority on repository commits, and treats manual file import as a user-side dirty change rather than a clean remote sync pull.
 
+## 2026-07-28 Fitness parity audit
+
+- After Import/Export closeout, replacement readiness is roughly 80% by risk-weighted surface: core Todos, Records, Dashboard, Goals, Search/Tags, Materials, main protected upload, Todo independent sync, and Import/Export now have contract coverage; Habits, Wheel, Fitness, remaining Sync, and non-diary AI remain the main blockers.
+- Legacy Fitness UI in `fitness-ui.js` supports multi-exercise plan editing with per-exercise set rows, action-library insertion, manual exercise creation, status/goal/notes, and legacy `fitnessPlans[].exercises` plus mirrored `days[0].exercises`.
+- Legacy live workouts can start from an entire plan, preserve `planId` / `planName`, complete sets across multiple exercises, and after finish ask whether changed prescription data should be written back through `fitness-service.js#updatePlanFromWorkout`.
+- Current Vue `FitnessPage.vue` only creates one-exercise plans and one-exercise free workouts, while `fitness-service.js` already exposes the needed multi-exercise and writeback contract helpers.
+- The next bounded Fitness slice should reuse `fitness-service.js` rather than adding new data rules: implement multi-exercise plan editing and user-confirmed plan writeback on finish, leaving full rest timer/history editing polish for later audited slices.
+
 ## 2026-07-27 Diary AI parity
 
 - Legacy diary analysis sends `mode: diaryReview` with a compact `selectedDiary` containing persisted metadata, full Markdown content, `templateId`, and parsed built-in diary fields.
