@@ -143,6 +143,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 125. Status: complete - Add focused history persistence, tombstone, dirty-state, and no-mirror contract coverage.
 126. Status: complete - Run build/check plus 1440px/390px responsive verification for the Fitness history editor.
 127. Status: complete - Update parity evidence, package, commit the verified Fitness history stage, and append dual-store memory.
+128. Status: complete - Audit legacy Habit checkin note, makeup, undo, reward reversal, mirror, and tombstone contracts against Vue.
+129. Status: complete - Implement Vue Habit note checkin, backfill, note edit, and undo-latest checkin without touching remote upload.
+130. Status: complete - Add focused Habit local contract tests for checkins, ledger rewards/reversals, deletedItems, dirty state, and `habitAppData` mirror.
+131. Status: complete - Run build/check plus 1440px/390px responsive verification for the Habit correction surface.
+132. Status: complete - Update parity evidence, package, commit the verified Habit correction stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -199,3 +204,6 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First Fitness build failed on removed `planForm.exerciseId` | Multi-exercise plan form replaced the old single-action field, but the action-library save path still filled the removed property | Routed new library items into the first blank plan exercise draft and reran `npm run build` green |
 | First Fitness focused contract used inaccessible separated-label locators | Vue form labels are rendered as sibling text, not associated `label for` controls | Scoped the test to the Fitness plan form and used DOM locators inside the form |
 | Second Fitness focused contract hit duplicate `删除` buttons | The plan row and workout history rows both contained the long plan title | Scoped the deletion assertion to the `开始计划训练` card |
+| First Habit correction build rejected `Array.at()` | The project TypeScript lib target does not include ES2022 array helpers | Replaced `.at(-1)` with `checkins[checkins.length - 1]` and reran build |
+| First full Habit correction check failed an existing quick-checkin locator | New `备注打卡/补卡` button also matched the old fuzzy `打卡` role locator | Changed the existing quick-checkin test to `exact: true` |
+| Habit correction read-only sidecar failed before review | Subagent `Poincare` exceeded retry limit with upstream `429 Too Many Requests` | Continued main-thread contract review and verification; no project files were changed by the sidecar |

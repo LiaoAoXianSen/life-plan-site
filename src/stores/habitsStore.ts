@@ -285,6 +285,32 @@ export const useHabitsStore = defineStore('habits', () => {
       });
   }
 
+  function reverseCheckinRewards(data: LifePlanData, habit: Habit, checkin: HabitCheckin) {
+    if (data.habitPointLedger.some(entry => entry.type === 'reverse' && entry.sourceId === checkin.id)) return;
+    const totals = new Map<string, number>();
+    data.habitPointLedger
+      .filter(entry => {
+        if (entry.type === 'checkin' && entry.sourceId === checkin.id) return true;
+        return entry.type === 'milestone' && String(entry.sourceId || '').startsWith(`${checkin.id}:milestone:`);
+      })
+      .forEach(entry => {
+        const currency = normalizeCurrency(entry.currency);
+        totals.set(currency, (totals.get(currency) || 0) + (Number(entry.amount) || 0));
+      });
+    totals.forEach((total, currency) => {
+      if (!total) return;
+      addLedgerEntry(data, {
+        amount: -total,
+        type: 'reverse',
+        habitId: habit.id,
+        sourceId: checkin.id,
+        date: checkin.date,
+        note: `撤销打卡「${habit.name}」`,
+        currency,
+      });
+    });
+  }
+
   function reversePenaltiesForDate(data: LifePlanData, habit: Habit, date: string) {
     const prefix = `${habit.id}:${date}:penalty-reversal:`;
     const previouslyReversed = new Map<string, number>();
@@ -362,32 +388,35 @@ export const useHabitsStore = defineStore('habits', () => {
     }
   }
 
-  function quickCheckin(habitId: string, note = ''): boolean {
+  function appendCheckin(habitId: string, date = getTodayStr(), note = ''): boolean {
     const habit = habits.value.find(item => item.id === habitId);
-    const today = getTodayStr();
     if (!habit) {
       lastError.value = '未找到该习惯，未写入任何数据。';
       return false;
     }
-    if (!isDueOnDate(habit, today)) {
-      lastError.value = '这条习惯今天不在执行日，未写入任何数据。';
+    if (date > getTodayStr()) {
+      lastError.value = '不能补未来日期的习惯打卡。';
       return false;
     }
-    if (targetCount(habit) === 1 && getCheckinCount(habitId, today) > 0) {
-      lastError.value = '今天已完成该习惯；备注编辑和撤销仍请使用旧版。';
+    if (!isDueOnDate(habit, date)) {
+      lastError.value = '这条习惯不在该日期执行，未写入任何数据。';
+      return false;
+    }
+    if (targetCount(habit) === 1 && getCheckinCount(habitId, date) > 0) {
+      lastError.value = '这一天已完成该习惯；可编辑备注或先撤销。';
       return false;
     }
 
     try {
-      lifePlan.mutate('vue-habit-quick-checkin', data => {
+      lifePlan.mutate('vue-habit-append-checkin', data => {
         const target = data.habits.find(item => item.id === habitId) as Habit | undefined;
         if (!target) throw new Error('习惯已不存在，已取消打卡。');
         const now = new Date();
-        const timestamp = `${today}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        const timestamp = `${date}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
         const checkin: HabitCheckin = {
           id: genId(),
           habitId,
-          date: today,
+          date,
           time: timestamp.slice(11, 16),
           checkinAt: timestamp,
           createdAt: timestamp,
@@ -397,11 +426,67 @@ export const useHabitsStore = defineStore('habits', () => {
         data.checkins.push(checkin);
         addCheckinReward(data, target, checkin);
         addMilestoneRewards(data, target, checkin);
-        reversePenaltiesForDate(data, target, today);
+        reversePenaltiesForDate(data, target, date);
         target.updatedAt = getNowLocal(now);
       });
-      rebuildLocalMirror('vue-habit-quick-checkin');
-      lastAction.value = `已为「${habit.name}」打卡`;
+      rebuildLocalMirror('append-checkin');
+      lastAction.value = date === getTodayStr() ? `已为「${habit.name}」打卡` : `已为「${habit.name}」补卡 ${date}`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
+  function quickCheckin(habitId: string, note = ''): boolean {
+    return appendCheckin(habitId, getTodayStr(), note);
+  }
+
+  function editCheckinNote(checkinId: string, note = ''): boolean {
+    const checkin = lifePlan.data.checkins.map(asCheckin).find(item => item.id === checkinId);
+    if (!checkin) {
+      lastError.value = '未找到这条打卡记录。';
+      return false;
+    }
+    try {
+      lifePlan.mutate('vue-habit-edit-checkin-note', data => {
+        const targetCheckin = data.checkins.find(item => item.id === checkinId) as HabitCheckin | undefined;
+        if (!targetCheckin) throw new Error('打卡记录已不存在。');
+        targetCheckin.note = String(note || '').trim();
+        targetCheckin.updatedAt = getNowLocal();
+        const targetHabit = data.habits.find(item => item.id === targetCheckin.habitId) as Habit | undefined;
+        if (targetHabit) targetHabit.updatedAt = getNowLocal();
+      });
+      rebuildLocalMirror('edit-checkin-note');
+      lastAction.value = '打卡备注已保存';
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
+  function undoLatestCheckin(habitId: string, date = getTodayStr()): boolean {
+    const habit = habits.value.find(item => item.id === habitId);
+    const checkins = getCheckins(habitId, date);
+    const latest = checkins[checkins.length - 1];
+    if (!habit || !latest) {
+      lastError.value = '没有可撤销的打卡记录。';
+      return false;
+    }
+    try {
+      lifePlan.mutate('vue-habit-decrease-checkin', data => {
+        const target = data.habits.find(item => item.id === habitId) as Habit | undefined;
+        if (!target) throw new Error('习惯已不存在。');
+        reverseCheckinRewards(data, target, latest);
+        habitServices.sync.markDeletedItem(data, 'checkins', latest.id, { reason: 'manual-decrease', habitId });
+        data.checkins = data.checkins.filter(item => item.id !== latest.id);
+        target.updatedAt = getNowLocal();
+      });
+      rebuildLocalMirror('decrease-checkin');
+      lastAction.value = `已撤销「${habit.name}」${date} 的最近一次打卡`;
       lastError.value = '';
       return true;
     } catch (error) {
@@ -420,6 +505,9 @@ export const useHabitsStore = defineStore('habits', () => {
     getCheckinCount,
     targetCount,
     create,
+    appendCheckin,
+    editCheckinNote,
+    undoLatestCheckin,
     quickCheckin,
   };
 });

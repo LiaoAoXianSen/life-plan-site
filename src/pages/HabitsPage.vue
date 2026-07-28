@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
+import { getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
 
 const habits = useHabitsStore();
@@ -9,12 +10,19 @@ const name = ref('');
 const tag = ref('');
 const timesPerDay = ref(1);
 const formError = ref('');
+const actionDrafts = reactive<Record<string, { date: string; note: string }>>({});
+const checkinNoteDrafts = reactive<Record<string, string>>({});
 const focusedHabitId = computed(() => String(route.query.habit || ''));
 const todayItems = computed(() => habits.todayHabits.map(habit => ({
   habit,
   count: habits.getCheckinCount(habit.id),
   target: habits.targetCount(habit),
 })));
+
+function draftFor(habitId: string) {
+  if (!actionDrafts[habitId]) actionDrafts[habitId] = { date: getTodayStr(), note: '' };
+  return actionDrafts[habitId];
+}
 
 function addHabit() {
   try {
@@ -30,6 +38,34 @@ function addHabit() {
 
 function checkin(id: string) {
   habits.quickCheckin(id);
+}
+
+function appendWithDraft(habitId: string) {
+  const draft = draftFor(habitId);
+  if (habits.appendCheckin(habitId, draft.date, draft.note)) draft.note = '';
+}
+
+function undoWithDraft(habitId: string) {
+  const draft = draftFor(habitId);
+  habits.undoLatestCheckin(habitId, draft.date);
+}
+
+function checkinsForDraft(habitId: string) {
+  const draft = draftFor(habitId);
+  return habits.getCheckins(habitId, draft.date);
+}
+
+function noteDraft(checkin: { id: string; note?: string }) {
+  if (!(checkin.id in checkinNoteDrafts)) checkinNoteDrafts[checkin.id] = checkin.note || '';
+  return checkinNoteDrafts[checkin.id];
+}
+
+function updateNoteDraft(checkinId: string, value: string) {
+  checkinNoteDrafts[checkinId] = value;
+}
+
+function saveCheckinNote(checkinId: string) {
+  habits.editCheckinNote(checkinId, checkinNoteDrafts[checkinId] || '');
 }
 </script>
 
@@ -89,6 +125,21 @@ function checkin(id: string) {
               </button>
             </div>
           </div>
+          <div class="habit-correction-panel">
+            <div class="habit-correction-form">
+              <label><span>日期</span><input v-model="draftFor(item.habit.id).date" type="date" /></label>
+              <label><span>备注</span><input v-model="draftFor(item.habit.id).note" maxlength="120" placeholder="本次打卡备注" /></label>
+              <button class="btn btn-secondary" type="button" @click="appendWithDraft(item.habit.id)">备注打卡/补卡</button>
+              <button class="btn btn-secondary" type="button" :disabled="!checkinsForDraft(item.habit.id).length" @click="undoWithDraft(item.habit.id)">撤销最近一次</button>
+            </div>
+            <div v-if="checkinsForDraft(item.habit.id).length" class="habit-checkin-note-list">
+              <div v-for="checkinItem in checkinsForDraft(item.habit.id)" :key="checkinItem.id" class="habit-checkin-note-row">
+                <span>{{ checkinItem.time || checkinItem.checkinAt?.slice(11, 16) || '记录' }}</span>
+                <input :value="noteDraft(checkinItem)" maxlength="120" placeholder="备注" @input="updateNoteDraft(checkinItem.id, ($event.target as HTMLInputElement).value)" />
+                <button class="btn btn-secondary" type="button" @click="saveCheckinNote(checkinItem.id)">保存备注</button>
+              </div>
+            </div>
+          </div>
         </article>
         <div v-if="!todayItems.length" class="empty-state">今日没有按规则待完成的习惯。</div>
       </div>
@@ -110,4 +161,55 @@ function checkin(id: string) {
 
 <style scoped>
 .habit-quick-card.is-target { outline: 3px solid rgba(47, 128, 237, .24); outline-offset: 2px; }
+.habit-correction-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.habit-correction-form,
+.habit-checkin-note-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+.habit-correction-form label {
+  display: grid;
+  min-width: 150px;
+  flex: 1 1 150px;
+  gap: 4px;
+  color: var(--muted, #647269);
+  font-size: 12px;
+  font-weight: 700;
+}
+.habit-correction-form input,
+.habit-checkin-note-row input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #dfe7e1);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text, #17211b);
+}
+.habit-checkin-note-list {
+  display: grid;
+  gap: 8px;
+}
+.habit-checkin-note-row span {
+  min-width: 48px;
+  color: var(--muted, #647269);
+  font-size: 12px;
+  font-weight: 750;
+}
+.habit-checkin-note-row input {
+  min-width: 160px;
+  flex: 1 1 180px;
+}
+@media (max-width: 520px) {
+  .habit-correction-form > *,
+  .habit-checkin-note-row > * {
+    width: 100%;
+  }
+}
 </style>

@@ -180,6 +180,12 @@
 - Legacy workout history editing supports completed/planned/skipped logs with `date`, `status`, `title`, `durationMin`, `notes`, plan association, multi-exercise rows, per-set `weight`/`reps`/`done`, and manual-delete tombstones. Vue can close this without a modal by using an inline repository-backed form that calls `fitness-service.js#upsertFitnessWorkout`.
 - Fitness should not create a `fitnessAppData` mirror. Any create/edit/delete must dirty the main sync state through the shared repository path and keep `lifePlanData` authoritative.
 
+## 2026-07-28 Habit correction audit
+
+- Legacy Habit checkins have three local correction paths before remote sync: `append-checkin` for today notes/backfill, `edit-checkin-note` for note-only edits, and `decrease-checkin` / `toggle-checkin` for undoing the latest checkin on a date.
+- Undoing a checkin removes the row from `lifePlanData.checkins`, writes a `deletedItems(collection=checkins, reason=manual-decrease, habitId)` tombstone, and adds `reverse` ledger rows for prior checkin and milestone rewards keyed by the removed checkin ID.
+- Backfill/checkin must reject future dates, preserve single-per-day habits by refusing duplicate checkins, reverse existing miss/break penalties for that date, update the habit timestamp, mark main sync dirty, and rebuild `habitAppData` as a local mirror with `remoteUploadEnabled: false`.
+
 ## 2026-07-27 Diary AI parity
 
 - Legacy diary analysis sends `mode: diaryReview` with a compact `selectedDiary` containing persisted metadata, full Markdown content, `templateId`, and parsed built-in diary fields.

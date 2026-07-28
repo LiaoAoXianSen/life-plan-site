@@ -720,13 +720,103 @@ test('habit quick check-in writes the legacy fields and rebuilds its local mirro
         habits: [{ id: 'habit-1', name: '阅读', rule: 'daily', timesPerDay: '1', startDate: date, rewardPoints: 2, rewardCurrency: '金币' }],
     })), { data: emptyData(), date: today });
     await page.goto('/#/habits');
-    await page.getByRole('button', { name: '打卡' }).click();
+    await page.getByRole('button', { name: '打卡', exact: true }).click();
     await expect(page.locator('#page-habits')).toContainText('1/1 次');
     const stored = await page.evaluate(() => ({ data: JSON.parse(localStorage.getItem('lifePlanData')), mirror: JSON.parse(localStorage.getItem('habitAppData')) }));
     expect(stored.data.checkins).toHaveLength(1);
     expect(stored.data.checkins[0]).toMatchObject({ habitId: 'habit-1', date: today, note: '' });
     expect(stored.mirror.localMirror).toBe(true);
     expect(stored.mirror.remoteUploadEnabled).toBe(false);
+});
+
+test('habit note backfill edit and undo keep local mirror and ledger contracts', async ({ page }) => {
+    const today = '2026-07-28';
+    const yesterday = '2026-07-27';
+    const source = emptyData({
+        habits: [{
+            id: 'habit-correction',
+            name: '复盘习惯',
+            rule: 'daily',
+            timesPerDay: '2',
+            startDate: '2026-07-01',
+            rewardPoints: 3,
+            rewardCurrency: '星星',
+            noteMode: 'never',
+            createdAt: '2026-07-01T08:00:00',
+            updatedAt: '2026-07-01T08:00:00',
+        }],
+        habitPointLedger: [{
+            id: 'ledger-miss',
+            habitId: 'habit-correction',
+            sourceId: 'habit-correction:2026-07-27:miss',
+            date: yesterday,
+            amount: -2,
+            currency: '星星',
+            type: 'miss',
+            note: '未完成「复盘习惯」',
+            createdAt: '2026-07-27T23:00:00',
+            updatedAt: '2026-07-27T23:00:00',
+        }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'habit-before' }));
+        localStorage.setItem('habitAppData', JSON.stringify({ localMirror: true, remoteUploadEnabled: true, mirror: { reason: 'stale' } }));
+    }, source);
+
+    await page.goto('/#/habits');
+    const card = page.locator('.habit-quick-card').filter({ hasText: '复盘习惯' });
+    const actionForm = card.locator('.habit-correction-form');
+    await actionForm.locator('label').filter({ hasText: '日期' }).locator('input').fill(yesterday);
+    await actionForm.locator('label').filter({ hasText: '备注' }).locator('input').fill('昨天补卡备注');
+    await actionForm.getByRole('button', { name: '备注打卡/补卡' }).click();
+    await expect(page.locator('.notice.success')).toContainText(`补卡 ${yesterday}`);
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.checkins).toHaveLength(1);
+    expect(stored.data.checkins[0]).toEqual(expect.objectContaining({ habitId: 'habit-correction', date: yesterday, note: '昨天补卡备注' }));
+    expect(stored.data.habitPointLedger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'checkin', sourceId: stored.data.checkins[0].id, amount: 3, currency: '星星' }),
+        expect.objectContaining({ type: 'reverse-penalty', sourceId: 'habit-correction:2026-07-27:penalty-reversal:星星', amount: 2, currency: '星星' }),
+    ]));
+    expect(stored.mirror.localMirror).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('append-checkin');
+    expect(stored.syncState.dirty).toBe(true);
+
+    await actionForm.locator('label').filter({ hasText: '日期' }).locator('input').fill(today);
+    await actionForm.locator('label').filter({ hasText: '备注' }).locator('input').fill('今天初始备注');
+    await actionForm.getByRole('button', { name: '备注打卡/补卡' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已为「复盘习惯」打卡');
+    const todayRow = card.locator('.habit-checkin-note-row').last();
+    await todayRow.locator('input').fill('今天编辑后的备注');
+    await todayRow.getByRole('button', { name: '保存备注' }).click();
+    await expect(page.locator('.notice.success')).toContainText('打卡备注已保存');
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const todayCheckin = stored.checkins.find(item => item.date === today);
+    expect(todayCheckin.note).toBe('今天编辑后的备注');
+
+    await actionForm.getByRole('button', { name: '撤销最近一次' }).click();
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.checkins.map(item => item.date)).toEqual([yesterday]);
+    expect(stored.data.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'checkins', id: todayCheckin.id, reason: 'manual-decrease', habitId: 'habit-correction' }),
+    ]));
+    expect(stored.data.habitPointLedger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'reverse', sourceId: todayCheckin.id, amount: -3, currency: '星星' }),
+    ]));
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('decrease-checkin');
+    expect(stored.syncState.dirty).toBe(true);
 });
 
 test('records day view maintains a fixed-width timed event with a complete hover title', async ({ page }) => {

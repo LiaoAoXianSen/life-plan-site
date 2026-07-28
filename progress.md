@@ -348,3 +348,15 @@
 - Desktop 1440x1000 and mobile 390x844 Fitness history create/edit screenshot/overflow checks passed with no overflow in `html`, `body`, `.vue-main`, `#page-fitness`, history forms, exercise cards, workout set rows, or history metric rows. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\fitness-history-final`.
 - Created clean runtime package `life-plan-site-runtime-20260728-131237.zip`; package retention removed `life-plan-site-runtime-20260728-111421.zip`.
 - Protected refs remained unchanged before the Fitness history commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-28 - Habit correction stage
+
+- Started phases 128-132 after confirming the worktree was clean at `2429907` and the branch remained `migration/vue-app-v1` ahead of origin by 18 commits.
+- Selected Habit local correction parity as the next bounded blocker: note checkins, backfill, note editing, and undo latest checkin can be verified without opening the larger independent remote sync state machine.
+- Main-thread audit confirmed legacy `app.js` uses `appendHabitCheckin`, `submitHabitNoteModal`, `decreaseCheckin`, `reverseHabitCheckinReward`, `reverseHabitPenaltiesForDate`, and `dualWriteHabitAppLocalMirror` for these flows.
+- Implemented Vue Habit correction controls and store actions for note/backfill checkins, note editing, and undo-latest checkin with reward reversal, same-date penalty reversal, `manual-decrease` checkin tombstones, dirty main sync state, and local-only `habitAppData` mirror rebuilding.
+- Added focused Habit Playwright coverage for quick checkin plus the note/backfill/edit/undo local correction contract; focused `npx playwright test tests/vue-smoke.spec.js --grep "habit"` passed 2/2.
+- Production `npm run build` passed with 92 transformed modules. Full `.\scripts\check.ps1` passed syntax checks and all 32 Vue Playwright tests.
+- Desktop 1440x1000 and mobile 390x844 Habit correction screenshot/overflow checks passed with no overflow in `html`, `body`, `.vue-main`, `#page-habits`, Habit cards, correction form, or note rows. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\habit-correction-final`.
+- Read-only sidecar `Poincare` failed before review with upstream `429 Too Many Requests`; main-thread review and verification continued, and the sidecar made no file changes.
+- `git diff --check` passed with only LF/CRLF warnings. Created clean runtime package `life-plan-site-runtime-20260728-140806.zip`; package retention removed `life-plan-site-runtime-20260728-113854.zip`.
