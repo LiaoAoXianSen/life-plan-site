@@ -383,3 +383,14 @@
 - Desktop 1440x1000 and mobile 390x900 Wheel normal/tag screenshot checks passed with painted canvas pixels and no `#page-wheel` or document-level overflow. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\019fa748-12b4-7f41-9a97-394d8bc2a01c\wheel-canvas-stage`.
 - Final `npm run build` passed with assets `dist/assets/index-c-C3NQZh.css` and `dist/assets/index-1RBUs_-N.js`. `git diff --check` passed with only LF/CRLF warnings. Created clean runtime package `life-plan-site-runtime-20260728-163445.zip`; package retention removed `life-plan-site-runtime-20260728-123540.zip`.
 - Protected refs remained unchanged before the Wheel canvas commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-28 - Wheel public-library batch stage
+
+- Started phases 143-147 after the Wheel canvas commit `6e2c0df`; a read-only Wheel public-library sidecar failed with upstream `503 Service Unavailable`, so the main thread completed the bounded audit and implementation.
+- Audited legacy `wheel-tool.js` public-library management: tag filtering, selected-visible count, selected set cleanup, batch tag add/remove, batch enable/disable, batch delete, and the only-tag removal guard.
+- Implemented Vue public-library tag filtering, visible selection, selected count, quick batch tag picks, batch tag add/remove, batch enable/disable, and batch delete in `src/pages/WheelPage.vue` backed by repository writes in `src/stores/wheelStore.ts`.
+- Added focused Playwright coverage proving filtered selection, batch tag add/remove, only-tag guard, enable/disable, `wheelLibraryItems` tombstones, and dirty main sync state.
+- Focused `npx playwright test tests/vue-smoke.spec.js -g "wheel public library"` passed 1/1. `npm run build` passed with assets `dist/assets/index-qX1Uh49p.css` and `dist/assets/index-CCe0Sgda.js`. Full `.\scripts\check.ps1` passed syntax checks and all 35 Vue Playwright tests.
+- Desktop 1440x1000 and mobile 390x1000 Wheel public-library batch screenshot checks passed with no `#page-wheel` or document-level overflow. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\019fa748-12b4-7f41-9a97-394d8bc2a01c\wheel-library-batch-stage`.
+- `git diff --check` passed with only LF/CRLF warnings. Created clean runtime package `life-plan-site-runtime-20260728-172150.zip`; package retention removed `life-plan-site-runtime-20260728-130141.zip`.
+- Protected refs remained unchanged before the Wheel public-library commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

@@ -127,6 +127,66 @@ export const useWheelStore = defineStore('wheel', () => {
   function deleteTag(id: string) { mutate('delete-wheel-tag', () => { const tag = tags.value.find(item => item.id === id); if (!tag) return; const orphaned = libraryItems.value.filter(item => safeArray(item.tagIds).map(String).includes(id) && safeArray(item.tagIds).length === 1); if (orphaned.length) throw new Error(`仍有 ${orphaned.length} 个公共项只属于该标签，请先调整它们的标签`); tombstone('wheelTags', id, { name: tag.name }); lifePlan.data.wheelTags = lifePlan.data.wheelTags.filter(item => String(item.id) !== id); libraryItems.value.forEach(item => { item.tagIds = safeArray(item.tagIds).map(String).filter(tagId => tagId !== id); }); wheels.value.filter(wheel => wheel.mode === 'tag').forEach(wheel => { wheel.tagIds = safeArray(wheel.tagIds).map(String).filter(tagId => tagId !== id); wheel.updatedAt = getNowLocal(); }); }); }
   function saveLibraryItem(input: { id?: string; name: string; tagIds: string[]; weight?: number; enabled?: boolean }) { mutate(input.id ? 'update-wheel-library-item' : 'create-wheel-library-item', () => { const name = String(input.name || '').trim(); const tagIds = validTagIds(input.tagIds); if (!name) throw new Error('请输入公共项名称'); if (!tagIds.length) throw new Error('公共项至少需要选择一个标签'); if (libraryItems.value.some(item => item.id !== input.id && nameKey(item.name) === nameKey(name))) throw new Error('公共项里已有同名内容'); const stamp = getNowLocal(); const existing = libraryItems.value.find(item => item.id === input.id); if (existing) Object.assign(existing, { name, tagIds, weight: weight(input.weight), enabled: input.enabled !== false, updatedAt: stamp }); else lifePlan.data.wheelLibraryItems.push({ id: genId(), name, note: '', tagIds, weight: weight(input.weight), enabled: input.enabled !== false, createdAt: stamp, updatedAt: stamp }); }); }
   function deleteLibraryItem(id: string) { mutate('delete-wheel-library-item', () => { const item = libraryItems.value.find(entry => entry.id === id); if (!item) return; tombstone('wheelLibraryItems', id, { name: item.name }); lifePlan.data.wheelLibraryItems = lifePlan.data.wheelLibraryItems.filter(entry => String(entry.id) !== id); }); }
+  function batchSetLibraryEnabled(ids: string[], enabled: boolean) {
+    const selected = new Set(ids.map(String));
+    const targets = libraryItems.value.filter(item => selected.has(item.id) && (item.enabled !== false) !== enabled);
+    if (!targets.length) return 0;
+    mutate('batch-toggle-wheel-library-items', () => {
+      const stamp = getNowLocal();
+      targets.forEach(item => {
+        item.enabled = enabled;
+        item.updatedAt = stamp;
+      });
+    });
+    return targets.length;
+  }
+  function batchUpdateLibraryTags(ids: string[], tagIds: string[], action: 'add' | 'remove') {
+    let blockedOnlyTag = 0;
+    const validTags = validTagIds(tagIds);
+    if (!ids.length) throw new Error('请先勾选公共项');
+    if (!validTags.length) throw new Error('请先选择至少一个标签');
+    const selected = new Set(ids.map(String));
+    const plans = libraryItems.value.map(item => {
+      if (!selected.has(item.id)) return null;
+      const set = new Set(safeArray(item.tagIds).map(String));
+      let itemChanged = false;
+      validTags.forEach(tagId => {
+        if (action === 'remove') {
+          if (!set.has(tagId)) return;
+          if (set.size <= 1) {
+            blockedOnlyTag += 1;
+            return;
+          }
+          set.delete(tagId);
+          itemChanged = true;
+          return;
+        }
+        if (set.has(tagId)) return;
+        set.add(tagId);
+        itemChanged = true;
+      });
+      return itemChanged ? { item, tagIds: validTagIds(Array.from(set)) } : null;
+    }).filter(Boolean) as Array<{ item: WheelItem; tagIds: string[] }>;
+    if (!plans.length) return { changed: 0, blockedOnlyTag };
+    mutate(action === 'remove' ? 'batch-remove-wheel-library-tags' : 'batch-add-wheel-library-tags', () => {
+      const stamp = getNowLocal();
+      plans.forEach(({ item, tagIds }) => {
+        item.tagIds = tagIds;
+        item.updatedAt = stamp;
+      });
+    });
+    return { changed: plans.length, blockedOnlyTag };
+  }
+  function batchDeleteLibraryItems(ids: string[]) {
+    const selected = new Set(ids.map(String));
+    const items = libraryItems.value.filter(item => selected.has(item.id));
+    if (!items.length) return 0;
+    mutate('batch-delete-wheel-library-items', () => {
+      items.forEach(item => tombstone('wheelLibraryItems', item.id, { name: item.name }));
+      lifePlan.data.wheelLibraryItems = lifePlan.data.wheelLibraryItems.filter(item => !selected.has(String(item.id)));
+    });
+    return items.length;
+  }
 
   function recordSpin(wheelId: string, result: WheelItem, tag?: WheelTag) { const wheel = byId(wheelId); if (!wheel) throw new Error('找不到转盘'); const stamp = getNowLocal(); const entry: WheelHistory = { id: genId(), wheelId, wheelName: wheel.name, mode: wheel.mode, ...(tag ? { tagId: tag.id, tagName: tag.name } : {}), resultId: result.id, resultName: result.name, note: result.note, convertedTodoId: '', createdAt: stamp, updatedAt: stamp }; mutate('wheel-spin', () => { lifePlan.data.wheelHistory.unshift(entry); }); return entry; }
   function deleteHistory(id: string) { mutate('delete-wheel-history', () => { const item = history.value.find(entry => entry.id === id); if (!item) return; tombstone('wheelHistory', id, { wheelId: item.wheelId, resultName: item.resultName }); lifePlan.data.wheelHistory = lifePlan.data.wheelHistory.filter(entry => String(entry.id) !== id); }); }
@@ -159,5 +219,5 @@ export const useWheelStore = defineStore('wheel', () => {
   }
   function exportHistoryCsv() { const header = ['时间', '转盘', '模式', '标签', '结果', '备注', '是否已转待办']; const rows = history.value.map(item => [item.createdAt, item.wheelName, item.mode === 'tag' ? '标签转盘' : '普通转盘', item.tagName || '', item.resultName, item.note, item.convertedTodoId ? '是' : '否']); download(`大转盘抽取记录_${fileStamp()}.csv`, `\uFEFF${[header, ...rows].map(row => row.map(csvCell).join(',')).join('\n')}`, 'text/csv;charset=utf-8'); }
 
-  return { wheels, tags, libraryItems, history, candidates, candidateTags, weightedPick, createWheel, updateWheel, deleteWheel, saveOption, deleteOption, saveTag, deleteTag, saveLibraryItem, deleteLibraryItem, recordSpin, deleteHistory, clearHistory, convertHistoryToTodo, backupSnapshot, exportBackup, restoreBackup, exportHistoryCsv };
+  return { wheels, tags, libraryItems, history, candidates, candidateTags, weightedPick, createWheel, updateWheel, deleteWheel, saveOption, deleteOption, saveTag, deleteTag, saveLibraryItem, deleteLibraryItem, batchSetLibraryEnabled, batchUpdateLibraryTags, batchDeleteLibraryItems, recordSpin, deleteHistory, clearHistory, convertHistoryToTodo, backupSnapshot, exportBackup, restoreBackup, exportHistoryCsv };
 });

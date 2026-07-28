@@ -197,6 +197,14 @@
 - The bounded Vue fix keeps `lifePlanData` authoritative and only changes local interaction/rendering: no Wheel remote upload or independent sync authority is introduced in this slice.
 - Replacement risks left after this slice are batch public-library workflows, independent Wheel remote preview/apply/upload conflict handling, and management-form polish rather than basic canvas interaction.
 
+## 2026-07-28 Wheel public-library batch audit
+
+- Legacy `wheel-tool.js` public-library management keeps a selected-item set across tag filters, reports total selected count plus current-filter count, and provides batch add/remove tag, enable/disable, and delete actions.
+- Bulk tag removal has a data-contract guard: a public item must keep at least one tag, so removing the only tag from a selected item is blocked rather than producing an untagged library row.
+- Bulk public-item deletion writes `deletedItems(collection=wheelLibraryItems)` tombstones and does not alter already-copied private normal-wheel options.
+- Vue already had single public-item CRUD, but replacement parity needed the batch management surface because the old tool is optimized for maintaining many public items and tags.
+- The bounded Vue fix keeps all public-library writes under `lifePlanData` and main dirty-state handling; independent Wheel remote preview/apply/upload remains deliberately out of scope.
+
 ## 2026-07-27 Diary AI parity
 
 - Legacy diary analysis sends `mode: diaryReview` with a compact `selectedDiary` containing persisted metadata, full Markdown content, `templateId`, and parsed built-in diary fields.

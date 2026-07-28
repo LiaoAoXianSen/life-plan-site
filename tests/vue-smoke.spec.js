@@ -523,6 +523,76 @@ test('wheel canvas click drag and tag stage preserve interaction contracts', asy
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('wheel public library batch actions preserve selection and tombstone contracts', async ({ page }) => {
+    const source = emptyData({
+        wheelTags: [
+            { id: 'tag-dinner', name: '晚餐', color: '#ff6b6b', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+            { id: 'tag-move', name: '活动', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+            { id: 'tag-rest', name: '休息', color: '#4f7cac', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+        ],
+        wheelLibraryItems: [
+            { id: 'lib-noodle', name: '番茄牛肉面', note: '', tagIds: ['tag-dinner'], weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+            { id: 'lib-stretch', name: '拉伸十分钟', note: '', tagIds: ['tag-move'], weight: 1, enabled: false, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+            { id: 'lib-tea', name: '泡茶放空', note: '', tagIds: ['tag-rest', 'tag-dinner'], weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'wheel-library-before' }));
+    }, source);
+
+    await page.goto('/#/wheel');
+    const library = page.locator('.library-card');
+    await expect(library).toContainText('公共项库');
+    await expect(page.locator('.library-row')).toHaveCount(3);
+    await page.locator('select[aria-label="公共项标签筛选"]').selectOption('tag-dinner');
+    await expect(page.locator('.library-row')).toHaveCount(2);
+
+    await page.locator('.library-batch-bar input[type="checkbox"]').first().check();
+    await expect(page.locator('.library-batch-bar')).toContainText('选中 2');
+    await page.getByRole('checkbox', { name: '选择公共项 番茄牛肉面' }).check();
+    await page.getByRole('checkbox', { name: '选择公共项 泡茶放空' }).check();
+
+    await library.locator('.batch-tag-checks').getByRole('checkbox', { name: '活动' }).check();
+    await page.getByRole('button', { name: '批量加标签' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('已给 2 个公共项加上标签：活动');
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        deletedItems: JSON.parse(localStorage.getItem('lifePlanData')).deletedItems,
+    }));
+    expect(stored.syncState.dirty).toBe(true);
+    expect(stored.data.wheelLibraryItems.find(item => item.id === 'lib-noodle')).toMatchObject({ tagIds: ['tag-dinner', 'tag-move'] });
+    expect(stored.data.wheelLibraryItems.find(item => item.id === 'lib-tea')).toMatchObject({ tagIds: ['tag-rest', 'tag-dinner', 'tag-move'] });
+
+    await page.getByRole('button', { name: '批量去标签' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('已从 2 个公共项去掉标签：活动');
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems.find(item => item.id === 'lib-noodle')).toMatchObject({ tagIds: ['tag-dinner'] });
+    expect(stored.wheelLibraryItems.find(item => item.id === 'lib-tea')).toMatchObject({ tagIds: ['tag-rest', 'tag-dinner'] });
+
+    await page.getByRole('button', { name: '批量停用' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('已批量停用 2 个公共项');
+    await page.getByRole('button', { name: '批量启用' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('已批量启用 2 个公共项');
+
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: '批量删除' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('已删除 2 个公共项');
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.wheelLibraryItems).toHaveLength(1);
+    expect(stored.data.deletedItems.filter(item => item.collection === 'wheelLibraryItems').map(item => item.id)).toEqual(expect.arrayContaining(['lib-noodle', 'lib-tea']));
+    expect(stored.syncState.dirty).toBe(true);
+
+    await page.locator('select[aria-label="公共项标签筛选"]').selectOption('tag-move');
+    await page.getByRole('checkbox', { name: '选择公共项 拉伸十分钟' }).check();
+    await page.getByRole('button', { name: '批量去标签' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('没有可移除的标签；公共项至少要保留一个标签');
+});
+
 test('main import export keeps snapshots tombstones mirrors and dirty state compatible', async ({ page }) => {
     const local = emptyData({
         records: [
