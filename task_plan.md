@@ -116,6 +116,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 98. Status: complete - Add exact persistence, tombstone, read-only filtering/randomization, and route restoration Playwright contracts.
 99. Status: complete - Run production build, focused/full checks, and 1440px/390px visual verification for Materials.
 100. Status: complete - Update parity evidence, package, commit the verified Materials stage, and append dual-store memory.
+101. Status: complete - Audit legacy Dashboard summary, command center, timeline, and navigation contracts against Vue.
+102. Status: complete - Implement read-only Vue Dashboard command center, active-period/timeline entry points, and legacy-compatible summary counts without persistence side effects.
+103. Status: complete - Add Dashboard contract tests for navigation, bounded timeline content, summary semantics, and storage immutability.
+104. Status: complete - Run production build, focused/full checks, and 1440px/390px visual verification for Dashboard.
+105. Status: complete - Update parity evidence, package, commit the verified Dashboard stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -135,6 +140,7 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 - The protected first-upload phase supersedes the permanent-false part only during an explicitly armed browser session: `remoteUploadEnabled` starts false, is never restored from storage, and automatically returns false after any upload attempt. No automatic upload or authority switch is introduced.
 - Habit bootstrap must reuse the already configured unified sync endpoint. The user should not have to enter or migrate a second habit-specific URL; only `/apps/habit-app/data.json` remains habit-specific.
 - Vue Todo independent sync must reuse `lifePlanSyncConfig.webdavUrl`, keep `/apps/todo-app/data.json` fixed, persist `todoAppSyncConfig` / `todoAppSyncState`, and force `autoSync` plus restored upload authorization off.
+- Dashboard parity should close read-only replacement blockers first: summary semantics, command-center entry points, active periods, and bounded timeline navigation. Legacy quick-write actions such as "今天做", "执行一次", and habit check-in remain out of this Dashboard slice unless they are separately audited and covered.
 
 ## Errors Encountered
 

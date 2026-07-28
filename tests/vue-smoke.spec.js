@@ -236,6 +236,78 @@ test('todo dashboard route presets and calendar entries preserve one read-only d
     expect(persisted.mirror).toBeNull();
 });
 
+test('dashboard command center periods and recent timeline stay read-only', async ({ page }) => {
+    const dateAt = amount => {
+        const date = new Date();
+        date.setDate(date.getDate() + amount);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const today = dateAt(0);
+    const yesterday = dateAt(-1);
+    const tomorrow = dateAt(1);
+    const source = emptyData({
+        records: [
+            { id: 'record-dashboard-period', type: '周计划', title: '本周计划入口', content: '周期内容', startDate: yesterday, endDate: tomorrow, todoIds: ['todo-dashboard-done', 'todo-dashboard-session'], createdAt: `${yesterday}T08:00:00`, updatedAt: `${yesterday}T08:00:00` },
+            { id: 'record-dashboard-day', type: '日记', title: 'Dashboard 日记记录', content: '记录正文', startDate: today, endDate: today, recordTime: '09:00', recordEndTime: '09:30', todoIds: [], createdAt: `${today}T09:00:00`, updatedAt: `${today}T09:00:00` },
+            { id: 'idea-dashboard-unprocessed', type: '灵感碎片', title: '未处理 Dashboard 灵感', content: '灵感内容', startDate: today, endDate: today, ideaStatus: '待整理', ideaTags: ['dashboard'], ideaNextAction: '', ideaConclusion: '', todoIds: [] },
+            { id: 'idea-dashboard-conclusion', type: '灵感碎片', title: '待结论 Dashboard 灵感', content: '实验内容', startDate: today, endDate: today, ideaStatus: '实践中', ideaTags: ['dashboard'], ideaNextAction: '', ideaConclusion: '', todoIds: [] },
+        ],
+        todos: [
+            todoFixture('todo-dashboard-overdue', '超期高压待办', { dueDate: yesterday, urgency: 'high', group: '工作' }),
+            todoFixture('todo-dashboard-done', '已完成今日待办', { dueDate: today, done: true, completedAt: `${today}T08:30:00` }),
+            todoFixture('todo-dashboard-plan-due', '计划截止不进首页时间轴', { dueDate: today, planStartDate: today, planEndDate: today, urgency: 'medium' }),
+            todoFixture('todo-dashboard-session', '执行入口待办', { sessions: [{ id: 'session-dashboard', date: today, startTime: '10:00', endTime: '10:45', note: '首页执行记录', createdAt: `${today}T10:00:00` }] }),
+            todoFixture('todo-dashboard-floating', '无截止池入口待办', { urgency: 'low' }),
+        ],
+        habits: [{ id: 'habit-dashboard', name: 'Dashboard 习惯', tag: '健康', rule: 'daily', timesPerDay: 1, startDate: yesterday }],
+        checkins: [{ id: 'checkin-dashboard', habitId: 'habit-dashboard', date: today, time: '07:00', checkinAt: `${today}T07:00:00`, note: '首页习惯记录' }],
+        goals: [
+            { id: 'goal-dashboard', name: 'Dashboard 目标', status: '进行中', progress: 66, createdAt: `${yesterday}T08:00:00`, updatedAt: `${today}T08:00:00` },
+            { id: 'goal-paused', name: '暂停目标', status: '暂停', progress: 20 },
+        ],
+        materials: [{ id: 'material-dashboard', type: '摘抄', content: 'Dashboard 素材内容', tags: ['dashboard'], source: '测试', note: '首页入口', createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/dashboard');
+    await expect(page.locator('.summary-card').filter({ hasText: '今日待办' })).toContainText('1/4');
+    await expect(page.locator('.summary-card').filter({ hasText: '今日习惯' })).toContainText('1/1');
+    await expect(page.locator('.summary-card').filter({ hasText: '进行目标' })).toContainText('1');
+    const commandMetrics = page.locator('.command-metric');
+    await expect(commandMetrics.filter({ hasText: '未处理灵感' })).toContainText('1');
+    await expect(commandMetrics.filter({ hasText: '待写结论' })).toContainText('1');
+    await expect(commandMetrics.filter({ hasText: '高压待办' })).toContainText('1');
+    await expect(page.locator('.dashboard-timeline')).toContainText('Dashboard 日记记录');
+    await expect(page.locator('.dashboard-timeline')).toContainText('执行：执行入口待办');
+    await expect(page.locator('.dashboard-timeline')).toContainText('Dashboard 习惯');
+    await expect(page.locator('.dashboard-timeline')).not.toContainText('计划：计划截止不进首页时间轴');
+    await expect(page.locator('.dashboard-timeline')).not.toContainText('截止：计划截止不进首页时间轴');
+
+    await page.locator('.command-row').filter({ hasText: '超期高压待办' }).click();
+    await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-overdue' });
+
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /Dashboard 素材内容/ }).click();
+    await expectHashRoute(page, '/materials', { material: 'material-dashboard' });
+
+    await page.goto('/#/dashboard');
+    await page.locator('.period-item').filter({ hasText: '本周计划入口' }).click();
+    await expectHashRoute(page, '/records', { record: 'record-dashboard-period' });
+
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /执行：执行入口待办/ }).click();
+    await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-session' });
+
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /Dashboard 习惯/ }).click();
+    await expectHashRoute(page, '/habits', { habit: 'habit-dashboard' });
+
+    const persisted = await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), mirror: localStorage.getItem('todoAppData') }));
+    expect(persisted.data).toBe(original);
+    expect(persisted.mirror).toBeNull();
+});
+
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
     const source = emptyData({
         records: [

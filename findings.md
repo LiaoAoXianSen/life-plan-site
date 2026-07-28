@@ -148,6 +148,17 @@
 - Vue Materials now normalizes old string tags, invalid types, missing IDs, and missing timestamps into the legacy contract while keeping `content` as the only required field and omitting `title`.
 - Search routes Material results to `#/materials?material=<id>` and Tags exposes a separate Material-tags section to `#/materials?tag=<tag>`; this closes the bounded Material entry-point gap without claiming full Search/Tags parity.
 - Correct 1440px and 390px visual checks show Materials page, filter controls, random/list grids, long content/tags/source/note, and the editor dialog within viewport width; the mobile dialog uses a sticky action row so delete/cancel/save remain visible.
+- Legacy Dashboard renders more than summary cards: it calls `renderDashboardCommandCenter()`, `renderTodayTodos()`, `renderFloatingTodos()`, `renderTodayHabits()`, `renderActivePeriods()`, and `renderTimeline()`.
+- Legacy Dashboard summary counts today's relevant Todos including overdue, due today, planned today, and sessions today; it displays completed/total Todo and habit ratios, active goals, week records, and fitness snippets.
+- Legacy Dashboard command center surfaces unprocessed ideas, ideas needing conclusion, urgent/overdue Todos, two random Materials, active goal progress, and fitness snippets with navigation to Ideas, Todos, Tags, Materials, Goals, and Fitness.
+- Legacy Dashboard timeline uses a bounded recent range and `buildScheduleItemsForRange()` with records, Todo execution sessions, and checked-habit items, while excluding Todo plan/due items. Vue can reuse `src/utils/schedule.ts` for this contract.
+- Legacy Dashboard active-period cards open record preview for 周/月/年复盘/计划 plus 3年计划/终身愿景 records whose `endDate` is future or absent. Vue should route them to the shared Records editor via `#/records?record=<id>`.
+- The next bounded Vue Dashboard stage will keep all new Dashboard additions read-only and navigation-only so the exact `lifePlanData` string remains unchanged during Dashboard browsing.
+- Vue Dashboard now restores the read-only command-center slice: unprocessed ideas, ideas needing conclusion, high-pressure Todos, random Materials, active goals, Tags, Materials, Fitness, Ideas, Todos, and Goals entry points route to migrated pages without writing storage.
+- Vue Dashboard summary semantics now use ratios for today's relevant Todos and due Habits, count active goals, and count records from the current week; this mirrors the legacy ratio-first Dashboard without adding Dashboard-owned persistence.
+- Vue Dashboard recent timeline now uses the shared schedule builder over a bounded 14-day window with records, Todo execution sessions, and checked-habit events, while excluding Todo plan/due-only items for this page.
+- Dashboard quick-write parity remains intentionally open: legacy actions such as direct Todo completion, habit check-in, and other write-heavy shortcuts need a separate audited slice before any replacement decision.
+- Read-only Dashboard review found no blocking data-contract issue after implementation. Follow-up parity can deepen Ideas metric links from plain `#/ideas` into filtered states, Goals rows from plain `#/goals` into target detail, and Habit timeline links once the migrated Habits page has a fuller historical/detail landing surface.
 
 ## 2026-07-27 Diary AI parity
 

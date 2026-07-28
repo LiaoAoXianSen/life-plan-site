@@ -16,7 +16,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 
 | Area | Legacy baseline | Vue baseline | Blocking gaps | Replacement acceptance |
 | --- | --- | --- | --- | --- |
-| Dashboard | Summaries, today focus, recent records/todos/ideas, entry points into record preview and domain pages. | Basic dashboard overview plus exact Todo detail links from today and floating lists. | Needs parity audit of record preview links and domain summary edge cases. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss. |
+| Dashboard | Summaries, today focus, command center, active periods, bounded timeline, and entry points into record preview and domain pages. | Read-only command center, today's Todo/habit ratios, active-goal/week-record summaries, today/floating Todo links, random Material links, active-period links, and bounded recent timeline links. | No open blocker in the current read-only Dashboard parity audit; legacy quick-write actions remain a later audited slice and replacement remains blocked by other modules. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss or incidental writes. |
 | Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
 | Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | New-record modal with meaningful-input autosave plus persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, legacy filters/day ordering, list/calendar operation events, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | No open blocker in the current Records parity audit; replacement remains blocked by other modules. | Users can create, preview, edit, delete, template, filter, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, and compatible Todo conversion exist. | AI next-action generation and the legacy editable pre-create Todo draft remain incomplete. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
@@ -126,6 +126,17 @@ Status: verified locally
 - Support `#/materials?material=<id>` editor restoration and `#/materials?tag=<tag>` filtering, while invalid material queries are cleaned without writing data.
 - Route Material search results and Material tag chips to the Materials page; this is a bounded entry-point fix and does not claim full Search/Tags parity.
 - Verify exact persistence, tombstone output, read-only filters/random review, route restoration, Search/Tags entry points, and 1440px/390px layouts with Playwright and screenshots.
+
+### Dashboard Read-Only Command Slice
+
+Status: verified locally
+
+- Restore the Dashboard command center with unprocessed ideas, ideas needing conclusion, urgent/high/overdue Todos, random Materials, active goals, Tags, Materials, Goals, Fitness, Ideas, and Todos entry points.
+- Show legacy-style summary ratios for today's relevant Todos and due Habits, plus active-goal and current-week record counts.
+- Surface today/floating Todo lists as navigation-only rows; no Dashboard checkbox/toggle path mutates Todo data in this slice.
+- Surface active period records for weekly/monthly/yearly reviews/plans, `3年计划`, and `终身愿景`, routing to `#/records?record=<id>`.
+- Build a bounded recent timeline from records, Todo execution sessions, and checked-habit events while excluding Todo plan/due-only events for Dashboard.
+- Verify navigation restoration and exact `lifePlanData` / `todoAppData` immutability in Playwright, plus 1440px/390px screenshots with no horizontal overflow after long-title wrapping fixes.
 
 ### Sync Protected Main Upload Slice
 

@@ -74,8 +74,10 @@ changes. Keep a manually exported data file before testing complex data flows.
 
 The Vue branch has operational Dashboard, Todos, Records, Materials, Libraries,
 Search, Goals, basic Habits, Fitness, Wheel, AI and main Sync workflows. The
-Dashboard parity audit remains a blocker before any replacement decision. The
-following specialist controls still live in the proven static app and should be
-migrated only as separately tested follow-up releases: habit wallet/reward
-administration and protected remote flow, wheel Canvas/remote auto-sync, and
-non-diary AI writeback modes. They are not replaced by incompatible shortcuts.
+Dashboard now covers the read-only command center, active-period links, and
+bounded recent timeline, but replacement remains blocked until the remaining
+module audits and write-heavy specialist flows are closed. The following
+specialist controls still live in the proven static app and should be migrated
+only as separately tested follow-up releases: habit wallet/reward administration
+and protected remote flow, wheel Canvas/remote auto-sync, and non-diary AI
+writeback modes. They are not replaced by incompatible shortcuts.
