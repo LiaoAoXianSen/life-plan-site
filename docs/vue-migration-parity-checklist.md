@@ -25,7 +25,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Goals | CRUD/progress/status, detail modal entry points, search/Dashboard deep links, and tombstones. | Detail modal create/edit/delete, `goal=<id>` deep links, Dashboard goal-row restoration, legacy `createDate` and tombstones, and progress/status persistence exist. | No open blocker in the current Goals parity audit; replacement remains blocked by other modules. | Goal writes keep existing fields, avoid Vue-only timestamp churn, and delete with legacy `manual-delete` tombstones. |
 | Habits | Full rule editor, edit/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic rule create/edit/delete, quick check-in, note/backfill check-ins, note edit, undo-latest check-in, reward/penalty ledger reversals, habit/check-in tombstones, dirty-state updates, and `habitAppData` local mirror. | No open blocker in the current local Habit management/correction audit; archive, wallet/reward administration, wishes, diagnostics depth, independent protected remote workflows, and broader penalty settlement UX remain later Habit risks. | Habit local writes preserve legacy `habits`, `checkins`, `habitPointLedger`, tombstones, dirty state, and local-only mirror contracts while keeping `lifePlanData` authoritative. |
 | Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, multi-exercise plan create/edit, plan-start live workouts, explicit finish-time plan writeback, workout history create/edit/delete, manual-delete tombstones, and dirty-state coverage. | Rest timer UX, history suggestion controls, and full body-metric field editing remain incomplete. | Fitness writes are delegated to `fitness-service.js` and preserve old plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
-| Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, tag two-stage spin, history, todo conversion, JSON/CSV. | Canvas parity, batch public-item flows, independent sync/conflict handling. | Wheel collections and independent sync path remain compatible with old `wheel-tool.js` behavior. |
+| Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, canvas rendering, click/drag spin entry points, normal and tag two-stage spin, history, Todo conversion, JSON/CSV. | Batch public-item flows, independent sync/conflict handling, and final management-form polish. | Wheel writes preserve `wheels`, `wheelTags`, `wheelLibraryItems`, `wheelHistory`, Todo conversion links, dirty state, and old `wheel-tool.js` interaction expectations. |
 | Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo independent preview/apply/conditional upload flows. | Auto sync and Habit/Wheel independent flows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice plus Records diary analysis with remote/local generation, editable section/Todo drafts, overwrite confirmation, duplicate hints, and repository-backed writeback. | Idea next action, Todo breakdown, chat capture, and remaining legacy mode writebacks are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
 | Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists, import merge creates before/after snapshots, preserves tombstones, refreshes Todo/Habit mirrors, and marks main sync dirty. | No open blocker in the current Import/Export contract audit; replacement remains blocked by other modules. | Import/export round-trips complete data with snapshots, mirror rebuilds, dirty-state updates, and merge semantics intact. |
@@ -208,6 +208,22 @@ Remaining Fitness scope:
 
 - Rest timer and history-suggestion controls during live workouts.
 - Full body-metric field editing beyond the current weight/body-fat/waist subset.
+
+### Wheel Canvas Interaction Slice
+
+Status: verified locally
+
+- Replace the placeholder CSS disc with a real canvas-rendered wheel that redraws from the current option set and shows weighted segment labels.
+- Keep the wheel itself as an interaction target: click/keyboard starts a spin, and pointer drag rotates the wheel before committing a spin.
+- For tag wheels, render the first stage from enabled public tags, then lock the selected tag and render the second-stage public library options.
+- Preserve write contracts for `wheelHistory`, tag-mode `tagId` / `tagName`, Todo conversion source links, `todoAppData` mirror rebuilds, and `lifePlanSyncState.dirty`.
+- Verify canvas pixels, click, drag, tag two-stage result, history ordering, Todo conversion, dirty state, and 1440px/390px layouts with Playwright screenshots.
+
+Remaining Wheel scope:
+
+- Batch public-item management workflows.
+- Independent Wheel remote preview/apply/upload conflict handling.
+- Final management-form visual polish before replacement-candidate review.
 
 ### Sync Protected Main Upload Slice
 

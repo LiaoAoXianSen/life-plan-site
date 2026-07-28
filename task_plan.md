@@ -153,6 +153,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 135. Status: complete - Add focused Habit base management contract tests for update, delete, checkin tombstones, record cleanup, dirty state, and `habitAppData` mirror.
 136. Status: complete - Run build/check plus 1440px/390px responsive verification for the polished Habit management surface.
 137. Status: complete - Update parity evidence, package, commit, push the verified Habit base management stage, and append dual-store memory.
+138. Status: complete - Audit legacy Wheel canvas click/drag, tag first-stage, history, and current Vue visual/interaction gaps.
+139. Status: complete - Implement Vue Wheel canvas rendering, click/drag spin entry points, and tag first-stage label correction without touching remote sync.
+140. Status: complete - Add focused Wheel interaction contract tests for canvas click, drag, tag two-stage result, history, Todo conversion, and dirty state.
+141. Status: complete - Run build/check plus 1440px/390px responsive verification for the Wheel interaction surface.
+142. Status: complete - Update parity evidence, package, commit, push the verified Wheel interaction stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import { useWheelStore, type WheelItem, type WheelMode, type WheelTag } from '../stores/wheelStore';
@@ -13,17 +13,20 @@ const spinning = ref(false);
 const rotation = ref(0);
 const notice = ref('');
 let spinTimer: number | undefined;
+let dragState: { x: number; y: number; moved: boolean } | null = null;
+let suppressCanvasClick = false;
 
 const selectedWheel = computed(() => wheelStore.wheels.find(wheel => wheel.id === selectedId.value) || wheelStore.wheels[0]);
 const selectedOptions = computed(() => selectedWheel.value ? wheelStore.candidates(selectedWheel.value, stageTag.value?.id || '') : []);
 const availableTags = computed(() => selectedWheel.value?.mode === 'tag' ? wheelStore.candidateTags(selectedWheel.value) : []);
 const currentResult = computed(() => wheelStore.history.find(item => item.id === resultId.value));
 const isTagSecondStage = computed(() => Boolean(selectedWheel.value?.mode === 'tag' && stageTag.value));
-const wheelSegments = computed(() => selectedOptions.value.slice(0, 18).map((item, index, all) => {
-  const start = (index / all.length) * 360; const end = ((index + 1) / all.length) * 360;
-  return `${segmentColors[index % segmentColors.length]} ${start}deg ${end}deg`;
-}).join(', ') || '#edf2ee 0deg 360deg');
 const segmentColors = ['#bcdcc9', '#d7e5f5', '#f4d5b7', '#e3d6f4', '#d1e6db', '#f3dfad'];
+const canvasRef = ref<HTMLCanvasElement | null>(null);
+const displayEntries = computed(() => {
+  if (selectedWheel.value?.mode === 'tag' && !stageTag.value) return availableTags.value;
+  return selectedOptions.value;
+});
 
 const wheelForm = reactive<{ id: string; name: string; mode: WheelMode; tagIds: string[]; itemsText: string }>({ id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' });
 const optionForm = reactive({ id: '', name: '', weight: 1, enabled: true });
@@ -34,6 +37,8 @@ watch(() => wheelStore.wheels, wheels => {
   if (!wheels.some(wheel => wheel.id === selectedId.value)) selectedId.value = wheels[0]?.id || '';
 }, { immediate: true, deep: true });
 watch(selectedId, () => { stageTag.value = null; resultId.value = ''; notice.value = ''; });
+watch(displayEntries, () => { void nextTick(drawWheelCanvas); }, { immediate: true, deep: true });
+onMounted(drawWheelCanvas);
 watch([() => route.query.library, () => wheelStore.libraryItems.length], ([value]) => {
   const id = String(Array.isArray(value) ? value[0] || '' : value || '');
   if (!id || libraryForm.id === id) return;
@@ -53,6 +58,95 @@ watch([() => route.query.tag, () => wheelStore.tags.length], ([value]) => {
   }
 }, { immediate: true });
 onBeforeUnmount(() => { if (spinTimer) window.clearTimeout(spinTimer); });
+
+function entryColor(item: unknown, index: number) {
+  const value = String((item as { color?: unknown }).color || '');
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : segmentColors[index % segmentColors.length];
+}
+
+function drawWheelCanvas() {
+  const canvas = canvasRef.value;
+  if (!canvas) return;
+  const entries = displayEntries.value;
+  const ratio = window.devicePixelRatio || 1;
+  const cssSize = 390;
+  canvas.width = cssSize * ratio;
+  canvas.height = cssSize * ratio;
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const cx = cssSize / 2;
+  const cy = cssSize / 2;
+  const radius = cssSize / 2 - 12;
+  const innerRadius = Math.max(42, radius * (entries.length > 28 ? 0.24 : 0.29));
+  ctx.clearRect(0, 0, cssSize, cssSize);
+  ctx.beginPath();
+  ctx.fillStyle = '#e9eef1';
+  ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2);
+  ctx.fill();
+  if (!entries.length) {
+    ctx.beginPath();
+    ctx.fillStyle = '#edf2ee';
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    drawCenter(ctx, cx, cy, '空');
+    return;
+  }
+  const slice = (Math.PI * 2) / entries.length;
+  entries.forEach((entry, index) => {
+    const start = index * slice - Math.PI / 2;
+    const end = start + slice;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(start) * innerRadius, cy + Math.sin(start) * innerRadius);
+    ctx.arc(cx, cy, radius, start, end);
+    ctx.arc(cx, cy, innerRadius, end, start, true);
+    ctx.closePath();
+    ctx.fillStyle = entryColor(entry, index);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.9)';
+    ctx.lineWidth = entries.length > 32 ? 0.8 : 1.4;
+    ctx.stroke();
+    drawSliceLabel(ctx, String(entry.name || '未命名'), cx, cy, innerRadius, radius, start + slice / 2, entries.length, index);
+  });
+  drawCenter(ctx, cx, cy, selectedWheel.value?.mode === 'tag' && !stageTag.value ? '标签' : 'GO');
+}
+
+function drawCenter(ctx: CanvasRenderingContext2D, cx: number, cy: number, label: string) {
+  ctx.beginPath();
+  ctx.fillStyle = '#ffffff';
+  ctx.arc(cx, cy, 43, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(31,83,57,.16)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#285940';
+  ctx.font = '700 18px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, cx, cy);
+}
+
+function drawSliceLabel(ctx: CanvasRenderingContext2D, raw: string, cx: number, cy: number, innerRadius: number, radius: number, angle: number, count: number, index: number) {
+  const compact = raw.replace(/\s+/g, '').replace(/^[\d]+[.、．\s]*/, '');
+  const max = count > 32 ? 6 : count > 16 ? 7 : 9;
+  const label = count > 32 ? `${index + 1} ${compact.slice(0, max)}` : compact.slice(0, max);
+  const text = compact.length > max ? `${label}…` : label;
+  const labelRadius = innerRadius + (radius - innerRadius) * (count > 20 ? 0.62 : 0.58);
+  ctx.save();
+  ctx.translate(cx + Math.cos(angle) * labelRadius, cy + Math.sin(angle) * labelRadius);
+  ctx.rotate(angle + Math.PI / 2);
+  ctx.fillStyle = count > 20 ? '#314036' : '#ffffff';
+  ctx.strokeStyle = count > 20 ? 'rgba(255,255,255,.7)' : 'rgba(35,48,39,.42)';
+  ctx.lineWidth = 3;
+  ctx.font = `${count > 32 ? 10 : count > 16 ? 11 : 13}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeText(text, 0, 0, Math.max(48, radius - innerRadius - 16));
+  ctx.fillText(text, 0, 0, Math.max(48, radius - innerRadius - 16));
+  ctx.restore();
+}
 
 function say(message: string) { notice.value = message; }
 function handle(action: () => void, success = '') { try { action(); if (success) say(success); } catch (error) { say(error instanceof Error ? error.message : String(error)); } }
@@ -105,7 +199,38 @@ function nextSpin() {
 function directTag(tag: WheelTag) { stageTag.value = tag; resultId.value = ''; nextSpin(); }
 function animate(done: () => void) {
   spinning.value = true; rotation.value += 1440 + Math.floor(Math.random() * 720);
-  spinTimer = window.setTimeout(() => { spinning.value = false; done(); }, 560);
+  const configured = Number((window as unknown as { __wheelSpinDurationMs?: number }).__wheelSpinDurationMs);
+  const duration = Number.isFinite(configured) ? Math.max(1, configured) : 560;
+  spinTimer = window.setTimeout(() => { spinning.value = false; done(); void nextTick(drawWheelCanvas); }, duration);
+}
+function canvasClick() {
+  if (suppressCanvasClick) {
+    suppressCanvasClick = false;
+    return;
+  }
+  nextSpin();
+}
+function canvasPointerDown(event: PointerEvent) {
+  dragState = { x: event.clientX, y: event.clientY, moved: false };
+  (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+}
+function canvasPointerMove(event: PointerEvent) {
+  if (!dragState) return;
+  const dx = event.clientX - dragState.x;
+  const dy = event.clientY - dragState.y;
+  if (Math.hypot(dx, dy) < 8) return;
+  dragState.moved = true;
+  rotation.value += dx * 0.4 + dy * 0.2;
+}
+function canvasPointerUp(event: PointerEvent) {
+  const state = dragState;
+  dragState = null;
+  (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+  if (state?.moved) {
+    suppressCanvasClick = true;
+    nextSpin();
+    window.setTimeout(() => { suppressCanvasClick = false; }, 0);
+  }
 }
 function toggleTag(list: string[], id: string, checked: boolean) { const next = new Set(list); checked ? next.add(id) : next.delete(id); return [...next]; }
 function exportJson() { wheelStore.exportBackup(); say('已下载转盘 JSON 备份，并创建本地快照。'); }
@@ -143,11 +268,24 @@ function importJson(event: Event) {
           <button class="btn btn-danger" type="button" @click="removeWheel" :disabled="!selectedWheel">删除</button>
         </div>
         <div class="wheel-pointer">▼</div>
-        <div class="wheel-disc" :class="{ spinning }" :style="{ '--wheel-fill': `conic-gradient(${wheelSegments})`, transform: `rotate(${rotation}deg)` }">
-          <span v-for="(item, index) in selectedOptions.slice(0, 8)" :key="item.id" class="wheel-label" :style="{ transform: `rotate(${index * (360 / Math.max(1, Math.min(8, selectedOptions.length)))}deg) translateY(-86px) rotate(${-index * (360 / Math.max(1, Math.min(8, selectedOptions.length)))}deg)` }" :title="item.name">{{ item.name.slice(0, 7) }}</span>
-          <span class="wheel-center">{{ spinning ? '转动中' : isTagSecondStage ? '抽项目' : selectedWheel?.mode === 'tag' ? '抽标签' : 'GO' }}</span>
+        <div
+          class="wheel-canvas-wrap"
+          :class="{ spinning }"
+          role="button"
+          tabindex="0"
+          :aria-label="isTagSecondStage ? '抽取具体内容' : selectedWheel?.mode === 'tag' ? '开始抽标签' : '开始转动'"
+          @click="canvasClick"
+          @keydown.enter.prevent="nextSpin"
+          @keydown.space.prevent="nextSpin"
+          @pointerdown="canvasPointerDown"
+          @pointermove="canvasPointerMove"
+          @pointerup="canvasPointerUp"
+          @pointercancel="dragState = null"
+        >
+          <canvas ref="canvasRef" class="wheel-canvas" :style="{ transform: `rotate(${rotation}deg)` }" />
+          <span class="wheel-center-label">{{ spinning ? '转动中' : isTagSecondStage ? '抽项目' : selectedWheel?.mode === 'tag' ? '抽标签' : 'GO' }}</span>
         </div>
-        <div class="wheel-result" aria-live="polite"><template v-if="currentResult"><strong>{{ currentResult!.resultName }}</strong><span>{{ currentResult!.mode === 'tag' ? `标签：${currentResult!.tagName || '-'}` : '普通转盘结果' }}</span><button class="btn btn-primary" :disabled="Boolean(currentResult!.convertedTodoId)" @click="handle(() => wheelStore.convertHistoryToTodo(currentResult!.id), '已转入今日待办')">{{ currentResult!.convertedTodoId ? '已转入待办' : '转入待办' }}</button></template><template v-else-if="stageTag"><strong>已锁定：{{ stageTag.name }}</strong><span>再转一次，从该标签的公共项里抽取。</span></template><template v-else><strong>{{ selectedWheel ? '准备开始' : '先创建一个转盘' }}</strong><span>{{ selectedOptions.length }} 个候选</span></template></div>
+        <div class="wheel-result" aria-live="polite"><template v-if="currentResult"><strong>{{ currentResult!.resultName }}</strong><span>{{ currentResult!.mode === 'tag' ? `标签：${currentResult!.tagName || '-'}` : '普通转盘结果' }}</span><button class="btn btn-primary" :disabled="Boolean(currentResult!.convertedTodoId)" @click="handle(() => wheelStore.convertHistoryToTodo(currentResult!.id), '已转入今日待办')">{{ currentResult!.convertedTodoId ? '已转入待办' : '转入待办' }}</button></template><template v-else-if="stageTag"><strong>已锁定：{{ stageTag.name }}</strong><span>再转一次，从该标签的公共项里抽取。</span></template><template v-else><strong>{{ selectedWheel ? '准备开始' : '先创建一个转盘' }}</strong><span>{{ displayEntries.length }} 个{{ selectedWheel?.mode === 'tag' ? '候选标签' : '候选' }}</span></template></div>
         <button class="btn btn-primary wheel-spin" type="button" :disabled="spinning || !selectedWheel" @click="nextSpin">{{ isTagSecondStage ? '抽取具体内容' : selectedWheel?.mode === 'tag' ? '开始抽标签' : '开始转动' }}</button>
         <div v-if="selectedWheel?.mode === 'tag' && availableTags.length" class="direct-tags"><span>直接抽标签：</span><button v-for="tag in availableTags" :key="tag.id" type="button" class="tag-chip" :style="{ '--tag-color': tag.color }" @click="directTag(tag)">{{ tag.name }} · {{ wheelStore.candidates(selectedWheel, tag.id).length }}</button></div>
       </article>
@@ -167,5 +305,5 @@ function importJson(event: Event) {
 </template>
 
 <style scoped>
-.wheel-header,.wheel-toolbar,.wheel-actions,.inline-actions,.card-title-row,.entity-row,.history-row,.wheel-result,.wheel-management-grid,.inline-editor,.direct-tags{display:flex;align-items:center}.wheel-header,.wheel-toolbar,.card-title-row,.entity-row,.history-row{justify-content:space-between;gap:12px}.wheel-header{align-items:flex-start}.wheel-subtitle,.hint{margin:5px 0 0;color:var(--text-secondary,#66756c);font-size:.9rem}.wheel-actions,.inline-actions{flex-wrap:wrap}.import-button{cursor:pointer}.import-button input{display:none}.wheel-notice{margin:0 0 14px;padding:10px 13px;border-radius:9px;background:#edf6ef;color:#25613d}.wheel-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(290px,.8fr);gap:18px}.wheel-side-stack{display:grid;gap:18px}.wheel-stage-card{text-align:center}.wheel-selector{text-align:left;min-width:200px}.wheel-selector span{display:block;margin-bottom:4px}.wheel-pointer{position:relative;z-index:2;color:#e75d4d;font-size:28px;line-height:.5;margin-top:16px}.wheel-disc{width:min(390px,86vw);height:min(390px,86vw);margin:-1px auto 14px;border:10px solid #f7faf8;border-radius:50%;background:var(--wheel-fill);box-shadow:0 8px 28px rgba(25,61,42,.16),inset 0 0 0 2px rgba(31,83,57,.08);position:relative;transition:transform 560ms cubic-bezier(.16,.85,.22,1)}.wheel-center{position:absolute;inset:50% auto auto 50%;display:grid;place-items:center;width:82px;height:82px;border-radius:50%;background:#fff;color:#285940;font-weight:800;transform:translate(-50%,-50%);box-shadow:0 2px 9px rgba(0,0,0,.12)}.wheel-label{position:absolute;left:calc(50% - 30px);top:calc(50% - 12px);width:60px;color:#24332a;font-size:.72rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wheel-result{min-height:68px;justify-content:center;flex-direction:column;gap:3px}.wheel-result strong{font-size:1.15rem}.wheel-result span,.history-row span,.entity-row em{color:var(--text-secondary,#66756c);font-style:normal;font-size:.82rem}.wheel-spin{min-width:180px}.direct-tags{justify-content:center;flex-wrap:wrap;margin-top:15px;gap:7px;font-size:.85rem}.tag-chip{border:1px solid color-mix(in srgb,var(--tag-color) 35%,white);background:color-mix(in srgb,var(--tag-color) 12%,white);color:#32483a;border-radius:999px;padding:5px 9px;cursor:pointer}.compact-form label{display:block}.tag-checks{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}.tag-checks label{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;background:#f5f7f5;border-radius:7px;font-size:.84rem}.inline-editor{gap:8px;flex-wrap:wrap;margin:10px 0 14px}.inline-editor input:not([type=checkbox]){width:100px}.inline-editor input:first-child{flex:1;min-width:130px}.entity-row,.history-row{padding:9px 0;border-top:1px solid rgba(42,75,56,.1);text-align:left}.entity-row>span:first-child,.history-row>div{display:flex;align-items:center;gap:7px;min-width:0}.entity-row em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.color-dot{display:inline-block;width:10px;height:10px;border-radius:50%}.link-button{border:0;background:transparent;color:#316c4a;cursor:pointer;padding:3px}.danger-text{color:#b84f45}.wheel-management-grid{align-items:start;display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.library-card{grid-column:1/-1}.library-form{display:grid;grid-template-columns:minmax(160px,1fr) 90px auto;gap:8px;align-items:center;margin:10px 0}.library-form .tag-checks,.library-form .inline-actions{grid-column:1/-1}.empty-state{padding:12px 0}.history-card{max-height:430px;overflow:auto}@media (max-width:850px){.wheel-layout,.wheel-management-grid{grid-template-columns:1fr}.wheel-header{flex-direction:column}.library-card{grid-column:auto}.library-form{grid-template-columns:1fr 90px auto}.wheel-disc{width:min(350px,82vw);height:min(350px,82vw)}}@media (max-width:560px){.wheel-toolbar{align-items:stretch;flex-wrap:wrap}.wheel-selector{width:100%}.wheel-disc{width:280px;height:280px}.wheel-label{display:none}.library-form{grid-template-columns:1fr 80px}.library-form>label{grid-column:1/-1}.wheel-actions .btn{font-size:.82rem}}
+.wheel-header,.wheel-toolbar,.wheel-actions,.inline-actions,.card-title-row,.entity-row,.history-row,.wheel-result,.wheel-management-grid,.inline-editor,.direct-tags{display:flex;align-items:center}.wheel-header,.wheel-toolbar,.card-title-row,.entity-row,.history-row{justify-content:space-between;gap:12px}.wheel-header{align-items:flex-start}.wheel-subtitle,.hint{margin:5px 0 0;color:var(--text-secondary,#66756c);font-size:.9rem}.wheel-actions,.inline-actions{flex-wrap:wrap}.import-button{cursor:pointer}.import-button input{display:none}.wheel-notice{margin:0 0 14px;padding:10px 13px;border-radius:9px;background:#edf6ef;color:#25613d}.wheel-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(290px,.8fr);gap:18px}.wheel-side-stack{display:grid;gap:18px}.wheel-stage-card{text-align:center}.wheel-selector{text-align:left;min-width:200px}.wheel-selector span{display:block;margin-bottom:4px}.wheel-pointer{position:relative;z-index:2;color:#e75d4d;font-size:28px;line-height:.5;margin-top:16px}.wheel-canvas-wrap{position:relative;width:min(390px,86vw);aspect-ratio:1;margin:-1px auto 14px;border:10px solid #f7faf8;border-radius:50%;background:#eef4f0;box-shadow:0 8px 28px rgba(25,61,42,.16),inset 0 0 0 2px rgba(31,83,57,.08);cursor:pointer;touch-action:none;user-select:none;overflow:hidden}.wheel-canvas-wrap:focus-visible{outline:3px solid rgba(47,128,237,.32);outline-offset:4px}.wheel-canvas{display:block;width:100%;height:100%;border-radius:50%;transition:transform 560ms cubic-bezier(.16,.85,.22,1);will-change:transform}.wheel-canvas-wrap.spinning .wheel-canvas{transition-duration:560ms}.wheel-center-label{position:absolute;inset:50% auto auto 50%;display:grid;place-items:center;width:82px;height:82px;border-radius:50%;background:#fff;color:#285940;font-weight:800;transform:translate(-50%,-50%);box-shadow:0 2px 9px rgba(0,0,0,.12);pointer-events:none}.wheel-result{min-height:68px;justify-content:center;flex-direction:column;gap:3px}.wheel-result strong{font-size:1.15rem}.wheel-result span,.history-row span,.entity-row em{color:var(--text-secondary,#66756c);font-style:normal;font-size:.82rem}.wheel-spin{min-width:180px}.direct-tags{justify-content:center;flex-wrap:wrap;margin-top:15px;gap:7px;font-size:.85rem}.tag-chip{border:1px solid color-mix(in srgb,var(--tag-color) 35%,white);background:color-mix(in srgb,var(--tag-color) 12%,white);color:#32483a;border-radius:999px;padding:5px 9px;cursor:pointer}.compact-form label{display:block}.tag-checks{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}.tag-checks label{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;background:#f5f7f5;border-radius:7px;font-size:.84rem}.inline-editor{gap:8px;flex-wrap:wrap;margin:10px 0 14px}.inline-editor input:not([type=checkbox]){width:100px}.inline-editor input:first-child{flex:1;min-width:130px}.entity-row,.history-row{padding:9px 0;border-top:1px solid rgba(42,75,56,.1);text-align:left}.entity-row>span:first-child,.history-row>div{display:flex;align-items:center;gap:7px;min-width:0}.entity-row em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.color-dot{display:inline-block;width:10px;height:10px;border-radius:50%}.link-button{border:0;background:transparent;color:#316c4a;cursor:pointer;padding:3px}.danger-text{color:#b84f45}.wheel-management-grid{align-items:start;display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.library-card{grid-column:1/-1}.library-form{display:grid;grid-template-columns:minmax(160px,1fr) 90px auto;gap:8px;align-items:center;margin:10px 0}.library-form .tag-checks,.library-form .inline-actions{grid-column:1/-1}.empty-state{padding:12px 0}.history-card{max-height:430px;overflow:auto}@media (max-width:850px){.wheel-layout,.wheel-management-grid{grid-template-columns:1fr}.wheel-header{flex-direction:column}.library-card{grid-column:auto}.library-form{grid-template-columns:1fr 90px auto}.wheel-canvas-wrap{width:min(350px,82vw)}}@media (max-width:560px){.wheel-toolbar{align-items:stretch;flex-wrap:wrap}.wheel-selector{width:100%}.wheel-canvas-wrap{width:280px}.library-form{grid-template-columns:1fr 80px}.library-form>label{grid-column:1/-1}.wheel-actions .btn{font-size:.82rem}}
 </style>

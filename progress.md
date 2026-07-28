@@ -372,3 +372,14 @@
 - Desktop 1440x1000 and mobile 390x920 Habit management screenshot checks passed for the edit form, all-habits table, and correction panel. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\019fa748-12b4-7f41-9a97-394d8bc2a01c`.
 - `git diff --check` passed with only LF/CRLF warnings. Created clean runtime package `life-plan-site-runtime-20260728-153553.zip`; package retention removed `life-plan-site-runtime-20260728-120106.zip`.
 - Protected refs remained unchanged before the Habit base management commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-28 - Wheel canvas interaction stage
+
+- Started phases 138-142 after the Habit base commit `695e336`; a read-only Wheel sidecar failed through the local proxy before returning findings, so the main thread completed the bounded legacy/Vue audit.
+- Audited Wheel canvas and tag-mode behavior: legacy click/drag spins a drawn wheel, tag mode first selects an enabled public tag, then selects an enabled public library item under that tag.
+- Implemented Vue Wheel canvas rendering in `src/pages/WheelPage.vue`, including weighted segments, canvas labels, pointer drag rotation, keyboard/click spin entry points, and tag first-stage candidate-label/result wording.
+- Added focused Playwright coverage proving canvas pixels, normal-wheel click history, drag spin history, tag first-stage lock, second-stage result, Todo conversion, `todoAppData` mirror rebuild, and main dirty state.
+- Focused `npx playwright test tests/vue-smoke.spec.js -g "wheel canvas"` passed 1/1. Full `.\scripts\check.ps1` passed syntax checks and all 34 Vue Playwright tests.
+- Desktop 1440x1000 and mobile 390x900 Wheel normal/tag screenshot checks passed with painted canvas pixels and no `#page-wheel` or document-level overflow. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\019fa748-12b4-7f41-9a97-394d8bc2a01c\wheel-canvas-stage`.
+- Final `npm run build` passed with assets `dist/assets/index-c-C3NQZh.css` and `dist/assets/index-1RBUs_-N.js`. `git diff --check` passed with only LF/CRLF warnings. Created clean runtime package `life-plan-site-runtime-20260728-163445.zip`; package retention removed `life-plan-site-runtime-20260728-123540.zip`.
+- Protected refs remained unchanged before the Wheel canvas commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

@@ -189,6 +189,14 @@
 - Legacy Habit tag changes retag `records[].type` for `isHabitRecord` rows, while the Vue repository already normalizes stored records by pruning `isHabitRecord` shadow rows and derives habit schedule/list events from `checkins`; Habit base parity should therefore prove stale shadow cleanup, not reintroduce persistent shadow records.
 - Legacy Habit deletion writes `deletedItems(collection=habits, reason=manual-delete, name)` plus one `deletedItems(collection=checkins, reason=habit-delete, habitId)` for each related checkin, then removes the habit, checkins, and habit shadow records. The `habitAppData` mirror canonicalizes those checkin tombstones as `habitRecords` with path-prefixed IDs.
 
+## 2026-07-28 Wheel canvas interaction audit
+
+- Legacy `wheel-tool.js` treats the wheel surface as a canvas-backed interaction area, not only a button list: it redraws segment labels, accepts click/drag spin entry points, and records the selected option into history.
+- Tag wheels are a two-stage interaction contract. The first spin chooses from enabled public tags; the second spin chooses enabled public library items attached to the locked tag.
+- Vue previously had the data-level spin/history/Todo conversion flow, but the visible wheel was a CSS placeholder and tag first-stage result text reused option wording instead of making the candidate-tag stage obvious.
+- The bounded Vue fix keeps `lifePlanData` authoritative and only changes local interaction/rendering: no Wheel remote upload or independent sync authority is introduced in this slice.
+- Replacement risks left after this slice are batch public-library workflows, independent Wheel remote preview/apply/upload conflict handling, and management-form polish rather than basic canvas interaction.
+
 ## 2026-07-27 Diary AI parity
 
 - Legacy diary analysis sends `mode: diaryReview` with a compact `selectedDiary` containing persisted metadata, full Markdown content, `templateId`, and parsed built-in diary fields.

@@ -430,6 +430,99 @@ test('search and tag center restore legacy read-only index navigation', async ({
     expect(persisted.mirror).toBeNull();
 });
 
+test('wheel canvas click drag and tag stage preserve interaction contracts', async ({ page }) => {
+    const source = emptyData({
+        wheels: [
+            {
+                id: 'wheel-normal',
+                name: '专注普通盘',
+                mode: 'normal',
+                items: [
+                    { id: 'normal-read', name: '深度阅读', note: '读 25 分钟', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+                    { id: 'normal-walk', name: '散步复盘', note: '', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+                ],
+                createdAt: '2026-07-28T08:00:00',
+                updatedAt: '2026-07-28T08:00:00',
+            },
+            {
+                id: 'wheel-tag',
+                name: '两段标签盘',
+                mode: 'tag',
+                tagIds: ['tag-dinner', 'tag-move'],
+                items: [],
+                createdAt: '2026-07-28T08:00:00',
+                updatedAt: '2026-07-28T08:00:00',
+            },
+        ],
+        wheelTags: [
+            { id: 'tag-dinner', name: '晚餐', color: '#ff6b6b', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+            { id: 'tag-move', name: '活动', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+        ],
+        wheelLibraryItems: [
+            { id: 'library-noodle', name: '番茄牛肉面', note: '家里做', tagIds: ['tag-dinner'], weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+            { id: 'library-stretch', name: '拉伸十分钟', note: '', tagIds: ['tag-move'], weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'wheel-before' }));
+        Math.random = () => 0;
+        window.__wheelSpinDurationMs = 1;
+    }, source);
+
+    await page.goto('/#/wheel');
+    const canvasWrap = page.locator('.wheel-canvas-wrap');
+    await expect(canvasWrap).toBeVisible();
+    await expect.poll(() => page.locator('.wheel-canvas').evaluate(canvas => {
+        const context = canvas.getContext('2d');
+        if (!context) return 0;
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        let painted = 0;
+        for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 0) painted += 1;
+        return painted;
+    })).toBeGreaterThan(1000);
+
+    await canvasWrap.click();
+    await expect(page.locator('.wheel-result')).toContainText('深度阅读');
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.wheelHistory).toHaveLength(1);
+    expect(stored.data.wheelHistory[0]).toMatchObject({ wheelId: 'wheel-normal', resultId: 'normal-read', resultName: '深度阅读' });
+    expect(stored.syncState.dirty).toBe(true);
+
+    const box = await canvasWrap.boundingBox();
+    expect(box).toBeTruthy();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 24, box.y + box.height / 2 + 32, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).wheelHistory.length)).toBe(2);
+
+    await page.locator('.wheel-selector select').selectOption('wheel-tag');
+    await expect(page.locator('.wheel-result')).toContainText('2 个候选标签');
+    await canvasWrap.click();
+    await expect(page.locator('.wheel-result')).toContainText('已锁定：晚餐');
+    await canvasWrap.click();
+    await expect(page.locator('.wheel-result')).toContainText('番茄牛肉面');
+    await page.locator('.wheel-result').getByRole('button', { name: '转入待办' }).click();
+    await expect(page.locator('.wheel-result').getByRole('button', { name: '已转入待办' })).toBeDisabled();
+
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        todoMirror: JSON.parse(localStorage.getItem('todoAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.wheelHistory).toHaveLength(3);
+    expect(stored.data.wheelHistory[0]).toMatchObject({ wheelId: 'wheel-tag', mode: 'tag', tagName: '晚餐', resultName: '番茄牛肉面', convertedTodoId: expect.any(String) });
+    const linkedTodo = stored.data.todos.find(todo => todo.id === stored.data.wheelHistory[0].convertedTodoId);
+    expect(linkedTodo).toMatchObject({ text: '番茄牛肉面', sourceType: 'wheel', sourceRecordId: stored.data.wheelHistory[0].id, group: '转盘' });
+    expect(stored.todoMirror.authority).toBe('lifePlanData.todos');
+    expect(stored.todoMirror.todos).toEqual(expect.arrayContaining([expect.objectContaining({ id: linkedTodo.id, text: '番茄牛肉面' })]));
+    expect(stored.syncState.dirty).toBe(true);
+});
+
 test('main import export keeps snapshots tombstones mirrors and dirty state compatible', async ({ page }) => {
     const local = emptyData({
         records: [
