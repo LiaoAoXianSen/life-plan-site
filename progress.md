@@ -415,3 +415,15 @@
 - Added focused Playwright coverage for Wheel existing upload, upload-race refusal before PUT, and first creation; tests verify request sequences, conditional headers, uploaded snapshot contents, fixed config reset, and verified sync state.
 - Verified `npm run build`, focused Wheel protected upload/create tests 3/3, full `npm run test` 40/40, and `git diff --check` with only LF/CRLF warnings.
 - Verified ready and missing Wheel sync states at 1440x900 and 390x900: document, `.vue-main`, `.page.active`, and `.wheel-sync-card` all had zero horizontal overflow. Screenshots are under `test-results/wheel-sync-upload-ready-1440.png`, `test-results/wheel-sync-upload-ready-390.png`, `test-results/wheel-sync-upload-missing-1440.png`, and `test-results/wheel-sync-upload-missing-390.png`.
+
+## 2026-07-29 - Wheel management polish stage
+
+- Started phases 158-162 after commit `a419d0d`; the working tree was clean on `migration/vue-app-v1`, and protected `master`, `experiment/vue-preview-poc`, and `stash@{0}` were read-only checked before implementation.
+- Polished `src/pages/WheelPage.vue` management surfaces with a non-persisted summary for wheel/tag/library/history counts and labeled option, tag, and public-library item forms.
+- Kept the slice contract-neutral: edit buttons fill form state only, and the focused Playwright contract verifies that `lifePlanData` remains byte-for-byte unchanged and `todoAppData` is not created.
+- Strengthened responsive wrapping for long wheel option, tag, and public-library item names plus mobile management form/action layouts.
+- Added focused Playwright coverage for the management summary and edit-form focus behavior; the focused test passed 1/1 and the full Vue smoke suite passed 41/41 during implementation.
+- Verified desktop 1440x1000 and mobile 390x1000 Wheel management layouts with no horizontal overflow for document, `.vue-main`, `#page-wheel`, `.wheel-management-summary`, `.wheel-management-grid`, or `.library-card`. Screenshots are under `test-results/wheel-management-polish-1440.png` and `test-results/wheel-management-polish-390.png`.
+- Final `npm run build`, focused `npx playwright test tests/vue-smoke.spec.js -g "wheel management forms"`, full `.\scripts\check.ps1` with 41/41 Vue smoke tests, and `git diff --check` passed with only LF/CRLF working-copy warnings.
+- Created clean runtime package `life-plan-site-runtime-20260729-102209.zip`; package retention removed `life-plan-site-runtime-20260728-153553.zip`.
+- Protected refs remained unchanged before the Wheel management polish commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

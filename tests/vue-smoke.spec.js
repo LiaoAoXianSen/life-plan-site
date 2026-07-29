@@ -593,6 +593,51 @@ test('wheel public library batch actions preserve selection and tombstone contra
     await expect(page.locator('.wheel-notice')).toContainText('没有可移除的标签；公共项至少要保留一个标签');
 });
 
+test('wheel management forms focus editable rows without mutating data', async ({ page }) => {
+    const source = emptyData({
+        wheels: [{
+            id: 'wheel-management-polish',
+            name: '管理表单验证转盘',
+            mode: 'normal',
+            items: [{ id: 'option-management-polish', name: '需要编辑的长选项名称', note: '', weight: 2, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+            createdAt: '2026-07-29T08:00:00',
+            updatedAt: '2026-07-29T08:00:00',
+        }],
+        wheelTags: [
+            { id: 'tag-management-polish', name: '管理标签', color: '#216e4e', weight: 3, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+        ],
+        wheelLibraryItems: [
+            { id: 'library-management-polish', name: '管理公共项长名称', note: '', tagIds: ['tag-management-polish'], weight: 4, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+        ],
+        wheelHistory: [
+            { id: 'history-management-polish', wheelId: 'wheel-management-polish', wheelName: '管理表单验证转盘', mode: 'normal', resultId: 'option-management-polish', resultName: '需要编辑的长选项名称', note: '', convertedTodoId: '', createdAt: '2026-07-29T09:00:00', updatedAt: '2026-07-29T09:00:00' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/wheel');
+    const summary = page.locator('.wheel-management-summary');
+    await expect(summary).toContainText('1转盘');
+    await expect(summary).toContainText('1标签');
+    await expect(summary).toContainText('1公共项');
+    await expect(summary).toContainText('1历史');
+
+    await page.locator('.entity-row').filter({ hasText: '需要编辑的长选项名称' }).getByRole('button', { name: '编辑' }).click();
+    await expect(page.getByLabel('选项名称')).toHaveValue('需要编辑的长选项名称');
+    await page.locator('.management-card').filter({ hasText: '标签管理' }).locator('.entity-row').filter({ hasText: '管理标签' }).getByRole('button', { name: '编辑' }).click();
+    await expect(page.getByLabel('标签名称')).toHaveValue('管理标签');
+    await page.locator('.library-row').filter({ hasText: '管理公共项长名称' }).getByRole('button', { name: '编辑' }).click();
+    await expect(page.getByLabel('公共项名称')).toHaveValue('管理公共项长名称');
+
+    const persisted = await page.evaluate(() => ({
+        data: localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('todoAppData'),
+    }));
+    expect(persisted.data).toBe(original);
+    expect(persisted.mirror).toBeNull();
+});
+
 test('main import export keeps snapshots tombstones mirrors and dirty state compatible', async ({ page }) => {
     const local = emptyData({
         records: [

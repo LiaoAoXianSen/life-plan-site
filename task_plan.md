@@ -173,6 +173,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 155. Status: complete - Add focused Wheel protected upload/create contract tests for If-Match, If-None-Match, race refusal, readback hash, and restored upload-authority reset.
 156. Status: complete - Run build/check plus 1440px/390px responsive verification for the expanded Wheel sync surface.
 157. Status: complete - Update parity evidence, package, commit, push the verified Wheel protected upload/create stage, and append dual-store memory.
+158. Status: complete - Audit Wheel management-form polish gaps and choose a bounded no-contract-change UI slice.
+159. Status: complete - Polish Vue Wheel management forms with stable summary, labeled controls, responsive grids, and no premature writes.
+160. Status: complete - Add focused Wheel management-form UI contract coverage for edit focus and read-only form filling.
+161. Status: complete - Run build/check plus 1440px/390px responsive verification for the polished Wheel management surface.
+162. Status: complete - Update parity evidence, package, commit, push the verified Wheel management polish stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
