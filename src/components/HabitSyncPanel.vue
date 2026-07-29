@@ -6,7 +6,7 @@ import { lifePlanRepository } from '../services/lifePlanRepository';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { LifePlanData } from '../types/lifePlan';
 
-type SyncConfig = Record<string, unknown> & { webdavUrl?: string };
+type SyncConfig = Record<string, unknown> & { webdavUrl?: string; useAppSyncKitProvider?: boolean };
 type RemotePayload = { data: unknown; hash: string; etag?: string };
 type HabitSnapshot = Record<string, unknown> & {
   habits: unknown[];
@@ -38,6 +38,7 @@ type HabitSyncState = Record<string, unknown> & {
   lastRemoteHash?: string;
   lastRemoteEtag?: string;
   lastPullAt?: string;
+  lastPushAt?: string;
   lastSyncAt?: string;
   lastConflictAt?: string;
 };
@@ -67,6 +68,7 @@ persistConfig();
 const endpointReady = computed(() => !!String(props.syncConfig.webdavUrl || '').trim());
 const hasDangerRisk = computed(() => preview.risks.some(item => item.severity === 'danger'));
 const canApply = computed(() => preview.status === 'ready' && !preview.hashesMatch && !!preview.merged && !hasDangerRisk.value && !busy.value);
+const canUploadExisting = computed(() => preview.status === 'ready' && !preview.hashesMatch && !!preview.remote && !hasDangerRisk.value && !busy.value);
 
 function readJson(key: string): Record<string, unknown> {
   try {
@@ -388,6 +390,10 @@ function prepareLocal() {
   return model(previewModel.snapshot);
 }
 
+function legacySourceHash() {
+  return sync.getDataHash(habit.getHabitLegacySourceSlice(store.data));
+}
+
 async function pullRemote(): Promise<RemotePayload | null> {
   return await sync.pullJson(
     { ...props.syncConfig, remotePath },
@@ -409,6 +415,37 @@ function setReadyPreview(local: SnapshotModel, remotePayload: RemotePayload) {
     risks: schemaRisks(remotePayload.data),
   });
   return remote;
+}
+
+function verifyLocalUnchanged(localHash: string) {
+  return prepareLocal().hash === localHash;
+}
+
+async function verifyUpload(local: SnapshotModel) {
+  const verification = await pullRemote();
+  if (!verification || verification.hash !== local.hash) throw new Error('上传后回读的 Habit hash 不一致。');
+  return verification;
+}
+
+function finishUpload(local: SnapshotModel, verification: RemotePayload, fallbackEtag = '') {
+  const stamp = new Date().toISOString();
+  updateSyncState({
+    dirty: false,
+    lastLocalHash: legacySourceHash(),
+    lastRemoteHash: local.hash,
+    lastRemoteEtag: verification.etag || fallbackEtag,
+    lastPullAt: stamp,
+    lastPushAt: stamp,
+    lastSyncAt: stamp,
+  });
+  Object.assign(preview, {
+    status: 'ready',
+    local,
+    remote: { ...local, etag: verification.etag || fallbackEtag },
+    merged: local,
+    hashesMatch: true,
+    risks: [],
+  });
 }
 
 async function previewRemote() {
@@ -501,6 +538,60 @@ async function applyRemoteMerge() {
     persistConfig();
   }
 }
+
+async function uploadExisting() {
+  if (!canUploadExisting.value || !preview.remote || busy.value) return;
+  if (props.syncConfig.useAppSyncKitProvider) {
+    setMessage('当前 provider 不支持 If-Match 条件写入。', 'danger');
+    return;
+  }
+  busy.value = true;
+  let putAttempted = false;
+  setMessage('正在复查本机 Habit 快照与云端基线...');
+  try {
+    const expectedRemoteHash = preview.remote.hash;
+    const local = prepareLocal();
+    const remotePayload = await pullRemote();
+    if (!remotePayload) {
+      Object.assign(preview, { status: 'missing', local, remote: null, merged: null, hashesMatch: false, risks: [] });
+      throw new Error('云端文件已不存在，请重新检查；本切片不做首次创建。');
+    }
+    const remote = setReadyPreview(local, remotePayload);
+    if (hasDangerRisk.value) throw new Error('云端 schema 风险阻止上传。');
+    if (local.hash === remote.hash) {
+      finishUpload(local, remotePayload, remote.etag || '');
+      setMessage('本机与 Habit 云端已一致，未发送 PUT。', 'success');
+      return;
+    }
+    if (remote.hash !== expectedRemoteHash) {
+      updateSyncState({ lastConflictAt: new Date().toISOString(), lastRemoteHash: remote.hash, lastRemoteEtag: remote.etag || '' });
+      throw new Error('云端自上次检查后已变化，已停止上传并刷新预览。');
+    }
+    if (!remote.etag) throw new Error('云端响应没有 ETag，无法安全上传。');
+    if (!window.confirm(`使用 If-Match ${remote.etag} 将本机 Habit 快照写入云端。确认继续吗？`)) {
+      setMessage('已取消上传；云端未改变。');
+      return;
+    }
+    if (!verifyLocalUnchanged(local.hash)) throw new Error('确认期间本机 Habit 数据已变化，请重新检查。');
+    putAttempted = true;
+    const result = await sync.pushJson(
+      { ...props.syncConfig, remotePath }, remotePath, local.snapshot, 'habit-app', { ifMatch: remote.etag },
+    ) as { etag?: string };
+    const verification = await verifyUpload(local);
+    finishUpload(local, verification, result.etag || remote.etag);
+    setMessage('Habit 云端已条件写入并回读核验一致。', 'success');
+  } catch (error) {
+    const status = typeof error === 'object' && error !== null ? (error as { status?: number }).status : undefined;
+    setMessage(status === 412
+      ? 'If-Match 被拒绝：云端版本已变化，未发生覆盖。'
+      : putAttempted
+        ? `PUT 已发出但无法确认结果：${error instanceof Error ? error.message : String(error)}。不会自动重试。`
+        : error instanceof Error ? error.message : String(error), 'danger');
+  } finally {
+    busy.value = false;
+    persistConfig();
+  }
+}
 </script>
 
 <template>
@@ -513,6 +604,7 @@ async function applyRemoteMerge() {
     <div class="page-actions habit-sync-actions">
       <button class="btn btn-secondary" type="button" :disabled="busy || !endpointReady" @click="previewRemote">检查 Habit 云端</button>
       <button v-if="preview.status === 'ready'" class="btn btn-secondary" type="button" :disabled="!canApply" @click="applyRemoteMerge">应用合并到本机</button>
+      <button v-if="preview.status === 'ready'" class="btn btn-primary" type="button" :disabled="!canUploadExisting" @click="uploadExisting">受保护上传</button>
     </div>
 
     <div v-if="preview.local" class="habit-sync-comparison">

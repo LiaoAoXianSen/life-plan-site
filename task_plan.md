@@ -198,6 +198,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 180. Status: complete - Add focused Habit remote apply tests for two-GET zero-PUT success, legacy field/tombstone mapping, local mirror rebuild, dirty state, and cloud-change refusal.
 181. Status: complete - Run production build and focused Habit remote preview/apply checks before full verification.
 182. Status: complete - Update evidence, run full checks/package, verify protected refs, commit, push, and append dual-store memory for the Habit remote apply stage.
+183. Status: complete - Audit Habit protected existing-upload parity and choose a bounded if-match plus readback slice.
+184. Status: complete - Implement Vue Habit existing-file protected upload with baseline recheck, confirmation, If-Match write, and readback verification.
+185. Status: complete - Add focused Habit protected-upload Playwright coverage for success and cloud-race refusal without automatic retry.
+186. Status: complete - Run production build and focused Habit remote checks before final verification.
+187. Status: complete - Update docs/progress, run full checks/package, verify protected refs, commit, push, and append dual-store memory for the Habit protected upload stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -215,6 +220,7 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 - Wheel JSON restore remains an explicit overwrite action for now, but it must confirm the overwrite, create a restore-before snapshot, and leave current data untouched when canceled or when saving fails.
 - Habit remote preview remains strictly read-only: it may GET `/apps/habit-app/data.json`, but must not mutate legacy habit fields, `localStorage.habitAppData`, `habitAppSyncState`, or remote data; `autoSync` and `remoteUploadEnabled` remain `false`.
 - Habit remote apply is local-only: it must second-GET and refuse cloud races before snapshots or persistence, convert the merged canonical Habit app snapshot back into legacy `lifePlanData` Habit collections/tombstones, rebuild the local-only mirror, update sync metadata, and never PUT or create remote files.
+- Habit protected upload is for existing remote files only: it must second-GET, require ETag/confirmation, use `If-Match`, verify the readback hash, and never auto-retry after an uncertain PUT.
 - The protected first-upload phase supersedes the permanent-false part only during an explicitly armed browser session: `remoteUploadEnabled` starts false, is never restored from storage, and automatically returns false after any upload attempt. No automatic upload or authority switch is introduced.
 - Habit bootstrap must reuse the already configured unified sync endpoint. The user should not have to enter or migrate a second habit-specific URL; only `/apps/habit-app/data.json` remains habit-specific.
 - Vue Todo independent sync must reuse `lifePlanSyncConfig.webdavUrl`, keep `/apps/todo-app/data.json` fixed, persist `todoAppSyncConfig` / `todoAppSyncState`, and force `autoSync` plus restored upload authorization off.

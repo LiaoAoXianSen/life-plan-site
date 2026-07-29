@@ -2376,6 +2376,157 @@ test('habit remote apply stops before persistence when cloud changed after previ
     expect(result.syncState.lastRemoteEtag).toBe('"habit-race-v2"');
 });
 
+test('habit existing remote upload uses If-Match and verifies the written snapshot', async ({ page }) => {
+    const local = emptyData({
+        habits: [{
+            id: 'habit-existing-local',
+            name: '本机新版习惯',
+            tag: '健康',
+            rule: 'daily',
+            timesPerDay: 1,
+            rewardPoints: 3,
+            rewardCurrency: '金币',
+            startDate: '2026-07-29',
+            createdAt: '2026-07-29T08:00:00',
+            updatedAt: '2026-07-29T10:00:00',
+        }],
+        checkins: [{
+            id: 'checkin-existing-local',
+            habitId: 'habit-existing-local',
+            date: '2026-07-29',
+            time: '10:00',
+            checkinAt: '2026-07-29T10:00:00',
+            note: '本机新版打卡',
+            createdAt: '2026-07-29T10:00:00',
+            updatedAt: '2026-07-29T10:00:00',
+        }],
+        habitPointLedger: [{
+            id: 'ledger-existing-local',
+            habitId: 'habit-existing-local',
+            sourceId: 'checkin-existing-local',
+            type: 'checkin',
+            amount: 3,
+            currency: '金币',
+            date: '2026-07-29',
+            createdAt: '2026-07-29T10:00:00',
+            updatedAt: '2026-07-29T10:00:00',
+        }],
+        habitCurrencies: [{ id: 'currency-coin', name: '金币' }],
+    });
+    const remote = habitRemoteSnapshot({
+        habits: [{ id: 'life-plan/habits/habit-existing-remote', title: '云端旧版习惯', updatedAt: '2026-07-29T08:00:00' }],
+        habitCurrencies: [{ id: 'default', name: '金币' }],
+    });
+    await page.addInitScript(({ localData, remoteData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-habit.json', autoSync: true, remoteUploadEnabled: true }));
+        window.__habitSyncRequests = [];
+        window.__habitUploaded = null;
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__habitSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'PUT') {
+                window.__habitUploaded = JSON.parse(options.body);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"habit-existing-v2"' } });
+            }
+            if (method === 'GET') {
+                const fileGets = window.__habitSyncRequests.filter(item => item.method === 'GET').length;
+                const body = fileGets >= 3 && window.__habitUploaded ? window.__habitUploaded : remoteData;
+                return new Response(JSON.stringify(body), { status: 200, headers: { ETag: fileGets >= 3 ? '"habit-existing-v2"' : '"habit-existing-v1"', 'Content-Type': 'application/json' } });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, remoteData: remote });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.habit-sync-card');
+    await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('只读预检完成');
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '受保护上传' }).click();
+    await expect(panel.getByRole('status')).toContainText('回读核验一致');
+
+    const result = await page.evaluate(() => ({
+        requests: window.__habitSyncRequests,
+        uploaded: window.__habitUploaded,
+        state: JSON.parse(localStorage.getItem('habitAppSyncState')),
+        config: JSON.parse(localStorage.getItem('habitAppSyncConfig')),
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/habit-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET', 'PUT', 'GET']);
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(put.headers['If-Match'] || put.headers['if-match']).toBe('"habit-existing-v1"');
+    expect(result.uploaded.habits.some(item => item.title === '本机新版习惯' || item.name === '本机新版习惯')).toBe(true);
+    expect(result.uploaded.habitRecords).toEqual(expect.arrayContaining([
+        expect.objectContaining({ note: '本机新版打卡' }),
+    ]));
+    expect(result.data.habits[0].name).toBe('本机新版习惯');
+    expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"habit-existing-v2"' });
+    expect(result.config).toMatchObject({ remotePath: '/apps/habit-app/data.json', autoSync: false, remoteUploadEnabled: false });
+});
+
+test('habit existing upload stops before PUT when the remote changed after preview', async ({ page }) => {
+    const local = emptyData({
+        habits: [{
+            id: 'habit-upload-race-local',
+            name: '上传竞态本机习惯',
+            rule: 'daily',
+            timesPerDay: 1,
+            rewardPoints: 1,
+            rewardCurrency: '金币',
+            createdAt: '2026-07-29T08:00:00',
+            updatedAt: '2026-07-29T10:00:00',
+        }],
+    });
+    const remoteBefore = habitRemoteSnapshot({
+        habits: [{ id: 'life-plan/habits/habit-upload-race-before', title: '预览云端习惯', updatedAt: '2026-07-29T08:00:00' }],
+        habitCurrencies: [{ id: 'default', name: '金币' }],
+    });
+    const remoteAfter = habitRemoteSnapshot({
+        habits: [
+            { id: 'life-plan/habits/habit-upload-race-before', title: '预览云端习惯', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'life-plan/habits/habit-upload-race-after', title: '另一设备新增习惯', updatedAt: '2026-07-29T10:30:00' },
+        ],
+        habitCurrencies: [{ id: 'default', name: '金币' }],
+    });
+    await page.addInitScript(({ localData, firstRemote, secondRemote }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        window.__habitSyncRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__habitSyncRequests.push({ url: String(url), method, headers: options.headers || {} });
+            if (method === 'GET') {
+                const count = window.__habitSyncRequests.filter(item => item.method === 'GET').length;
+                return new Response(JSON.stringify(count === 1 ? firstRemote : secondRemote), {
+                    status: 200,
+                    headers: { ETag: count === 1 ? '"habit-upload-race-v1"' : '"habit-upload-race-v2"', 'Content-Type': 'application/json' },
+                });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, firstRemote: remoteBefore, secondRemote: remoteAfter });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.habit-sync-card');
+    await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('只读预检完成');
+    await panel.getByRole('button', { name: '受保护上传' }).click();
+    await expect(panel.getByRole('status')).toContainText('云端自上次检查后已变化');
+
+    const result = await page.evaluate(() => ({
+        methods: window.__habitSyncRequests.map(item => item.method),
+        state: JSON.parse(localStorage.getItem('habitAppSyncState')),
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+    }));
+    expect(result.methods).toEqual(['GET', 'GET']);
+    expect(result.data.habits[0].name).toBe('上传竞态本机习惯');
+    expect(result.state.lastConflictAt).toBeTruthy();
+    expect(result.state.lastRemoteEtag).toBe('"habit-upload-race-v2"');
+});
+
 test('wheel remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {
     const local = emptyData({
         wheels: [{

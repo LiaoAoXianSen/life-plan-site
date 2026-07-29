@@ -83,7 +83,7 @@ entry points across migrated modules; Import/Export now covers snapshots,
 tombstone-aware merge, dirty-state updates, and Todo/Habit mirror rebuilds;
 Habits now covers local note check-ins, backfills, note edits, undo-latest
 check-in, reward/penalty ledger reversals, tombstones, dirty-state updates,
-local-only mirror rebuilding, and independent remote preview/apply without cloud upload; Fitness now covers full-field body metric
+local-only mirror rebuilding, and independent remote preview/apply plus existing-file protected upload; Fitness now covers full-field body metric
 editing, multi-exercise plan editing, explicit plan writeback, and workout
 history create/edit plus live rest timers and last-performance suggestions;
 Wheel now covers canvas interaction, public-library batch management,
@@ -93,5 +93,5 @@ Replacement remains blocked until the remaining module audits and write-heavy
 specialist flows are closed. The following specialist controls still live in the
 proven static app and should be migrated only as separately tested follow-up
 releases: habit full rule editing, wallet/reward administration, diagnostics
-depth, protected upload/create remote flows; and non-diary AI writeback modes. They are
+depth, session-armed first-create remote flow; and non-diary AI writeback modes. They are
 not replaced by incompatible shortcuts.
