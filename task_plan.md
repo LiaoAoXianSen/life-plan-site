@@ -163,6 +163,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 145. Status: complete - Add focused Wheel public-library batch contract tests for tag add/remove, only-tag guard, enable/disable, tombstones, and dirty state.
 146. Status: complete - Run build/check plus 1440px/390px responsive verification for the public-library management surface.
 147. Status: complete - Update parity evidence, package, commit, push the verified Wheel public-library stage, and append dual-store memory.
+148. Status: complete - Audit legacy Wheel independent sync and define a bounded GET-only preview/apply slice.
+149. Status: complete - Implement Vue Wheel remote preview/apply panel with fixed `/apps/wheel-app/data.json`, schema checks, merge preview, recheck, snapshots, and dirty state.
+150. Status: complete - Add focused Wheel remote preview/apply contract tests for GET-only preview, race recheck, merge persistence, tombstones, and disabled upload authority.
+151. Status: complete - Run build/check plus 1440px/390px responsive verification for the Wheel sync surface.
+152. Status: complete - Update parity evidence, package, commit, push the verified Wheel remote preview/apply stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

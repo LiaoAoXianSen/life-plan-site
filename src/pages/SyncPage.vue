@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue';
 
 import TodoSyncPanel from '../components/TodoSyncPanel.vue';
+import WheelSyncPanel from '../components/WheelSyncPanel.vue';
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -251,5 +252,6 @@ async function importFile(event: Event) {
     </article>
 
     <TodoSyncPanel :sync-config="config" />
+    <WheelSyncPanel :sync-config="config" />
   </section>
 </template>

@@ -394,3 +394,14 @@
 - Desktop 1440x1000 and mobile 390x1000 Wheel public-library batch screenshot checks passed with no `#page-wheel` or document-level overflow. Screenshots are under `C:\Users\lihao\.codex\visualizations\2026\07\28\019fa748-12b4-7f41-9a97-394d8bc2a01c\wheel-library-batch-stage`.
 - `git diff --check` passed with only LF/CRLF warnings. Created clean runtime package `life-plan-site-runtime-20260728-172150.zip`; package retention removed `life-plan-site-runtime-20260728-130141.zip`.
 - Protected refs remained unchanged before the Wheel public-library commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-29 - Wheel remote preview/apply stage
+
+- Started phases 148-152 on `migration/vue-app-v1` after confirming `master`, `experiment/vue-preview-poc`, and the protected materials stash were not modified.
+- Added the Vue Wheel independent sync panel on the Sync page with the fixed `/apps/wheel-app/data.json` path, unified endpoint reuse, restored-config reset to `autoSync: false` / `remoteUploadEnabled: false`, and no upload/create path in this slice.
+- Implemented GET-only remote preview with schema risk reporting, local/cloud/merged hash summaries, tombstone-aware `sync-service.js.mergeWheelSnapshots`, and no `lifePlanData` mutation during preview.
+- Implemented apply with a second GET recheck, cloud-race refusal with `lastConflictAt`, application-before snapshots, `lifePlanWheelSyncState` updates, and main `lifePlanSyncState.dirty` propagation after local authority changes.
+- Added focused Playwright coverage for GET-only preview, fixed path/config reset, merge persistence across wheels/tags/library/history/tombstones, dirty states, snapshot creation, and stopping before persistence when the cloud changes after preview.
+- Fixed the existing Habit correction contract test to compute today/yesterday dynamically, because the hard-coded 2026-07-28 date became a backfill after the real date advanced to 2026-07-29.
+- Verified `npm run build`, focused Wheel remote tests 2/2, focused Habit date-drift regression 1/1, full `npm run test` 37/37, and `git diff --check` with only LF/CRLF warnings.
+- Verified the Sync page with the Wheel sync panel at 1440x900 and 390x900: document, `.vue-main`, `.page.active`, and `.wheel-sync-card` all had zero horizontal overflow. Screenshots are under `test-results/wheel-sync-1440.png` and `test-results/wheel-sync-390.png`.

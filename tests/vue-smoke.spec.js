@@ -893,8 +893,13 @@ test('habit quick check-in writes the legacy fields and rebuilds its local mirro
 });
 
 test('habit note backfill edit and undo keep local mirror and ledger contracts', async ({ page }) => {
-    const today = '2026-07-28';
-    const yesterday = '2026-07-27';
+    const dateAt = amount => {
+        const date = new Date();
+        date.setDate(date.getDate() + amount);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const today = dateAt(0);
+    const yesterday = dateAt(-1);
     const source = emptyData({
         habits: [{
             id: 'habit-correction',
@@ -911,14 +916,14 @@ test('habit note backfill edit and undo keep local mirror and ledger contracts',
         habitPointLedger: [{
             id: 'ledger-miss',
             habitId: 'habit-correction',
-            sourceId: 'habit-correction:2026-07-27:miss',
+            sourceId: `habit-correction:${yesterday}:miss`,
             date: yesterday,
             amount: -2,
             currency: '星星',
             type: 'miss',
             note: '未完成「复盘习惯」',
-            createdAt: '2026-07-27T23:00:00',
-            updatedAt: '2026-07-27T23:00:00',
+            createdAt: `${yesterday}T23:00:00`,
+            updatedAt: `${yesterday}T23:00:00`,
         }],
     });
     await page.addInitScript(data => {
@@ -944,7 +949,7 @@ test('habit note backfill edit and undo keep local mirror and ledger contracts',
     expect(stored.data.checkins[0]).toEqual(expect.objectContaining({ habitId: 'habit-correction', date: yesterday, note: '昨天补卡备注' }));
     expect(stored.data.habitPointLedger).toEqual(expect.arrayContaining([
         expect.objectContaining({ type: 'checkin', sourceId: stored.data.checkins[0].id, amount: 3, currency: '星星' }),
-        expect.objectContaining({ type: 'reverse-penalty', sourceId: 'habit-correction:2026-07-27:penalty-reversal:星星', amount: 2, currency: '星星' }),
+        expect.objectContaining({ type: 'reverse-penalty', sourceId: `habit-correction:${yesterday}:penalty-reversal:星星`, amount: 2, currency: '星星' }),
     ]));
     expect(stored.mirror.localMirror).toBe(true);
     expect(stored.mirror.remoteUploadEnabled).toBe(false);
@@ -1861,6 +1866,150 @@ test('todo remote preview stays GET-only and apply rechecks then persists the me
     expect(applied.state.dirty).toBe(true);
     expect(applied.mainState.dirty).toBe(true);
     expect(applied.snapshots.some(item => item.reason === '应用 Todo 云端合并结果前')).toBe(true);
+});
+
+test('wheel remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-local-sync', name: '本机转盘', mode: 'normal',
+            items: [{ id: 'local-option', name: '本机选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' }],
+            createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00',
+        }],
+        wheelTags: [{ id: 'tag-local-sync', name: '本机标签', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' }],
+        wheelLibraryItems: [{ id: 'library-local-sync', name: '本机公共项', note: '', tagIds: ['tag-local-sync'], weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' }],
+        deletedItems: [{ collection: 'wheelLibraryItems', id: 'library-deleted-sync', deletedAt: '2026-07-28T08:30:00', reason: 'manual-delete' }],
+    });
+    const remote = {
+        wheels: [{
+            id: 'wheel-remote-sync', name: '云端转盘', mode: 'normal',
+            items: [{ id: 'remote-option', name: '云端选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-28T09:00:00', updatedAt: '2026-07-28T09:00:00' }],
+            createdAt: '2026-07-28T09:00:00', updatedAt: '2026-07-28T09:00:00',
+        }],
+        wheelTags: [{ id: 'tag-remote-sync', name: '云端标签', color: '#4f7cac', weight: 1, enabled: true, createdAt: '2026-07-28T09:00:00', updatedAt: '2026-07-28T09:00:00' }],
+        wheelLibraryItems: [{ id: 'library-remote-sync', name: '云端公共项', note: '', tagIds: ['tag-remote-sync'], weight: 1, enabled: true, createdAt: '2026-07-28T09:00:00', updatedAt: '2026-07-28T09:00:00' }],
+        wheelHistory: [{ id: 'history-remote-sync', wheelId: 'wheel-remote-sync', wheelName: '云端转盘', mode: 'normal', resultId: 'remote-option', resultName: '云端选项', note: '', convertedTodoId: '', createdAt: '2026-07-28T09:05:00', updatedAt: '2026-07-28T09:05:00' }],
+        deletedItems: [{ collection: 'wheelHistory', id: 'history-deleted-sync', deletedAt: '2026-07-28T09:10:00', reason: 'manual-delete' }],
+    };
+    const original = JSON.stringify(local);
+    await page.addInitScript(({ localData, remoteData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
+        window.__wheelSyncRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__wheelSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'GET') return new Response(JSON.stringify(remoteData), { status: 200, headers: { ETag: '"wheel-v1"', 'Content-Type': 'application/json' } });
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, remoteData: remote });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.wheel-sync-card');
+    await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('已生成');
+    await expect(panel).toContainText('本机');
+    await expect(panel).toContainText('云端');
+    let state = await page.evaluate(() => ({
+        data: localStorage.getItem('lifePlanData'),
+        methods: window.__wheelSyncRequests.map(item => item.method),
+        urls: window.__wheelSyncRequests.map(item => item.url),
+        config: JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig')),
+        wheelState: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+    }));
+    expect(state.data).toBe(original);
+    expect(state.methods).toEqual(['GET']);
+    expect(state.urls[0]).toContain('/apps/wheel-app/data.json');
+    expect(state.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: false, remoteUploadEnabled: false });
+    expect(state.wheelState.lastRemoteEtag).toBe('"wheel-v1"');
+
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '应用合并到本机' }).click();
+    await expect(panel.getByRole('status')).toContainText('已应用');
+    state = await page.evaluate(() => ({
+        methods: window.__wheelSyncRequests.map(item => item.method),
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        wheelState: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+        mainState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'),
+    }));
+    expect(state.methods).toEqual(['GET', 'GET']);
+    expect(state.data.wheels.map(item => item.id)).toEqual(expect.arrayContaining(['wheel-local-sync', 'wheel-remote-sync']));
+    expect(state.data.wheelTags.map(item => item.id)).toEqual(expect.arrayContaining(['tag-local-sync', 'tag-remote-sync']));
+    expect(state.data.wheelLibraryItems.map(item => item.id)).toEqual(expect.arrayContaining(['library-local-sync', 'library-remote-sync']));
+    expect(state.data.wheelHistory.map(item => item.id)).toContain('history-remote-sync');
+    expect(state.data.deletedItems.filter(item => item.collection === 'wheelHistory').map(item => item.id)).toContain('history-deleted-sync');
+    expect(state.wheelState.dirty).toBe(true);
+    expect(state.mainState.dirty).toBe(true);
+    expect(state.snapshots.some(item => item.reason === '应用 Wheel 云端合并结果前')).toBe(true);
+});
+
+test('wheel remote apply stops before persistence when cloud changed after preview', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-race-local', name: '竞态本机转盘', mode: 'normal',
+            items: [{ id: 'race-local-option', name: '本机选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00' }],
+            createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T08:00:00',
+        }],
+    });
+    const remoteBefore = {
+        wheels: [{
+            id: 'wheel-race-remote', name: '预览云端转盘', mode: 'normal',
+            items: [{ id: 'race-remote-option', name: '预览选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-28T09:00:00', updatedAt: '2026-07-28T09:00:00' }],
+            createdAt: '2026-07-28T09:00:00', updatedAt: '2026-07-28T09:00:00',
+        }],
+        wheelTags: [], wheelLibraryItems: [], wheelHistory: [], deletedItems: [],
+    };
+    const remoteAfter = {
+        ...remoteBefore,
+        wheels: [
+            ...remoteBefore.wheels,
+            {
+                id: 'wheel-race-new-cloud', name: '另一设备新增转盘', mode: 'normal',
+                items: [{ id: 'race-new-option', name: '另一设备选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-28T10:00:00', updatedAt: '2026-07-28T10:00:00' }],
+                createdAt: '2026-07-28T10:00:00', updatedAt: '2026-07-28T10:00:00',
+            },
+        ],
+    };
+    const original = JSON.stringify(local);
+    await page.addInitScript(({ localData, firstRemote, secondRemote }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        window.__wheelSyncRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__wheelSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'GET') {
+                const getCount = window.__wheelSyncRequests.filter(item => item.method === 'GET').length;
+                return new Response(JSON.stringify(getCount === 1 ? firstRemote : secondRemote), {
+                    status: 200,
+                    headers: { ETag: getCount === 1 ? '"wheel-race-v1"' : '"wheel-race-v2"', 'Content-Type': 'application/json' },
+                });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, firstRemote: remoteBefore, secondRemote: remoteAfter });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.wheel-sync-card');
+    await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('已生成');
+    await panel.getByRole('button', { name: '应用合并到本机' }).click();
+    await expect(panel.getByRole('status')).toContainText('云端自预览后已变化');
+
+    const result = await page.evaluate(() => ({
+        data: localStorage.getItem('lifePlanData'),
+        requests: window.__wheelSyncRequests,
+        state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'),
+    }));
+    expect(result.data).toBe(original);
+    expect(result.requests.map(item => item.method)).toEqual(['GET', 'GET']);
+    expect(result.requests.every(item => item.url.includes('/apps/wheel-app/data.json'))).toBe(true);
+    expect(result.state.lastConflictAt).toBeTruthy();
+    expect(result.state.lastRemoteEtag).toBe('"wheel-race-v2"');
+    expect(result.snapshots.some(item => item.reason === '应用 Wheel 云端合并结果前')).toBe(false);
 });
 
 test('todo existing remote upload uses If-Match and verifies the written mirror', async ({ page }) => {
