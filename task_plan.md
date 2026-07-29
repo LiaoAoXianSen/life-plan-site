@@ -193,6 +193,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 175. Status: complete - Add focused Habit remote preview coverage proving one GET, no PUT, and unchanged `lifePlanData`, `habitAppData`, and `habitAppSyncState`.
 176. Status: complete - Run build/check plus responsive verification for the Habit read-only sync panel.
 177. Status: complete - Update parity evidence, package, commit, push the verified Habit read-only remote preview stage, and append dual-store memory.
+178. Status: complete - Audit Habit preview/apply parity risks with multi-agent sidecars, especially preview read-only state, legacy reverse mapping, tombstone conversion, and remote ID preservation.
+179. Status: complete - Implement guarded Vue Habit apply-to-local with second GET recheck, cloud-race refusal, application-before snapshot, legacy slice conversion, mirror rebuild, and sync metadata updates.
+180. Status: complete - Add focused Habit remote apply tests for two-GET zero-PUT success, legacy field/tombstone mapping, local mirror rebuild, dirty state, and cloud-change refusal.
+181. Status: complete - Run production build and focused Habit remote preview/apply checks before full verification.
+182. Status: complete - Update evidence, run full checks/package, verify protected refs, commit, push, and append dual-store memory for the Habit remote apply stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -208,7 +213,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 - Data safety work should clearly distinguish completed reliability fixes from larger storage roadmap items like IndexedDB migration, data-volume dashboards, and ETag conflict prevention.
 - Sync settings should only expose fields that are actually used by the Cloudflare Worker sync path; unused WebDAV username/password fields should be removed and cleaned from old local config.
 - Wheel JSON restore remains an explicit overwrite action for now, but it must confirm the overwrite, create a restore-before snapshot, and leave current data untouched when canceled or when saving fails.
-- Habit remote preview remains strictly read-only: it may GET `/apps/habit-app/data.json`, but must not mutate legacy habit fields, `localStorage.habitAppData`, or remote data; `autoSync` and `remoteUploadEnabled` remain `false`.
+- Habit remote preview remains strictly read-only: it may GET `/apps/habit-app/data.json`, but must not mutate legacy habit fields, `localStorage.habitAppData`, `habitAppSyncState`, or remote data; `autoSync` and `remoteUploadEnabled` remain `false`.
+- Habit remote apply is local-only: it must second-GET and refuse cloud races before snapshots or persistence, convert the merged canonical Habit app snapshot back into legacy `lifePlanData` Habit collections/tombstones, rebuild the local-only mirror, update sync metadata, and never PUT or create remote files.
 - The protected first-upload phase supersedes the permanent-false part only during an explicitly armed browser session: `remoteUploadEnabled` starts false, is never restored from storage, and automatically returns false after any upload attempt. No automatic upload or authority switch is introduced.
 - Habit bootstrap must reuse the already configured unified sync endpoint. The user should not have to enter or migrate a second habit-specific URL; only `/apps/habit-app/data.json` remains habit-specific.
 - Vue Todo independent sync must reuse `lifePlanSyncConfig.webdavUrl`, keep `/apps/todo-app/data.json` fixed, persist `todoAppSyncConfig` / `todoAppSyncState`, and force `autoSync` plus restored upload authorization off.

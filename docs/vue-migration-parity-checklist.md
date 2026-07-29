@@ -23,10 +23,10 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Materials | Material CRUD, type colors, source/note/tags, search. | Legacy-compatible create/edit/delete, content-only required field, type/tag normalization, keyword/type/tag filters, descending sort, random review, `material`/`tag` deep links, and tombstones. | No open blocker in the current Materials parity audit; replacement remains blocked by other modules. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation across records, todos, goals, materials, templates, and wheel public items; tag center with idea/material/wheel scopes. | Grouped module search with scope filtering, exact detail/query navigation, template-management and wheel-library/tag entry points, and combined tag center with summaries, search, scopes, previews, and read-only module jumps. | No open blocker in the current Search/Tags parity audit; replacement remains blocked by other modules. | Search covers legacy modules with matching labels and navigation targets without mutating persisted data. |
 | Goals | CRUD/progress/status, detail modal entry points, search/Dashboard deep links, and tombstones. | Detail modal create/edit/delete, `goal=<id>` deep links, Dashboard goal-row restoration, legacy `createDate` and tombstones, and progress/status persistence exist. | No open blocker in the current Goals parity audit; replacement remains blocked by other modules. | Goal writes keep existing fields, avoid Vue-only timestamp churn, and delete with legacy `manual-delete` tombstones. |
-| Habits | Full rule editor, edit/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic rule create/edit/delete, quick check-in, note/backfill check-ins, note edit, undo-latest check-in, reward/penalty ledger reversals, habit/check-in tombstones, dirty-state updates, `habitAppData` local mirror, and read-only independent remote preview. | No open blocker in the current local Habit management/correction plus read-only remote-preview audit; archive, wallet/reward administration, wishes, diagnostics depth, independent apply/upload workflows, and broader penalty settlement UX remain later Habit risks. | Habit local writes preserve legacy `habits`, `checkins`, `habitPointLedger`, tombstones, dirty state, and local-only mirror contracts while keeping `lifePlanData` authoritative. |
+| Habits | Full rule editor, edit/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic rule create/edit/delete, quick check-in, note/backfill check-ins, note edit, undo-latest check-in, reward/penalty ledger reversals, habit/check-in tombstones, dirty-state updates, `habitAppData` local mirror, and independent remote preview/apply. | No open blocker in the current local Habit management/correction plus remote preview/apply audit; archive, wallet/reward administration, wishes, diagnostics depth, protected upload/create, auto/resume sync, and broader penalty settlement UX remain later Habit risks. | Habit local writes preserve legacy `habits`, `checkins`, `habitPointLedger`, tombstones, dirty state, and local-only mirror contracts while keeping `lifePlanData` authoritative. |
 | Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Full-field body metric create/edit/delete, library, multi-exercise plan create/edit, plan-start live workouts, service-backed last-performance suggestions, rest timer controls, explicit finish-time plan writeback, workout history create/edit/delete, manual-delete tombstones, and dirty-state coverage. | No open blocker in the current Fitness parity audit; replacement remains blocked by other modules. | Fitness writes are delegated to `fitness-service.js` and preserve old body metric, plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, canvas rendering, click/drag spin entry points, normal and tag two-stage spin, public-library tag filtering and batch tag/enable/delete actions, labeled management forms, history, Todo conversion, JSON/CSV, independent remote preview/apply, and protected upload/create. | No open blocker in the current Wheel parity audit; replacement remains blocked by other modules. | Wheel writes preserve `wheels`, `wheelTags`, `wheelLibraryItems`, `wheelHistory`, Todo conversion links, dirty state, tombstones, and old `wheel-tool.js` interaction expectations. |
-| Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export, Todo and Wheel independent preview/apply/conditional upload flows, and Habit independent GET-only preview. | Auto sync plus Habit independent apply/upload workflows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
+| Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export, Todo and Wheel independent preview/apply/conditional upload flows, and Habit independent preview/apply without cloud upload. | Auto sync plus Habit protected upload/create workflows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice plus Records diary analysis with remote/local generation, editable section/Todo drafts, overwrite confirmation, duplicate hints, and repository-backed writeback. | Idea next action, Todo breakdown, chat capture, and remaining legacy mode writebacks are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
 | Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists, import merge creates before/after snapshots, preserves tombstones, refreshes Todo/Habit mirrors, and marks main sync dirty. | No open blocker in the current Import/Export contract audit; replacement remains blocked by other modules. | Import/export round-trips complete data with snapshots, mirror rebuilds, dirty-state updates, and merge semantics intact. |
 
@@ -162,19 +162,22 @@ Remaining Habit scope:
 
 - Full rule editor, archive/delete, wallet/reward administration, wishes, diagnostics depth, independent apply/upload workflows, and broader penalty settlement UX.
 
-### Habit Remote Read-Only Preview Slice
+### Habit Remote Preview/Apply Slice
 
 Status: verified locally
 
 - Add a Vue Sync-page Habit independent sync panel that reuses `lifePlanSyncConfig.webdavUrl` and fixes the path at `/apps/habit-app/data.json`.
-- Force restored `habitAppSyncConfig.autoSync` and `remoteUploadEnabled` off; this slice never issues PUT, creates files, applies merged data, or writes `habitAppSyncState`.
+- Force restored `habitAppSyncConfig.autoSync` and `remoteUploadEnabled` off; preview/apply never issue PUT and this slice does not create remote Habit files.
 - Build the local preview through `LifePlanHabitService.buildHabitAppSnapshotPreview` without writing `localStorage.habitAppData`.
 - GET the remote JSON only, normalize/hash it through `sync-service.js` Habit helpers, show local/remote/merged counts and hashes, and surface missing schema arrays as preview risks.
-- Verify in Playwright that preview sends exactly one GET, leaves `lifePlanData`, `habitAppData`, and `habitAppSyncState` byte-for-byte unchanged, and resets only the safe local config flags.
+- Keep preview strictly read-only: exactly one GET, no `lifePlanData`, `habitAppData`, or `habitAppSyncState` mutation, and only safe local config flags reset.
+- Apply requires a second GET before local persistence; if the cloud hash changes after preview, Vue refreshes the preview, writes `habitAppSyncState.lastConflictAt`, and stops before snapshots or local data writes.
+- Apply confirms with the user, creates an application-before snapshot, converts the merged Habit app snapshot back into legacy `habits`, `checkins`, `habitPointLedger`, `habitRewards`, `habitCurrencies`, and legacy tombstones, then rebuilds `habitAppData` as a local-only mirror.
+- Apply marks the main `lifePlanSyncState.dirty`, stores Habit sync baseline metadata, preserves non-`life-plan/...` remote IDs, and keeps cloud upload authority disabled.
+- Verify in Playwright that preview sends exactly one GET, apply sends exactly two GETs and zero PUTs, race refusal leaves `lifePlanData`/`habitAppData` byte-for-byte unchanged, and successful apply creates the Habit snapshot plus legacy-compatible data.
 
 Remaining Habit remote scope:
 
-- Application of a Habit remote merge into legacy-authoritative `lifePlanData`.
 - Protected existing-file upload and session-armed first creation with readback verification.
 - Automatic or resume-triggered Habit sync remains out of this slice.
 
@@ -337,7 +340,7 @@ Status: verified locally
 Remaining Sync scope:
 
 - Automatic sync and visibility-resume sync.
-- Habit independent apply/upload flows; read-only remote preview is covered in Vue.
+- Habit protected upload/create flows; preview/apply without cloud upload are covered in Vue.
 - WebDAV verification readback for independent app mirrors.
 
 ### Todo Detail Contract Slice
