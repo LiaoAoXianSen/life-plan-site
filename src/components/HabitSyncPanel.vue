@@ -58,6 +58,7 @@ const sync = services.sync;
 const habit = services.habit;
 const remotePath = '/apps/habit-app/data.json';
 const busy = ref(false);
+const armed = ref(false);
 const message = ref('');
 const messageTone = ref<'info' | 'success' | 'danger'>('info');
 const preview = reactive<PreviewState>({ status: 'idle', local: null, remote: null, merged: null, hashesMatch: false, risks: [] });
@@ -450,6 +451,7 @@ function finishUpload(local: SnapshotModel, verification: RemotePayload, fallbac
 
 async function previewRemote() {
   if (busy.value) return;
+  armed.value = false;
   persistConfig();
   if (!endpointReady.value) {
     preview.status = 'error';
@@ -465,7 +467,7 @@ async function previewRemote() {
     const remotePayload = await pullRemote();
     if (!remotePayload) {
       Object.assign(preview, { status: 'missing', local, remote: null, merged: null, hashesMatch: false, risks: [] });
-      setMessage('云端尚无 Habit 文件；本切片不会创建或上传。');
+      setMessage('云端 Habit 文件不存在。首次创建需要本次会话授权。');
       return;
     }
     setReadyPreview(local, remotePayload);
@@ -592,6 +594,49 @@ async function uploadExisting() {
     persistConfig();
   }
 }
+
+async function uploadFirst() {
+  if (preview.status !== 'missing' || !armed.value || busy.value) return;
+  if (props.syncConfig.useAppSyncKitProvider) {
+    setMessage('当前 provider 不支持 create-only 条件写入。', 'danger');
+    return;
+  }
+  busy.value = true;
+  let putAttempted = false;
+  setMessage('正在执行 Habit 首次创建前复查...');
+  try {
+    const local = prepareLocal();
+    const remotePayload = await pullRemote();
+    if (remotePayload) {
+      setReadyPreview(local, remotePayload);
+      throw new Error('最终复查发现云端文件已存在，已停止首次创建。');
+    }
+    if (!window.confirm(`以 create-only 条件创建 ${remotePath}，包含 ${local.counts.habits} 个习惯、${local.counts.records} 条记录和 ${local.counts.ledger} 条流水。确认继续吗？`)) {
+      setMessage('已取消首次创建；云端未改变。');
+      return;
+    }
+    if (!verifyLocalUnchanged(local.hash)) throw new Error('确认期间本机 Habit 数据已变化，请重新检查。');
+    putAttempted = true;
+    const result = await sync.pushJson(
+      { ...props.syncConfig, remotePath }, remotePath, local.snapshot, 'habit-app', { ifNoneMatch: '*' },
+    ) as { etag?: string };
+    const verification = await verifyUpload(local);
+    finishUpload(local, verification, result.etag || '');
+    setMessage('Habit 云端文件已首次创建并回读核验一致。', 'success');
+  } catch (error) {
+    const status = typeof error === 'object' && error !== null ? (error as { status?: number }).status : undefined;
+    if (status === 412 || putAttempted) preview.status = 'idle';
+    setMessage(status === 412
+      ? 'Create-only 写入被拒绝：云端文件已由其他设备创建。'
+      : putAttempted
+        ? `PUT 已发出但无法确认结果：${error instanceof Error ? error.message : String(error)}。不会自动重试。`
+        : error instanceof Error ? error.message : String(error), 'danger');
+  } finally {
+    busy.value = false;
+    armed.value = false;
+    persistConfig();
+  }
+}
 </script>
 
 <template>
@@ -606,6 +651,12 @@ async function uploadExisting() {
       <button v-if="preview.status === 'ready'" class="btn btn-secondary" type="button" :disabled="!canApply" @click="applyRemoteMerge">应用合并到本机</button>
       <button v-if="preview.status === 'ready'" class="btn btn-primary" type="button" :disabled="!canUploadExisting" @click="uploadExisting">受保护上传</button>
     </div>
+
+    <label v-if="preview.status === 'missing'" class="habit-sync-arm">
+      <input v-model="armed" type="checkbox" />
+      <span>本次会话允许首次创建</span>
+      <button class="btn btn-primary" type="button" :disabled="!armed || busy" @click.prevent="uploadFirst">首次创建</button>
+    </label>
 
     <div v-if="preview.local" class="habit-sync-comparison">
       <div v-for="item in [{ label: '本机', value: preview.local }, { label: '云端', value: preview.remote }, { label: '合并', value: preview.merged }]" :key="item.label" class="habit-sync-column">
@@ -631,6 +682,7 @@ async function uploadExisting() {
 .habit-sync-heading span { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; }
 .habit-sync-mode { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
 .habit-sync-actions { margin-top: 14px; }
+.habit-sync-arm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; margin-top: 14px; padding: 10px 0; border-top: 1px solid var(--line); }
 .habit-sync-comparison { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .habit-sync-column { display: grid; gap: 4px; min-width: 0; padding: 12px; border-right: 1px solid var(--line); }
 .habit-sync-column:last-child { border-right: 0; }
@@ -648,5 +700,7 @@ async function uploadExisting() {
   .habit-sync-comparison { grid-template-columns: 1fr; }
   .habit-sync-column { border-right: 0; border-bottom: 1px solid var(--line); }
   .habit-sync-column:last-child { border-bottom: 0; }
+  .habit-sync-arm { grid-template-columns: auto minmax(0, 1fr); }
+  .habit-sync-arm .btn { grid-column: 1 / -1; width: 100%; }
 }
 </style>

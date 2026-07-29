@@ -2527,6 +2527,156 @@ test('habit existing upload stops before PUT when the remote changed after previ
     expect(result.state.lastRemoteEtag).toBe('"habit-upload-race-v2"');
 });
 
+test('habit first remote creation requires session arm and uses If-None-Match', async ({ page }) => {
+    const local = emptyData({
+        habits: [{
+            id: 'habit-first-sync',
+            name: '首次云端习惯',
+            tag: '健康',
+            rule: 'daily',
+            timesPerDay: 1,
+            rewardPoints: 3,
+            rewardCurrency: '金币',
+            startDate: '2026-07-29',
+            createdAt: '2026-07-29T08:00:00',
+            updatedAt: '2026-07-29T08:00:00',
+        }],
+        checkins: [{
+            id: 'checkin-first-sync',
+            habitId: 'habit-first-sync',
+            date: '2026-07-29',
+            time: '08:00',
+            checkinAt: '2026-07-29T08:00:00',
+            note: '首次创建打卡',
+            createdAt: '2026-07-29T08:00:00',
+            updatedAt: '2026-07-29T08:00:00',
+        }],
+        habitPointLedger: [{
+            id: 'ledger-first-sync',
+            habitId: 'habit-first-sync',
+            sourceId: 'checkin-first-sync',
+            type: 'checkin',
+            amount: 3,
+            currency: '金币',
+            date: '2026-07-29',
+            createdAt: '2026-07-29T08:00:00',
+            updatedAt: '2026-07-29T08:00:00',
+        }],
+        habitCurrencies: [{ id: 'currency-coin', name: '金币' }],
+    });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-habit.json', autoSync: true, remoteUploadEnabled: true }));
+        localStorage.setItem('habitAppSyncState', JSON.stringify({ dirty: true, lastRemoteHash: 'old-habit-created' }));
+        window.__habitSyncRequests = [];
+        window.__habitUploaded = null;
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__habitSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'PUT') {
+                window.__habitUploaded = JSON.parse(options.body);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"habit-created"' } });
+            }
+            if (method === 'GET') {
+                if (!window.__habitUploaded) return new Response('missing', { status: 404 });
+                return new Response(JSON.stringify(window.__habitUploaded), { status: 200, headers: { ETag: '"habit-created"', 'Content-Type': 'application/json' } });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, local);
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.habit-sync-card');
+    await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('不存在');
+    await expect(panel.getByRole('checkbox', { name: '本次会话允许首次创建' })).not.toBeChecked();
+    expect(await page.evaluate(() => window.__habitSyncRequests.filter(item => item.method === 'PUT').length)).toBe(0);
+    await panel.getByRole('checkbox', { name: '本次会话允许首次创建' }).check();
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '首次创建' }).click();
+    await expect(panel.getByRole('status')).toContainText('回读核验一致');
+
+    const result = await page.evaluate(() => ({
+        requests: window.__habitSyncRequests,
+        uploaded: window.__habitUploaded,
+        state: JSON.parse(localStorage.getItem('habitAppSyncState')),
+        config: JSON.parse(localStorage.getItem('habitAppSyncConfig')),
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/habit-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET', 'PUT', 'GET']);
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(put.headers['If-None-Match'] || put.headers['if-none-match']).toBe('*');
+    expect(result.uploaded.habits.some(item => item.title === '首次云端习惯' || item.name === '首次云端习惯')).toBe(true);
+    expect(result.uploaded.habitRecords).toEqual(expect.arrayContaining([
+        expect.objectContaining({ note: '首次创建打卡' }),
+    ]));
+    expect(result.data.habits[0].name).toBe('首次云端习惯');
+    expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"habit-created"' });
+    expect(result.state.lastLocalHash).toEqual(expect.any(String));
+    expect(result.state.lastRemoteHash).toEqual(expect.any(String));
+    expect(result.state.lastPushAt).toEqual(expect.any(String));
+    expect(result.config).toMatchObject({ remotePath: '/apps/habit-app/data.json', autoSync: false, remoteUploadEnabled: false });
+});
+
+test('habit first remote creation stops before PUT when the file appears after preview', async ({ page }) => {
+    const local = emptyData({
+        habits: [{
+            id: 'habit-first-race-local',
+            name: '首次创建竞态本机习惯',
+            rule: 'daily',
+            timesPerDay: 1,
+            rewardPoints: 1,
+            rewardCurrency: '金币',
+            createdAt: '2026-07-29T08:00:00',
+            updatedAt: '2026-07-29T08:00:00',
+        }],
+    });
+    const remoteAfter = habitRemoteSnapshot({
+        habits: [{ id: 'life-plan/habits/habit-first-race-remote', title: '另一设备已创建习惯', updatedAt: '2026-07-29T09:00:00' }],
+        habitCurrencies: [{ id: 'default', name: '金币' }],
+    });
+    const original = JSON.stringify(local);
+    const syncState = JSON.stringify({ dirty: true, lastRemoteHash: 'old-first-race' });
+    await page.addInitScript(({ localData, stateData, remoteData }) => {
+        localStorage.setItem('lifePlanData', localData);
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('habitAppSyncState', stateData);
+        window.__habitSyncRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__habitSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'GET') {
+                const count = window.__habitSyncRequests.filter(item => item.method === 'GET').length;
+                if (count === 1) return new Response('missing', { status: 404 });
+                return new Response(JSON.stringify(remoteData), { status: 200, headers: { ETag: '"habit-first-race-v2"', 'Content-Type': 'application/json' } });
+            }
+            return new Response('', { status: 405 });
+        };
+    }, { localData: original, stateData: syncState, remoteData: remoteAfter });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.habit-sync-card');
+    await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('不存在');
+    await panel.getByRole('checkbox', { name: '本次会话允许首次创建' }).check();
+    await panel.getByRole('button', { name: '首次创建' }).click();
+    await expect(panel.getByRole('status')).toContainText('已停止首次创建');
+
+    const result = await page.evaluate(() => ({
+        requests: window.__habitSyncRequests,
+        data: localStorage.getItem('lifePlanData'),
+        syncState: localStorage.getItem('habitAppSyncState'),
+        config: JSON.parse(localStorage.getItem('habitAppSyncConfig')),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/habit-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET']);
+    expect(result.data).toBe(original);
+    expect(result.syncState).toBe(syncState);
+    expect(result.config).toMatchObject({ remotePath: '/apps/habit-app/data.json', autoSync: false, remoteUploadEnabled: false });
+});
+
 test('wheel remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {
     const local = emptyData({
         wheels: [{
