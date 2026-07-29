@@ -167,6 +167,16 @@
 .record-create-footer .form-actions { margin: 0; }
 .record-create-status { min-height: 20px; color: var(--accent); font-size: 12px; font-weight: 750; }
 
+#page-fitness .fitness-body-field-grid { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+#page-fitness .fitness-body-field-grid .form-group { min-width: 0; }
+#page-fitness .fitness-body-field-grid input { width: 100%; min-width: 0; }
+#page-fitness .fitness-body-metric-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+#page-fitness .fitness-body-metric-row > div { display: grid; gap: 4px; min-width: 0; }
+#page-fitness .fitness-body-metric-row strong,
+#page-fitness .fitness-body-metric-row span { min-width: 0; overflow-wrap: anywhere; }
+#page-fitness .fitness-metric-chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+#page-fitness .fitness-metric-chip-row span { padding: 3px 7px; border-radius: var(--radius-pill); background: var(--surface-soft); color: var(--muted); font-size: 12px; font-weight: 700; }
+
 @media (max-width: 1040px) {
   .todo-workspace { grid-template-columns: minmax(0, 1fr); }
   .todo-detail-panel, .todo-detail-placeholder { position: static; }
@@ -189,4 +199,6 @@
   .record-create-type-option { flex: 1 1 calc(50% - 8px); min-width: 0; }
   .record-create-footer { align-items: stretch; flex-direction: column; }
   .record-create-footer .form-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  #page-fitness .fitness-body-metric-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  #page-fitness .fitness-body-metric-row .btn { justify-self: start; }
 }

@@ -178,6 +178,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 160. Status: complete - Add focused Wheel management-form UI contract coverage for edit focus and read-only form filling.
 161. Status: complete - Run build/check plus 1440px/390px responsive verification for the polished Wheel management surface.
 162. Status: complete - Update parity evidence, package, commit, push the verified Wheel management polish stage, and append dual-store memory.
+163. Status: complete - Audit Fitness body-metric legacy fields and choose a bounded full-field editing slice.
+164. Status: complete - Expand Vue Fitness body metric form/list to the shared legacy metric field and condition definitions.
+165. Status: complete - Add focused Fitness body metric contract coverage for full-field create/edit/delete, dirty state, tombstones, and no mirror.
+166. Status: complete - Run build/check plus 1440px/390px responsive verification for the expanded body metric surface.
+167. Status: complete - Update parity evidence, package, commit, push the verified Fitness body metric stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

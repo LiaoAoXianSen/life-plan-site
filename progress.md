@@ -427,3 +427,15 @@
 - Final `npm run build`, focused `npx playwright test tests/vue-smoke.spec.js -g "wheel management forms"`, full `.\scripts\check.ps1` with 41/41 Vue smoke tests, and `git diff --check` passed with only LF/CRLF working-copy warnings.
 - Created clean runtime package `life-plan-site-runtime-20260729-102209.zip`; package retention removed `life-plan-site-runtime-20260728-153553.zip`.
 - Protected refs remained unchanged before the Wheel management polish commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-29 - Fitness body metrics full-field stage
+
+- Started phases 163-167 after commit `6efd977`; the working tree was clean on `migration/vue-app-v1`, and protected `master`, `experiment/vue-preview-poc`, and `stash@{0}` were read-only checked before implementation.
+- Expanded the Vue Fitness body metric form to use `fitness-service.js` `METRIC_FIELDS` and `CONDITION_OPTIONS`, covering weight, body fat, chest, waist, hips, arm, thigh, calf, shoulder, height, date, condition, and note.
+- Added metric edit mode plus wrapping recent-metric chips while keeping `lifePlanData.bodyMetrics` authoritative and avoiding any `fitnessAppData` mirror.
+- Added focused Playwright coverage for full-field create/edit/delete, numeric normalization, dirty sync state, `bodyMetrics` manual-delete tombstones, and no mirror creation.
+- First focused test attempted to assert that clearing an existing metric field deletes it, but `fitness-service.js#upsertBodyMetric` intentionally falls back to the existing record for missing fields; the test was adjusted to preserve that legacy service behavior and verify updates instead.
+- Verified desktop 1440x1000 and mobile 390x1000 Fitness body metric layouts with no horizontal overflow for document, `.vue-main`, `#page-fitness`, `.fitness-body-field-grid`, or `.fitness-body-metric-row`. Screenshots are under `test-results/fitness-body-metrics-1440.png` and `test-results/fitness-body-metrics-390.png`.
+- Final `npm run build`, focused `npx playwright test tests/vue-smoke.spec.js -g "fitness body metrics"`, full `.\scripts\check.ps1` with 42/42 Vue smoke tests, and `git diff --check` passed with only LF/CRLF working-copy warnings.
+- Created clean runtime package `life-plan-site-runtime-20260729-120906.zip`; package retention removed `life-plan-site-runtime-20260728-163445.zip`.
+- Protected refs remained unchanged before the Fitness body metrics commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

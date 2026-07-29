@@ -873,6 +873,84 @@ test('fitness history editor saves edits through the legacy workout contract', a
     ]));
 });
 
+test('fitness body metrics edit every legacy field through the shared service', async ({ page }) => {
+    const source = emptyData();
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-body-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    let metricForm = page.locator('form.card').filter({ hasText: '记录身体指标' });
+    await metricForm.locator('.form-group').filter({ hasText: '日期' }).locator('input').fill('2026-07-29');
+    await metricForm.locator('.form-group').filter({ hasText: '测量状态' }).locator('select').selectOption('afterMeal');
+    for (const [label, value] of [
+        ['体重', '72.4'],
+        ['体脂', '18.2'],
+        ['胸围', '98.5'],
+        ['腰围', '82'],
+        ['臀围', '96'],
+        ['臂围', '34.5'],
+        ['大腿围', '57'],
+        ['小腿围', '38.2'],
+        ['肩围', '112'],
+        ['身高', '176.5'],
+    ]) {
+        await metricForm.locator('.form-group').filter({ hasText: label }).locator('input').fill(value);
+    }
+    await metricForm.locator('.form-group').filter({ hasText: '备注' }).locator('input').fill('全字段记录');
+    await metricForm.getByRole('button', { name: '保存指标' }).click();
+    await expect(page.locator('.notice.success')).toContainText('身体指标已保存');
+    await expect(page.locator('.fitness-body-metric-row')).toContainText('胸围 98.5 cm');
+    await expect(page.locator('.fitness-body-metric-row')).toContainText('小腿围 38.2 cm');
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        fitnessMirror: localStorage.getItem('fitnessAppData'),
+    }));
+    expect(stored.data.bodyMetrics).toHaveLength(1);
+    const metricId = stored.data.bodyMetrics[0].id;
+    expect(stored.data.bodyMetrics[0]).toEqual(expect.objectContaining({
+        date: '2026-07-29',
+        condition: 'afterMeal',
+        weight: 72.4,
+        bodyFat: 18.2,
+        chest: 98.5,
+        waist: 82,
+        hips: 96,
+        arm: 34.5,
+        thigh: 57,
+        calf: 38.2,
+        shoulder: 112,
+        height: 176.5,
+        note: '全字段记录',
+    }));
+    expect(stored.syncState.dirty).toBe(true);
+    expect(stored.fitnessMirror).toBeNull();
+
+    await page.locator('.fitness-body-metric-row').getByRole('button', { name: '编辑' }).click();
+    metricForm = page.locator('form.card').filter({ hasText: '编辑身体指标' });
+    await expect(metricForm.locator('.form-group').filter({ hasText: '胸围' }).locator('input')).toHaveValue('98.5');
+    await expect(metricForm.locator('.form-group').filter({ hasText: '小腿围' }).locator('input')).toHaveValue('38.2');
+    await metricForm.locator('.form-group').filter({ hasText: '测量状态' }).locator('select').selectOption('fasted');
+    await metricForm.locator('.form-group').filter({ hasText: '胸围' }).locator('input').fill('99');
+    await metricForm.locator('.form-group').filter({ hasText: '小腿围' }).locator('input').fill('39');
+    await metricForm.locator('.form-group').filter({ hasText: '备注' }).locator('input').fill('编辑后记录');
+    await metricForm.getByRole('button', { name: '保存修改' }).click();
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.bodyMetrics).toHaveLength(1);
+    expect(stored.bodyMetrics[0]).toEqual(expect.objectContaining({ id: metricId, condition: 'fasted', chest: 99, calf: 39, note: '编辑后记录' }));
+
+    await page.locator('.fitness-body-metric-row').getByRole('button', { name: '删除' }).click();
+    const afterDelete = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(afterDelete.bodyMetrics).toHaveLength(0);
+    expect(afterDelete.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'bodyMetrics', id: metricId, reason: 'manual-delete' }),
+    ]));
+});
+
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
     const source = emptyData({
         records: [

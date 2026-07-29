@@ -20,7 +20,24 @@ type WorkoutSetDraft = PlanSetDraft & { done?: boolean };
 type WorkoutExerciseDraft = Omit<PlanExerciseDraft, 'sets'> & { sets: WorkoutSetDraft[] };
 
 const fitness = useFitnessStore();
-const metricForm = reactive({ date: getTodayStr(), weight: '', bodyFat: '', waist: '', note: '' });
+const metricForm = reactive({
+  id: '',
+  date: getTodayStr(),
+  condition: 'fasted',
+  note: '',
+  values: {
+    weight: '',
+    bodyFat: '',
+    chest: '',
+    waist: '',
+    hips: '',
+    arm: '',
+    thigh: '',
+    calf: '',
+    shoulder: '',
+    height: '',
+  } as Record<string, string>,
+});
 const libraryForm = reactive({ name: '', muscle: 'other', defaultSets: 3, defaultReps: '8-12', defaultWeight: '', restSec: 90, note: '' });
 const planForm = reactive({ name: '', goal: 'general', status: 'active', notes: '', exercises: [] as PlanExerciseDraft[] });
 const workoutForm = reactive({ date: getTodayStr(), status: 'done', title: '', planId: '', durationMin: '', notes: '', exercises: [] as WorkoutExerciseDraft[] });
@@ -41,6 +58,8 @@ const muscleOptions = computed(() => fitness.services.fitness.EXERCISE_MUSCLE_OP
 const goalOptions = computed(() => fitness.services.fitness.PLAN_GOAL_OPTIONS);
 const planStatusOptions = computed(() => fitness.services.fitness.PLAN_STATUS_OPTIONS);
 const workoutStatusOptions = computed(() => fitness.services.fitness.WORKOUT_STATUS_OPTIONS.filter((option: Record<string, string>) => option.value !== 'inProgress'));
+const metricFields = computed(() => fitness.services.fitness.METRIC_FIELDS);
+const conditionOptions = computed(() => fitness.services.fitness.CONDITION_OPTIONS);
 
 function localDraftId() {
   return `plan-draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -135,17 +154,55 @@ function resetWorkoutForm() {
   workoutEditingId.value = '';
 }
 
+function resetMetricForm() {
+  Object.assign(metricForm, { id: '', date: getTodayStr(), condition: 'fasted', note: '' });
+  metricFields.value.forEach((field: Record<string, string>) => {
+    metricForm.values[field.key] = '';
+  });
+}
+
+function metricPayload() {
+  const input: Record<string, unknown> = {
+    date: metricForm.date,
+    condition: metricForm.condition,
+    note: metricForm.note,
+  };
+  metricFields.value.forEach((field: Record<string, string>) => {
+    input[field.key] = metricForm.values[field.key];
+  });
+  return input;
+}
+
 function saveMetric() {
   run(() => {
-    fitness.saveMetric({
-      date: metricForm.date,
-      weight: metricForm.weight,
-      bodyFat: metricForm.bodyFat,
-      waist: metricForm.waist,
-      note: metricForm.note,
-    });
-    Object.assign(metricForm, { date: getTodayStr(), weight: '', bodyFat: '', waist: '', note: '' });
+    fitness.saveMetric(metricPayload(), metricForm.id);
+    resetMetricForm();
   });
+}
+
+function editMetric(metric: Record<string, any>) {
+  run(() => {
+    Object.assign(metricForm, {
+      id: metric.id || '',
+      date: metric.date || getTodayStr(),
+      condition: metric.condition || 'unknown',
+      note: metric.note || '',
+    });
+    metricFields.value.forEach((field: Record<string, string>) => {
+      const value = fitness.services.fitness.parseMetricNumber(metric[field.key]);
+      metricForm.values[field.key] = value === null ? '' : String(value);
+    });
+  });
+}
+
+function metricChips(metric: Record<string, any>) {
+  return metricFields.value
+    .filter((field: Record<string, string>) => fitness.services.fitness.parseMetricNumber(metric[field.key]) !== null)
+    .map((field: Record<string, string>) => ({
+      key: field.key,
+      label: field.label,
+      value: fitness.services.fitness.formatMetricValue(metric[field.key], field.unit),
+    }));
 }
 
 function saveLibraryItem() {
@@ -412,21 +469,36 @@ resetWorkoutForm();
 
     <div class="form-row">
       <form class="card" @submit.prevent="saveMetric">
-        <div class="card-title">记录身体指标</div>
+        <div class="section-title-row">
+          <div>
+            <div class="card-title">{{ metricForm.id ? '编辑身体指标' : '记录身体指标' }}</div>
+            <p class="section-hint">身高、胸围、臀围、臂围等字段与旧版身材记录共用同一套规范化服务。</p>
+          </div>
+          <button v-if="metricForm.id" class="btn btn-secondary" type="button" @click="resetMetricForm">取消编辑</button>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>日期</label><input v-model="metricForm.date" type="date" /></div>
-          <div class="form-group"><label>体重 (kg)</label><input v-model="metricForm.weight" inputmode="decimal" /></div>
-          <div class="form-group"><label>体脂 (%)</label><input v-model="metricForm.bodyFat" inputmode="decimal" /></div>
-          <div class="form-group"><label>腰围 (cm)</label><input v-model="metricForm.waist" inputmode="decimal" /></div>
+          <div class="form-group"><label>测量状态</label><select v-model="metricForm.condition"><option v-for="option in conditionOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+        </div>
+        <div class="form-row fitness-body-field-grid">
+          <div v-for="field in metricFields" :key="field.key" class="form-group">
+            <label>{{ field.label }}<span v-if="field.unit"> ({{ field.unit }})</span></label>
+            <input v-model="metricForm.values[field.key]" inputmode="decimal" :step="field.step || '0.1'" />
+          </div>
         </div>
         <div class="form-group"><label>备注</label><input v-model="metricForm.note" /></div>
-        <button class="btn btn-primary">保存指标</button>
+        <button class="btn btn-primary">{{ metricForm.id ? '保存修改' : '保存指标' }}</button>
       </form>
       <article class="card">
         <div class="card-title">最近指标</div>
         <div v-if="fitness.metrics.length" class="fitness-metric-list">
-          <div v-for="item in fitness.metrics.slice(0, 8)" :key="item.id" class="fitness-metric-row">
-            <strong>{{ item.date }}</strong><span v-if="item.weight != null">体重 {{ item.weight }} kg</span><span v-if="item.bodyFat != null">体脂 {{ item.bodyFat }}%</span><span v-if="item.waist != null">腰围 {{ item.waist }} cm</span><span>{{ item.note }}</span>
+          <div v-for="item in fitness.metrics.slice(0, 8)" :key="item.id" class="fitness-metric-row fitness-body-metric-row">
+            <div>
+              <strong>{{ item.date }} · {{ fitness.services.fitness.getConditionLabel(item.condition) }}</strong>
+              <span class="fitness-metric-chip-row"><span v-for="chip in metricChips(item)" :key="chip.key">{{ chip.label }} {{ chip.value }}</span></span>
+              <span v-if="item.note">{{ item.note }}</span>
+            </div>
+            <button class="btn btn-secondary" type="button" @click="editMetric(item)">{{ metricForm.id === item.id ? '正在编辑' : '编辑' }}</button>
             <button class="btn btn-danger" type="button" @click="run(() => fitness.removeMetric(item.id))">删除</button>
           </div>
         </div>
