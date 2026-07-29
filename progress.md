@@ -503,7 +503,7 @@
 
 ## 2026-07-29 - Habit advanced reward fields stage
 
-- Started phases 193-197 after commit `aa9f9eb`; the working tree unexpectedly contained in-progress `src/stores/habitsStore.ts`, `src/pages/HabitsPage.vue`, and `tests/vue-smoke.spec.js` edits, so the slice was preserved and audited instead of switching to AI work.
+- Started phases 193-197 after commit `aa9f9eb`; protected `master`, `experiment/vue-preview-poc`, and `stash@{0}` were read-only checked before implementation, and the in-progress Habit advanced field diff was preserved instead of switching modules.
 - Exposed Vue Habit advanced management fields for fixed rewards, reward currency, penalty points/currency, random reward ranges, break-penalty mode/value/currency, and the legacy 7/15/21/30/90/180/365-day milestone rows.
 - Extended `src/stores/habitsStore.ts` create/update normalization to persist advanced reward, penalty, break-penalty, and milestone fields instead of resetting them during a basic edit.
 - Added currency preservation support so referenced reward, penalty, break-penalty, and milestone currencies are present in `lifePlanData.habitCurrencies` while keeping `lifePlanData.habits` authoritative.
