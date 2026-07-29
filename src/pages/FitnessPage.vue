@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onUnmounted, reactive, ref } from 'vue';
 
 import { getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
@@ -46,6 +46,8 @@ const formError = ref('');
 const planEditingId = ref('');
 const workoutEditingId = ref('');
 const writeBackPlan = ref(false);
+const restTimer = reactive({ remaining: 0, total: 0, exerciseName: '' });
+let restTimerId: ReturnType<typeof window.setInterval> | null = null;
 
 const doneHistory = computed(() => fitness.workouts.filter(item => item.status === 'done' || item.status === 'skipped'));
 const activeCompleted = computed(() => fitness.activeWorkout ? fitness.services.fitness.countCompletedSets(fitness.activeWorkout) : 0);
@@ -246,6 +248,7 @@ function finishActiveWorkout() {
   run(() => {
     fitness.finishWorkout({ updatePlanFromWorkout: writeBackPlan.value && activePlanDiff.value === true });
     writeBackPlan.value = false;
+    stopRestTimer();
   });
 }
 
@@ -384,8 +387,74 @@ function saveWorkoutLog() {
   });
 }
 
+function stopRestTimer() {
+  if (restTimerId) window.clearInterval(restTimerId);
+  restTimerId = null;
+  Object.assign(restTimer, { remaining: 0, total: 0, exerciseName: '' });
+}
+
+function tickRestTimer() {
+  restTimer.remaining = Math.max(0, restTimer.remaining - 1);
+  if (restTimer.remaining <= 0 && restTimerId) {
+    window.clearInterval(restTimerId);
+    restTimerId = null;
+  }
+}
+
+function startRestTimer(seconds: unknown, exerciseName = '') {
+  const total = Number(seconds);
+  if (!Number.isFinite(total) || total <= 0) return;
+  if (restTimerId) window.clearInterval(restTimerId);
+  Object.assign(restTimer, { remaining: Math.round(total), total: Math.round(total), exerciseName });
+  restTimerId = window.setInterval(tickRestTimer, 1000);
+}
+
+function adjustRestTimer(delta: number) {
+  if (!restTimer.total && !restTimer.remaining) return;
+  restTimer.remaining = Math.max(0, restTimer.remaining + delta);
+  restTimer.total = Math.max(restTimer.total, restTimer.remaining);
+  if (restTimer.remaining <= 0) stopRestTimer();
+}
+
+function formatClock(seconds: number) {
+  const value = Math.max(0, Math.round(seconds || 0));
+  const minutes = Math.floor(value / 60);
+  const rest = String(value % 60).padStart(2, '0');
+  return `${minutes}:${rest}`;
+}
+
+function exerciseHistory(exercise: Record<string, any>) {
+  return fitness.services.fitness.findLastExercisePerformance(
+    fitness.workouts,
+    exercise.name || '',
+    fitness.activeWorkout?.id || '',
+  );
+}
+
+function setSuggestion(exercise: Record<string, any>, setIndex: number) {
+  if (exercise.sets?.[setIndex]?.done) return null;
+  return fitness.services.fitness.suggestSetValues(exercise, setIndex, exerciseHistory(exercise));
+}
+
+function suggestionHint(suggestion: Record<string, any> | null) {
+  return suggestion?.label
+    ? String(suggestion.label).replace(/^上次\s*/, '').replace(/^复制上一组\s*/, '同上 ')
+    : '';
+}
+
+function applySuggestion(exerciseIndex: number, setIndex: number) {
+  const exercise = fitness.activeWorkout?.exercises?.[exerciseIndex];
+  const suggestion = exercise ? setSuggestion(exercise, setIndex) : null;
+  if (!suggestion) return;
+  setDone(exerciseIndex, setIndex, false, suggestion.weight, suggestion.reps);
+}
+
 function setDone(exerciseIndex: number, setIndex: number, done: boolean, weight: unknown, reps: unknown) {
-  run(() => fitness.completeSet(exerciseIndex, setIndex, { done, weight, reps }));
+  run(() => {
+    const result = fitness.completeSet(exerciseIndex, setIndex, { done, weight, reps });
+    const exerciseName = fitness.activeWorkout?.exercises?.[exerciseIndex]?.name || '';
+    if (done && result?.restSec) startRestTimer(result.restSec, exerciseName);
+  });
 }
 
 function workoutStatusLabel(status: string) {
@@ -398,6 +467,7 @@ function planGoalLabel(goal: string) {
 
 resetPlanForm();
 resetWorkoutForm();
+onUnmounted(stopRestTimer);
 </script>
 
 <template>
@@ -427,17 +497,36 @@ resetWorkoutForm();
         </div>
         <button class="btn btn-primary" type="button" @click="finishActiveWorkout">结束训练</button>
       </div>
+      <div v-if="restTimer.total || restTimer.remaining" class="fitness-rest-timer vue-fitness-rest-timer" role="timer" aria-live="polite">
+        <div class="fitness-rest-timer-main">
+          <div>
+            <div class="fitness-rest-timer-kicker">组间休息<span v-if="restTimer.exerciseName"> · {{ restTimer.exerciseName }}</span></div>
+            <div class="fitness-rest-timer-clock">{{ formatClock(restTimer.remaining) }}</div>
+          </div>
+          <div class="fitness-rest-timer-actions">
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="adjustRestTimer(30)">+30s</button>
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="adjustRestTimer(-30)">-30s</button>
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="stopRestTimer">跳过</button>
+          </div>
+        </div>
+        <div class="fitness-rest-timer-track"><div class="fitness-rest-timer-fill" :style="{ width: `${restTimer.total ? Math.max(0, Math.min(100, (restTimer.remaining / restTimer.total) * 100)) : 0}%` }" /></div>
+      </div>
       <article v-for="(exercise, exerciseIndex) in fitness.activeWorkout.exercises" :key="exercise.id || exercise.name" class="card">
         <h3>{{ exercise.name }}</h3>
-        <p class="section-hint">目标：{{ exercise.targetSets }} 组 × {{ exercise.targetReps }}<span v-if="exercise.targetWeight"> · {{ exercise.targetWeight }} kg</span></p>
+        <p class="section-hint">
+          目标：{{ exercise.targetSets }} 组 × {{ exercise.targetReps }}<span v-if="exercise.targetWeight"> · {{ exercise.targetWeight }} kg</span><span v-if="fitness.services.fitness.getExerciseRestSec(exercise, fitness.library)"> · 休 {{ fitness.services.fitness.getExerciseRestSec(exercise, fitness.library) }}s</span>
+          <span v-if="exerciseHistory(exercise)?.set"> · 上次 {{ exerciseHistory(exercise)?.workoutDate }} {{ exerciseHistory(exercise)?.set?.weight ?? '—' }}kg × {{ exerciseHistory(exercise)?.set?.reps ?? '—' }}</span>
+        </p>
         <div class="fitness-metric-list">
-          <div v-for="(set, setIndex) in exercise.sets" :key="set.id || setIndex" class="fitness-metric-row">
+          <div v-for="(set, setIndex) in exercise.sets" :key="set.id || setIndex" class="fitness-metric-row fitness-live-row">
             <strong>第 {{ setIndex + 1 }} 组</strong>
             <label>重量 <input :value="set.weight ?? ''" type="number" min="0" step="0.5" @change="setDone(exerciseIndex, setIndex, set.done === true, ($event.target as HTMLInputElement).value, set.reps)" /></label>
             <label>次数 <input :value="set.reps ?? ''" type="number" min="1" step="1" @change="setDone(exerciseIndex, setIndex, set.done === true, set.weight, ($event.target as HTMLInputElement).value)" /></label>
+            <button v-if="setSuggestion(exercise, setIndex)" class="btn btn-secondary todo-mini-btn" type="button" @click="applySuggestion(exerciseIndex, setIndex)">套用建议</button>
             <button class="btn btn-secondary" type="button" @click="setDone(exerciseIndex, setIndex, set.done !== true, set.weight, set.reps)">
               {{ set.done ? '撤销完成' : '完成本组' }}
             </button>
+            <span v-if="suggestionHint(setSuggestion(exercise, setIndex))" class="fitness-set-suggestion vue-fitness-set-suggestion">{{ suggestionHint(setSuggestion(exercise, setIndex)) }}</span>
           </div>
         </div>
       </article>

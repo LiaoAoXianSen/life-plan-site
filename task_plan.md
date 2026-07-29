@@ -183,6 +183,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 165. Status: complete - Add focused Fitness body metric contract coverage for full-field create/edit/delete, dirty state, tombstones, and no mirror.
 166. Status: complete - Run build/check plus 1440px/390px responsive verification for the expanded body metric surface.
 167. Status: complete - Update parity evidence, package, commit, push the verified Fitness body metric stage, and append dual-store memory.
+168. Status: complete - Audit Fitness live workout rest timer and last-performance suggestion gaps.
+169. Status: complete - Add Vue live workout rest timer controls and service-backed last-performance suggestion actions.
+170. Status: complete - Add focused Fitness live workout coverage for suggestion apply, persisted active workout sets, rest timer display, timer controls, and dirty state.
+171. Status: complete - Run build/check plus 1440px/390px responsive verification for the live workout timer/suggestion surface.
+172. Status: complete - Update parity evidence, package, commit, push the verified Fitness live workout assist stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

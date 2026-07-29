@@ -439,3 +439,15 @@
 - Final `npm run build`, focused `npx playwright test tests/vue-smoke.spec.js -g "fitness body metrics"`, full `.\scripts\check.ps1` with 42/42 Vue smoke tests, and `git diff --check` passed with only LF/CRLF working-copy warnings.
 - Created clean runtime package `life-plan-site-runtime-20260729-120906.zip`; package retention removed `life-plan-site-runtime-20260728-163445.zip`.
 - Protected refs remained unchanged before the Fitness body metrics commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-29 - Fitness live workout assist stage
+
+- Started phases 168-172 after commit `25d7666`; the working tree was clean on `migration/vue-app-v1`, and protected `master`, `experiment/vue-preview-poc`, and `stash@{0}` were read-only checked before implementation.
+- Audited the legacy Fitness live session helpers in `fitness-ui.js` and the shared service functions in `fitness-service.js`: `findLastExercisePerformance`, `suggestSetValues`, `completeWorkoutSet`, and `getExerciseRestSec`.
+- Added Vue live-workout last-performance hints, per-set `套用建议` actions, and a page-local rest timer with +30s, -30s, and skip controls.
+- Kept the service/data contract unchanged: suggestion apply writes weight/reps into the active `fitnessWorkouts` set without completing it, completed sets still go through `fitness-service.js#completeWorkoutSet`, and timer state is not persisted.
+- Added focused Playwright coverage for suggestion text, suggestion apply, in-progress workout persistence, dirty sync state, rest timer display/controls, and set completion.
+- Verified desktop 1440x1000 and mobile 390x1000 Fitness live assist layouts with no horizontal overflow for document, `.vue-main`, `#page-fitness`, the active workout card, `.vue-fitness-rest-timer`, or `.fitness-live-row`. Screenshots are under `test-results/fitness-live-assist-1440.png` and `test-results/fitness-live-assist-390.png`.
+- Final `npm run build`, focused `npx playwright test tests/vue-smoke.spec.js -g "fitness live workout suggestions"`, full `.\scripts\check.ps1` with 43/43 Vue smoke tests, and `git diff --check` passed with only LF/CRLF working-copy warnings.
+- Created clean runtime package `life-plan-site-runtime-20260729-124113.zip`; package retention removed `life-plan-site-runtime-20260728-172150.zip`.
+- Protected refs remained unchanged before the Fitness live workout assist commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

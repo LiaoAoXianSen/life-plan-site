@@ -24,7 +24,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Tags/Search | Cross-module search and tag navigation across records, todos, goals, materials, templates, and wheel public items; tag center with idea/material/wheel scopes. | Grouped module search with scope filtering, exact detail/query navigation, template-management and wheel-library/tag entry points, and combined tag center with summaries, search, scopes, previews, and read-only module jumps. | No open blocker in the current Search/Tags parity audit; replacement remains blocked by other modules. | Search covers legacy modules with matching labels and navigation targets without mutating persisted data. |
 | Goals | CRUD/progress/status, detail modal entry points, search/Dashboard deep links, and tombstones. | Detail modal create/edit/delete, `goal=<id>` deep links, Dashboard goal-row restoration, legacy `createDate` and tombstones, and progress/status persistence exist. | No open blocker in the current Goals parity audit; replacement remains blocked by other modules. | Goal writes keep existing fields, avoid Vue-only timestamp churn, and delete with legacy `manual-delete` tombstones. |
 | Habits | Full rule editor, edit/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic rule create/edit/delete, quick check-in, note/backfill check-ins, note edit, undo-latest check-in, reward/penalty ledger reversals, habit/check-in tombstones, dirty-state updates, and `habitAppData` local mirror. | No open blocker in the current local Habit management/correction audit; archive, wallet/reward administration, wishes, diagnostics depth, independent protected remote workflows, and broader penalty settlement UX remain later Habit risks. | Habit local writes preserve legacy `habits`, `checkins`, `habitPointLedger`, tombstones, dirty state, and local-only mirror contracts while keeping `lifePlanData` authoritative. |
-| Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Full-field body metric create/edit/delete, library, multi-exercise plan create/edit, plan-start live workouts, explicit finish-time plan writeback, workout history create/edit/delete, manual-delete tombstones, and dirty-state coverage. | Rest timer UX and history suggestion controls remain incomplete. | Fitness writes are delegated to `fitness-service.js` and preserve old body metric, plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
+| Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Full-field body metric create/edit/delete, library, multi-exercise plan create/edit, plan-start live workouts, service-backed last-performance suggestions, rest timer controls, explicit finish-time plan writeback, workout history create/edit/delete, manual-delete tombstones, and dirty-state coverage. | No open blocker in the current Fitness parity audit; replacement remains blocked by other modules. | Fitness writes are delegated to `fitness-service.js` and preserve old body metric, plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, canvas rendering, click/drag spin entry points, normal and tag two-stage spin, public-library tag filtering and batch tag/enable/delete actions, labeled management forms, history, Todo conversion, JSON/CSV, independent remote preview/apply, and protected upload/create. | No open blocker in the current Wheel parity audit; replacement remains blocked by other modules. | Wheel writes preserve `wheels`, `wheelTags`, `wheelLibraryItems`, `wheelHistory`, Todo conversion links, dirty state, tombstones, and old `wheel-tool.js` interaction expectations. |
 | Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo and Wheel independent preview/apply/conditional upload flows. | Auto sync and Habit independent flows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice plus Records diary analysis with remote/local generation, editable section/Todo drafts, overwrite confirmation, duplicate hints, and repository-backed writeback. | Idea next action, Todo breakdown, chat capture, and remaining legacy mode writebacks are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
@@ -204,10 +204,6 @@ Status: verified locally
 - Keep Fitness deletes on legacy `manual-delete` tombstones and avoid introducing any `fitnessAppData` mirror.
 - Verify create, edit-in-place, dirty sync state, no mirror creation, deletion tombstone output, and 1440px/390px create/edit layouts with Playwright.
 
-Remaining Fitness scope:
-
-- Rest timer and history-suggestion controls during live workouts.
-
 ### Fitness Body Metrics Full Field Slice
 
 Status: verified locally
@@ -220,7 +216,22 @@ Status: verified locally
 
 Remaining Fitness scope:
 
-- Rest timer and history-suggestion controls during live workouts.
+- No open blocker in the current Fitness parity audit.
+
+### Fitness Live Workout Assist Slice
+
+Status: verified locally
+
+- Show service-backed last-performance hints during Vue live workouts via `fitness-service.js#findLastExercisePerformance`.
+- Add a per-set `套用建议` action that writes suggested weight/reps into the active in-progress workout without marking the set complete.
+- Start a Vue rest timer after completing a set, using the `restSec` returned by `fitness-service.js#completeWorkoutSet` and the current exercise/library rest setting.
+- Add timer controls for +30s, -30s, and skip while keeping timer state page-local and out of `lifePlanData`.
+- Preserve active workout persistence, dirty sync state, explicit plan writeback behavior, and no `fitnessAppData` mirror.
+- Verify suggestion text, suggestion apply, active workout set persistence, rest timer display/controls, dirty state, and 1440px/390px layouts with Playwright.
+
+Remaining Fitness scope:
+
+- No open blocker in the current Fitness parity audit.
 
 ### Wheel Canvas Interaction Slice
 

@@ -951,6 +951,63 @@ test('fitness body metrics edit every legacy field through the shared service', 
     ]));
 });
 
+test('fitness live workout suggestions and rest timer stay service backed', async ({ page }) => {
+    const source = emptyData({
+        exerciseLibrary: [
+            { id: 'ex-live', name: '卧推建议', muscle: 'chest', defaultSets: 2, defaultReps: '6', defaultWeight: 50, restSec: 90, createdAt: '2026-07-29T07:00:00', updatedAt: '2026-07-29T07:00:00' },
+        ],
+        fitnessPlans: [{
+            id: 'plan-live', name: '实时训练计划', goal: 'strength', status: 'active', weekdays: [], notes: '', createdAt: '2026-07-29T07:10:00', updatedAt: '2026-07-29T07:10:00',
+            exercises: [{ id: 'plan-live-ex', name: '卧推建议', targetSets: 2, targetReps: '6', targetWeight: 50, restSec: 90, note: '', sets: [{ id: 'live-set-1', weight: 50, reps: 6 }, { id: 'live-set-2', weight: 52.5, reps: 6 }] }],
+            days: [{ id: 'plan-live-day', name: '训练', exercises: [{ id: 'plan-live-ex', name: '卧推建议', targetSets: 2, targetReps: '6', targetWeight: 50, restSec: 90, note: '', sets: [{ id: 'live-set-1', weight: 50, reps: 6 }, { id: 'live-set-2', weight: 52.5, reps: 6 }] }] }],
+        }],
+        fitnessWorkouts: [{
+            id: 'workout-history-live',
+            date: '2026-07-28',
+            status: 'done',
+            title: '上次胸部',
+            planId: '',
+            planName: '',
+            durationMin: 45,
+            exercises: [{ id: 'history-live-ex', name: '卧推建议', targetSets: 2, targetReps: '8', targetWeight: 55, restSec: 90, note: '', plannedSets: [], sets: [{ id: 'history-set-1', weight: 55, reps: 8, done: true }, { id: 'history-set-2', weight: 57.5, reps: 7, done: true }] }],
+            createdAt: '2026-07-28T08:00:00',
+            updatedAt: '2026-07-28T09:00:00',
+        }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-live-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    await page.locator('article.card').filter({ hasText: '开始计划训练' }).locator('.fitness-metric-row').filter({ hasText: '实时训练计划' }).getByRole('button', { name: '按计划开练' }).click();
+    const active = page.locator('#page-fitness > article.card').first();
+    await expect(active).toContainText('上次 2026-07-28 57.5kg × 7');
+    const firstRow = active.locator('.fitness-live-row').first();
+    await expect(firstRow.locator('.vue-fitness-set-suggestion')).toContainText('2026-07-28 57.5kg × 7');
+    await firstRow.getByRole('button', { name: '套用建议' }).click();
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    const activeWorkout = stored.data.fitnessWorkouts.find(item => item.status === 'inProgress');
+    expect(activeWorkout.exercises[0].sets[0]).toEqual(expect.objectContaining({ weight: 57.5, reps: 7, done: false }));
+    expect(stored.syncState.dirty).toBe(true);
+
+    await firstRow.getByRole('button', { name: '完成本组' }).click();
+    await expect(active.getByRole('timer')).toContainText('卧推建议');
+    await expect(active.getByRole('timer')).toContainText(/1:2\\d|1:30/);
+    await expect(active.getByRole('button', { name: '+30s' })).toBeVisible();
+    await expect(active.getByRole('button', { name: '-30s' })).toBeVisible();
+    await active.getByRole('button', { name: '跳过' }).click();
+    await expect(active.getByRole('timer')).toHaveCount(0);
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const afterDone = stored.fitnessWorkouts.find(item => item.status === 'inProgress');
+    expect(afterDone.exercises[0].sets[0]).toEqual(expect.objectContaining({ weight: 57.5, reps: 7, done: true }));
+});
+
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
     const source = emptyData({
         records: [

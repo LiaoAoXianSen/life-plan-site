@@ -176,6 +176,11 @@
 #page-fitness .fitness-body-metric-row span { min-width: 0; overflow-wrap: anywhere; }
 #page-fitness .fitness-metric-chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
 #page-fitness .fitness-metric-chip-row span { padding: 3px 7px; border-radius: var(--radius-pill); background: var(--surface-soft); color: var(--muted); font-size: 12px; font-weight: 700; }
+#page-fitness .vue-fitness-rest-timer { display: block; margin-top: 12px; }
+#page-fitness .fitness-live-row { display: grid; grid-template-columns: 60px minmax(96px, 120px) minmax(86px, 110px) auto auto; align-items: center; gap: 8px; }
+#page-fitness .fitness-live-row label { display: grid; gap: 3px; min-width: 0; color: var(--muted); font-size: 12px; }
+#page-fitness .fitness-live-row input { width: 100%; min-width: 0; }
+#page-fitness .vue-fitness-set-suggestion { grid-column: 2 / -1; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 
 @media (max-width: 1040px) {
   .todo-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -201,4 +206,9 @@
   .record-create-footer .form-actions { display: grid; grid-template-columns: 1fr 1fr; }
   #page-fitness .fitness-body-metric-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   #page-fitness .fitness-body-metric-row .btn { justify-self: start; }
+  #page-fitness .fitness-live-row { grid-template-columns: 1fr 1fr; align-items: stretch; }
+  #page-fitness .fitness-live-row strong,
+  #page-fitness .fitness-live-row .vue-fitness-set-suggestion { grid-column: 1 / -1; }
+  #page-fitness .fitness-live-row .btn { justify-self: start; }
+  #page-fitness .fitness-rest-timer-main { align-items: stretch; flex-direction: column; }
 }
