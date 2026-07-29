@@ -25,8 +25,8 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Goals | CRUD/progress/status, detail modal entry points, search/Dashboard deep links, and tombstones. | Detail modal create/edit/delete, `goal=<id>` deep links, Dashboard goal-row restoration, legacy `createDate` and tombstones, and progress/status persistence exist. | No open blocker in the current Goals parity audit; replacement remains blocked by other modules. | Goal writes keep existing fields, avoid Vue-only timestamp churn, and delete with legacy `manual-delete` tombstones. |
 | Habits | Full rule editor, edit/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic rule create/edit/delete, quick check-in, note/backfill check-ins, note edit, undo-latest check-in, reward/penalty ledger reversals, habit/check-in tombstones, dirty-state updates, and `habitAppData` local mirror. | No open blocker in the current local Habit management/correction audit; archive, wallet/reward administration, wishes, diagnostics depth, independent protected remote workflows, and broader penalty settlement UX remain later Habit risks. | Habit local writes preserve legacy `habits`, `checkins`, `habitPointLedger`, tombstones, dirty state, and local-only mirror contracts while keeping `lifePlanData` authoritative. |
 | Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Metrics, library, multi-exercise plan create/edit, plan-start live workouts, explicit finish-time plan writeback, workout history create/edit/delete, manual-delete tombstones, and dirty-state coverage. | Rest timer UX, history suggestion controls, and full body-metric field editing remain incomplete. | Fitness writes are delegated to `fitness-service.js` and preserve old plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
-| Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, canvas rendering, click/drag spin entry points, normal and tag two-stage spin, public-library tag filtering and batch tag/enable/delete actions, history, Todo conversion, JSON/CSV, and independent remote preview/apply. | Independent protected upload/conflict write handling and final management-form polish. | Wheel writes preserve `wheels`, `wheelTags`, `wheelLibraryItems`, `wheelHistory`, Todo conversion links, dirty state, tombstones, and old `wheel-tool.js` interaction expectations. |
-| Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo independent preview/apply/conditional upload flows and Wheel independent preview/apply. | Auto sync, Habit independent flows, and Wheel protected upload remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
+| Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, canvas rendering, click/drag spin entry points, normal and tag two-stage spin, public-library tag filtering and batch tag/enable/delete actions, history, Todo conversion, JSON/CSV, independent remote preview/apply, and protected upload/create. | Final management-form polish. | Wheel writes preserve `wheels`, `wheelTags`, `wheelLibraryItems`, `wheelHistory`, Todo conversion links, dirty state, tombstones, and old `wheel-tool.js` interaction expectations. |
+| Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export plus Todo and Wheel independent preview/apply/conditional upload flows. | Auto sync and Habit independent flows remain incomplete. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Basic advice plus Records diary analysis with remote/local generation, editable section/Todo drafts, overwrite confirmation, duplicate hints, and repository-backed writeback. | Idea next action, Todo breakdown, chat capture, and remaining legacy mode writebacks are incomplete. | AI actions write back only after confirmation and preserve existing fields. |
 | Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists, import merge creates before/after snapshots, preserves tombstones, refreshes Todo/Habit mirrors, and marks main sync dirty. | No open blocker in the current Import/Export contract audit; replacement remains blocked by other modules. | Import/export round-trips complete data with snapshots, mirror rebuilds, dirty-state updates, and merge semantics intact. |
 
@@ -254,7 +254,21 @@ Status: verified locally
 
 Remaining Wheel scope:
 
-- Protected Wheel upload/create flows with conditional write and readback verification.
+- Final management-form visual polish before replacement-candidate review.
+
+### Wheel Protected Upload Create Slice
+
+Status: verified locally
+
+- Extend the Wheel independent sync panel with protected existing-file upload and session-armed first creation while keeping restored `remoteUploadEnabled` forced off.
+- Existing remote upload re-GETs `/apps/wheel-app/data.json`, refuses to PUT if the cloud hash changed since preview, requires an ETag, writes with `If-Match`, and then GET-verifies the written Wheel hash.
+- First remote creation is available only after a missing-file preview and a current-session checkbox; it rechecks the path, writes with `If-None-Match: *`, and then GET-verifies the written hash.
+- Neither protected write path changes `lifePlanData`; successful uploads clear `lifePlanWheelSyncState.dirty` and store the verified remote ETag, while uncertain PUT outcomes are not retried automatically.
+- Verify existing upload, remote-race refusal, first creation, fixed path/config reset, conditional headers, readback verification, and upload-authority reset in Playwright.
+- Verify ready and missing states at 1440px and 390px with no document, `.vue-main`, page, or Wheel panel horizontal overflow.
+
+Remaining Wheel scope:
+
 - Final management-form visual polish before replacement-candidate review.
 
 ### Sync Protected Main Upload Slice
@@ -272,7 +286,6 @@ Remaining Sync scope:
 
 - Automatic sync and visibility-resume sync.
 - Habit independent remote flows.
-- Wheel protected upload/create flows.
 - WebDAV verification readback for independent app mirrors.
 
 ### Todo Detail Contract Slice

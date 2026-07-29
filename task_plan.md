@@ -168,6 +168,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 150. Status: complete - Add focused Wheel remote preview/apply contract tests for GET-only preview, race recheck, merge persistence, tombstones, and disabled upload authority.
 151. Status: complete - Run build/check plus 1440px/390px responsive verification for the Wheel sync surface.
 152. Status: complete - Update parity evidence, package, commit, push the verified Wheel remote preview/apply stage, and append dual-store memory.
+153. Status: complete - Audit the just-added Wheel preview/apply panel and define the protected upload/create state machine.
+154. Status: complete - Implement Vue Wheel existing-file conditional upload and session-armed first creation with readback verification.
+155. Status: complete - Add focused Wheel protected upload/create contract tests for If-Match, If-None-Match, race refusal, readback hash, and restored upload-authority reset.
+156. Status: complete - Run build/check plus 1440px/390px responsive verification for the expanded Wheel sync surface.
+157. Status: complete - Update parity evidence, package, commit, push the verified Wheel protected upload/create stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

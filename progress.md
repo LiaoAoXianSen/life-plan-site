@@ -405,3 +405,13 @@
 - Fixed the existing Habit correction contract test to compute today/yesterday dynamically, because the hard-coded 2026-07-28 date became a backfill after the real date advanced to 2026-07-29.
 - Verified `npm run build`, focused Wheel remote tests 2/2, focused Habit date-drift regression 1/1, full `npm run test` 37/37, and `git diff --check` with only LF/CRLF warnings.
 - Verified the Sync page with the Wheel sync panel at 1440x900 and 390x900: document, `.vue-main`, `.page.active`, and `.wheel-sync-card` all had zero horizontal overflow. Screenshots are under `test-results/wheel-sync-1440.png` and `test-results/wheel-sync-390.png`.
+
+## 2026-07-29 - Wheel protected upload/create stage
+
+- Started phases 153-157 after commit `4266925`; the working tree was clean on `migration/vue-app-v1`, and protected `master`, `experiment/vue-preview-poc`, and `stash@{0}` were read-only checked before implementation.
+- Extended `src/components/WheelSyncPanel.vue` with protected existing-file upload and session-armed first creation for `/apps/wheel-app/data.json`; restored `lifePlanWheelSyncConfig` still forces `autoSync: false` and `remoteUploadEnabled: false`.
+- Existing upload now re-GETs the Wheel remote, refuses PUT if the remote hash changed since preview, requires ETag, writes with `If-Match`, performs GET readback hash verification, and clears `lifePlanWheelSyncState.dirty` only after verification.
+- First creation now appears only after a missing-file preview and current-session checkbox, rechecks absence immediately before writing, uses `If-None-Match: *`, performs readback verification, and does not retry uncertain PUT outcomes automatically.
+- Added focused Playwright coverage for Wheel existing upload, upload-race refusal before PUT, and first creation; tests verify request sequences, conditional headers, uploaded snapshot contents, fixed config reset, and verified sync state.
+- Verified `npm run build`, focused Wheel protected upload/create tests 3/3, full `npm run test` 40/40, and `git diff --check` with only LF/CRLF warnings.
+- Verified ready and missing Wheel sync states at 1440x900 and 390x900: document, `.vue-main`, `.page.active`, and `.wheel-sync-card` all had zero horizontal overflow. Screenshots are under `test-results/wheel-sync-upload-ready-1440.png`, `test-results/wheel-sync-upload-ready-390.png`, `test-results/wheel-sync-upload-missing-1440.png`, and `test-results/wheel-sync-upload-missing-390.png`.

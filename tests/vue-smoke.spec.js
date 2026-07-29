@@ -2012,6 +2012,171 @@ test('wheel remote apply stops before persistence when cloud changed after previ
     expect(result.snapshots.some(item => item.reason === '应用 Wheel 云端合并结果前')).toBe(false);
 });
 
+test('wheel existing remote upload uses If-Match and verifies the written snapshot', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-existing-sync', name: '本机新版转盘', mode: 'normal',
+            items: [{ id: 'existing-local-option', name: '本机新版选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T10:00:00' }],
+            createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T10:00:00',
+        }],
+        wheelTags: [{ id: 'tag-existing-local', name: '本机标签', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T10:00:00' }],
+        wheelLibraryItems: [{ id: 'library-existing-local', name: '本机公共项', note: '', tagIds: ['tag-existing-local'], weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T10:00:00' }],
+    });
+    const remote = {
+        wheels: [{
+            id: 'wheel-existing-sync', name: '云端旧版转盘', mode: 'normal',
+            items: [{ id: 'existing-remote-option', name: '云端旧版选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-29T07:00:00', updatedAt: '2026-07-29T08:00:00' }],
+            createdAt: '2026-07-29T07:00:00', updatedAt: '2026-07-29T08:00:00',
+        }],
+        wheelTags: [], wheelLibraryItems: [], wheelHistory: [], deletedItems: [],
+    };
+    await page.addInitScript(({ localData, remoteData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
+        window.__wheelSyncRequests = [];
+        window.__wheelUploaded = null;
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__wheelSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'PUT') {
+                window.__wheelUploaded = JSON.parse(options.body);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"wheel-existing-v2"' } });
+            }
+            if (method === 'GET') {
+                const fileGets = window.__wheelSyncRequests.filter(item => item.method === 'GET').length;
+                const body = fileGets >= 3 && window.__wheelUploaded ? window.__wheelUploaded : remoteData;
+                return new Response(JSON.stringify(body), { status: 200, headers: { ETag: fileGets >= 3 ? '"wheel-existing-v2"' : '"wheel-existing-v1"', 'Content-Type': 'application/json' } });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, remoteData: remote });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.wheel-sync-card');
+    await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '受保护上传' }).click();
+    await expect(panel.getByRole('status')).toContainText('回读核验一致');
+
+    const result = await page.evaluate(() => ({
+        requests: window.__wheelSyncRequests,
+        uploaded: window.__wheelUploaded,
+        state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+        config: JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig')),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/wheel-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET', 'PUT', 'GET']);
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(put.headers['If-Match'] || put.headers['if-match']).toBe('"wheel-existing-v1"');
+    expect(result.uploaded.wheels[0].name).toBe('本机新版转盘');
+    expect(result.uploaded.wheelLibraryItems.map(item => item.id)).toContain('library-existing-local');
+    expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"wheel-existing-v2"' });
+    expect(result.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: false, remoteUploadEnabled: false });
+});
+
+test('wheel existing upload stops before PUT when the remote changed after preview', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-upload-race-local', name: '上传竞态本机转盘', mode: 'normal',
+            items: [{ id: 'upload-race-local-option', name: '本机选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T10:00:00' }],
+            createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T10:00:00',
+        }],
+    });
+    const remoteBefore = {
+        wheels: [{ id: 'wheel-upload-race-remote', name: '预览云端转盘', mode: 'normal', items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+        wheelTags: [], wheelLibraryItems: [], wheelHistory: [], deletedItems: [],
+    };
+    const remoteAfter = {
+        ...remoteBefore,
+        wheelHistory: [{ id: 'wheel-upload-race-history', wheelId: 'wheel-upload-race-remote', wheelName: '预览云端转盘', mode: 'normal', resultId: '', resultName: '另一设备结果', note: '', createdAt: '2026-07-29T10:30:00', updatedAt: '2026-07-29T10:30:00' }],
+    };
+    await page.addInitScript(({ localData, firstRemote, secondRemote }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        window.__wheelSyncRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__wheelSyncRequests.push({ url: String(url), method, headers: options.headers || {} });
+            if (method === 'GET') {
+                const count = window.__wheelSyncRequests.filter(item => item.method === 'GET').length;
+                return new Response(JSON.stringify(count === 1 ? firstRemote : secondRemote), {
+                    status: 200,
+                    headers: { ETag: count === 1 ? '"wheel-upload-race-v1"' : '"wheel-upload-race-v2"', 'Content-Type': 'application/json' },
+                });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, { localData: local, firstRemote: remoteBefore, secondRemote: remoteAfter });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.wheel-sync-card');
+    await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
+    await panel.getByRole('button', { name: '受保护上传' }).click();
+    await expect(panel.getByRole('status')).toContainText('云端自上次检查后已变化');
+
+    const result = await page.evaluate(() => ({
+        methods: window.__wheelSyncRequests.map(item => item.method),
+        state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+    }));
+    expect(result.methods).toEqual(['GET', 'GET']);
+    expect(result.state.lastConflictAt).toBeTruthy();
+    expect(result.state.lastRemoteEtag).toBe('"wheel-upload-race-v2"');
+});
+
+test('wheel first remote creation requires session arm and uses If-None-Match', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-first-sync', name: '首次云端转盘', mode: 'normal',
+            items: [{ id: 'first-option', name: '首次选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+            createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00',
+        }],
+    });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
+        window.__wheelSyncRequests = [];
+        window.__wheelUploaded = null;
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__wheelSyncRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'PUT') {
+                window.__wheelUploaded = JSON.parse(options.body);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"wheel-created"' } });
+            }
+            if (method === 'GET') {
+                if (!window.__wheelUploaded) return new Response('missing', { status: 404 });
+                return new Response(JSON.stringify(window.__wheelUploaded), { status: 200, headers: { ETag: '"wheel-created"', 'Content-Type': 'application/json' } });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, local);
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.wheel-sync-card');
+    await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('不存在');
+    await expect(panel.getByRole('checkbox', { name: '本次会话允许首次创建' })).not.toBeChecked();
+    expect(await page.evaluate(() => window.__wheelSyncRequests.filter(item => item.method === 'PUT').length)).toBe(0);
+    await panel.getByRole('checkbox', { name: '本次会话允许首次创建' }).check();
+    page.once('dialog', dialog => dialog.accept());
+    await panel.getByRole('button', { name: '首次创建' }).click();
+    await expect(panel.getByRole('status')).toContainText('回读核验一致');
+
+    const result = await page.evaluate(() => ({
+        requests: window.__wheelSyncRequests,
+        state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+        config: JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig')),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/wheel-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET', 'PUT', 'GET']);
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(put.headers['If-None-Match'] || put.headers['if-none-match']).toBe('*');
+    expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"wheel-created"' });
+    expect(result.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: false, remoteUploadEnabled: false });
+});
+
 test('todo existing remote upload uses If-Match and verifies the written mirror', async ({ page }) => {
     const local = emptyData({ todos: [todoFixture('todo-existing-sync', '本机新版待办', { updatedAt: '2026-07-27T10:00:00' })] });
     const remote = todoRemoteSnapshot([todoFixture('todo-existing-sync', '云端旧版待办', { updatedAt: '2026-07-27T08:00:00' })]);
