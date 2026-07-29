@@ -208,6 +208,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 190. Status: complete - Add focused Habit first-create Playwright coverage for disabled-until-armed success and final-recheck race refusal.
 191. Status: complete - Run production build and focused Habit first-create checks before full verification.
 192. Status: complete - Update docs/progress, run full checks/package, verify protected refs, commit, push, and append dual-store memory for the Habit first-create stage.
+193. Status: complete - Audit in-progress Habit advanced reward/penalty/milestone management diff and preserve the existing dirty work instead of switching modules.
+194. Status: complete - Expose Vue Habit advanced reward, penalty, break-penalty, and milestone fields through the management form.
+195. Status: complete - Extend `habitsStore` create/update normalization so advanced fields persist and referenced currencies are created.
+196. Status: complete - Add focused Habit management coverage for advanced field editing, milestone persistence, currency creation, mirror rebuild, dirty state, and tombstones.
+197. Status: complete - Run full verification, package, commit, push, and append dual-store memory for the Habit advanced reward fields stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

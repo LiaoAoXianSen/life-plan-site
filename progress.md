@@ -500,3 +500,15 @@
 - Verified desktop 1440x1000 and mobile 390x1000 Sync page layouts with regular Playwright fallback: no unexpected console/page errors and zero horizontal overflow for document, `.vue-main`, `.page.active`, `.habit-sync-card`, `.habit-sync-arm`, and `.habit-sync-comparison`. Screenshots are under `test-results/habit-sync-first-create-1440.png` and `test-results/habit-sync-first-create-390.png`.
 - Created clean runtime package `life-plan-site-runtime-20260729-152830.zip`; package retention removed `life-plan-site-runtime-20260729-120906.zip`.
 - Protected refs remained unchanged before the Habit first-create commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-29 - Habit advanced reward fields stage
+
+- Started phases 193-197 after commit `aa9f9eb`; the working tree unexpectedly contained in-progress `src/stores/habitsStore.ts`, `src/pages/HabitsPage.vue`, and `tests/vue-smoke.spec.js` edits, so the slice was preserved and audited instead of switching to AI work.
+- Exposed Vue Habit advanced management fields for fixed rewards, reward currency, penalty points/currency, random reward ranges, break-penalty mode/value/currency, and the legacy 7/15/21/30/90/180/365-day milestone rows.
+- Extended `src/stores/habitsStore.ts` create/update normalization to persist advanced reward, penalty, break-penalty, and milestone fields instead of resetting them during a basic edit.
+- Added currency preservation support so referenced reward, penalty, break-penalty, and milestone currencies are present in `lifePlanData.habitCurrencies` while keeping `lifePlanData.habits` authoritative.
+- Extended the focused Habit management Playwright contract to edit advanced fields, persist milestone rewards, create currencies, preserve record/checkin cleanup, rebuild local-only `habitAppData`, and mark main sync dirty.
+- Verified `npm run build`, focused `npx playwright test tests/vue-smoke.spec.js --grep "habit base edit"` with 1/1 passing, full `.\scripts\check.ps1` with 50/50 Vue smoke tests, and `git diff --check` with only LF/CRLF warnings.
+- Verified desktop 1440x1000 and mobile 390x1000 Habits advanced form layouts with no horizontal overflow for document, `.vue-main`, `#page-habits`, `.habit-management-card`, `.habit-editor-form`, `.habit-advanced-fields`, or `.habit-milestone-editor`. Screenshots are under `test-results/habit-advanced-fields-1440.png` and `test-results/habit-advanced-fields-390.png`.
+- Created clean runtime package `life-plan-site-runtime-20260729-155944.zip`; package retention removed `life-plan-site-runtime-20260729-143057.zip`.
+- Protected refs remained unchanged before the Habit advanced reward fields commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.

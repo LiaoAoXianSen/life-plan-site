@@ -32,6 +32,19 @@ const ruleLabels: Record<string, string> = {
   'monthly-count': '每月次数',
   interval: '间隔天数',
 };
+const milestoneDays = [7, 15, 21, 30, 90, 180, 365];
+
+function milestoneDefaults() {
+  return milestoneDays.map(days => ({
+    days,
+    enabled: false,
+    rewardAmount: 0,
+    currency: '金币',
+    penaltyAmount: 0,
+    penaltyCurrency: '金币',
+  }));
+}
+
 const habitForm = reactive({
   id: '',
   name: '',
@@ -42,6 +55,17 @@ const habitForm = reactive({
   tag: '',
   goalCount: 0,
   noteMode: 'ask',
+  rewardPoints: 0,
+  rewardCurrency: '金币',
+  penaltyPoints: 0,
+  penaltyCurrency: '金币',
+  randomReward: false,
+  rewardMin: 0,
+  rewardMax: 0,
+  breakPenaltyMode: 'none',
+  breakPenaltyPoints: 0,
+  breakPenaltyCurrency: '金币',
+  milestoneRewards: milestoneDefaults(),
 });
 const editingHabit = computed(() => habitForm.id ? habits.habits.find(item => item.id === habitForm.id) : null);
 const formTitle = computed(() => editingHabit.value ? '编辑基础习惯' : '添加基础习惯');
@@ -56,10 +80,25 @@ function resetHabitForm() {
   habitForm.tag = '';
   habitForm.goalCount = 0;
   habitForm.noteMode = 'ask';
+  habitForm.rewardPoints = 0;
+  habitForm.rewardCurrency = '金币';
+  habitForm.penaltyPoints = 0;
+  habitForm.penaltyCurrency = '金币';
+  habitForm.randomReward = false;
+  habitForm.rewardMin = 0;
+  habitForm.rewardMax = 0;
+  habitForm.breakPenaltyMode = 'none';
+  habitForm.breakPenaltyPoints = 0;
+  habitForm.breakPenaltyCurrency = '金币';
+  habitForm.milestoneRewards = milestoneDefaults();
   formError.value = '';
 }
 
-function editHabit(item: { id: string; name?: string; rule?: string; weekdays?: unknown; count?: unknown; timesPerDay?: unknown; tag?: string; goalCount?: unknown; noteMode?: string }) {
+function editHabit(item: {
+  id: string; name?: string; rule?: string; weekdays?: unknown; count?: unknown; timesPerDay?: unknown; tag?: string; goalCount?: unknown; noteMode?: string;
+  rewardPoints?: unknown; rewardCurrency?: string; penaltyPoints?: unknown; penaltyCurrency?: string; randomReward?: boolean; rewardMin?: unknown; rewardMax?: unknown;
+  breakPenaltyMode?: string; breakPenaltyPoints?: unknown; breakPenaltyCurrency?: string; milestoneRewards?: unknown;
+}) {
   habitForm.id = item.id;
   habitForm.name = item.name || '';
   habitForm.rule = item.rule || 'daily';
@@ -69,6 +108,28 @@ function editHabit(item: { id: string; name?: string; rule?: string; weekdays?: 
   habitForm.tag = item.tag || '';
   habitForm.goalCount = Number(item.goalCount || 0);
   habitForm.noteMode = item.noteMode === 'never' ? 'never' : 'ask';
+  habitForm.rewardPoints = Number(item.rewardPoints || 0);
+  habitForm.rewardCurrency = item.rewardCurrency || '金币';
+  habitForm.penaltyPoints = Number(item.penaltyPoints || 0);
+  habitForm.penaltyCurrency = item.penaltyCurrency || item.rewardCurrency || '金币';
+  habitForm.randomReward = Boolean(item.randomReward);
+  habitForm.rewardMin = Number(item.rewardMin ?? item.rewardPoints ?? 0);
+  habitForm.rewardMax = Number(item.rewardMax ?? item.rewardPoints ?? 0);
+  habitForm.breakPenaltyMode = ['none', 'fixed', 'stage'].includes(String(item.breakPenaltyMode)) ? String(item.breakPenaltyMode) : 'none';
+  habitForm.breakPenaltyPoints = Number(item.breakPenaltyPoints || 0);
+  habitForm.breakPenaltyCurrency = item.breakPenaltyCurrency || item.penaltyCurrency || item.rewardCurrency || '金币';
+  const supplied = Array.isArray(item.milestoneRewards) ? item.milestoneRewards as Array<Record<string, unknown>> : [];
+  habitForm.milestoneRewards = milestoneDefaults().map(fallback => {
+    const match = supplied.find(value => Number(value.days) === fallback.days);
+    return {
+      days: fallback.days,
+      enabled: Boolean(match?.enabled),
+      rewardAmount: Number(match?.rewardAmount || 0),
+      currency: String(match?.currency || '金币'),
+      penaltyAmount: Number(match?.penaltyAmount || 0),
+      penaltyCurrency: String(match?.penaltyCurrency || match?.currency || '金币'),
+    };
+  });
   formError.value = '';
 }
 
@@ -88,6 +149,17 @@ function saveHabit() {
       tag: habitForm.tag,
       goalCount: habitForm.goalCount,
       noteMode: habitForm.noteMode as 'ask' | 'never',
+      rewardPoints: habitForm.rewardPoints,
+      rewardCurrency: habitForm.rewardCurrency,
+      penaltyPoints: habitForm.penaltyPoints,
+      penaltyCurrency: habitForm.penaltyCurrency,
+      randomReward: habitForm.randomReward,
+      rewardMin: habitForm.rewardMin,
+      rewardMax: habitForm.rewardMax,
+      breakPenaltyMode: habitForm.breakPenaltyMode as 'none' | 'fixed' | 'stage',
+      breakPenaltyPoints: habitForm.breakPenaltyPoints,
+      breakPenaltyCurrency: habitForm.breakPenaltyCurrency,
+      milestoneRewards: habitForm.milestoneRewards,
     };
     const saved = habitForm.id ? habits.updateHabit(habitForm.id, input) : habits.create(input);
     if (saved) resetHabitForm();
@@ -240,10 +312,35 @@ watch(focusedHabitId, value => {
           <span>执行星期</span>
           <label v-for="day in weekdayOptions" :key="day.value"><input v-model="habitForm.weekdays" type="checkbox" :value="day.value" />{{ day.label }}</label>
         </div>
+        <details class="habit-advanced-fields">
+          <summary>高级积分与里程碑</summary>
+          <div class="habit-advanced-grid">
+            <label class="form-field"><span>固定奖励</span><input v-model.number="habitForm.rewardPoints" type="number" min="0" max="99999" /></label>
+            <label class="form-field"><span>奖励币种</span><input v-model="habitForm.rewardCurrency" maxlength="24" /></label>
+            <label class="form-field"><span>未完成扣分</span><input v-model.number="habitForm.penaltyPoints" type="number" min="0" max="99999" /></label>
+            <label class="form-field"><span>扣金币种</span><input v-model="habitForm.penaltyCurrency" maxlength="24" /></label>
+            <label class="habit-check-field"><input v-model="habitForm.randomReward" type="checkbox" /><span>使用随机奖励区间</span></label>
+            <label v-if="habitForm.randomReward" class="form-field"><span>奖励下限</span><input v-model.number="habitForm.rewardMin" type="number" min="0" max="99999" /></label>
+            <label v-if="habitForm.randomReward" class="form-field"><span>奖励上限</span><input v-model.number="habitForm.rewardMax" type="number" min="0" max="99999" /></label>
+            <label class="form-field"><span>断签扣分</span><select v-model="habitForm.breakPenaltyMode"><option value="none">不扣分</option><option value="fixed">固定扣分</option><option value="stage">按阶段扣分</option></select></label>
+            <label v-if="habitForm.breakPenaltyMode === 'fixed'" class="form-field"><span>断签扣分值</span><input v-model.number="habitForm.breakPenaltyPoints" type="number" min="0" max="99999" /></label>
+            <label v-if="habitForm.breakPenaltyMode === 'fixed'" class="form-field"><span>断签币种</span><input v-model="habitForm.breakPenaltyCurrency" maxlength="24" /></label>
+          </div>
+          <div class="habit-milestone-editor">
+            <div class="habit-milestone-head"><span>天数</span><span>奖励</span><span>奖励币种</span><span>罚款</span><span>罚款币种</span></div>
+            <div v-for="milestone in habitForm.milestoneRewards" :key="milestone.days" class="habit-milestone-row">
+              <label><input v-model="milestone.enabled" type="checkbox" />{{ milestone.days }} 天</label>
+              <input v-model.number="milestone.rewardAmount" :aria-label="`${milestone.days} 天奖励`" type="number" min="0" max="99999" />
+              <input v-model="milestone.currency" :aria-label="`${milestone.days} 天奖励币种`" maxlength="24" />
+              <input v-model.number="milestone.penaltyAmount" :aria-label="`${milestone.days} 天罚款`" type="number" min="0" max="99999" />
+              <input v-model="milestone.penaltyCurrency" :aria-label="`${milestone.days} 天罚款币种`" maxlength="24" />
+            </div>
+          </div>
+        </details>
         <div class="form-actions"><button class="btn btn-primary" type="submit">{{ editingHabit ? '保存习惯' : '添加习惯' }}</button></div>
       </form>
       <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
-      <p class="section-hint">新建项使用旧版默认字段：每日规则、金币奖励币种、完整里程碑结构；详细规则、提醒、罚款、心愿和同步设置仍请在旧版维护。</p>
+      <p class="section-hint">新建和编辑会保留旧版规则、积分、断签扣分、里程碑与本地镜像结构；心愿兑换、钱包管理和远端同步仍在各自页面维护。</p>
 
       <div class="habit-library-table habit-management-table">
         <div class="habit-library-row head">
@@ -382,6 +479,82 @@ watch(focusedHabitId, value => {
   width: 14px;
   height: 14px;
 }
+.habit-advanced-fields {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(42, 75, 56, .12);
+  border-radius: 10px;
+  background: #fff;
+}
+.habit-advanced-fields summary {
+  cursor: pointer;
+  color: var(--text, #17211b);
+  font-size: 13px;
+  font-weight: 850;
+}
+.habit-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.habit-check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: var(--text, #17211b);
+  font-size: 13px;
+  font-weight: 750;
+}
+.habit-check-field input {
+  width: 16px;
+  height: 16px;
+}
+.habit-milestone-editor {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+.habit-milestone-head,
+.habit-milestone-row {
+  display: grid;
+  grid-template-columns: minmax(86px, .8fr) repeat(4, minmax(92px, 1fr));
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.habit-milestone-head {
+  color: var(--muted, #647269);
+  font-size: 12px;
+  font-weight: 800;
+}
+.habit-milestone-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 750;
+}
+.habit-milestone-row input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid var(--line, #dfe7e1);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text, #17211b);
+}
+.habit-milestone-row label input[type="checkbox"] {
+  width: 16px;
+  min-height: auto;
+  flex: 0 0 auto;
+}
 .habit-management-table {
   margin-top: 2px;
 }
@@ -395,12 +568,27 @@ watch(focusedHabitId, value => {
   }
 }
 @media (max-width: 900px) {
-  .habit-editor-form {
+  .habit-editor-form,
+  .habit-advanced-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .habit-milestone-head {
+    display: none;
+  }
+  .habit-milestone-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 8px;
+    border: 1px solid rgba(42, 75, 56, .10);
+    border-radius: 8px;
+  }
+  .habit-milestone-row label {
+    grid-column: 1 / -1;
   }
 }
 @media (max-width: 620px) {
-  .habit-editor-form {
+  .habit-editor-form,
+  .habit-advanced-grid,
+  .habit-milestone-row {
     grid-template-columns: minmax(0, 1fr);
   }
   .habit-management-table {

@@ -1238,6 +1238,23 @@ test('habit base edit and delete preserve legacy management contracts', async ({
     await management.getByLabel('每天次数').fill('3');
     await management.getByLabel('总目标次数').fill('30');
     await management.getByLabel('备注模式').selectOption('never');
+    await management.getByText('高级积分与里程碑').click();
+    await management.getByLabel('固定奖励', { exact: true }).fill('9');
+    await management.getByLabel('奖励币种', { exact: true }).fill('能量');
+    await management.getByLabel('未完成扣分', { exact: true }).fill('4');
+    await management.getByLabel('扣金币种', { exact: true }).fill('罚金币');
+    await management.getByLabel('使用随机奖励区间', { exact: true }).check();
+    await management.getByLabel('奖励下限', { exact: true }).fill('5');
+    await management.getByLabel('奖励上限', { exact: true }).fill('12');
+    await management.locator('label.form-field').filter({ hasText: '断签扣分' }).locator('select').selectOption('fixed');
+    await management.getByLabel('断签扣分值', { exact: true }).fill('6');
+    await management.getByLabel('断签币种', { exact: true }).fill('断签币');
+    const milestoneRow = management.locator('.habit-milestone-row').filter({ hasText: '7 天' });
+    await milestoneRow.getByRole('checkbox').check();
+    await management.getByLabel('7 天奖励', { exact: true }).fill('20');
+    await management.getByLabel('7 天奖励币种', { exact: true }).fill('里程碑币');
+    await management.getByLabel('7 天罚款', { exact: true }).fill('3');
+    await management.getByLabel('7 天罚款币种', { exact: true }).fill('里程碑罚币');
     await management.getByRole('button', { name: '保存习惯' }).click();
     await expect(page.locator('.notice.success')).toContainText('已保存「更新习惯」');
 
@@ -1256,12 +1273,22 @@ test('habit base edit and delete preserve legacy management contracts', async ({
         tag: '新分组',
         goalCount: 30,
         noteMode: 'never',
-        rewardPoints: 7,
-        rewardCurrency: '星星',
-        penaltyPoints: 2,
+        rewardPoints: 9,
+        rewardCurrency: '能量',
+        penaltyPoints: 4,
+        penaltyCurrency: '罚金币',
+        randomReward: true,
+        rewardMin: 5,
+        rewardMax: 12,
         breakPenaltyMode: 'fixed',
+        breakPenaltyPoints: 6,
+        breakPenaltyCurrency: '断签币',
         createdAt: '2026-07-27T08:00:00',
     });
+    expect(stored.data.habits[0].milestoneRewards).toEqual(expect.arrayContaining([
+        expect.objectContaining({ days: 7, enabled: true, rewardAmount: 20, currency: '里程碑币', penaltyAmount: 3, penaltyCurrency: '里程碑罚币' }),
+    ]));
+    expect(stored.data.habitCurrencies.map(item => item.name)).toEqual(expect.arrayContaining(['金币', '能量', '罚金币', '断签币', '里程碑币', '里程碑罚币']));
     expect(stored.data.habits[0].updatedAt).not.toBe('2026-07-27T08:00:00');
     expect(stored.data.records.map(item => item.id)).toEqual(['record-keep']);
     expect(stored.mirror.localMirror).toBe(true);

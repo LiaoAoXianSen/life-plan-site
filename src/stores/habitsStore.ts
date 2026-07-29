@@ -63,6 +63,17 @@ export interface CreateHabitInput {
   count?: number;
   goalCount?: number;
   noteMode?: 'ask' | 'never';
+  rewardPoints?: number;
+  rewardCurrency?: string;
+  penaltyPoints?: number;
+  penaltyCurrency?: string;
+  randomReward?: boolean;
+  rewardMin?: number;
+  rewardMax?: number;
+  breakPenaltyMode?: 'none' | 'fixed' | 'stage';
+  breakPenaltyPoints?: number;
+  breakPenaltyCurrency?: string;
+  milestoneRewards?: Partial<HabitMilestone>[];
 }
 
 export interface UpdateHabitInput extends CreateHabitInput {}
@@ -163,6 +174,12 @@ function normalizeHabitBaseInput(input: CreateHabitInput | UpdateHabitInput) {
   const timesPerDay = Math.max(1, Math.min(99, Math.trunc(Number(input.timesPerDay) || 1)));
   const count = Math.max(1, Math.min(99, Math.trunc(Number(input.count) || 3)));
   const goalCount = Math.max(0, Math.trunc(Number(input.goalCount) || 0));
+  const rewardPoints = Math.max(0, Math.trunc(Number(input.rewardPoints) || 0));
+  const rewardMin = Math.max(0, Math.trunc(Number(input.rewardMin ?? rewardPoints) || 0));
+  const rewardMax = Math.max(rewardMin, Math.trunc(Number(input.rewardMax ?? rewardMin) || rewardMin));
+  const breakPenaltyMode = ['none', 'fixed', 'stage'].includes(String(input.breakPenaltyMode))
+    ? input.breakPenaltyMode as 'none' | 'fixed' | 'stage'
+    : 'none';
   return {
     name,
     rule,
@@ -172,6 +189,17 @@ function normalizeHabitBaseInput(input: CreateHabitInput | UpdateHabitInput) {
     tag: String(input.tag || '').trim(),
     goalCount,
     noteMode: input.noteMode === 'never' ? 'never' as const : 'ask' as const,
+    rewardPoints,
+    rewardCurrency: normalizeCurrency(input.rewardCurrency),
+    penaltyPoints: Math.max(0, Math.trunc(Number(input.penaltyPoints) || 0)),
+    penaltyCurrency: normalizeCurrency(input.penaltyCurrency || input.rewardCurrency),
+    randomReward: Boolean(input.randomReward),
+    rewardMin,
+    rewardMax,
+    breakPenaltyMode,
+    breakPenaltyPoints: Math.max(0, Math.trunc(Number(input.breakPenaltyPoints) || 0)),
+    breakPenaltyCurrency: normalizeCurrency(input.breakPenaltyCurrency || input.penaltyCurrency || input.rewardCurrency),
+    milestoneRewards: normalizedMilestones(input.milestoneRewards),
   };
 }
 
@@ -185,6 +213,17 @@ function habitComparable(habit: Partial<Habit>) {
     tag: habit.tag || '',
     goalCount: Number(habit.goalCount || 0),
     noteMode: habit.noteMode || 'ask',
+    rewardPoints: Number(habit.rewardPoints || 0),
+    rewardCurrency: normalizeCurrency(habit.rewardCurrency),
+    penaltyPoints: Number(habit.penaltyPoints || 0),
+    penaltyCurrency: normalizeCurrency(habit.penaltyCurrency || habit.rewardCurrency),
+    randomReward: Boolean(habit.randomReward),
+    rewardMin: Number(habit.rewardMin ?? habit.rewardPoints ?? 0),
+    rewardMax: Number(habit.rewardMax ?? habit.rewardPoints ?? 0),
+    breakPenaltyMode: habit.breakPenaltyMode || 'none',
+    breakPenaltyPoints: Number(habit.breakPenaltyPoints || 0),
+    breakPenaltyCurrency: normalizeCurrency(habit.breakPenaltyCurrency || habit.penaltyCurrency || habit.rewardCurrency),
+    milestoneRewards: normalizedMilestones(habit.milestoneRewards),
   });
 }
 
@@ -197,6 +236,24 @@ function habitSlice(data: LifePlanData) {
     habitCurrencies: data.habitCurrencies,
     deletedItems: data.deletedItems,
   };
+}
+
+function ensureHabitCurrencies(data: LifePlanData, habit: Partial<Habit>) {
+  const names = new Set<string>([DEFAULT_CURRENCY]);
+  [habit.rewardCurrency, habit.penaltyCurrency, habit.breakPenaltyCurrency].forEach(value => names.add(normalizeCurrency(value)));
+  normalizedMilestones(habit.milestoneRewards).forEach(item => {
+    names.add(normalizeCurrency(item.currency));
+    names.add(normalizeCurrency(item.penaltyCurrency));
+  });
+  names.forEach(name => {
+    if (data.habitCurrencies.some(item => normalizeCurrency(item.name || item.currency || item.id) === name)) return;
+    data.habitCurrencies.push({
+      id: name === DEFAULT_CURRENCY ? 'habit-currency-default' : genId(),
+      name,
+      createdAt: getNowLocal(),
+      updatedAt: getNowLocal(),
+    });
+  });
 }
 
 export const useHabitsStore = defineStore('habits', () => {
@@ -397,17 +454,6 @@ export const useHabitsStore = defineStore('habits', () => {
     const habit: Habit = {
       id: genId(),
       ...base,
-      rewardPoints: 0,
-      rewardCurrency: DEFAULT_CURRENCY,
-      penaltyPoints: 0,
-      penaltyCurrency: DEFAULT_CURRENCY,
-      randomReward: false,
-      rewardMin: 0,
-      rewardMax: 0,
-      breakPenaltyMode: 'none',
-      breakPenaltyPoints: 0,
-      breakPenaltyCurrency: DEFAULT_CURRENCY,
-      milestoneRewards: milestoneDefaults(),
       startDate: getTodayStr(),
       createdAt: now,
       updatedAt: now,
@@ -415,9 +461,7 @@ export const useHabitsStore = defineStore('habits', () => {
     try {
       lifePlan.mutate('vue-create-habit', data => {
         data.habits.push(habit);
-        if (!data.habitCurrencies.some(item => normalizeCurrency(item.name || item.currency || item.id) === DEFAULT_CURRENCY)) {
-          data.habitCurrencies.push({ id: 'habit-currency-default', name: DEFAULT_CURRENCY, createdAt: now, updatedAt: now });
-        }
+        ensureHabitCurrencies(data, habit);
       });
       rebuildLocalMirror('vue-create-habit');
       lastAction.value = `已添加「${habit.name}」`;
@@ -453,6 +497,7 @@ export const useHabitsStore = defineStore('habits', () => {
           createdAt: target.createdAt || getNowLocal(),
           updatedAt: getNowLocal(),
         });
+        ensureHabitCurrencies(data, target);
         if (previousTag !== base.tag) {
           data.records.forEach(record => {
             if (record.isHabitRecord && record.habitId === habitId) {
