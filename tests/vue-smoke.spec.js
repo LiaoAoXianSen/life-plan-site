@@ -18,6 +18,27 @@ function todoRemoteSnapshot(todos, deletedItems = []) {
     return { schemaVersion: 1, generatedAt: '2026-07-27T09:00:00.000Z', todos, deletedItems };
 }
 
+function habitRemoteSnapshot(overrides = {}) {
+    return {
+        schemaVersion: 1,
+        habits: [],
+        habitGroups: [],
+        habitRecords: [],
+        habitRewards: [],
+        habitRewardRecords: [],
+        habitFineRecords: [],
+        habitLedger: [],
+        habitCurrencies: [],
+        habitMilestones: [],
+        habitMilestoneClaims: [],
+        habitOverdueEvents: [],
+        habitMoodNotes: [],
+        habitTimeTasks: [],
+        deletedItems: [],
+        ...overrides,
+    };
+}
+
 async function expectHashRoute(page, path, query = {}) {
     await expect.poll(() => page.evaluate(() => {
         const [hashPath, rawQuery = ''] = location.hash.replace(/^#/, '').split('?');
@@ -2046,6 +2067,92 @@ test('todo remote preview stays GET-only and apply rechecks then persists the me
     expect(applied.state.dirty).toBe(true);
     expect(applied.mainState.dirty).toBe(true);
     expect(applied.snapshots.some(item => item.reason === '应用 Todo 云端合并结果前')).toBe(true);
+});
+
+test('habit remote preview stays GET-only and leaves local habit mirrors untouched', async ({ page }) => {
+    const local = emptyData({
+        habits: [{
+            id: 'habit-local-sync',
+            name: '本机习惯',
+            tag: '健康',
+            rule: 'daily',
+            timesPerDay: '1',
+            rewardPoints: 2,
+            rewardCurrency: '金币',
+            startDate: '2026-07-27',
+            createdAt: '2026-07-27T08:00:00',
+            updatedAt: '2026-07-27T08:00:00',
+        }],
+        checkins: [{
+            id: 'checkin-local-sync',
+            habitId: 'habit-local-sync',
+            date: '2026-07-27',
+            time: '08:00',
+            checkinAt: '2026-07-27T08:00:00',
+            note: '',
+            createdAt: '2026-07-27T08:00:00',
+            updatedAt: '2026-07-27T08:00:00',
+        }],
+        habitPointLedger: [{
+            id: 'ledger-local-sync',
+            habitId: 'habit-local-sync',
+            sourceId: 'checkin-local-sync',
+            type: 'checkin',
+            amount: 2,
+            currency: '金币',
+            date: '2026-07-27',
+            createdAt: '2026-07-27T08:00:00',
+            updatedAt: '2026-07-27T08:00:00',
+        }],
+    });
+    const remote = habitRemoteSnapshot({
+        habits: [{ id: 'life-plan/habits/habit-remote-sync', title: '云端习惯', updatedAt: '2026-07-27T09:00:00' }],
+        habitRecords: [{ id: 'life-plan/checkins/checkin-remote-sync', habitId: 'life-plan/habits/habit-remote-sync', date: '2026-07-27', sourceKey: 'remote-checkin', updatedAt: '2026-07-27T09:10:00' }],
+        habitLedger: [{ id: 'life-plan/ledger/ledger-remote-sync', type: 'checkin', sourceId: 'remote-checkin', currency: '金币', amount: 5, updatedAt: '2026-07-27T09:10:00' }],
+        habitCurrencies: [{ id: 'default', name: '金币' }],
+    });
+    const original = JSON.stringify(local);
+    const mirror = JSON.stringify({ localMirror: true, remoteUploadEnabled: true, mirror: { reason: 'pre-vue-preview' }, habits: [] });
+    const syncState = JSON.stringify({ dirty: true, lastRemoteHash: 'old-habit-hash' });
+    const requests = [];
+    await page.route('https://habit-vue.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requests.push({ method: request.method(), path: url.pathname });
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            await route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: '"habit-vue-v1"' }, body: JSON.stringify(remote) });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(({ localData, mirrorData, stateData }) => {
+        localStorage.setItem('lifePlanData', localData);
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-vue.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('habitAppData', mirrorData);
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-habit.json', autoSync: true, remoteUploadEnabled: true }));
+        localStorage.setItem('habitAppSyncState', stateData);
+    }, { localData: original, mirrorData: mirror, stateData: syncState });
+
+    await page.goto('/#/sync');
+    const panel = page.locator('.habit-sync-card');
+    await expect(panel).toContainText('/apps/habit-app/data.json');
+    await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
+    await expect(panel.getByRole('status')).toContainText('只读预检完成');
+    await expect(panel).toContainText('本机');
+    await expect(panel).toContainText('云端');
+    await expect(panel).toContainText('合并');
+
+    const stored = await page.evaluate(() => ({
+        data: localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData'),
+        syncState: localStorage.getItem('habitAppSyncState'),
+        config: JSON.parse(localStorage.getItem('habitAppSyncConfig')),
+    }));
+    expect(requests).toEqual([{ method: 'GET', path: '/apps/habit-app/data.json' }]);
+    expect(stored.data).toBe(original);
+    expect(stored.mirror).toBe(mirror);
+    expect(stored.syncState).toBe(syncState);
+    expect(stored.config).toMatchObject({ remotePath: '/apps/habit-app/data.json', autoSync: false, remoteUploadEnabled: false });
 });
 
 test('wheel remote preview stays GET-only and apply rechecks then persists the merged contract', async ({ page }) => {

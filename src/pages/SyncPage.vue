@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 
+import HabitSyncPanel from '../components/HabitSyncPanel.vue';
 import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import WheelSyncPanel from '../components/WheelSyncPanel.vue';
 import { createLegacyServices } from '../services/legacyServices';
@@ -253,5 +254,6 @@ async function importFile(event: Event) {
 
     <TodoSyncPanel :sync-config="config" />
     <WheelSyncPanel :sync-config="config" />
+    <HabitSyncPanel :sync-config="config" />
   </section>
 </template>

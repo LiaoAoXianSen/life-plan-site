@@ -188,6 +188,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 170. Status: complete - Add focused Fitness live workout coverage for suggestion apply, persisted active workout sets, rest timer display, timer controls, and dirty state.
 171. Status: complete - Run build/check plus 1440px/390px responsive verification for the live workout timer/suggestion surface.
 172. Status: complete - Update parity evidence, package, commit, push the verified Fitness live workout assist stage, and append dual-store memory.
+173. Status: complete - Audit Habit independent remote preview rules and choose a bounded GET-only Vue Sync-page slice.
+174. Status: complete - Add the Vue Habit independent sync panel with fixed `/apps/habit-app/data.json`, config reset, local/remote/merged preview, and no apply/upload path.
+175. Status: complete - Add focused Habit remote preview coverage proving one GET, no PUT, and unchanged `lifePlanData`, `habitAppData`, and `habitAppSyncState`.
+176. Status: complete - Run build/check plus responsive verification for the Habit read-only sync panel.
+177. Status: complete - Update parity evidence, package, commit, push the verified Habit read-only remote preview stage, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

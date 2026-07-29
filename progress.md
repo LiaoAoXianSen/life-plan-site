@@ -451,3 +451,15 @@
 - Final `npm run build`, focused `npx playwright test tests/vue-smoke.spec.js -g "fitness live workout suggestions"`, full `.\scripts\check.ps1` with 43/43 Vue smoke tests, and `git diff --check` passed with only LF/CRLF working-copy warnings.
 - Created clean runtime package `life-plan-site-runtime-20260729-124113.zip`; package retention removed `life-plan-site-runtime-20260728-172150.zip`.
 - Protected refs remained unchanged before the Fitness live workout assist commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-29 - Habit remote read-only preview stage
+
+- Started phases 173-177 after commit `3e28dca`; the working tree was clean on `migration/vue-app-v1`, and protected `master`, `experiment/vue-preview-poc`, and `stash@{0}` were read-only checked before implementation.
+- Added `src/components/HabitSyncPanel.vue` and mounted it on `src/pages/SyncPage.vue`, reusing `lifePlanSyncConfig.webdavUrl` with fixed `/apps/habit-app/data.json`.
+- The panel forces `habitAppSyncConfig.autoSync` and `remoteUploadEnabled` off, builds local preview from `LifePlanHabitService.buildHabitAppSnapshotPreview`, GETs the remote only, and shows local/remote/merged Habit snapshot counts and hashes through `sync-service.js` helpers.
+- Strict read-only contract: no PUT/create/apply path, no `lifePlanData` mutation, no `habitAppData` mirror write, and no `habitAppSyncState` write.
+- Added focused Playwright coverage proving exactly one GET, safe config reset, and byte-for-byte unchanged `lifePlanData`, `habitAppData`, and `habitAppSyncState`.
+- Verified `npm run build`, focused Habit remote preview 1/1, full `.\scripts\check.ps1` with 44/44 Vue smoke tests, and `git diff --check` with only LF/CRLF warnings.
+- Verified desktop 1440x1000 and mobile 390x1000 Sync page layouts with Browser plugin unavailable and regular Playwright fallback: no console errors and zero horizontal overflow for document, `.vue-main`, `.page.active`, `.habit-sync-card`, and `.habit-sync-comparison`. Screenshots are under `test-results/habit-sync-preview-1440.png` and `test-results/habit-sync-preview-390.png`.
+- Created clean runtime package `life-plan-site-runtime-20260729-132845.zip`; package retention removed `life-plan-site-runtime-20260729-094524.zip`.
+- Protected refs remained unchanged before the Habit remote read-only preview commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
