@@ -222,7 +222,7 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 204. Status: complete - Implement Vue Todo/Wheel/Habit auto-sync with explicit opt-in, fixed independent paths, existing-file If-Match upload, visibility resume, and no background first-create.
 205. Status: complete - Add focused Todo/Wheel/Habit auto-sync coverage for unsafe config sanitization, disabled idle behavior, dirty upload, missing remote no-create, remote pull, and main dirty propagation.
 206. Status: complete - Run build/typecheck/focused/full checks plus responsive verification for the Todo/Wheel/Habit auto-sync surfaces.
-207. Status: in_progress - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the module auto-sync stage.
+207. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the module auto-sync stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
