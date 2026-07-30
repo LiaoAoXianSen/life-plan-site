@@ -529,3 +529,9 @@
 - Playwright covers ideaNext generate no-write then confirmed writeback, and todoBreakdown confirmed subtask append.
 - Focused AI/idea conversion tests 4/4 passed.
 
+## 2026-07-30 - Main auto sync and visibility resume
+
+- Added `src/services/mainCloudSync.ts` for main both-direction auto sync, 20s debounce, 5-minute visible interval, and visibility resume.
+- Bound the engine from `src/App.vue` and user commits in `src/stores/lifePlanStore.ts`; Sync page now saves `autoSync` and can force one run.
+- Playwright covers debounce upload with If-Match, visibility resume, and autoSync-off idle behavior.
+

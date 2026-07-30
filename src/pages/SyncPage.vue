@@ -6,6 +6,7 @@ import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import WheelSyncPanel from '../components/WheelSyncPanel.vue';
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
+import { bindMainCloudSync, getMainSyncConfig, runMainCloudSyncBoth, saveMainSyncConfig, startMainAutoSyncEngine } from '../services/mainCloudSync';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 
 type SyncState = Record<string, unknown> & {
@@ -22,14 +23,18 @@ type RemotePayload = { data: unknown; hash: string; etag?: string };
 
 const store = useLifePlanStore();
 const sync = createLegacyServices().sync;
-const config = reactive({
-  webdavUrl: '',
-  remotePath: '/life-plan.json',
-  autoSync: true,
-  ...JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}'),
-});
+const config = reactive(getMainSyncConfig());
 const status = ref('');
+const autoStatus = ref('');
 const busy = ref(false);
+
+bindMainCloudSync({
+  getData: () => store.data,
+  replaceData: (next, reason) => store.replace(next, reason, 'sync'),
+  onStatus: (message, isError) => {
+    autoStatus.value = isError ? `自动同步失败：${message}` : message;
+  },
+});
 
 function nowIso() {
   return new Date().toISOString();
@@ -104,8 +109,24 @@ async function pushWithEtag(ifMatch = '') {
 
 function saveConfig() {
   normalizeRemotePath();
-  localStorage.setItem('lifePlanSyncConfig', JSON.stringify(config));
-  status.value = '配置已保存到原 lifePlanSyncConfig。';
+  Object.assign(config, saveMainSyncConfig({ ...config, autoSync: !!config.autoSync }));
+  startMainAutoSyncEngine();
+  status.value = config.autoSync
+    ? '配置已保存；主数据自动同步与页面恢复同步已启用。'
+    : '配置已保存；主数据自动同步已关闭。';
+}
+
+async function runAutoNow() {
+  busy.value = true;
+  status.value = '';
+  try {
+    await runMainCloudSyncBoth({ force: true, source: 'manual-auto-both' });
+    status.value = autoStatus.value || '已执行一次主数据自动同步流程。';
+  } catch (error) {
+    status.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function pullAndMerge() {
@@ -227,10 +248,15 @@ async function importFile(event: Event) {
     <article class="card">
       <div class="card-title">主数据 WebDAV 配置</div>
       <div class="form-row">
-        <div class="form-group"><label>同步地址</label><input v-model="config.webdavUrl" placeholder="https://..." /></div>
-        <div class="form-group"><label>远端路径</label><input v-model="config.remotePath" /></div>
+        <div class="form-group"><label for="sync-webdav-url">同步地址</label><input id="sync-webdav-url" v-model="config.webdavUrl" placeholder="https://..." /></div>
+        <div class="form-group"><label for="sync-remote-path">远端路径</label><input id="sync-remote-path" v-model="config.remotePath" /></div>
+        <div class="form-group"><label for="sync-auto"><input id="sync-auto" v-model="config.autoSync" type="checkbox" /> 启用主数据自动同步</label></div>
       </div>
-      <button class="btn btn-secondary" @click="saveConfig">保存配置</button>
+      <div class="page-actions">
+        <button class="btn btn-secondary" type="button" @click="saveConfig">保存配置</button>
+        <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="runAutoNow">立即自动同步一次</button>
+      </div>
+      <p v-if="autoStatus" class="sync-status active">{{ autoStatus }}</p>
     </article>
 
     <article class="card">

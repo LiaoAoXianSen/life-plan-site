@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
 import { lifePlanRepository } from '../services/lifePlanRepository';
+import { notifyMainDataUserCommit } from '../services/mainCloudSync';
 import { normalizeTopLevelData, type LifePlanData } from '../types/lifePlan';
 
 export const useLifePlanStore = defineStore('lifePlan', () => {
@@ -21,6 +22,7 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
     try {
       data.value = lifePlanRepository.commit(data.value, reason, source);
       lastError.value = '';
+      if (source === 'user') notifyMainDataUserCommit();
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : String(error);
       throw error;

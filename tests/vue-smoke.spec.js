@@ -3347,3 +3347,140 @@ test('main sync upload uses If-Match and merges after a 412 conflict', async ({ 
     expect(result.snapshots.some(item => item.reason === '条件写入冲突合并前')).toBe(true);
     expect(result.snapshots.some(item => item.reason === '条件写入冲突合并结果')).toBe(true);
 });
+
+
+test('main auto sync uploads local dirty data after the debounce window', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-auto', '自动同步待办')],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://example.test/dav',
+            remotePath: '/life-plan.json',
+            autoSync: true,
+        }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({
+            dirty: false,
+            lastRemoteEtag: '"etag-1"',
+        }));
+    }, source);
+
+    const calls = [];
+    await page.route('https://example.test/dav/life-plan.json', async route => {
+        const request = route.request();
+        calls.push({ method: request.method(), ifMatch: request.headers()['if-match'] || '' });
+        if (request.method() === 'GET') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { ETag: '"etag-1"' },
+                body: JSON.stringify(source),
+            });
+            return;
+        }
+        if (request.method() === 'PUT') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { ETag: '"etag-2"' },
+                body: JSON.stringify({ ok: true, etag: '"etag-2"' }),
+            });
+            return;
+        }
+        await route.fallback();
+    });
+
+    await page.clock.install();
+    await page.goto('/#/todos');
+    // Allow startup auto-sync (if any) to settle with a clean, non-dirty local state.
+    await page.waitForTimeout(200);
+    const putsBeforeEdit = calls.filter(item => item.method === 'PUT').length;
+    await page.locator('#page-todos input[required]').fill('触发自动同步');
+    await page.getByRole('button', { name: '保存待办' }).click();
+    await expect(page.locator('.todo-table')).toContainText('触发自动同步');
+    expect(calls.filter(item => item.method === 'PUT')).toHaveLength(putsBeforeEdit);
+
+    await page.clock.fastForward(20000);
+    await expect.poll(() => calls.filter(item => item.method === 'PUT').length).toBe(putsBeforeEdit + 1);
+    expect(calls.some(item => item.method === 'GET')).toBe(true);
+    expect(calls.filter(item => item.method === 'PUT').at(-1).ifMatch).toBe('"etag-1"');
+
+    await expect.poll(async () => page.evaluate(() => {
+        const state = JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}');
+        return { dirty: state.dirty, etag: state.lastRemoteEtag };
+    })).toEqual({ dirty: false, etag: '"etag-2"' });
+});
+
+test('main auto sync resumes on visibility when enabled', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-visible', '恢复同步待办')],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://example.test/dav',
+            remotePath: '/life-plan.json',
+            autoSync: true,
+        }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({
+            dirty: false,
+            lastRemoteHash: 'same-will-be-replaced',
+        }));
+    }, source);
+
+    const methods = [];
+    await page.route('https://example.test/dav/life-plan.json', async route => {
+        methods.push(route.request().method());
+        if (route.request().method() === 'GET') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { ETag: '"vis-1"' },
+                body: JSON.stringify(source),
+            });
+            return;
+        }
+        await route.fulfill({ status: 204, headers: { ETag: '"vis-2"' }, body: '' });
+    });
+
+    await page.goto('/#/sync');
+    await expect(page.getByRole('button', { name: '保存配置' })).toBeVisible();
+    expect(methods.length).toBe(0);
+    await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(() => methods.filter(method => method === 'GET').length).toBeGreaterThan(0);
+});
+
+test('main auto sync stays idle when autoSync is disabled', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-no-auto', '不自动同步')],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://example.test/dav',
+            remotePath: '/life-plan.json',
+            autoSync: false,
+        }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: true, lastRemoteHash: 'x', lastRemoteEtag: '"e1"' }));
+    }, source);
+
+    const methods = [];
+    await page.route('https://example.test/dav/life-plan.json', async route => {
+        methods.push(route.request().method());
+        await route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: '"e1"' }, body: JSON.stringify(source) });
+    });
+
+    await page.clock.install();
+    await page.goto('/#/todos');
+    await page.locator('#page-todos input[required]').fill('关闭自动同步后编辑');
+    await page.getByRole('button', { name: '保存待办' }).click();
+    await page.clock.fastForward(25000);
+    await page.waitForTimeout(100);
+    expect(methods).toEqual([]);
+});
