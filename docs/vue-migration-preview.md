@@ -18,6 +18,22 @@ npm test
 The build output is `dist/`. The project uses Vue Router hash history, so
 Cloudflare does not need a SPA fallback rule for route refreshes.
 
+### Vue dist packaging
+
+Do **not** use `scripts/package-clean.ps1` for Vue artifacts. That script packs
+the legacy static runtime only.
+
+```powershell
+npm run package:vue
+# or
+.\scripts\package-vue-dist.ps1
+# skip rebuild when dist/ is already fresh:
+.\scripts\package-vue-dist.ps1 -SkipBuild
+```
+
+This writes `life-plan-site-vue-dist-YYYYMMDD-HHMMSS.zip` from `dist/` and keeps
+the newest 5 Vue dist packages by default.
+
 ## Separate Cloudflare Pages preview
 
 Create a new Pages project connected to the same GitHub repository, limited to
@@ -72,10 +88,16 @@ If a Vue-side data action must be reverted, use the existing snapshot recovery
 flow. Wheel JSON restore and import operations make snapshots before applying
 changes. Keep a manually exported data file before testing complex data flows.
 
-## Advanced legacy controls retained on master
+## Replacement-candidate status
+
+`migration/vue-app-v1` is an operational **replacement candidate** for daily
+workflows covered by the parity checklist. Optional specialist depth still on
+master only: wheel library AI tag-suggest and deeper Habit diagnostics repair
+beyond read-only diagnostics plus settle-through-yesterday. Do not substitute
+incompatible shortcuts; ship those as separately tested follow-ups.
 
 The Vue branch has operational Dashboard, Todos, Records, Materials, Libraries,
-Search, Goals, basic Habits, Fitness, Wheel, AI and main Sync workflows. The
+Search, Goals, Habits, Fitness, Wheel, AI and main Sync workflows. The
 Dashboard now covers the command center, active-period links, bounded recent
 timeline, Todo quick-writes (`今天做`, `执行一次`, checkbox toggle), and today
 habit quick check-in/undo;
@@ -85,22 +107,15 @@ modules; Import/Export now covers snapshots, tombstone-aware merge, dirty-state
 updates, and Todo/Habit mirror rebuilds; Habits now covers local note check-ins,
 backfills, note edits, undo-latest check-in, advanced reward/penalty/milestone
 editing, reward/penalty ledger reversals, archive/restore, wish create/archive,
-wallet redemption, read-only diagnostics, tombstones, dirty-state updates,
-local-only mirror rebuilding, independent remote preview/apply, protected
-upload/create, and guarded conditional auto-sync; Fitness now covers full-field
-body metric editing, multi-exercise plan editing, explicit plan writeback, and
-workout history create/edit plus live rest timers and last-performance
-suggestions; Wheel now covers canvas interaction, public-library batch
-management, independent remote preview/apply, protected upload/create, guarded
-conditional auto-sync, and final management-form polish; Todo independent sync
-now covers guarded existing-file auto-sync without background first-create; AI
-now covers multi-destination chat capture writeback, today-plan and
-backlog-triage confirmed Todo writeback, plus diary, idea-next, and
-Todo-breakdown confirmation flows.
-Replacement remains blocked until the remaining module audits and write-heavy
-specialist flows are closed. The following specialist controls still live in the
-proven static app and should be migrated only as separately tested follow-up
-releases: deeper Habit diagnostics repair actions and optional wheel
-tag-suggest. They are not replaced by incompatible shortcuts. Habit
-settle-through-yesterday miss/break penalty writes and Dashboard habit quick
-check-in are now covered on this branch.
+wallet redemption, read-only diagnostics, settle-through-yesterday penalties,
+tombstones, dirty-state updates, local-only mirror rebuilding, independent
+remote preview/apply, protected upload/create, and guarded conditional
+auto-sync; Fitness now covers full-field body metric editing, multi-exercise
+plan editing, explicit plan writeback, and workout history create/edit plus live
+rest timers and last-performance suggestions; Wheel now covers canvas
+interaction, public-library batch management, independent remote preview/apply,
+protected upload/create, guarded conditional auto-sync, and final
+management-form polish; Todo independent sync now covers guarded existing-file
+auto-sync without background first-create; AI now covers multi-destination chat
+capture writeback, today-plan and backlog-triage confirmed Todo writeback, plus
+diary, idea-next, and Todo-breakdown confirmation flows.

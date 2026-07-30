@@ -239,6 +239,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 221. Status: complete - Implement Vue AI todayPlan and backlogTriage modes with legacy-compatible context and confirmed `sourceType: 'ai'` Todo writeback.
 222. Status: complete - Add focused AI todayPlan Playwright coverage and pass full Vue smoke 78/78 plus build/check.
 223. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the AI today-plan/backlog-triage stage.
+224. Status: complete - Add Vue dist packaging via scripts/package-vue-dist.ps1 and npm run package:vue without using package-clean.ps1.
+225. Status: complete - Mark replacement-candidate acceptance READY after modular sync suite + Vue packaging + checklist/preview wording cleanup.
+226. Status: complete - Verify protected refs, package Vue dist, commit, push, and append dual-store memory for the replacement-candidate acceptance stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
