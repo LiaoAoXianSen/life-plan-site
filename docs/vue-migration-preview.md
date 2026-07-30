@@ -97,6 +97,8 @@ Todo-breakdown confirmation flows.
 Replacement remains blocked until the remaining module audits and write-heavy
 specialist flows are closed. The following specialist controls still live in the
 proven static app and should be migrated only as separately tested follow-up
-releases: habit archive/wallet redemption/wishes, diagnostics depth,
-broader penalty settlement UX, and older AI plan/triage modes. They are not
-replaced by incompatible shortcuts.
+releases: broader Habit penalty settlement UX, deeper diagnostics repair
+	actions, and older AI plan/triage modes. They are not replaced by
+	incompatible shortcuts. Habit archive/restore, wish create/archive,
+	wallet redemption, and read-only diagnostics summary/top issues are now
+	covered on this branch.

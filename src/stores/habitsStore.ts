@@ -45,6 +45,29 @@ interface HabitCheckin extends DataEntity {
   note: string;
 }
 
+interface HabitReward extends DataEntity {
+  id: string;
+  name: string;
+  cost?: number;
+  currency?: string;
+  stock?: number;
+  redeemedCount?: number;
+  note?: string;
+  archived?: boolean;
+}
+
+interface HabitLedgerEntry extends DataEntity {
+  id: string;
+  amount: number;
+  currency: string;
+  type: string;
+  habitId?: string;
+  rewardId?: string;
+  sourceId?: string;
+  date?: string;
+  note?: string;
+}
+
 interface HabitMilestone {
   days: number;
   enabled: boolean;
@@ -78,12 +101,28 @@ export interface CreateHabitInput {
 
 export interface UpdateHabitInput extends CreateHabitInput {}
 
+export interface CreateHabitRewardInput {
+  name: string;
+  cost?: number;
+  currency?: string;
+  stock?: number;
+  note?: string;
+}
+
 function asHabit(value: DataEntity): Habit {
   return value as Habit;
 }
 
 function asCheckin(value: DataEntity): HabitCheckin {
   return value as HabitCheckin;
+}
+
+function asReward(value: DataEntity): HabitReward {
+  return value as HabitReward;
+}
+
+function asLedgerEntry(value: DataEntity): HabitLedgerEntry {
+  return value as HabitLedgerEntry;
 }
 
 function normalizeCurrency(value: unknown): string {
@@ -246,14 +285,38 @@ function ensureHabitCurrencies(data: LifePlanData, habit: Partial<Habit>) {
     names.add(normalizeCurrency(item.penaltyCurrency));
   });
   names.forEach(name => {
-    if (data.habitCurrencies.some(item => normalizeCurrency(item.name || item.currency || item.id) === name)) return;
-    data.habitCurrencies.push({
-      id: name === DEFAULT_CURRENCY ? 'habit-currency-default' : genId(),
-      name,
-      createdAt: getNowLocal(),
-      updatedAt: getNowLocal(),
-    });
+    ensureHabitCurrency(data, name);
   });
+}
+
+function ensureHabitCurrency(data: LifePlanData, value: unknown) {
+  const name = normalizeCurrency(value);
+  if (data.habitCurrencies.some(item => normalizeCurrency(item.name || item.currency || item.id) === name)) return name;
+  data.habitCurrencies.push({
+    id: name === DEFAULT_CURRENCY ? 'habit-currency-default' : genId(),
+    name,
+    createdAt: getNowLocal(),
+    updatedAt: getNowLocal(),
+  });
+  return name;
+}
+
+function balanceFor(data: LifePlanData, currency: string) {
+  const targetCurrency = normalizeCurrency(currency);
+  return data.habitPointLedger
+    .map(asLedgerEntry)
+    .filter(entry => normalizeCurrency(entry.currency) === targetCurrency)
+    .reduce((total, entry) => total + (Number(entry.amount) || 0), 0);
+}
+
+function rewardCost(reward: Partial<HabitReward>): number {
+  return Math.max(1, Number.parseInt(String(reward.cost || 0), 10) || 1);
+}
+
+function rewardStockLeft(reward: Partial<HabitReward>): number {
+  const stock = Math.max(0, Number.parseInt(String(reward.stock || 0), 10) || 0);
+  if (stock <= 0) return Infinity;
+  return Math.max(0, stock - (Number.parseInt(String(reward.redeemedCount || 0), 10) || 0));
 }
 
 export const useHabitsStore = defineStore('habits', () => {
@@ -263,6 +326,34 @@ export const useHabitsStore = defineStore('habits', () => {
 
   const habits = computed(() => lifePlan.data.habits.map(asHabit));
   const todayHabits = computed(() => habits.value.filter(habit => isDueOnDate(habit, getTodayStr())));
+  const rewards = computed(() => lifePlan.data.habitRewards.map(asReward));
+  const latestLedger = computed(() => lifePlan.data.habitPointLedger
+    .map(asLedgerEntry)
+    .sort((a, b) => String(b.createdAt || b.date || '').localeCompare(String(a.createdAt || a.date || '')))
+    .slice(0, 8));
+  const diagnostics = computed(() => habitServices.habit.buildLegacyHabitDiagnostics(lifePlan.data) as {
+    readOnly?: boolean;
+    authority?: string;
+    summary?: Record<string, any>;
+    issues?: Array<{
+      type?: string;
+      id?: string;
+      label?: string;
+      title?: string;
+      severity?: string;
+      hint?: string;
+      message?: string;
+      details?: unknown[];
+      count?: number;
+      hiddenCount?: number;
+    }>;
+  });
+  const diagnosticIssues = computed(() => [...(diagnostics.value.issues || [])]
+    .sort((a, b) => {
+      const rank: Record<string, number> = { danger: 0, warning: 1, info: 2 };
+      return (rank[a.severity || 'info'] ?? 3) - (rank[b.severity || 'info'] ?? 3);
+    })
+    .slice(0, 4));
   const balances = computed(() => lifePlan.data.habitPointLedger.reduce<Record<string, number>>((summary, entry) => {
     const currency = normalizeCurrency(entry.currency);
     summary[currency] = (summary[currency] || 0) + (Number(entry.amount) || 0);
@@ -316,6 +407,7 @@ export const useHabitsStore = defineStore('habits', () => {
     date: string;
     note: string;
     currency: string;
+    rewardId?: string;
   }) {
     if (!input.amount) return;
     const now = getNowLocal();
@@ -325,7 +417,7 @@ export const useHabitsStore = defineStore('habits', () => {
       currency: normalizeCurrency(input.currency),
       type: input.type,
       habitId: input.habitId,
-      rewardId: '',
+      rewardId: input.rewardId || '',
       sourceId: input.sourceId,
       date: input.date,
       note: input.note,
@@ -544,6 +636,150 @@ export const useHabitsStore = defineStore('habits', () => {
     }
   }
 
+  function setHabitArchived(habitId: string, archived: boolean): boolean {
+    const habit = habits.value.find(item => item.id === habitId);
+    if (!habit) {
+      lastError.value = '未找到该习惯，未更新归档状态。';
+      return false;
+    }
+    try {
+      lifePlan.mutate(archived ? 'vue-archive-habit' : 'vue-restore-habit', data => {
+        const target = data.habits.find(item => item.id === habitId) as Habit | undefined;
+        if (!target) throw new Error('习惯已不存在。');
+        target.archived = archived;
+        target.updatedAt = getNowLocal();
+      });
+      rebuildLocalMirror(archived ? 'vue-archive-habit' : 'vue-restore-habit');
+      lastAction.value = archived ? `已归档「${habit.name}」` : `已恢复「${habit.name}」`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
+  function createReward(input: CreateHabitRewardInput): HabitReward {
+    const name = String(input.name || '').trim();
+    if (!name) throw new Error('请输入心愿名称');
+    const cost = Math.max(1, Math.trunc(Number(input.cost) || 10));
+    const stock = Math.max(0, Math.trunc(Number(input.stock) || 0));
+    const currency = normalizeCurrency(input.currency);
+    const now = getNowLocal();
+    const reward: HabitReward = {
+      id: genId(),
+      name,
+      cost,
+      currency,
+      stock,
+      redeemedCount: 0,
+      note: String(input.note || '').trim(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    try {
+      lifePlan.mutate('vue-create-habit-reward', data => {
+        ensureHabitCurrency(data, currency);
+        data.habitRewards.push(reward);
+      });
+      rebuildLocalMirror('vue-create-habit-reward');
+      lastAction.value = `已添加心愿「${name}」`;
+      lastError.value = '';
+      return reward;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  }
+
+  function setRewardArchived(rewardId: string, archived: boolean): boolean {
+    const reward = rewards.value.find(item => item.id === rewardId);
+    if (!reward) {
+      lastError.value = '未找到该心愿，未更新归档状态。';
+      return false;
+    }
+    try {
+      lifePlan.mutate(archived ? 'vue-archive-habit-reward' : 'vue-restore-habit-reward', data => {
+        const target = data.habitRewards.find(item => item.id === rewardId) as HabitReward | undefined;
+        if (!target) throw new Error('心愿已不存在。');
+        target.archived = archived;
+        target.updatedAt = getNowLocal();
+      });
+      rebuildLocalMirror(archived ? 'vue-archive-habit-reward' : 'vue-restore-habit-reward');
+      lastAction.value = archived ? `已归档心愿「${reward.name}」` : `已恢复心愿「${reward.name}」`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
+  function redeemReward(rewardId: string): boolean {
+    const reward = rewards.value.find(item => item.id === rewardId);
+    if (!reward) {
+      lastError.value = '未找到该心愿，未兑换。';
+      return false;
+    }
+    if (reward.archived) {
+      lastError.value = '这个心愿已归档，不能兑换。';
+      return false;
+    }
+    const currency = normalizeCurrency(reward.currency);
+    const cost = rewardCost(reward);
+    const stockLeft = rewardStockLeft(reward);
+    if (stockLeft <= 0) {
+      lastError.value = '这个心愿已经没有库存了。';
+      return false;
+    }
+    if (balanceFor(lifePlan.data, currency) < cost) {
+      lastError.value = `${currency} 不够，先攒一点再兑换。`;
+      return false;
+    }
+    try {
+      lifePlan.mutate('vue-redeem-habit-reward', data => {
+        const target = data.habitRewards.find(item => item.id === rewardId) as HabitReward | undefined;
+        if (!target) throw new Error('心愿已不存在。');
+        if (target.archived) throw new Error('这个心愿已归档，不能兑换。');
+        const targetCurrency = ensureHabitCurrency(data, target.currency || currency);
+        const targetCost = rewardCost({ cost: target.cost || cost });
+        const remaining = rewardStockLeft(target);
+        if (remaining <= 0) throw new Error('这个心愿已经没有库存了。');
+        if (balanceFor(data, targetCurrency) < targetCost) throw new Error(`${targetCurrency} 不够，先攒一点再兑换。`);
+        target.redeemedCount = Number(target.redeemedCount || 0) + 1;
+        target.updatedAt = getNowLocal();
+        addLedgerEntry(data, {
+          amount: -targetCost,
+          currency: targetCurrency,
+          type: 'redeem',
+          habitId: '',
+          rewardId: target.id,
+          sourceId: '',
+          date: getTodayStr(),
+          note: `兑换「${target.name}」`,
+        });
+      });
+      rebuildLocalMirror('vue-redeem-habit-reward');
+      lastAction.value = `已兑换「${reward.name}」`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
+  function getRewardStockLeft(rewardId: string): number {
+    const reward = rewards.value.find(item => item.id === rewardId);
+    return reward ? rewardStockLeft(reward) : 0;
+  }
+
+  function canRedeemReward(rewardId: string): boolean {
+    const reward = rewards.value.find(item => item.id === rewardId);
+    if (!reward || reward.archived) return false;
+    return rewardStockLeft(reward) > 0 && balanceFor(lifePlan.data, normalizeCurrency(reward.currency)) >= rewardCost(reward);
+  }
+
   function appendCheckin(habitId: string, date = getTodayStr(), note = ''): boolean {
     const habit = habits.value.find(item => item.id === habitId);
     if (!habit) {
@@ -654,6 +890,10 @@ export const useHabitsStore = defineStore('habits', () => {
   return {
     habits,
     todayHabits,
+    rewards,
+    latestLedger,
+    diagnostics,
+    diagnosticIssues,
     balances,
     lastError,
     lastAction,
@@ -662,7 +902,13 @@ export const useHabitsStore = defineStore('habits', () => {
     targetCount,
     create,
     updateHabit,
+    setHabitArchived,
     deleteHabit,
+    createReward,
+    setRewardArchived,
+    redeemReward,
+    getRewardStockLeft,
+    canRedeemReward,
     appendCheckin,
     editCheckinNote,
     undoLatestCheckin,

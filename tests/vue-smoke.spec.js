@@ -1322,6 +1322,158 @@ test('habit base edit and delete preserve legacy management contracts', async ({
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('habit archive and restore preserve history without tombstones', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const source = emptyData({
+        habits: [{ id: 'habit-archive', name: '归档习惯', rule: 'daily', timesPerDay: '1', startDate: today, rewardPoints: 2, rewardCurrency: '金币', createdAt: '2026-07-27T08:00:00', updatedAt: '2026-07-27T08:00:00' }],
+        checkins: [{ id: 'checkin-archive', habitId: 'habit-archive', date: today, time: '07:00', checkinAt: `${today}T07:00:00`, note: '历史保留', createdAt: `${today}T07:00:00`, updatedAt: `${today}T07:00:00` }],
+        habitPointLedger: [{ id: 'ledger-archive', habitId: 'habit-archive', sourceId: 'checkin-archive', date: today, amount: 2, currency: '金币', type: 'checkin', createdAt: `${today}T07:00:00`, updatedAt: `${today}T07:00:00` }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'habit-archive-before' }));
+    }, source);
+
+    await page.goto('/#/habits');
+    await expect(page.locator('.habit-quick-card').filter({ hasText: '归档习惯' })).toHaveCount(1);
+    const row = page.locator('.habit-management-card .habit-library-row').filter({ hasText: '归档习惯' });
+    page.once('dialog', dialog => dialog.accept());
+    await row.getByRole('button', { name: '归档' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已归档「归档习惯」');
+    await expect(page.locator('.habit-quick-card').filter({ hasText: '归档习惯' })).toHaveCount(0);
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.habits[0]).toMatchObject({ id: 'habit-archive', archived: true });
+    expect(stored.data.checkins).toHaveLength(1);
+    expect(stored.data.habitPointLedger).toHaveLength(1);
+    expect(stored.data.deletedItems).toEqual([]);
+    expect(stored.mirror.habits).toEqual(expect.arrayContaining([expect.objectContaining({ status: 'archived' })]));
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('vue-archive-habit');
+    expect(stored.syncState.dirty).toBe(true);
+
+    await row.getByRole('button', { name: '恢复' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已恢复「归档习惯」');
+    await expect(page.locator('.habit-quick-card').filter({ hasText: '归档习惯' })).toHaveCount(1);
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+    }));
+    expect(stored.data.habits[0].archived).toBe(false);
+    expect(stored.data.deletedItems).toEqual([]);
+    expect(stored.mirror.habits).toEqual(expect.arrayContaining([expect.objectContaining({ status: 'active' })]));
+});
+
+test('habit wishes create and archive preserve reward mirror contract', async ({ page }) => {
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'habit-reward-before' }));
+    }, emptyData());
+
+    await page.goto('/#/habits');
+    const wallet = page.locator('.habit-wallet-panel');
+    await wallet.getByLabel('心愿名称').fill('买一本好书');
+    await wallet.getByLabel('花费').fill('12');
+    await wallet.getByLabel('币种').fill('钻石');
+    await wallet.getByLabel('库存').fill('3');
+    await wallet.getByLabel('备注').fill('完成一周后兑换');
+    await wallet.getByRole('button', { name: '新增心愿' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已添加心愿「买一本好书」');
+    await wallet.locator('.habit-reward-card').filter({ hasText: '买一本好书' }).getByRole('button', { name: '归档心愿' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已归档心愿「买一本好书」');
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.habitRewards).toHaveLength(1);
+    expect(stored.data.habitRewards[0]).toMatchObject({ name: '买一本好书', cost: 12, currency: '钻石', stock: 3, redeemedCount: 0, note: '完成一周后兑换', archived: true });
+    expect(stored.data.habitCurrencies.map(item => item.name)).toEqual(expect.arrayContaining(['钻石']));
+    expect(stored.data.deletedItems).toEqual([]);
+    expect(stored.mirror.habitRewards).toEqual(expect.arrayContaining([expect.objectContaining({ name: '买一本好书', cost: 12, status: 'archived' })]));
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('vue-archive-habit-reward');
+    expect(stored.syncState.dirty).toBe(true);
+});
+
+test('habit wallet redeem deducts points and blocks unavailable wishes', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const source = emptyData({
+        habitPointLedger: [{ id: 'ledger-earned', amount: 12, currency: '星星', type: 'manual_reward', date: today, note: '初始奖励', createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` }],
+        habitRewards: [
+            { id: 'reward-buy', name: '小奖励', cost: 5, currency: '星星', stock: 1, redeemedCount: 0, note: '可兑换', createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` },
+            { id: 'reward-expensive', name: '大愿望', cost: 99, currency: '星星', stock: 0, redeemedCount: 0, createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` },
+            { id: 'reward-empty', name: '售罄愿望', cost: 1, currency: '星星', stock: 1, redeemedCount: 1, createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'habit-wallet-before' }));
+    }, source);
+
+    await page.goto('/#/habits');
+    const wallet = page.locator('.habit-wallet-panel');
+    await expect(wallet.locator('.habit-reward-card').filter({ hasText: '大愿望' }).getByRole('button', { name: '兑换' })).toBeDisabled();
+    await expect(wallet.locator('.habit-reward-card').filter({ hasText: '售罄愿望' }).getByRole('button', { name: '兑换' })).toBeDisabled();
+    page.once('dialog', dialog => dialog.accept());
+    await wallet.locator('.habit-reward-card').filter({ hasText: '小奖励' }).getByRole('button', { name: '兑换' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已兑换「小奖励」');
+    await expect(wallet.locator('.habit-reward-card').filter({ hasText: '小奖励' }).getByRole('button', { name: '兑换' })).toBeDisabled();
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.habitRewards.find(item => item.id === 'reward-buy').redeemedCount).toBe(1);
+    expect(stored.data.habitPointLedger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'redeem', amount: -5, rewardId: 'reward-buy', currency: '星星', note: '兑换「小奖励」' }),
+    ]));
+    expect(stored.data.habitPointLedger.filter(item => item.type === 'redeem')).toHaveLength(1);
+    expect(stored.mirror.habitLedger).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'reward_redeem', amount: -5 })]));
+    expect(stored.mirror.habitRewardRecords).toHaveLength(1);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('vue-redeem-habit-reward');
+    expect(stored.syncState.dirty).toBe(true);
+});
+
+test('habit diagnostics stays read-only and surfaces legacy issues', async ({ page }) => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const source = emptyData({
+        habits: [
+            { id: 'habit-duplicate', name: '重复习惯 A', rule: 'daily', timesPerDay: '1', startDate: '2026-07-01' },
+            { id: 'habit-duplicate', name: '重复习惯 B', rule: 'daily', timesPerDay: '1', startDate: '2026-07-01' },
+        ],
+        checkins: [
+            { id: 'checkin-orphan', habitId: 'missing-habit', date: '2026-07-29', time: '08:00', checkinAt: '2026-07-29T08:00:00' },
+            { id: 'checkin-future', habitId: 'habit-duplicate', date: tomorrow, time: '08:00', checkinAt: `${tomorrow}T08:00:00` },
+        ],
+        habitPointLedger: [{ id: 'ledger-invalid', amount: 'not-a-number', currency: '', type: 'adjust', date: '2026-07-29' }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        window.__habitBefore = localStorage.getItem('lifePlanData');
+    }, source);
+
+    await page.goto('/#/habits');
+    const diagnostics = page.locator('.habit-diagnostics-panel');
+    await expect(diagnostics).toContainText('只读');
+    await expect(diagnostics).toContainText('重复习惯 ID');
+    await expect(diagnostics).toContainText('孤儿打卡记录');
+    await expect(diagnostics).toContainText('流水金额异常');
+    const unchanged = await page.evaluate(() => ({
+        sameData: window.__habitBefore === localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData'),
+    }));
+    expect(unchanged.sameData).toBe(true);
+    expect(unchanged.mirror).toBeNull();
+});
+
 test('records day view maintains a fixed-width timed event with a complete hover title', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({ ...data, records: [{ id: 'record-1', type: '日记', title: '这是一个完整的日程标题', content: '', startDate: date, endDate: date, recordTime: '09:00', recordEndTime: '10:00' }] })), { data: emptyData(), date: today });

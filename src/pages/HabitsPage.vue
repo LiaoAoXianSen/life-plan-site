@@ -10,12 +10,24 @@ const route = useRoute();
 const formError = ref('');
 const actionDrafts = reactive<Record<string, { date: string; note: string }>>({});
 const checkinNoteDrafts = reactive<Record<string, string>>({});
+const rewardForm = reactive({ name: '', cost: 10, currency: '金币', stock: 0, note: '' });
 const focusedHabitId = computed(() => String(route.query.habit || ''));
 const todayItems = computed(() => habits.todayHabits.map(habit => ({
   habit,
   count: habits.getCheckinCount(habit.id),
   target: habits.targetCount(habit),
 })));
+const rewardItems = computed(() => [...habits.rewards].sort((a, b) => {
+  const archiveRank = Number(Boolean(a.archived)) - Number(Boolean(b.archived));
+  if (archiveRank) return archiveRank;
+  return String(a.currency || '金币').localeCompare(String(b.currency || '金币'), 'zh-Hans-CN') || Number(a.cost || 0) - Number(b.cost || 0);
+}));
+const balanceText = computed(() => Object.entries(habits.balances)
+  .sort(([a], [b]) => a.localeCompare(b, 'zh-Hans-CN'))
+  .map(([currency, amount]) => `${amount} ${currency}`)
+  .join(' · ') || '0 金币');
+const diagnosticSummary = computed(() => habits.diagnostics.summary || {});
+const diagnosticIssues = computed(() => habits.diagnosticIssues.slice(0, 3));
 const weekdayOptions = [
   { value: '1', label: '一' },
   { value: '2', label: '二' },
@@ -169,6 +181,49 @@ function saveHabit() {
   }
 }
 
+function resetRewardForm() {
+  rewardForm.name = '';
+  rewardForm.cost = 10;
+  rewardForm.currency = '金币';
+  rewardForm.stock = 0;
+  rewardForm.note = '';
+}
+
+function saveReward() {
+  try {
+    habits.createReward({
+      name: rewardForm.name,
+      cost: rewardForm.cost,
+      currency: rewardForm.currency,
+      stock: rewardForm.stock,
+      note: rewardForm.note,
+    });
+    resetRewardForm();
+    formError.value = '';
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function redeemReward(id: string) {
+  const reward = habits.rewards.find(item => item.id === id);
+  if (!reward) return;
+  if (!window.confirm(`确认兑换「${reward.name}」吗？`)) return;
+  habits.redeemReward(id);
+}
+
+function archiveReward(id: string, archived: boolean) {
+  habits.setRewardArchived(id, archived);
+}
+
+function setHabitArchive(id: string, archived: boolean) {
+  const item = habits.habits.find(habit => habit.id === id);
+  if (!item) return;
+  if (archived && !window.confirm(`归档「${item.name}」后，它不会出现在今日待做中。确认继续吗？`)) return;
+  habits.setHabitArchived(id, archived);
+  if (habitForm.id === id) resetHabitForm();
+}
+
 function deleteHabit(id: string) {
   const item = habits.habits.find(habit => habit.id === id);
   if (!item) return;
@@ -244,6 +299,73 @@ watch(focusedHabitId, value => {
         <strong>0</strong>
       </article>
     </div>
+
+    <section class="card habit-wallet-panel" aria-labelledby="habit-wallet-title">
+      <div class="section-title-row">
+        <div>
+          <h2 id="habit-wallet-title">钱包与心愿</h2>
+          <p class="section-hint">兑换会写入旧版 <code>habitPointLedger</code> 的 <code>type: redeem</code> 流水，并更新心愿兑换次数。</p>
+        </div>
+        <strong class="habit-wallet-total">{{ balanceText }}</strong>
+      </div>
+
+      <form class="habit-reward-form" @submit.prevent="saveReward">
+        <label class="form-field"><span>心愿名称</span><input v-model="rewardForm.name" required maxlength="80" placeholder="例如：买一本书" /></label>
+        <label class="form-field"><span>花费</span><input v-model.number="rewardForm.cost" type="number" min="1" max="999999" /></label>
+        <label class="form-field"><span>币种</span><input v-model="rewardForm.currency" maxlength="24" /></label>
+        <label class="form-field"><span>库存</span><input v-model.number="rewardForm.stock" type="number" min="0" max="99999" /></label>
+        <label class="form-field reward-note"><span>备注</span><input v-model="rewardForm.note" maxlength="120" placeholder="可选" /></label>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">新增心愿</button></div>
+      </form>
+
+      <div class="habit-wallet-layout">
+        <div class="habit-reward-list">
+          <article v-for="reward in rewardItems" :key="reward.id" class="habit-reward-card" :class="{ archived: reward.archived }">
+            <div>
+              <strong>{{ reward.name }}</strong>
+              <span>{{ Number(reward.cost || 0) }} {{ reward.currency || '金币' }} · 已兑 {{ Number(reward.redeemedCount || 0) }} · {{ Number(reward.stock || 0) > 0 ? `库存 ${habits.getRewardStockLeft(reward.id)}` : '不限次数' }}</span>
+              <p v-if="reward.note">{{ reward.note }}</p>
+            </div>
+            <div class="habit-reward-actions">
+              <button class="btn btn-secondary" type="button" :disabled="!habits.canRedeemReward(reward.id)" @click="redeemReward(reward.id)">兑换</button>
+              <button class="btn btn-secondary" type="button" @click="archiveReward(reward.id, !reward.archived)">{{ reward.archived ? '恢复心愿' : '归档心愿' }}</button>
+            </div>
+          </article>
+          <div v-if="!rewardItems.length" class="empty-state">还没有心愿。</div>
+        </div>
+        <div class="habit-ledger-panel">
+          <h3>近期流水</h3>
+          <div v-for="entry in habits.latestLedger" :key="entry.id" class="habit-ledger-row" :class="Number(entry.amount || 0) >= 0 ? 'plus' : 'minus'">
+            <span>{{ entry.note || entry.type || '积分调整' }}</span>
+            <strong>{{ Number(entry.amount || 0) > 0 ? '+' : '' }}{{ Number(entry.amount || 0) }} {{ entry.currency || '金币' }}</strong>
+          </div>
+          <div v-if="!habits.latestLedger.length" class="empty-state">暂无积分流水。</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card habit-diagnostics-panel" aria-labelledby="habit-diagnostics-title">
+      <div class="section-title-row">
+        <div>
+          <h2 id="habit-diagnostics-title">习惯诊断</h2>
+          <p class="section-hint">只读检查旧版习惯字段、钱包流水、心愿和本地镜像风险；不会修改任何数据。</p>
+        </div>
+        <span class="habit-diagnostics-pill">{{ habits.diagnostics.readOnly ? '只读' : '检查' }}</span>
+      </div>
+      <div class="habit-diagnostics-grid">
+        <article><span>权威源</span><strong>{{ habits.diagnostics.authority || 'lifePlanData' }}</strong></article>
+        <article><span>习惯/打卡</span><strong>{{ Number(diagnosticSummary.habits || 0) }} / {{ Number(diagnosticSummary.checkins || 0) }}</strong></article>
+        <article><span>流水/心愿</span><strong>{{ Number(diagnosticSummary.habitPointLedger || 0) }} / {{ Number(diagnosticSummary.habitRewards || 0) }}</strong></article>
+        <article><span>今日进度</span><strong>{{ Number(diagnosticSummary.doneToday || 0) }} / {{ Number(diagnosticSummary.dueToday || 0) }}</strong></article>
+      </div>
+      <div class="habit-diagnostics-issues">
+        <article v-for="issue in diagnosticIssues" :key="issue.type || issue.id || issue.label || issue.title" class="habit-diagnostics-issue" :class="`is-${issue.severity || 'info'}`">
+          <strong>{{ issue.label || issue.title || issue.type || issue.id }}</strong>
+          <span>{{ issue.hint || issue.message || '需要复核这类旧数据。' }}</span>
+        </article>
+        <div v-if="!diagnosticIssues.length" class="empty-state">当前没有发现重复 ID、孤儿引用、异常金额或未来打卡。</div>
+      </div>
+    </section>
 
     <section class="card" aria-labelledby="today-habits-title">
       <div class="section-title-row">
@@ -340,20 +462,21 @@ watch(focusedHabitId, value => {
         <div class="form-actions"><button class="btn btn-primary" type="submit">{{ editingHabit ? '保存习惯' : '添加习惯' }}</button></div>
       </form>
       <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
-      <p class="section-hint">新建和编辑会保留旧版规则、积分、断签扣分、里程碑与本地镜像结构；心愿兑换、钱包管理和远端同步仍在各自页面维护。</p>
+      <p class="section-hint">新建和编辑会保留旧版规则、积分、断签扣分、里程碑与本地镜像结构；远端同步仍在云同步页面维护。</p>
 
       <div class="habit-library-table habit-management-table">
         <div class="habit-library-row head">
           <span>习惯</span><span>规则</span><span>次数</span><span>分组</span><span>目标</span><span>操作</span>
         </div>
-        <div v-for="item in habits.habits" :key="item.id" class="habit-library-row" :class="{ 'is-target': focusedHabitId === item.id }">
-          <span class="habit-library-name"><strong>{{ item.name }}</strong><em>{{ item.startDate || '未设置开始日' }}</em></span>
+        <div v-for="item in habits.habits" :key="item.id" class="habit-library-row" :class="{ 'is-target': focusedHabitId === item.id, archived: item.archived }">
+          <span class="habit-library-name"><strong>{{ item.name }}</strong><em>{{ item.archived ? '已归档' : (item.startDate || '未设置开始日') }}</em></span>
           <span>{{ ruleLabels[item.rule || 'daily'] || item.rule || '每天' }}</span>
           <span>{{ habits.targetCount(item) }}/日</span>
           <span>{{ item.tag || '习惯' }}</span>
           <span>{{ Number(item.goalCount || 0) || '-' }}</span>
           <span class="habit-library-actions">
             <button class="btn btn-secondary" type="button" @click="editHabit(item)">编辑</button>
+            <button class="btn btn-secondary" type="button" @click="setHabitArchive(item.id, !item.archived)">{{ item.archived ? '恢复' : '归档' }}</button>
             <button class="btn btn-danger" type="button" @click="deleteHabit(item.id)">删除</button>
           </span>
         </div>
@@ -428,6 +551,170 @@ watch(focusedHabitId, value => {
 .habit-checkin-note-row input {
   min-width: 160px;
   flex: 1 1 180px;
+}
+.habit-wallet-panel {
+  display: grid;
+  gap: 14px;
+}
+.habit-wallet-total {
+  padding: 6px 10px;
+  border: 1px solid rgba(42, 75, 56, .12);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text, #17211b);
+  font-size: 13px;
+}
+.habit-reward-form {
+  display: grid;
+  grid-template-columns: 1.3fr .7fr .8fr .7fr 1.3fr auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid rgba(42, 75, 56, .11);
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+.habit-reward-form .form-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.habit-reward-form .form-field span {
+  color: var(--muted, #647269);
+  font-size: 12px;
+  font-weight: 800;
+}
+.habit-reward-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #dfe7e1);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text, #17211b);
+}
+.habit-wallet-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(240px, .8fr);
+  gap: 14px;
+}
+.habit-reward-list,
+.habit-ledger-panel {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.habit-ledger-panel {
+  padding: 12px;
+  border: 1px solid rgba(42, 75, 56, .11);
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+.habit-ledger-panel h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.habit-reward-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(42, 75, 56, .11);
+  border-radius: 12px;
+  background: #fff;
+}
+.habit-reward-card.archived,
+.habit-library-row.archived {
+  opacity: .64;
+}
+.habit-reward-card strong,
+.habit-reward-card span,
+.habit-reward-card p {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.habit-reward-card span,
+.habit-reward-card p {
+  margin: 3px 0 0;
+  color: var(--muted, #647269);
+  font-size: 12px;
+}
+.habit-reward-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.habit-ledger-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid rgba(42, 75, 56, .09);
+}
+.habit-ledger-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.habit-ledger-row.plus strong {
+  color: #1d7f4d;
+}
+.habit-ledger-row.minus strong {
+  color: #b84949;
+}
+.habit-diagnostics-panel {
+  display: grid;
+  gap: 14px;
+}
+.habit-diagnostics-pill {
+  padding: 5px 9px;
+  border: 1px solid rgba(42, 75, 56, .14);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted, #647269);
+  font-size: 12px;
+  font-weight: 800;
+}
+.habit-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.habit-diagnostics-grid article,
+.habit-diagnostics-issue {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(42, 75, 56, .11);
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+.habit-diagnostics-grid span,
+.habit-diagnostics-issue span {
+  display: block;
+  color: var(--muted, #647269);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.habit-diagnostics-grid strong,
+.habit-diagnostics-issue strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text, #17211b);
+  overflow-wrap: anywhere;
+}
+.habit-diagnostics-issues {
+  display: grid;
+  gap: 8px;
+}
+.habit-diagnostics-issue.is-danger {
+  border-color: rgba(184, 73, 73, .28);
+  background: #fff8f8;
+}
+.habit-diagnostics-issue.is-warning {
+  border-color: rgba(170, 130, 28, .25);
+  background: #fffdf4;
 }
 .habit-management-card {
   display: grid;
@@ -569,8 +856,16 @@ watch(focusedHabitId, value => {
 }
 @media (max-width: 900px) {
   .habit-editor-form,
-  .habit-advanced-grid {
+  .habit-advanced-grid,
+  .habit-reward-form,
+  .habit-wallet-layout,
+  .habit-diagnostics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .habit-reward-form .reward-note,
+  .habit-reward-form .form-actions,
+  .habit-ledger-panel {
+    grid-column: 1 / -1;
   }
   .habit-milestone-head {
     display: none;
@@ -588,8 +883,18 @@ watch(focusedHabitId, value => {
 @media (max-width: 620px) {
   .habit-editor-form,
   .habit-advanced-grid,
-  .habit-milestone-row {
+  .habit-milestone-row,
+  .habit-reward-form,
+  .habit-wallet-layout,
+  .habit-diagnostics-grid,
+  .habit-reward-card {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .habit-reward-actions {
+    justify-content: stretch;
+  }
+  .habit-reward-actions .btn {
+    flex: 1 1 120px;
   }
   .habit-management-table {
     overflow-x: auto;

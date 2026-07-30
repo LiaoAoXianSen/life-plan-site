@@ -223,6 +223,10 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 205. Status: complete - Add focused Todo/Wheel/Habit auto-sync coverage for unsafe config sanitization, disabled idle behavior, dirty upload, missing remote no-create, remote pull, and main dirty propagation.
 206. Status: complete - Run build/typecheck/focused/full checks plus responsive verification for the Todo/Wheel/Habit auto-sync surfaces.
 207. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the module auto-sync stage.
+208. Status: complete - Implement Habit archive/restore soft-state, wish create/archive, wallet redeem ledger writes, and read-only diagnostics summary/top issues.
+209. Status: complete - Map diagnostics UI to legacy `makeIssue` fields (`label`/`hint`) and keep diagnostics free of `lifePlanData` / `habitAppData` writes.
+210. Status: complete - Add focused Habit archive/wishes/wallet/diagnostics Playwright coverage and pass full Vue smoke 74/74 plus build/check.
+211. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the Habit archive/wallet/wishes/diagnostics stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -277,6 +281,7 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First dev-server stop script failed on `$pid` | PowerShell reserves `$PID`/`$pid` as a read-only process ID variable | Renamed the loop variable to `$listenerId` and stopped the exact node listener on port 5174 |
 | First Goals contract test expected no `todoAppData` after a Goal write | Vue repository commits rebuild the compatible Todo mirror for writes even when the Todo collection is empty | Changed the assertion to require mirror authority `lifePlanData.todos` with an empty `todos` array |
 | First full Search/Tags check left an old Materials test targeting the removed standalone `素材标签` card | Search/Tags slice intentionally changed Tags to the legacy combined tag-center card layout | Updated the Materials test to click the new Beta tag-center card's `素材` count button |
+| Habit diagnostics focused test failed to surface legacy issue labels | Vue diagnostics UI read `issue.title` / `issue.message`, but `habit-service.js.makeIssue` returns `label` / `hint` | Display `issue.label || issue.title || issue.type || issue.id` and `issue.hint || issue.message`, then reran the four Habit deep-water tests green |
 | Search/Tags read-only subagent failed through local proxy | Spawned agent inherited `gpt-5.5` and upstream returned HTTP 503 auth unavailable | Continued the Search/Tags audit in the main thread using legacy `app.js`, Vue pages, and focused Playwright evidence |
 | First Fitness build failed on removed `planForm.exerciseId` | Multi-exercise plan form replaced the old single-action field, but the action-library save path still filled the removed property | Routed new library items into the first blank plan exercise draft and reran `npm run build` green |
 | First Fitness focused contract used inaccessible separated-label locators | Vue form labels are rendered as sibling text, not associated `label for` controls | Scoped the test to the Fitness plan form and used DOM locators inside the form |
