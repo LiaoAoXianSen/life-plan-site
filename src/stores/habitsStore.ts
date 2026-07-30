@@ -7,6 +7,15 @@ import { useLifePlanStore } from './lifePlanStore';
 
 const DEFAULT_CURRENCY = '金币';
 const MILESTONE_DAYS = [7, 15, 21, 30, 90, 180, 365];
+const MILESTONE_LABELS: Record<number, string> = {
+  7: '一周',
+  15: '15天',
+  21: '21天',
+  30: '30天',
+  90: '一个季度',
+  180: '半年',
+  365: '一年',
+};
 const habitServices = createLegacyServices();
 
 export type HabitRule = 'daily' | 'weekly-fixed' | 'weekly-count' | 'monthly-count' | 'interval';
@@ -540,6 +549,190 @@ export const useHabitsStore = defineStore('habits', () => {
     });
   }
 
+  function checkinCountOnDate(data: LifePlanData, habitId: string, date: string): number {
+    return data.checkins.filter(item => item.habitId === habitId && item.date === date).length;
+  }
+
+  function completedDatesUpTo(data: LifePlanData, habit: Habit, upToDate: string): Set<string> {
+    const counts = new Map<string, number>();
+    data.checkins.forEach(item => {
+      if (item.habitId !== habit.id) return;
+      const date = String(item.date || '');
+      if (!date || date > upToDate) return;
+      counts.set(date, (counts.get(date) || 0) + 1);
+    });
+    const target = targetCount(habit);
+    const completed = new Set<string>();
+    counts.forEach((count, date) => {
+      if (count >= target) completed.add(date);
+    });
+    return completed;
+  }
+
+  function streakEndingOn(data: LifePlanData, habit: Habit, date: string): number {
+    const completed = completedDatesUpTo(data, habit, date);
+    let streak = 0;
+    for (let cursor = date; completed.has(cursor); cursor = addDays(cursor, -1)) streak += 1;
+    return streak;
+  }
+
+  function streakBeforeDate(data: LifePlanData, habit: Habit, date: string): number {
+    return streakEndingOn(data, habit, addDays(date, -1));
+  }
+
+  function enabledPenaltyMilestones(habit: Habit): HabitMilestone[] {
+    return normalizedMilestones(habit.milestoneRewards)
+      .filter(item => item.enabled && item.penaltyAmount > 0)
+      .sort((a, b) => a.days - b.days);
+  }
+
+  function milestoneCycleLength(habit: Habit): number {
+    const enabled = normalizedMilestones(habit.milestoneRewards).filter(item => item.enabled);
+    return enabled.length ? Math.max(...enabled.map(item => item.days)) : 0;
+  }
+
+  function nextMilestoneForPenalty(habit: Habit, previousStreak: number): HabitMilestone | null {
+    const milestones = enabledPenaltyMilestones(habit);
+    const cycleLength = milestoneCycleLength(habit);
+    if (!milestones.length || !cycleLength || previousStreak <= 0) return null;
+    const dayInCycle = ((previousStreak - 1) % cycleLength) + 1;
+    return milestones.find(item => item.days > dayInCycle) || milestones[0];
+  }
+
+  function applyMissPenalty(data: LifePlanData, habit: Habit, date: string): boolean {
+    const penalty = Math.max(0, Number.parseInt(String(habit.penaltyPoints || 0), 10) || 0);
+    if (!habit || penalty <= 0) return false;
+    const sourceId = `${habit.id}:${date}:miss`;
+    if (data.habitPointLedger.some(entry => entry.sourceId === sourceId)) return false;
+    if (!isDueOnDate(habit, date)) return false;
+    if (checkinCountOnDate(data, habit.id, date) >= targetCount(habit)) return false;
+    addLedgerEntry(data, {
+      amount: -penalty,
+      type: 'miss',
+      habitId: habit.id,
+      sourceId,
+      date,
+      note: `未完成「${habit.name}」`,
+      currency: normalizeCurrency(habit.penaltyCurrency || habit.rewardCurrency),
+    });
+    return true;
+  }
+
+  function applyBreakPenalty(data: LifePlanData, habit: Habit, date: string): boolean {
+    if (!habit || !isDueOnDate(habit, date)) return false;
+    if (checkinCountOnDate(data, habit.id, date) >= targetCount(habit)) return false;
+    const previousStreak = streakBeforeDate(data, habit, date);
+    if (previousStreak <= 0) return false;
+
+    if (habit.breakPenaltyMode === 'fixed') {
+      const penalty = Math.max(0, Number.parseInt(String(habit.breakPenaltyPoints || 0), 10) || 0);
+      if (penalty <= 0) return false;
+      const sourceId = `${habit.id}:${date}:break:fixed`;
+      if (data.habitPointLedger.some(entry => entry.sourceId === sourceId)) return false;
+      addLedgerEntry(data, {
+        amount: -penalty,
+        type: 'break',
+        habitId: habit.id,
+        sourceId,
+        date,
+        note: `断签「${habit.name}」`,
+        currency: normalizeCurrency(habit.breakPenaltyCurrency || habit.penaltyCurrency || habit.rewardCurrency),
+      });
+      return true;
+    }
+
+    if (habit.breakPenaltyMode === 'stage') {
+      const milestone = nextMilestoneForPenalty(habit, previousStreak);
+      if (!milestone) return false;
+      const sourceId = `${habit.id}:${date}:break:stage:${milestone.days}`;
+      if (data.habitPointLedger.some(entry => entry.sourceId === sourceId)) return false;
+      addLedgerEntry(data, {
+        amount: -milestone.penaltyAmount,
+        type: 'break',
+        habitId: habit.id,
+        sourceId,
+        date,
+        note: `未达${MILESTONE_LABELS[milestone.days] || `${milestone.days}天`}断签「${habit.name}」`,
+        currency: normalizeCurrency(milestone.penaltyCurrency),
+      });
+      return true;
+    }
+
+    return false;
+  }
+
+  function settlePenaltiesThroughYesterday(): { changed: boolean; missCount: number; breakCount: number } {
+    const yesterday = addDays(getTodayStr(), -1);
+    let missCount = 0;
+    let breakCount = 0;
+
+    try {
+      // Preview against current data so a no-op settle does not mark dirty.
+      const draft = lifePlan.data;
+      draft.habits.map(asHabit).forEach(habit => {
+        const start = habit.startDate || yesterday;
+        if (start > yesterday) return;
+        for (let date = start; date <= yesterday; date = addDays(date, 1)) {
+          // Dry-run style checks only: apply* needs mutable ledger, so we detect pending work first.
+          const dueAndMissed = isDueOnDate(habit, date)
+            && checkinCountOnDate(draft, habit.id, date) < targetCount(habit);
+          if (!dueAndMissed) continue;
+          const missSourceId = `${habit.id}:${date}:miss`;
+          const missPenalty = Math.max(0, Number.parseInt(String(habit.penaltyPoints || 0), 10) || 0);
+          if (missPenalty > 0 && !draft.habitPointLedger.some(entry => entry.sourceId === missSourceId)) {
+            missCount += 1;
+          }
+          const previousStreak = streakBeforeDate(draft, habit, date);
+          if (previousStreak > 0) {
+            if (habit.breakPenaltyMode === 'fixed') {
+              const breakPenalty = Math.max(0, Number.parseInt(String(habit.breakPenaltyPoints || 0), 10) || 0);
+              const breakSourceId = `${habit.id}:${date}:break:fixed`;
+              if (breakPenalty > 0 && !draft.habitPointLedger.some(entry => entry.sourceId === breakSourceId)) {
+                breakCount += 1;
+              }
+            } else if (habit.breakPenaltyMode === 'stage') {
+              const milestone = nextMilestoneForPenalty(habit, previousStreak);
+              if (milestone) {
+                const breakSourceId = `${habit.id}:${date}:break:stage:${milestone.days}`;
+                if (!draft.habitPointLedger.some(entry => entry.sourceId === breakSourceId)) {
+                  breakCount += 1;
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const pending = missCount + breakCount;
+      if (!pending) {
+        lastAction.value = '昨日及更早没有新的扣分';
+        lastError.value = '';
+        return { changed: false, missCount: 0, breakCount: 0 };
+      }
+
+      missCount = 0;
+      breakCount = 0;
+      lifePlan.mutate('vue-settle-penalties', data => {
+        data.habits.map(asHabit).forEach(habit => {
+          const start = habit.startDate || yesterday;
+          if (start > yesterday) return;
+          for (let date = start; date <= yesterday; date = addDays(date, 1)) {
+            if (applyMissPenalty(data, habit, date)) missCount += 1;
+            if (applyBreakPenalty(data, habit, date)) breakCount += 1;
+          }
+        });
+      });
+
+      rebuildLocalMirror('vue-settle-penalties');
+      lastAction.value = `已结算扣分：漏打 ${missCount} 条，断签 ${breakCount} 条`;
+      lastError.value = '';
+      return { changed: true, missCount, breakCount };
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return { changed: false, missCount: 0, breakCount: 0 };
+    }
+  }
+
   function create(input: CreateHabitInput): Habit {
     const base = normalizeHabitBaseInput(input);
     const now = getNowLocal();
@@ -913,5 +1106,6 @@ export const useHabitsStore = defineStore('habits', () => {
     editCheckinNote,
     undoLatestCheckin,
     quickCheckin,
+    settlePenaltiesThroughYesterday,
   };
 });

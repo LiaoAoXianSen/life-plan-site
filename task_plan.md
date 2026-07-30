@@ -230,6 +230,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 212. Status: complete - Implement Dashboard Todo quick-writes: planForToday, quickSession, and checkbox toggle with local todo mirror rebuild.
 213. Status: complete - Add focused Dashboard quick-write Playwright coverage while keeping the read-only Dashboard contract green; full Vue smoke 75/75.
 214. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the Dashboard Todo quick-write stage.
+215. Status: complete - Implement Habit settle-through-yesterday miss/break penalty writes with idempotent sourceIds and no-op dirty protection.
+216. Status: complete - Add focused Habit penalty settlement Playwright coverage and pass full Vue smoke plus build/check.
+217. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the Habit penalty settlement stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

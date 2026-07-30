@@ -263,6 +263,10 @@ function saveCheckinNote(checkinId: string) {
   habits.editCheckinNote(checkinId, checkinNoteDrafts[checkinId] || '');
 }
 
+function settlePenalties() {
+  habits.settlePenaltiesThroughYesterday();
+}
+
 watch(focusedHabitId, value => {
   if (!value || habitForm.id) return;
   const item = habits.habits.find(habit => habit.id === value);
@@ -348,9 +352,12 @@ watch(focusedHabitId, value => {
       <div class="section-title-row">
         <div>
           <h2 id="habit-diagnostics-title">习惯诊断</h2>
-          <p class="section-hint">只读检查旧版习惯字段、钱包流水、心愿和本地镜像风险；不会修改任何数据。</p>
+          <p class="section-hint">只读检查旧版习惯字段、钱包流水、心愿和本地镜像风险；不会修改任何数据。扣分结算会写入 miss/break 流水并重建本地镜像。</p>
         </div>
-        <span class="habit-diagnostics-pill">{{ habits.diagnostics.readOnly ? '只读' : '检查' }}</span>
+        <div class="habit-diagnostics-actions">
+          <button class="btn btn-secondary" type="button" @click="settlePenalties">结算昨日扣分</button>
+          <span class="habit-diagnostics-pill">{{ habits.diagnostics.readOnly ? '只读' : '检查' }}</span>
+        </div>
       </div>
       <div class="habit-diagnostics-grid">
         <article><span>权威源</span><strong>{{ habits.diagnostics.authority || 'lifePlanData' }}</strong></article>
@@ -676,6 +683,13 @@ watch(focusedHabitId, value => {
   color: var(--muted, #647269);
   font-size: 12px;
   font-weight: 800;
+}
+.habit-diagnostics-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .habit-diagnostics-grid {
   display: grid;

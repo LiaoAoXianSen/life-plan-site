@@ -1549,6 +1549,85 @@ test('habit diagnostics stays read-only and surfaces legacy issues', async ({ pa
     expect(unchanged.mirror).toBeNull();
 });
 
+test('habit penalty settle writes miss ledger once and keeps local mirror upload disabled', async ({ page }) => {
+    const dateAt = amount => {
+        const date = new Date();
+        date.setDate(date.getDate() + amount);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const today = dateAt(0);
+    const yesterday = dateAt(-1);
+    const twoDaysAgo = dateAt(-2);
+    const source = emptyData({
+        habits: [{
+            id: 'habit-settle',
+            name: '结算扣分习惯',
+            rule: 'daily',
+            timesPerDay: '1',
+            startDate: twoDaysAgo,
+            rewardPoints: 0,
+            rewardCurrency: '金币',
+            penaltyPoints: 5,
+            penaltyCurrency: '金币',
+            breakPenaltyMode: 'none',
+            createdAt: `${twoDaysAgo}T08:00:00`,
+            updatedAt: `${twoDaysAgo}T08:00:00`,
+        }],
+        checkins: [],
+        habitPointLedger: [],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'habit-settle-before' }));
+    }, source);
+
+    await page.goto('/#/habits');
+    const diagnostics = page.locator('.habit-diagnostics-panel');
+    await diagnostics.getByRole('button', { name: '结算昨日扣分' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已结算扣分');
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    const missEntries = stored.data.habitPointLedger.filter(item => item.type === 'miss' && item.habitId === 'habit-settle');
+    expect(missEntries).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+            type: 'miss',
+            amount: -5,
+            currency: '金币',
+            habitId: 'habit-settle',
+            sourceId: `habit-settle:${twoDaysAgo}:miss`,
+            date: twoDaysAgo,
+            note: '未完成「结算扣分习惯」',
+        }),
+        expect.objectContaining({
+            type: 'miss',
+            amount: -5,
+            currency: '金币',
+            habitId: 'habit-settle',
+            sourceId: `habit-settle:${yesterday}:miss`,
+            date: yesterday,
+            note: '未完成「结算扣分习惯」',
+        }),
+    ]));
+    expect(missEntries).toHaveLength(2);
+    expect(missEntries.some(item => item.date === today)).toBe(false);
+    expect(stored.syncState.dirty).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('vue-settle-penalties');
+
+    await diagnostics.getByRole('button', { name: '结算昨日扣分' }).click();
+    await expect(page.locator('.notice.success')).toContainText('没有新的扣分');
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+    }));
+    expect(stored.data.habitPointLedger.filter(item => item.type === 'miss' && item.habitId === 'habit-settle')).toHaveLength(2);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+});
+
 test('records day view maintains a fixed-width timed event with a complete hover title', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({ ...data, records: [{ id: 'record-1', type: '日记', title: '这是一个完整的日程标题', content: '', startDate: date, endDate: date, recordTime: '09:00', recordEndTime: '10:00' }] })), { data: emptyData(), date: today });

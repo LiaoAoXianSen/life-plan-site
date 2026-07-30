@@ -98,6 +98,7 @@ Todo-breakdown confirmation flows.
 Replacement remains blocked until the remaining module audits and write-heavy
 specialist flows are closed. The following specialist controls still live in the
 proven static app and should be migrated only as separately tested follow-up
-releases: broader Habit penalty settlement UX, deeper diagnostics repair
-actions, optional Dashboard habit quick check-in polish, and older AI
-plan/triage modes. They are not replaced by incompatible shortcuts.
+releases: deeper Habit diagnostics repair actions, optional Dashboard habit
+quick check-in polish, and older AI plan/triage modes. They are not replaced
+by incompatible shortcuts. Habit settle-through-yesterday miss/break penalty
+writes are now covered on this branch.
