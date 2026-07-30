@@ -236,6 +236,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 218. Status: complete - Add Dashboard today-habit quick check-in/undo using existing habitsStore write paths and archived-safe due lists.
 219. Status: complete - Add focused Dashboard habit check-in Playwright coverage, keep read-only Dashboard contract green, and pass full Vue smoke 77/77.
 220. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the Dashboard habit quick check-in stage.
+221. Status: complete - Implement Vue AI todayPlan and backlogTriage modes with legacy-compatible context and confirmed `sourceType: 'ai'` Todo writeback.
+222. Status: complete - Add focused AI todayPlan Playwright coverage and pass full Vue smoke 78/78 plus build/check.
+223. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the AI today-plan/backlog-triage stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

@@ -94,12 +94,13 @@ suggestions; Wheel now covers canvas interaction, public-library batch
 management, independent remote preview/apply, protected upload/create, guarded
 conditional auto-sync, and final management-form polish; Todo independent sync
 now covers guarded existing-file auto-sync without background first-create; AI
-now covers multi-destination chat capture writeback plus diary, idea-next, and
+now covers multi-destination chat capture writeback, today-plan and
+backlog-triage confirmed Todo writeback, plus diary, idea-next, and
 Todo-breakdown confirmation flows.
 Replacement remains blocked until the remaining module audits and write-heavy
 specialist flows are closed. The following specialist controls still live in the
 proven static app and should be migrated only as separately tested follow-up
-releases: deeper Habit diagnostics repair actions and older AI plan/triage
-modes. They are not replaced by incompatible shortcuts. Habit
+releases: deeper Habit diagnostics repair actions and optional wheel
+tag-suggest. They are not replaced by incompatible shortcuts. Habit
 settle-through-yesterday miss/break penalty writes and Dashboard habit quick
 check-in are now covered on this branch.

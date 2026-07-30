@@ -7,7 +7,7 @@ import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
 
-type AiMode = 'chatCapture' | 'ideaNext' | 'todoBreakdown';
+type AiMode = 'chatCapture' | 'todayPlan' | 'backlogTriage' | 'ideaNext' | 'todoBreakdown';
 type AiDraftItem = {
   text: string;
   note: string;
@@ -52,6 +52,18 @@ const modeMeta: Record<AiMode, { title: string; subtitle: string; placeholder: s
     placeholder: '例如：明天想把页面检查一下，顺手记个待办。',
     action: '生成建议',
   },
+  todayPlan: {
+    title: 'AI 今日计划',
+    subtitle: '根据今日待办、逾期项和浮动池，生成可确认的今日行动清单。',
+    placeholder: '例如：优先补逾期，再推进一个高优先级任务。',
+    action: '生成今日计划',
+  },
+  backlogTriage: {
+    title: 'AI 待办整理',
+    subtitle: '从逾期、浮动和今日关注里挑出几件能马上推进的小事。',
+    placeholder: '例如：只保留今天能完成的 3 到 5 件。',
+    action: '生成整理建议',
+  },
   ideaNext: {
     title: 'AI 灵感下一步',
     subtitle: '选择一条灵感，把它变成可确认的小实验或下一步行动。',
@@ -80,11 +92,74 @@ const todoOptions = computed(() => store.data.todos
 const selectedIdea = computed(() => store.data.records.find(record => record.id === selectedIdeaId.value && record.type === '灵感碎片') ?? null);
 const selectedTodo = computed(() => store.data.todos.find(todo => todo.id === selectedTodoId.value) ?? null);
 const selectedDrafts = computed(() => drafts.value.filter(item => item.selected && item.text.trim()));
+const today = computed(() => getTodayStr());
+
+function isTodoPlannedToday(todo: { planStartDate?: string; planEndDate?: string }) {
+  return Boolean(todo.planStartDate && todo.planEndDate && todo.planStartDate <= today.value && todo.planEndDate >= today.value);
+}
+
+function hasTodoSessionToday(todo: { sessions?: Array<{ date?: string }> }) {
+  return (todo.sessions || []).some(session => session.date === today.value);
+}
+
+function isTodoOverdue(todo: { done?: boolean; dueDate?: string }) {
+  return Boolean(!todo.done && todo.dueDate && todo.dueDate < today.value);
+}
+
+function isTodoRelevantToday(todo: { done?: boolean; dueDate?: string; planStartDate?: string; planEndDate?: string; sessions?: Array<{ date?: string }> }) {
+  return isTodoOverdue(todo) || todo.dueDate === today.value || isTodoPlannedToday(todo) || hasTodoSessionToday(todo);
+}
+
+function compactTodo(todo: any) {
+  return {
+    id: todo.id,
+    text: todo.text,
+    note: todo.note,
+    group: todo.group,
+    urgency: todo.urgency,
+    dueDate: todo.dueDate,
+    planStartDate: todo.planStartDate,
+    planEndDate: todo.planEndDate,
+    subTodos: todo.subTodos || [],
+    sessions: todo.sessions || [],
+  };
+}
 
 const context = computed(() => ({
-  todayTodos: store.data.todos.filter(todo => !todo.done && todo.dueDate === getTodayStr()),
-  floatingTodos: store.data.todos.filter(todo => !todo.done && !todo.dueDate),
-  overdueTodos: store.data.todos.filter(todo => !todo.done && todo.dueDate && todo.dueDate < getTodayStr()),
+  todayTodos: store.data.todos.filter(todo => !todo.done && isTodoRelevantToday(todo)).slice(0, 10).map(compactTodo),
+  floatingTodos: store.data.todos
+    .filter(todo => !todo.done && !todo.dueDate && !todo.planStartDate && !todo.planEndDate)
+    .slice(0, 12)
+    .map(compactTodo),
+  overdueTodos: store.data.todos.filter(todo => isTodoOverdue(todo)).slice(0, 10).map(compactTodo),
+  activeGoals: store.data.goals.filter(goal => goal.status === '进行中').slice(0, 8).map(goal => ({
+    id: goal.id,
+    name: goal.name,
+    progress: goal.progress,
+    status: goal.status,
+  })),
+  dueHabits: store.data.habits.filter(habit => !habit.archived).slice(0, 8).map(habit => ({
+    id: habit.id,
+    name: habit.name,
+    doneToday: store.data.checkins.some(checkin => checkin.habitId === habit.id && checkin.date === today.value),
+  })),
+  ideas: store.data.records.filter(record => record.type === '灵感碎片').slice(0, 8).map(record => ({
+    id: record.id,
+    title: record.title,
+    content: String(record.content || '').slice(0, 180),
+    ideaStatus: record.ideaStatus,
+  })),
+  recentRecords: store.data.records
+    .filter(record => record.type !== '灵感碎片')
+    .slice()
+    .sort((left, right) => String(right.updatedAt || right.startDate || '').localeCompare(String(left.updatedAt || left.startDate || '')))
+    .slice(0, 8)
+    .map(record => ({
+      type: record.type,
+      title: record.title,
+      startDate: record.startDate,
+      content: String(record.content || '').slice(0, 280),
+    })),
   selectedIdea: selectedIdea.value ? {
     id: selectedIdea.value.id,
     title: selectedIdea.value.title,
@@ -186,7 +261,7 @@ async function run() {
   }
 }
 
-function applyChatItem(item: AiDraftItem) {
+function applyChatItem(item: AiDraftItem, sourceType = 'ai-capture') {
   todos.create({
     text: item.text.trim(),
     note: item.note,
@@ -196,7 +271,7 @@ function applyChatItem(item: AiDraftItem) {
     urgency: (item.urgency as any) || 'medium',
     group: item.group || '其他',
     subTodos: item.subTodos.map(sub => ({ text: sub.text, done: false })),
-    sourceType: 'ai-capture',
+    sourceType,
   });
   status.value = '已创建待办';
 }
@@ -207,8 +282,21 @@ function applyChatTodos() {
     error.value = '请至少选择一条待办并保留标题';
     return;
   }
-  selected.forEach(applyChatItem);
+  selected.forEach(item => applyChatItem(item, 'ai-capture'));
   status.value = `已创建待办 ${selected.length} 项`;
+  error.value = '';
+}
+
+function applyPlanTodos() {
+  const selected = selectedDrafts.value;
+  if (!selected.length) {
+    error.value = '请至少选择一条待办并保留标题';
+    return;
+  }
+  selected.forEach(item => applyChatItem(item, 'ai'));
+  status.value = mode.value === 'backlogTriage'
+    ? `已加入整理待办 ${selected.length} 项`
+    : `已加入今日待办 ${selected.length} 项`;
   error.value = '';
 }
 
@@ -296,12 +384,18 @@ function applySelected() {
     applyTodoBreakdown();
     return;
   }
+  if (mode.value === 'todayPlan' || mode.value === 'backlogTriage') {
+    applyPlanTodos();
+    return;
+  }
   applyChatTodos();
 }
 
 watch(() => route.query.mode, value => {
   const next = String(Array.isArray(value) ? value[0] : value || 'chatCapture');
-  if (next === 'ideaNext' || next === 'todoBreakdown' || next === 'chatCapture') mode.value = next;
+  if (next === 'ideaNext' || next === 'todoBreakdown' || next === 'chatCapture' || next === 'todayPlan' || next === 'backlogTriage') {
+    mode.value = next;
+  }
 }, { immediate: true });
 
 watch(() => route.query.idea, value => {
@@ -339,6 +433,8 @@ watch(() => route.query.todo, value => {
       <div class="card-title">模式</div>
       <div class="ai-mode-tabs" role="tablist" aria-label="AI mode">
         <button type="button" :class="{ active: mode === 'chatCapture' }" @click="setMode('chatCapture')">对话整理</button>
+        <button type="button" :class="{ active: mode === 'todayPlan' }" @click="setMode('todayPlan')">今日计划</button>
+        <button type="button" :class="{ active: mode === 'backlogTriage' }" @click="setMode('backlogTriage')">待办整理</button>
         <button type="button" :class="{ active: mode === 'ideaNext' }" @click="setMode('ideaNext')">灵感下一步</button>
         <button type="button" :class="{ active: mode === 'todoBreakdown' }" @click="setMode('todoBreakdown')">待办拆解</button>
       </div>
@@ -422,7 +518,17 @@ watch(() => route.query.todo, value => {
       </div>
       <div class="todo-detail-actions">
         <button class="btn btn-primary" type="button" :disabled="!selectedDrafts.length" @click="applySelected">
-          {{ mode === 'ideaNext' ? '转成关联待办' : mode === 'todoBreakdown' ? '写入子任务' : '创建这些待办' }}
+          {{
+            mode === 'ideaNext'
+              ? '转成关联待办'
+              : mode === 'todoBreakdown'
+                ? '写入子任务'
+                : mode === 'todayPlan'
+                  ? '加入今日待办'
+                  : mode === 'backlogTriage'
+                    ? '加入整理待办'
+                    : '创建这些待办'
+          }}
         </button>
       </div>
     </article>

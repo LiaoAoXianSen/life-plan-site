@@ -2277,6 +2277,69 @@ test('AI ideaNext keeps drafts read-only until confirmed writeback', async ({ pa
     expect(stored.mirror.todos.map(item => item.id)).toContain(todo.id);
 });
 
+test('AI todayPlan keeps drafts read-only until confirmed writeback with sourceType ai', async ({ page }) => {
+    const today = (() => {
+        const date = new Date();
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    })();
+    const yesterday = (() => {
+        const date = new Date();
+        date.setDate(date.getDate() - 1);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    })();
+    const source = emptyData({
+        todos: [
+            todoFixture('todo-overdue-plan', '补上过期复盘', { dueDate: yesterday, urgency: 'high', group: '工作' }),
+            todoFixture('todo-today-plan', '推进首页迁移', { dueDate: today, urgency: 'medium', group: '迁移' }),
+            todoFixture('todo-float-plan', '浮动阅读半小时', { urgency: 'low', group: '生活' }),
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'ai-today-plan-before' }));
+    }, source);
+
+    await page.goto('/#/ai?mode=todayPlan');
+    const aiPage = page.locator('#page-ai');
+    await expect(aiPage.locator('.ai-mode-tabs button.active')).toHaveText('今日计划');
+    await aiPage.getByLabel('AI 今日计划').fill('优先补逾期，再推进一个迁移事项。');
+    await aiPage.getByRole('button', { name: '生成今日计划', exact: true }).click();
+    await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
+    await expect(aiPage.locator('.ai-result-item').first()).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('todoAppData'))).toBeNull();
+
+    await page.locator('#ai-draft-text-0').fill('今天先补过期复盘');
+    await page.locator('#ai-draft-note-0').fill('确认后写入的今日计划');
+    await page.locator('#ai-draft-group-0').fill('工作');
+    await aiPage.getByRole('button', { name: '加入今日待办', exact: true }).click();
+    await expect(aiPage.getByText(/已加入今日待办/)).toBeVisible();
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+        sync: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    const created = stored.data.todos.filter(item => item.sourceType === 'ai');
+    expect(created.length).toBeGreaterThan(0);
+    const edited = created.find(item => item.text === '今天先补过期复盘');
+    expect(edited).toMatchObject({
+        text: '今天先补过期复盘',
+        note: '确认后写入的今日计划',
+        group: '工作',
+        sourceType: 'ai',
+    });
+    expect(edited.planStartDate).toBe(today);
+    expect(edited.planEndDate).toBe(today);
+    expect(stored.sync.dirty).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.todos).toEqual(expect.arrayContaining([
+        expect.objectContaining({ text: '今天先补过期复盘', sourceType: 'ai' }),
+    ]));
+});
+
 test('AI chatCapture keeps multi-destination drafts read-only until confirmed writeback', async ({ page }) => {
     const source = emptyData({
         records: [{

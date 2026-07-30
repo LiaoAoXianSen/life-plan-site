@@ -27,7 +27,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Full-field body metric create/edit/delete, library, multi-exercise plan create/edit, plan-start live workouts, service-backed last-performance suggestions, rest timer controls, explicit finish-time plan writeback, workout history create/edit/delete, manual-delete tombstones, and dirty-state coverage. | No open blocker in the current Fitness parity audit; replacement remains blocked by other modules. | Fitness writes are delegated to `fitness-service.js` and preserve old body metric, plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
 | Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, canvas rendering, click/drag spin entry points, normal and tag two-stage spin, public-library tag filtering and batch tag/enable/delete actions, labeled management forms, history, Todo conversion, JSON/CSV, independent remote preview/apply, protected upload/create, and guarded conditional auto-sync. | No open blocker in the current Wheel parity audit; replacement remains blocked by other modules. | Wheel writes preserve `wheels`, `wheelTags`, `wheelLibraryItems`, `wheelHistory`, Todo conversion links, dirty state, tombstones, and old `wheel-tool.js` interaction expectations. |
 | Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export, Todo/Wheel/Habit independent preview/apply/conditional upload/create flows, main auto-sync debounce, periodic visible sync, visibility-resume sync, and Todo/Wheel/Habit guarded conditional auto-sync. | No open blocker in the current main plus Todo/Wheel/Habit module auto-sync audit; replacement remains blocked by other modules. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
-| AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Chat capture multi-destination writeback, Records diary analysis, Ideas AI next-action confirmed writeback, and Todo breakdown confirmed subtask writeback exist with remote/local generation and editable drafts. | Older today-plan/backlog-triage modes remain later AI depth. | AI actions write back only after confirmation and preserve existing fields. |
+| AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Chat capture multi-destination writeback, today-plan and backlog-triage confirmed Todo writeback with `sourceType: 'ai'`, Records diary analysis, Ideas AI next-action confirmed writeback, and Todo breakdown confirmed subtask writeback exist with remote/local generation and editable drafts. | No open blocker in the current AI assistant mode audit; optional wheel tag-suggest remains later depth. | AI actions write back only after confirmation and preserve existing fields. |
 | Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists, import merge creates before/after snapshots, preserves tombstones, refreshes Todo/Habit mirrors, and marks main sync dirty. | No open blocker in the current Import/Export contract audit; replacement remains blocked by other modules. | Import/export round-trips complete data with snapshots, mirror rebuilds, dirty-state updates, and merge semantics intact. |
 
 ## Completed Implementation Slices
@@ -110,6 +110,16 @@ Status: verified locally
 - Create work records and idea records through the Records store; idea capture preserves `ideaStatus: 待整理` and `ideaTags: ['AI整理']`.
 - Reuse an existing same-day `日计划` scoped record by appending `# AI 对话整理` instead of creating a duplicate plan record.
 - Verify no-write generation, per-target confirmed writes, diary template content, day-plan scoped reuse, idea fields, Todo mirror, and dirty sync state with Playwright.
+
+### AI Today Plan And Backlog Triage Slice
+
+Status: verified locally
+
+- Add Vue AI modes `todayPlan` and `backlogTriage` beside chatCapture/ideaNext/todoBreakdown, including route `?mode=` restoration and mode tabs.
+- Build legacy-compatible context: relevant-today, overdue, and floating Todo buckets plus active goals, due habits, ideas, and recent records for remote parity.
+- Keep generation read-only until confirmation; selected drafts create Todos through `todos.create` with `sourceType: 'ai'`, repository dirty state, and local-only `todoAppData` rebuild.
+- Confirm buttons use legacy labels (`加入今日待办` / `加入整理待办`) and reuse editable draft fields for text/note/dates/group.
+- Verify todayPlan no-write generation, edited draft writeback, `sourceType: 'ai'`, plan dates, mirror flags, and dirty state with Playwright; full Vue smoke is 78/78.
 
 ### Ideas Editable Pre-Create Todo Draft Slice
 
