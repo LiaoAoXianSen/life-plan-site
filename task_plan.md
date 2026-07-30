@@ -218,6 +218,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 200. Status: complete - Add focused AI chat-capture contract coverage for no-write generation, per-target writes, mirrors, dirty state, scoped record reuse, and structured diary content.
 201. Status: complete - Run build/typecheck/focused/full checks plus responsive verification for the expanded AI page.
 202. Status: complete - Update parity evidence, package if applicable, verify protected refs, commit, push, and append dual-store memory for the chatCapture writeback stage.
+203. Status: complete - Audit module-level independent auto-sync and finish the coherent Todo/Wheel/Habit guarded conditional auto-sync slice together.
+204. Status: complete - Implement Vue Todo/Wheel/Habit auto-sync with explicit opt-in, fixed independent paths, existing-file If-Match upload, visibility resume, and no background first-create.
+205. Status: complete - Add focused Todo/Wheel/Habit auto-sync coverage for unsafe config sanitization, disabled idle behavior, dirty upload, missing remote no-create, remote pull, and main dirty propagation.
+206. Status: complete - Run build/typecheck/focused/full checks plus responsive verification for the Todo/Wheel/Habit auto-sync surfaces.
+207. Status: in_progress - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the module auto-sync stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

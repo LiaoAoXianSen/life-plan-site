@@ -2664,7 +2664,7 @@ test('habit existing remote upload uses If-Match and verifies the written snapsh
     });
     await page.addInitScript(({ localData, remoteData }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-habit.json', autoSync: true, remoteUploadEnabled: true }));
         window.__habitSyncRequests = [];
         window.__habitUploaded = null;
@@ -2738,7 +2738,7 @@ test('habit existing upload stops before PUT when the remote changed after previ
     });
     await page.addInitScript(({ localData, firstRemote, secondRemote }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         window.__habitSyncRequests = [];
         window.fetch = async (url, options = {}) => {
             const method = options.method || 'GET';
@@ -2811,7 +2811,7 @@ test('habit first remote creation requires session arm and uses If-None-Match', 
     });
     await page.addInitScript(localData => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-habit.json', autoSync: true, remoteUploadEnabled: true }));
         localStorage.setItem('habitAppSyncState', JSON.stringify({ dirty: true, lastRemoteHash: 'old-habit-created' }));
         window.__habitSyncRequests = [];
@@ -2886,7 +2886,7 @@ test('habit first remote creation stops before PUT when the file appears after p
     const syncState = JSON.stringify({ dirty: true, lastRemoteHash: 'old-first-race' });
     await page.addInitScript(({ localData, stateData, remoteData }) => {
         localStorage.setItem('lifePlanData', localData);
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('habitAppSyncState', stateData);
         window.__habitSyncRequests = [];
         window.fetch = async (url, options = {}) => {
@@ -3029,7 +3029,7 @@ test('wheel remote apply stops before persistence when cloud changed after previ
     const original = JSON.stringify(local);
     await page.addInitScript(({ localData, firstRemote, secondRemote }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         window.__wheelSyncRequests = [];
         window.fetch = async (url, options = {}) => {
             const method = options.method || 'GET';
@@ -3086,7 +3086,7 @@ test('wheel existing remote upload uses If-Match and verifies the written snapsh
     };
     await page.addInitScript(({ localData, remoteData }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
         window.__wheelSyncRequests = [];
         window.__wheelUploaded = null;
@@ -3147,7 +3147,7 @@ test('wheel existing upload stops before PUT when the remote changed after previ
     };
     await page.addInitScript(({ localData, firstRemote, secondRemote }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         window.__wheelSyncRequests = [];
         window.fetch = async (url, options = {}) => {
             const method = options.method || 'GET';
@@ -3188,7 +3188,7 @@ test('wheel first remote creation requires session arm and uses If-None-Match', 
     });
     await page.addInitScript(localData => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
         window.__wheelSyncRequests = [];
         window.__wheelUploaded = null;
@@ -3231,12 +3231,464 @@ test('wheel first remote creation requires session arm and uses If-None-Match', 
     expect(result.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: false, remoteUploadEnabled: false });
 });
 
+test('wheel conditional auto sync sanitizes old config and stays idle when disabled', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-auto-idle', name: '自动同步关闭转盘', mode: 'normal',
+            items: [{ id: 'idle-option', name: '旧选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00' }],
+            createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00',
+        }],
+    });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
+        window.__wheelAutoRequests = [];
+        window.fetch = async (url, options = {}) => {
+            window.__wheelAutoRequests.push({ url: String(url), method: options.method || 'GET', headers: options.headers || {}, body: options.body || '' });
+            return new Response('missing', { status: 404 });
+        };
+    }, local);
+
+    await page.clock.install();
+    await page.goto('/#/wheel');
+    await page.getByLabel('选项名称').fill('关闭时新增选项');
+    await page.locator('.option-form').getByRole('button', { name: '添加' }).click();
+    await page.clock.fastForward(25000);
+    await page.waitForTimeout(100);
+
+    const result = await page.evaluate(() => ({
+        requests: window.__wheelAutoRequests,
+        config: JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig')),
+        state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}'),
+    }));
+    expect(result.requests).toEqual([]);
+    expect(result.config).toMatchObject({
+        remotePath: '/apps/wheel-app/data.json',
+        autoSync: false,
+        conditionalAutoSyncEnabled: false,
+        remoteUploadEnabled: false,
+    });
+    expect(result.state.dirty).toBe(true);
+});
+
+test('wheel conditional auto sync uploads dirty wheel slice after debounce', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-auto-upload', name: '自动上传转盘', mode: 'normal',
+            items: [{ id: 'auto-upload-old', name: '旧选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00' }],
+            createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00',
+        }],
+    });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
+            remotePath: '/apps/wheel-app/data.json',
+            autoSync: true,
+            conditionalAutoSyncEnabled: true,
+            remoteUploadEnabled: true,
+        }));
+        window.__wheelAutoRequests = [];
+        window.__wheelUploaded = null;
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__wheelAutoRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'PUT') {
+                window.__wheelUploaded = JSON.parse(options.body);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"wheel-auto-v2"' } });
+            }
+            if (method === 'GET') {
+                const body = window.__wheelUploaded || localData;
+                return new Response(JSON.stringify(body), { status: 200, headers: { ETag: window.__wheelUploaded ? '"wheel-auto-v2"' : '"wheel-auto-v1"', 'Content-Type': 'application/json' } });
+            }
+            return new Response('', { status: 200 });
+        };
+    }, local);
+
+    await page.clock.install();
+    await page.goto('/#/wheel');
+    const baselineHash = await page.evaluate(localData => {
+        const sync = window.LifePlanSyncService.create();
+        return sync.getWheelDataHash(sync.getWheelSnapshot(localData));
+    }, local);
+    await page.evaluate(hash => {
+        localStorage.setItem('lifePlanWheelSyncState', JSON.stringify({
+            dirty: false,
+            lastLocalHash: hash,
+            lastRemoteHash: hash,
+            lastRemoteEtag: '"wheel-auto-v1"',
+        }));
+    }, baselineHash);
+    await page.getByLabel('选项名称').fill('自动同步新增选项');
+    await page.locator('.option-form').getByRole('button', { name: '添加' }).click();
+    await page.clock.fastForward(20000);
+    await expect.poll(() => page.evaluate(() => window.__wheelAutoRequests.filter(item => item.method === 'PUT').length)).toBe(1);
+
+    const result = await page.evaluate(() => ({
+        requests: window.__wheelAutoRequests,
+        uploaded: window.__wheelUploaded,
+        wheelState: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+        mainState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        config: JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig')),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/wheel-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'PUT', 'GET']);
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(put.headers['If-Match'] || put.headers['if-match']).toBe('"wheel-auto-v1"');
+    expect(result.uploaded.wheels[0].items.map(item => item.name)).toContain('自动同步新增选项');
+    expect(result.uploaded.remoteUploadEnabled).toBeUndefined();
+    expect(result.wheelState).toMatchObject({ dirty: false, lastRemoteEtag: '"wheel-auto-v2"' });
+    expect(result.mainState.dirty).toBe(true);
+    expect(result.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: true, conditionalAutoSyncEnabled: true, remoteUploadEnabled: false });
+});
+
+test('wheel conditional auto sync never creates a missing remote file', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-auto-missing', name: '自动同步缺云端', mode: 'normal',
+            items: [{ id: 'missing-option', name: '旧选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00' }],
+            createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00',
+        }],
+    });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
+            remotePath: '/apps/wheel-app/data.json',
+            autoSync: true,
+            conditionalAutoSyncEnabled: true,
+            remoteUploadEnabled: false,
+        }));
+        window.__wheelAutoRequests = [];
+        window.fetch = async (url, options = {}) => {
+            window.__wheelAutoRequests.push({ url: String(url), method: options.method || 'GET', headers: options.headers || {}, body: options.body || '' });
+            return new Response('missing', { status: 404 });
+        };
+    }, local);
+
+    await page.clock.install();
+    await page.goto('/#/wheel');
+    await page.getByLabel('选项名称').fill('缺云端时新增选项');
+    await page.locator('.option-form').getByRole('button', { name: '添加' }).click();
+    await page.clock.fastForward(20000);
+    await expect.poll(() => page.evaluate(() => window.__wheelAutoRequests.filter(item => item.method === 'GET').length)).toBe(1);
+    const result = await page.evaluate(() => ({
+        methods: window.__wheelAutoRequests.map(item => item.method),
+        headers: window.__wheelAutoRequests.map(item => item.headers),
+        state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+    }));
+    expect(result.methods).toEqual(['GET']);
+    expect(result.headers.some(headers => headers['If-None-Match'] || headers['if-none-match'])).toBe(false);
+    expect(result.state.dirty).toBe(true);
+});
+
+test('wheel conditional auto sync pulls remote update on visibility resume', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-visible-local', name: '可见性本机转盘', mode: 'normal',
+            items: [{ id: 'visible-local-option', name: '本机选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00' }],
+            createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00',
+        }],
+    });
+    const remote = emptyData({
+        wheels: [{
+            id: 'wheel-visible-remote', name: '可见性云端转盘', mode: 'normal',
+            items: [{ id: 'visible-remote-option', name: '云端选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-30T09:00:00', updatedAt: '2026-07-30T09:00:00' }],
+            createdAt: '2026-07-30T09:00:00', updatedAt: '2026-07-30T09:00:00',
+        }],
+    });
+    await page.addInitScript(({ localData, remoteData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
+            remotePath: '/apps/wheel-app/data.json',
+            autoSync: true,
+            conditionalAutoSyncEnabled: true,
+            remoteUploadEnabled: false,
+        }));
+        window.__wheelAutoRequests = [];
+        window.__wheelRemote = remoteData;
+        window.fetch = async (url, options = {}) => {
+            window.__wheelAutoRequests.push({ url: String(url), method: options.method || 'GET', headers: options.headers || {}, body: options.body || '' });
+            return new Response(JSON.stringify(window.__wheelRemote), { status: 200, headers: { ETag: '"wheel-visible-v2"', 'Content-Type': 'application/json' } });
+        };
+    }, { localData: local, remoteData: remote });
+
+    await page.goto('/#/sync');
+    const localHash = await page.evaluate(localData => {
+        const sync = window.LifePlanSyncService.create();
+        return sync.getWheelDataHash(sync.getWheelSnapshot(localData));
+    }, local);
+    await page.evaluate(hash => {
+        localStorage.setItem('lifePlanWheelSyncState', JSON.stringify({
+            dirty: false,
+            lastLocalHash: hash,
+            lastRemoteHash: hash,
+            lastRemoteEtag: '"wheel-visible-v1"',
+        }));
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+        document.dispatchEvent(new Event('visibilitychange'));
+    }, localHash);
+    await expect.poll(() => page.evaluate(() => window.__wheelAutoRequests.filter(item => item.method === 'GET').length)).toBeGreaterThan(0);
+
+    const result = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        wheelState: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
+        mainState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        methods: window.__wheelAutoRequests.map(item => item.method),
+    }));
+    expect(result.methods).toEqual(['GET']);
+    expect(result.data.wheels.map(item => item.id)).toEqual(['wheel-visible-remote']);
+    expect(result.wheelState).toMatchObject({ dirty: false, lastRemoteEtag: '"wheel-visible-v2"' });
+    expect(result.mainState.dirty).toBe(true);
+});
+
+test('habit conditional auto sync sanitizes old config and stays idle when disabled', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const local = emptyData({
+        habits: [{ id: 'habit-auto-idle', name: '自动同步关闭习惯', rule: 'daily', timesPerDay: '2', rewardPoints: 1, rewardCurrency: '金币', startDate: today }],
+    });
+    const requests = [];
+    await page.route('https://habit-auto-idle.example.test/**', async route => {
+        requests.push(route.request().method());
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(habitRemoteSnapshot()) });
+    });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-auto-idle.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-habit.json', autoSync: true, remoteUploadEnabled: true }));
+    }, local);
+
+    await page.clock.install();
+    await page.goto('/#/habits');
+    await page.getByRole('button', { name: '打卡', exact: true }).click();
+    await page.clock.fastForward(25000);
+    await page.waitForTimeout(100);
+
+    const result = await page.evaluate(() => ({
+        config: JSON.parse(localStorage.getItem('habitAppSyncConfig') || '{}'),
+        state: JSON.parse(localStorage.getItem('habitAppSyncState') || '{}'),
+    }));
+    expect(requests).toEqual([]);
+    expect(result.config).toMatchObject({
+        remotePath: '/apps/habit-app/data.json',
+        autoSync: false,
+        conditionalAutoSyncEnabled: false,
+        remoteUploadEnabled: false,
+    });
+    expect(result.state.dirty).toBe(true);
+});
+
+test('habit conditional auto sync uploads dirty habit slice after debounce', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const local = emptyData({
+        habits: [{
+            id: 'habit-auto-upload',
+            name: '自动上传习惯',
+            tag: '健康',
+            rule: 'daily',
+            timesPerDay: '2',
+            rewardPoints: 3,
+            rewardCurrency: '金币',
+            startDate: today,
+            createdAt: `${today}T08:00:00`,
+            updatedAt: `${today}T08:00:00`,
+        }],
+        habitCurrencies: [{ id: 'currency-coin', name: '金币' }],
+    });
+    const remote = habitRemoteSnapshot({
+        habits: [{ id: 'life-plan/habits/habit-auto-upload', title: '自动上传习惯', rewardAmount: 3, rewardCurrencyId: 'default', updatedAt: `${today}T08:00:00` }],
+        habitCurrencies: [{ id: 'default', name: '金币' }],
+    });
+    const requests = [];
+    let uploaded = null;
+    await page.route('https://habit-auto-upload.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requests.push({ method: request.method(), path: url.pathname, headers: request.headers(), body: request.postData() || '' });
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { ETag: uploaded ? '"habit-auto-v2"' : '"habit-auto-v1"', 'Access-Control-Expose-Headers': 'ETag' },
+                body: JSON.stringify(uploaded || remote),
+            });
+            return;
+        }
+        if (request.method() === 'PUT' && url.pathname === '/apps/habit-app/data.json') {
+            uploaded = JSON.parse(request.postData() || 'null');
+            await route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: '"habit-auto-v2"', 'Access-Control-Expose-Headers': 'ETag' }, body: JSON.stringify({ ok: true }) });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(({ localData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-auto-upload.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({
+            remotePath: '/apps/habit-app/data.json',
+            autoSync: true,
+            conditionalAutoSyncEnabled: true,
+            remoteUploadEnabled: false,
+        }));
+    }, { localData: local });
+
+    await page.clock.install();
+    await page.goto('/#/habits');
+    const hashes = await page.evaluate(remoteData => {
+        const services = window.LifePlanSyncService.create();
+        const habit = window.LifePlanHabitService.create();
+        const data = JSON.parse(localStorage.getItem('lifePlanData'));
+        return {
+            localSourceHash: services.getDataHash(habit.getHabitLegacySourceSlice(data)),
+            remoteHash: services.getHabitDataHash(remoteData),
+        };
+    }, remote);
+    await page.evaluate(({ localSourceHash, remoteHash }) => {
+        localStorage.setItem('habitAppSyncState', JSON.stringify({
+            dirty: false,
+            lastLocalHash: localSourceHash,
+            lastRemoteHash: remoteHash,
+            lastRemoteEtag: '"habit-auto-v1"',
+        }));
+    }, hashes);
+    await page.getByRole('button', { name: '打卡', exact: true }).click();
+    await page.clock.fastForward(20000);
+    await expect.poll(() => requests.filter(item => item.method === 'PUT').length).toBe(1);
+
+    const result = await page.evaluate(() => ({
+        uploaded: window.__unused || null,
+        habitState: JSON.parse(localStorage.getItem('habitAppSyncState') || '{}'),
+        mainState: JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}'),
+        config: JSON.parse(localStorage.getItem('habitAppSyncConfig') || '{}'),
+    }));
+    const fileRequests = requests.filter(item => item.path === '/apps/habit-app/data.json');
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'PUT', 'GET']);
+    expect(put.headers['if-match'] || put.headers['If-Match']).toBe('"habit-auto-v1"');
+    expect(uploaded.habitRecords.length).toBeGreaterThan(0);
+    expect(uploaded.localMirror).toBeUndefined();
+    expect(uploaded.remoteUploadEnabled).toBeUndefined();
+    expect(result.habitState).toMatchObject({ dirty: false, lastRemoteEtag: '"habit-auto-v2"' });
+    expect(result.mainState.dirty).toBe(true);
+    expect(result.config).toMatchObject({ remotePath: '/apps/habit-app/data.json', autoSync: true, conditionalAutoSyncEnabled: true, remoteUploadEnabled: false });
+});
+
+test('habit conditional auto sync never creates a missing remote file', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const local = emptyData({
+        habits: [{ id: 'habit-auto-missing', name: '自动同步不首创习惯', rule: 'daily', timesPerDay: '2', rewardPoints: 1, rewardCurrency: '金币', startDate: today }],
+    });
+    const requests = [];
+    await page.route('https://habit-auto-missing.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requests.push({ method: request.method(), path: url.pathname, headers: request.headers() });
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            await route.fulfill({ status: 404, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-auto-missing.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({
+            remotePath: '/apps/habit-app/data.json',
+            autoSync: true,
+            conditionalAutoSyncEnabled: true,
+            remoteUploadEnabled: false,
+        }));
+    }, local);
+
+    await page.clock.install();
+    await page.goto('/#/habits');
+    await page.getByRole('button', { name: '打卡', exact: true }).click();
+    await page.clock.fastForward(20000);
+    await expect.poll(() => requests.filter(item => item.path === '/apps/habit-app/data.json').length).toBe(1);
+
+    const state = await page.evaluate(() => JSON.parse(localStorage.getItem('habitAppSyncState') || '{}'));
+    expect(requests.map(item => item.method)).toEqual(['GET']);
+    expect(requests.some(item => item.headers['if-none-match'] || item.headers['If-None-Match'])).toBe(false);
+    expect(state.dirty).toBe(true);
+});
+
+test('habit conditional auto sync pulls remote update on visibility resume', async ({ page }) => {
+    const remote = habitRemoteSnapshot({
+        habits: [{ id: 'life-plan/habits/habit-auto-remote', title: '自动拉取云端习惯', repeatUnit: 'daily', requiredCountPerDay: 1, rewardAmount: 2, rewardCurrencyId: 'default', createdAt: '2026-07-30T08:00:00', updatedAt: '2026-07-30T08:00:00' }],
+        habitRecords: [{ id: 'life-plan/checkins/checkin-auto-remote', habitId: 'life-plan/habits/habit-auto-remote', recordDate: '2026-07-30', recordTime: '2026-07-30T08:10:00', note: '云端打卡', createdAt: '2026-07-30T08:10:00', updatedAt: '2026-07-30T08:10:00' }],
+        habitLedger: [{ id: 'life-plan/ledger/ledger-auto-remote', type: 'checkin', habitId: 'life-plan/habits/habit-auto-remote', sourceId: 'life-plan/checkins/checkin-auto-remote', amount: 2, currencyId: 'default', date: '2026-07-30', createdAt: '2026-07-30T08:10:00', updatedAt: '2026-07-30T08:10:00' }],
+        habitCurrencies: [{ id: 'default', name: '金币' }],
+    });
+    const requests = [];
+    let uploaded = null;
+    await page.route('https://habit-auto-pull.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requests.push({ method: request.method(), path: url.pathname, headers: request.headers(), body: request.postData() || '' });
+        if (request.method() === 'GET' && url.pathname === '/apps/habit-app/data.json') {
+            await route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: uploaded ? '"habit-auto-pull-v2"' : '"habit-auto-pull-v1"', 'Access-Control-Expose-Headers': 'ETag' }, body: JSON.stringify(uploaded || remote) });
+            return;
+        }
+        if (request.method() === 'PUT' && url.pathname === '/apps/habit-app/data.json') {
+            uploaded = JSON.parse(request.postData() || 'null');
+            await route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: '"habit-auto-pull-v2"', 'Access-Control-Expose-Headers': 'ETag' }, body: JSON.stringify({ ok: true }) });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-auto-pull.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
+        localStorage.setItem('habitAppSyncConfig', JSON.stringify({
+            remotePath: '/apps/habit-app/data.json',
+            autoSync: true,
+            conditionalAutoSyncEnabled: true,
+            remoteUploadEnabled: false,
+        }));
+    }, emptyData());
+
+    await page.goto('/#/sync');
+    await page.evaluate(() => {
+        localStorage.setItem('habitAppSyncState', JSON.stringify({
+            dirty: false,
+            lastRemoteHash: 'stale-empty-habit-baseline',
+            lastRemoteEtag: '"habit-auto-pull-v0"',
+        }));
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData') || '{}').habits.map(item => item.name))).toEqual(['自动拉取云端习惯']);
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData') || '{}'),
+        mirror: JSON.parse(localStorage.getItem('habitAppData') || 'null'),
+        mainState: JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}'),
+        habitState: JSON.parse(localStorage.getItem('habitAppSyncState') || '{}'),
+    }));
+    const fileRequests = requests.filter(item => item.path === '/apps/habit-app/data.json');
+    expect(fileRequests.some(item => item.method === 'GET')).toBe(true);
+    expect(fileRequests.some(item => item.headers['if-none-match'] || item.headers['If-None-Match'])).toBe(false);
+    expect(stored.data.checkins).toEqual(expect.arrayContaining([expect.objectContaining({ note: '云端打卡' })]));
+    expect(stored.data.habitPointLedger).toEqual(expect.arrayContaining([expect.objectContaining({ amount: 2, currency: '金币' })]));
+    expect(stored.mirror.localMirror).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mainState.dirty).toBe(true);
+    expect(stored.habitState.lastRemoteEtag).toMatch(/^"habit-auto-pull-v/);
+});
+
 test('todo existing remote upload uses If-Match and verifies the written mirror', async ({ page }) => {
     const local = emptyData({ todos: [todoFixture('todo-existing-sync', '本机新版待办', { updatedAt: '2026-07-27T10:00:00' })] });
     const remote = todoRemoteSnapshot([todoFixture('todo-existing-sync', '云端旧版待办', { updatedAt: '2026-07-27T08:00:00' })]);
     await page.addInitScript(({ localData, remoteData }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-old-path.json', autoSync: true, remoteUploadEnabled: true }));
         window.__todoSyncRequests = [];
         window.__todoUploaded = null;
@@ -3287,7 +3739,7 @@ test('todo existing upload stops before PUT when the remote changed after previe
     ]);
     await page.addInitScript(({ localData, firstRemote, secondRemote }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         window.__todoSyncRequests = [];
         window.fetch = async (url, options = {}) => {
             const method = options.method || 'GET';
@@ -3320,7 +3772,7 @@ test('todo first remote creation requires session arm and uses If-None-Match', a
     const local = emptyData({ todos: [todoFixture('todo-first-sync', '首次云端待办')] });
     await page.addInitScript(localData => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-old-path.json', autoSync: true, remoteUploadEnabled: true }));
         window.__todoSyncRequests = [];
         window.__todoUploaded = null;
@@ -3361,6 +3813,208 @@ test('todo first remote creation requires session arm and uses If-None-Match', a
     expect(put.headers['If-None-Match'] || put.headers['if-none-match']).toBe('*');
     expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"todo-created"' });
     expect(result.config).toMatchObject({ autoSync: false, remoteUploadEnabled: false });
+});
+
+test('todo independent auto sync stays idle for stale unsafe config', async ({ page }) => {
+    const source = emptyData({ todos: [todoFixture('todo-auto-idle', '不应自动同步')] });
+    const methods = [];
+    await page.route('https://todo-auto-idle.example.test/**', async route => {
+        methods.push(route.request().method());
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(todoRemoteSnapshot([])) });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://todo-auto-idle.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-todo.json', autoSync: true, remoteUploadEnabled: true }));
+    }, source);
+
+    await page.clock.install();
+    await page.goto('/#/todos');
+    await page.locator('#page-todos input[required]').fill('禁用状态编辑');
+    await page.getByRole('button', { name: '保存待办' }).click();
+    await page.clock.fastForward(25000);
+    await page.waitForTimeout(100);
+
+    const config = await page.evaluate(() => JSON.parse(localStorage.getItem('todoAppSyncConfig') || '{}'));
+    expect(methods).toEqual([]);
+    expect(config).toMatchObject({ remotePath: '/apps/todo-app/data.json', autoSync: false, remoteUploadEnabled: false });
+});
+
+test('todo independent auto sync records baseline before first remote difference', async ({ page }) => {
+    const local = emptyData();
+    const remote = todoRemoteSnapshot([todoFixture('todo-auto-first-remote', '首次差异不自动合并', { updatedAt: '2026-07-27T09:30:00' })]);
+    const methods = [];
+    await page.route('https://todo-auto-baseline.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        methods.push(`${request.method()} ${url.pathname}`);
+        if (request.method() === 'GET' && url.pathname === '/apps/todo-app/data.json') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { ETag: '"todo-auto-first"', 'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag' },
+                body: JSON.stringify(remote),
+            });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://todo-auto-baseline.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/apps/todo-app/data.json', autoSync: true, autoSyncUserEnabled: true, remoteUploadEnabled: false }));
+    }, local);
+
+    await page.goto('/#/sync');
+    await page.locator('.todo-sync-card').getByRole('button', { name: '立即同步一次' }).click();
+
+    await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('todoAppSyncState') || '{}').lastRemoteHash || '')).not.toBe('');
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData') || '{}'),
+        state: JSON.parse(localStorage.getItem('todoAppSyncState') || '{}'),
+        mainState: JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}'),
+    }));
+    expect(methods).toEqual(['GET /apps/todo-app/data.json']);
+    expect(stored.data.todos).toEqual([]);
+    expect(stored.state).toMatchObject({ lastRemoteEtag: '"todo-auto-first"' });
+    expect(stored.state.lastRemoteHash).toBeTruthy();
+    expect(stored.mainState.dirty).not.toBe(true);
+});
+
+test('todo independent auto sync uploads local dirty data with If-Match and verifies', async ({ page }) => {
+    const local = emptyData({ todos: [todoFixture('todo-auto-base', '自动同步基线')] });
+    const remote = todoRemoteSnapshot([todoFixture('todo-auto-base', '自动同步基线')]);
+    const requests = [];
+    let uploaded = null;
+    await page.route('https://todo-auto-upload.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requests.push({ method: request.method(), path: url.pathname, headers: request.headers(), body: request.postData() || '' });
+        if (request.method() === 'GET' && url.pathname === '/apps/todo-app/data.json') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { ETag: uploaded ? '"todo-auto-v2"' : '"todo-auto-v1"', 'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag' },
+                body: JSON.stringify(uploaded || remote),
+            });
+            return;
+        }
+        if (request.method() === 'PUT' && url.pathname === '/apps/todo-app/data.json') {
+            uploaded = JSON.parse(request.postData() || 'null');
+            await route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: '"todo-auto-v2"', 'Access-Control-Expose-Headers': 'ETag, X-Remote-ETag' }, body: JSON.stringify({ ok: true }) });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://todo-auto-upload.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/apps/todo-app/data.json', autoSync: true, autoSyncUserEnabled: true, remoteUploadEnabled: false }));
+        localStorage.setItem('todoAppSyncState', JSON.stringify({ dirty: false }));
+    }, local);
+
+    await page.goto('/#/todos');
+    const hashes = await page.evaluate(remoteData => {
+        const sync = window.LifePlanSyncService.create();
+        const todos = window.LifePlanTodosService.create();
+        const data = JSON.parse(localStorage.getItem('lifePlanData') || '{}');
+        return {
+            localSourceHash: sync.getDataHash({ todos: data.todos, deletedItems: data.deletedItems.filter(item => item.collection === 'todos') }),
+            remoteHash: sync.getDataHash(todos.getTodoAppHashPayload(remoteData)),
+        };
+    }, remote);
+    await page.evaluate(({ localSourceHash, remoteHash }) => {
+        localStorage.setItem('todoAppSyncState', JSON.stringify({
+            dirty: false,
+            lastLocalHash: localSourceHash,
+            lastRemoteHash: remoteHash,
+            lastRemoteEtag: '"todo-auto-v1"',
+        }));
+    }, hashes);
+    await page.locator('#page-todos input[required]').fill('自动同步新增待办');
+    await page.getByRole('button', { name: '保存待办' }).click();
+    await page.goto('/#/sync');
+    await page.locator('.todo-sync-card').getByRole('button', { name: '立即同步一次' }).click();
+
+    await expect.poll(() => requests.filter(item => item.method === 'PUT').length).toBe(1);
+    const todoRequests = requests.filter(item => item.path === '/apps/todo-app/data.json');
+    const put = todoRequests.find(item => item.method === 'PUT');
+    expect(todoRequests.map(item => item.method)).toEqual(['GET', 'PUT', 'GET']);
+    expect(put.headers['if-match'] || put.headers['If-Match']).toBe('"todo-auto-v1"');
+    expect(uploaded.todos.map(item => item.text)).toEqual(expect.arrayContaining(['自动同步基线', '自动同步新增待办']));
+    expect(uploaded.localMirror).toBeUndefined();
+    expect(uploaded.remoteUploadEnabled).toBeUndefined();
+    const state = await page.evaluate(() => JSON.parse(localStorage.getItem('todoAppSyncState') || '{}'));
+    expect(state).toMatchObject({ dirty: false, lastRemoteEtag: '"todo-auto-v2"' });
+});
+
+test('todo independent auto sync applies remote merge to lifePlanData and marks main dirty', async ({ page }) => {
+    const local = emptyData();
+    const remote = todoRemoteSnapshot([todoFixture('todo-auto-remote', '自动拉取云端待办', { updatedAt: '2026-07-27T09:30:00' })]);
+    const methods = [];
+    await page.route('https://todo-auto-pull.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        methods.push(`${request.method()} ${url.pathname}`);
+        if (request.method() === 'GET' && url.pathname === '/apps/todo-app/data.json') {
+            await route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: '"todo-auto-remote"' }, body: JSON.stringify(remote) });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://todo-auto-pull.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
+        localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/apps/todo-app/data.json', autoSync: true, autoSyncUserEnabled: true, remoteUploadEnabled: false }));
+        localStorage.setItem('todoAppSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'stale-todo-baseline', lastRemoteEtag: '"todo-old"' }));
+    }, local);
+
+    await page.goto('/#/sync');
+    await page.locator('.todo-sync-card').getByRole('button', { name: '立即同步一次' }).click();
+
+    await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData') || '{}').todos.map(item => item.text))).toEqual(['自动拉取云端待办']);
+    const stored = await page.evaluate(() => ({
+        mirror: JSON.parse(localStorage.getItem('todoAppData') || 'null'),
+        mainState: JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}'),
+        todoState: JSON.parse(localStorage.getItem('todoAppSyncState') || '{}'),
+    }));
+    expect(methods).toEqual(['GET /apps/todo-app/data.json']);
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mainState.dirty).toBe(true);
+    expect(stored.todoState.dirty).toBe(false);
+});
+
+test('todo independent auto sync never creates a missing remote file', async ({ page }) => {
+    const source = emptyData({ todos: [todoFixture('todo-auto-missing', '自动同步不首次创建')] });
+    const requests = [];
+    await page.route('https://todo-auto-missing.example.test/**', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requests.push({ method: request.method(), path: url.pathname });
+        if (request.method() === 'GET' && url.pathname === '/apps/todo-app/data.json') {
+            await route.fulfill({ status: 404, body: '' });
+            return;
+        }
+        await route.fulfill({ status: 405, body: '' });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://todo-auto-missing.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/apps/todo-app/data.json', autoSync: true, autoSyncUserEnabled: true, remoteUploadEnabled: false }));
+    }, source);
+
+    await page.clock.install();
+    await page.goto('/#/todos');
+    await page.locator('#page-todos input[required]').fill('缺失云端后仍不创建');
+    await page.getByRole('button', { name: '保存待办' }).click();
+    await page.clock.fastForward(20000);
+    await expect.poll(() => requests.filter(item => item.path === '/apps/todo-app/data.json').length).toBe(1);
+
+    expect(requests.filter(item => item.method === 'PUT')).toHaveLength(0);
+    const config = await page.evaluate(() => JSON.parse(localStorage.getItem('todoAppSyncConfig') || '{}'));
+    expect(config).toMatchObject({ remotePath: '/apps/todo-app/data.json', autoSync: true, remoteUploadEnabled: false });
 });
 
 test('main sync upload uses If-Match and merges after a 412 conflict', async ({ page }) => {

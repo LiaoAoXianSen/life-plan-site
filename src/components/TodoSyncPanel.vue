@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue';
 
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
+import { getTodoSyncConfig, runTodoCloudSyncBoth, saveTodoSyncConfig } from '../services/todoCloudSync';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity, LifePlanData, Todo } from '../types/lifePlan';
 
@@ -35,6 +36,7 @@ type TodoSyncState = Record<string, unknown> & {
   lastSyncAt?: string;
   lastConflictAt?: string;
 };
+type TodoSyncConfig = { remotePath: string; autoSync: boolean; remoteUploadEnabled: false; autoSyncUserEnabled?: boolean };
 
 const props = defineProps<{ syncConfig: SyncConfig }>();
 const store = useLifePlanStore();
@@ -48,6 +50,7 @@ const message = ref('');
 const messageTone = ref<'info' | 'success' | 'danger'>('info');
 const preview = reactive<PreviewState>({ status: 'idle', local: null, remote: null, merged: null, hashesMatch: false, risks: [] });
 const syncState = reactive<TodoSyncState>(readJson('todoAppSyncState'));
+const autoConfig = reactive<TodoSyncConfig>(getTodoSyncConfig());
 
 persistConfig();
 
@@ -66,7 +69,7 @@ function readJson(key: string): Record<string, unknown> {
 }
 
 function persistConfig() {
-  localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath, autoSync: false, remoteUploadEnabled: false }));
+  Object.assign(autoConfig, saveTodoSyncConfig({ autoSync: autoConfig.autoSync }));
 }
 
 function updateSyncState(patch: TodoSyncState) {
@@ -77,6 +80,30 @@ function updateSyncState(patch: TodoSyncState) {
 function setMessage(value: string, tone: 'info' | 'success' | 'danger' = 'info') {
   message.value = value;
   messageTone.value = tone;
+}
+
+function saveAutoSyncConfig() {
+  persistConfig();
+  setMessage(autoConfig.autoSync ? 'Todo 自动同步已启用；仍不会后台首次创建云端文件。' : 'Todo 自动同步已关闭。', 'success');
+}
+
+async function runAutoSyncNow() {
+  if (busy.value || !endpointReady.value) return;
+  busy.value = true;
+  setMessage('正在执行 Todo 自动同步流程...');
+  try {
+    const result = await runTodoCloudSyncBoth({ force: true, source: 'todo-panel-auto-now' });
+    if ('skipped' in result && result.skipped) {
+      setMessage(result.reason === 'missing-remote' ? 'Todo 云端文件不存在；自动同步不会后台首次创建。' : 'Todo 自动同步已跳过。');
+      return;
+    }
+    setMessage('Todo 自动同步流程已执行。', 'success');
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : String(error), 'danger');
+  } finally {
+    busy.value = false;
+    persistConfig();
+  }
 }
 
 function todoHash(value: unknown) {
@@ -371,7 +398,15 @@ async function uploadFirst() {
   <article class="card todo-sync-card">
     <div class="todo-sync-heading">
       <div><div class="card-title">待办独立同步</div><span>{{ remotePath }}</span></div>
-      <span class="todo-sync-mode">自动同步关闭</span>
+      <span class="todo-sync-mode">{{ autoConfig.autoSync ? '自动同步开启' : '自动同步关闭' }}</span>
+    </div>
+
+    <div class="todo-sync-auto">
+      <label>
+        <input v-model="autoConfig.autoSync" type="checkbox" :disabled="busy || !endpointReady" @change="saveAutoSyncConfig" />
+        <span>启用待办自动同步</span>
+      </label>
+      <button class="btn btn-secondary" type="button" :disabled="busy || !endpointReady" @click="runAutoSyncNow">立即同步一次</button>
     </div>
 
     <div class="page-actions todo-sync-actions">
@@ -409,6 +444,8 @@ async function uploadFirst() {
 .todo-sync-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .todo-sync-heading span { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; }
 .todo-sync-mode { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
+.todo-sync-auto { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 10px 0; border-top: 1px solid var(--line); }
+.todo-sync-auto label { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
 .todo-sync-actions { margin-top: 14px; }
 .todo-sync-arm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; margin-top: 14px; padding: 10px 0; border-top: 1px solid var(--line); }
 .todo-sync-comparison { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -425,6 +462,8 @@ async function uploadFirst() {
 @media (max-width: 560px) {
   .todo-sync-heading { align-items: stretch; flex-direction: column; }
   .todo-sync-mode { align-self: flex-start; }
+  .todo-sync-auto { align-items: stretch; flex-direction: column; }
+  .todo-sync-auto .btn { width: 100%; }
   .todo-sync-comparison { grid-template-columns: 1fr; }
   .todo-sync-column { border-right: 0; border-bottom: 1px solid var(--line); }
   .todo-sync-column:last-child { border-bottom: 0; }

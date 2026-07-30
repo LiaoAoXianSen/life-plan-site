@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 
+import { getHabitSyncConfig, saveHabitSyncConfig } from '../services/habitCloudSync';
 import { createLegacyServices, genId, getNowLocal, getTodayStr } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { LifePlanData } from '../types/lifePlan';
 
 type SyncConfig = Record<string, unknown> & { webdavUrl?: string; useAppSyncKitProvider?: boolean };
+type RunAutoSync = () => Promise<unknown>;
 type RemotePayload = { data: unknown; hash: string; etag?: string };
 type HabitSnapshot = Record<string, unknown> & {
   habits: unknown[];
@@ -50,19 +52,22 @@ type PreviewState = {
   hashesMatch: boolean;
   risks: SyncRisk[];
 };
+type HabitSyncConfig = { remotePath: string; autoSync: boolean; conditionalAutoSyncEnabled: boolean; remoteUploadEnabled: false };
 
-const props = defineProps<{ syncConfig: SyncConfig }>();
+const props = defineProps<{ syncConfig: SyncConfig; runAutoSync?: RunAutoSync; restartAutoSync?: () => void }>();
 const store = useLifePlanStore();
 const services = createLegacyServices();
 const sync = services.sync;
 const habit = services.habit;
 const remotePath = '/apps/habit-app/data.json';
 const busy = ref(false);
+const autoBusy = ref(false);
 const armed = ref(false);
 const message = ref('');
 const messageTone = ref<'info' | 'success' | 'danger'>('info');
 const preview = reactive<PreviewState>({ status: 'idle', local: null, remote: null, merged: null, hashesMatch: false, risks: [] });
 const syncState = reactive<HabitSyncState>(readJson('habitAppSyncState'));
+const autoConfig = reactive<HabitSyncConfig>(getHabitSyncConfig());
 
 persistConfig();
 
@@ -98,7 +103,7 @@ const requiredCollections = [
 ];
 
 function persistConfig() {
-  localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath, autoSync: false, remoteUploadEnabled: false }));
+  Object.assign(autoConfig, saveHabitSyncConfig({ autoSync: autoConfig.autoSync }));
 }
 
 function updateSyncState(patch: HabitSyncState) {
@@ -109,6 +114,38 @@ function updateSyncState(patch: HabitSyncState) {
 function setMessage(value: string, tone: 'info' | 'success' | 'danger' = 'info') {
   message.value = value;
   messageTone.value = tone;
+}
+
+function saveAutoSyncSetting() {
+  persistConfig();
+  props.restartAutoSync?.();
+  setMessage(autoConfig.autoSync
+    ? 'Habit 条件自动同步已启用；仅同步已存在的云端文件，不会后台首次创建。'
+    : 'Habit 条件自动同步已关闭。', autoConfig.autoSync ? 'success' : 'info');
+}
+
+async function runAutoSyncNow() {
+  if (!props.runAutoSync || autoBusy.value) return;
+  autoBusy.value = true;
+  setMessage('正在执行一次 Habit 条件自动同步...');
+  try {
+    const result = await props.runAutoSync();
+    if (result && typeof result === 'object' && 'skipped' in result && result.skipped) {
+      const reason = 'reason' in result ? String(result.reason || '') : '';
+      setMessage(reason === 'missing-remote'
+        ? 'Habit 云端文件不存在；自动同步不会后台首次创建。'
+        : reason === 'missing-baseline'
+          ? 'Habit 自动同步已记录云端基线；首次差异需要手动预览确认。'
+          : 'Habit 条件自动同步已跳过。');
+      return;
+    }
+    setMessage('已执行一次 Habit 条件自动同步。', 'success');
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : String(error), 'danger');
+  } finally {
+    autoBusy.value = false;
+    Object.assign(autoConfig, getHabitSyncConfig());
+  }
 }
 
 function habitHash(value: unknown) {
@@ -643,7 +680,15 @@ async function uploadFirst() {
   <article class="card habit-sync-card">
     <div class="habit-sync-heading">
       <div><div class="card-title">习惯独立同步</div><span>{{ remotePath }}</span></div>
-      <span class="habit-sync-mode">只读预览</span>
+      <span class="habit-sync-mode">预览/应用/条件自动</span>
+    </div>
+
+    <div class="habit-sync-auto">
+      <label>
+        <input v-model="autoConfig.autoSync" type="checkbox" :disabled="busy || !endpointReady" @change="saveAutoSyncSetting" />
+        <span>启用 Habit 条件自动同步</span>
+      </label>
+      <button class="btn btn-secondary" type="button" :disabled="autoBusy || busy || !endpointReady" @click="runAutoSyncNow">立即自动同步一次</button>
     </div>
 
     <div class="page-actions habit-sync-actions">
@@ -681,6 +726,22 @@ async function uploadFirst() {
 .habit-sync-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .habit-sync-heading span { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; }
 .habit-sync-mode { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
+.habit-sync-auto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.habit-sync-auto label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .habit-sync-actions { margin-top: 14px; }
 .habit-sync-arm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; margin-top: 14px; padding: 10px 0; border-top: 1px solid var(--line); }
 .habit-sync-comparison { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -697,6 +758,8 @@ async function uploadFirst() {
 @media (max-width: 560px) {
   .habit-sync-heading { align-items: stretch; flex-direction: column; }
   .habit-sync-mode { align-self: flex-start; }
+  .habit-sync-auto { align-items: stretch; flex-direction: column; }
+  .habit-sync-auto .btn { width: 100%; }
   .habit-sync-comparison { grid-template-columns: 1fr; }
   .habit-sync-column { border-right: 0; border-bottom: 1px solid var(--line); }
   .habit-sync-column:last-child { border-bottom: 0; }

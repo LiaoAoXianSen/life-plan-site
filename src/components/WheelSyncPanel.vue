@@ -3,10 +3,12 @@ import { computed, reactive, ref } from 'vue';
 
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
+import { getWheelSyncConfig, saveWheelSyncConfig } from '../services/wheelCloudSync';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity, LifePlanData } from '../types/lifePlan';
 
 type SyncConfig = Record<string, unknown> & { webdavUrl?: string; useAppSyncKitProvider?: boolean };
+type RunAutoSync = () => Promise<unknown>;
 type RemotePayload = { data: unknown; hash: string; etag?: string };
 type WheelSnapshot = {
   wheels: DataEntity[];
@@ -42,12 +44,14 @@ type WheelSyncState = Record<string, unknown> & {
   lastConflictAt?: string;
 };
 
-const props = defineProps<{ syncConfig: SyncConfig }>();
+const props = defineProps<{ syncConfig: SyncConfig; runAutoSync?: RunAutoSync; restartAutoSync?: () => void }>();
 const store = useLifePlanStore();
 const sync = createLegacyServices().sync;
 const remotePath = '/apps/wheel-app/data.json';
 const busy = ref(false);
+const autoBusy = ref(false);
 const armed = ref(false);
+const autoSyncEnabled = ref(getWheelSyncConfig().autoSync === true);
 const message = ref('');
 const messageTone = ref<'info' | 'success' | 'danger'>('info');
 const preview = reactive<PreviewState>({ status: 'idle', local: null, remote: null, merged: null, hashesMatch: false, risks: [] });
@@ -70,7 +74,7 @@ function readJson(key: string): Record<string, unknown> {
 }
 
 function persistConfig() {
-  localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath, autoSync: false, remoteUploadEnabled: false }));
+  saveWheelSyncConfig({ autoSync: autoSyncEnabled.value });
 }
 
 function updateSyncState(patch: WheelSyncState) {
@@ -81,6 +85,29 @@ function updateSyncState(patch: WheelSyncState) {
 function setMessage(value: string, tone: 'info' | 'success' | 'danger' = 'info') {
   message.value = value;
   messageTone.value = tone;
+}
+
+function saveAutoSyncSetting() {
+  persistConfig();
+  props.restartAutoSync?.();
+  setMessage(autoSyncEnabled.value
+    ? 'Wheel 条件自动同步已启用；仅同步已存在的云端文件，不会后台首次创建。'
+    : 'Wheel 条件自动同步已关闭。', autoSyncEnabled.value ? 'success' : 'info');
+}
+
+async function runAutoSyncNow() {
+  if (!props.runAutoSync || autoBusy.value) return;
+  autoBusy.value = true;
+  setMessage('正在执行一次 Wheel 条件自动同步...');
+  try {
+    await props.runAutoSync();
+    setMessage('已执行一次 Wheel 条件自动同步。', 'success');
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : String(error), 'danger');
+  } finally {
+    autoBusy.value = false;
+    autoSyncEnabled.value = getWheelSyncConfig().autoSync === true;
+  }
 }
 
 function wheelHash(value: unknown) {
@@ -375,7 +402,15 @@ async function uploadFirst() {
   <article class="card wheel-sync-card">
     <div class="wheel-sync-heading">
       <div><div class="card-title">转盘独立同步</div><span>{{ remotePath }}</span></div>
-      <span class="wheel-sync-mode">预览/应用阶段</span>
+      <span class="wheel-sync-mode">预览/应用/条件自动</span>
+    </div>
+
+    <div class="wheel-sync-auto">
+      <label>
+        <input v-model="autoSyncEnabled" type="checkbox" :disabled="busy || !endpointReady" @change="saveAutoSyncSetting" />
+        <span>启用 Wheel 条件自动同步</span>
+      </label>
+      <button class="btn btn-secondary" type="button" :disabled="autoBusy || busy || !endpointReady" @click="runAutoSyncNow">立即自动同步一次</button>
     </div>
 
     <div class="page-actions wheel-sync-actions">
@@ -413,6 +448,22 @@ async function uploadFirst() {
 .wheel-sync-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .wheel-sync-heading span { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; }
 .wheel-sync-mode { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
+.wheel-sync-auto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.wheel-sync-auto label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .wheel-sync-actions { margin-top: 14px; }
 .wheel-sync-arm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; margin-top: 14px; padding: 10px 0; border-top: 1px solid var(--line); }
 .wheel-sync-comparison { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -429,6 +480,8 @@ async function uploadFirst() {
 @media (max-width: 560px) {
   .wheel-sync-heading { align-items: stretch; flex-direction: column; }
   .wheel-sync-mode { align-self: flex-start; }
+  .wheel-sync-auto { align-items: stretch; flex-direction: column; }
+  .wheel-sync-auto .btn { width: 100%; }
   .wheel-sync-comparison { grid-template-columns: 1fr; }
   .wheel-sync-column { border-right: 0; border-bottom: 1px solid var(--line); }
   .wheel-sync-column:last-child { border-bottom: 0; }

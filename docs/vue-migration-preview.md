@@ -83,18 +83,20 @@ entry points across migrated modules; Import/Export now covers snapshots,
 tombstone-aware merge, dirty-state updates, and Todo/Habit mirror rebuilds;
 Habits now covers local note check-ins, backfills, note edits, undo-latest
 check-in, advanced reward/penalty/milestone editing, reward/penalty ledger
-reversals, tombstones, dirty-state updates, local-only mirror rebuilding, and
-independent remote preview/apply plus protected upload/create; Fitness now covers full-field body metric
+reversals, tombstones, dirty-state updates, local-only mirror rebuilding,
+independent remote preview/apply, protected upload/create, and guarded
+conditional auto-sync; Fitness now covers full-field body metric
 editing, multi-exercise plan editing, explicit plan writeback, and workout
 history create/edit plus live rest timers and last-performance suggestions;
 Wheel now covers canvas interaction, public-library batch management,
-independent remote preview/apply, protected upload/create, and final
-management-form polish without automatic sync; AI now covers multi-destination
-chat capture writeback plus diary, idea-next, and Todo-breakdown confirmation
-flows.
+independent remote preview/apply, protected upload/create, guarded conditional
+auto-sync, and final management-form polish; Todo independent sync now covers
+guarded existing-file auto-sync without background first-create; AI now covers
+multi-destination chat capture writeback plus diary, idea-next, and
+Todo-breakdown confirmation flows.
 Replacement remains blocked until the remaining module audits and write-heavy
 specialist flows are closed. The following specialist controls still live in the
 proven static app and should be migrated only as separately tested follow-up
 releases: habit archive/wallet redemption/wishes, diagnostics depth,
-auto/resume Habit sync; and older AI plan/triage modes. They are not replaced
-by incompatible shortcuts.
+broader penalty settlement UX, and older AI plan/triage modes. They are not
+replaced by incompatible shortcuts.

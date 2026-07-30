@@ -2,7 +2,10 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
 import { lifePlanRepository } from '../services/lifePlanRepository';
+import { notifyHabitDataUserCommit } from '../services/habitCloudSync';
 import { notifyMainDataUserCommit } from '../services/mainCloudSync';
+import { notifyTodoDataUserCommit } from '../services/todoCloudSync';
+import { notifyWheelDataUserCommit } from '../services/wheelCloudSync';
 import { normalizeTopLevelData, type LifePlanData } from '../types/lifePlan';
 
 export const useLifePlanStore = defineStore('lifePlan', () => {
@@ -22,7 +25,12 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
     try {
       data.value = lifePlanRepository.commit(data.value, reason, source);
       lastError.value = '';
-      if (source === 'user') notifyMainDataUserCommit();
+      if (source === 'user') {
+        notifyMainDataUserCommit();
+        notifyTodoDataUserCommit();
+        notifyWheelDataUserCommit();
+        notifyHabitDataUserCommit();
+      }
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : String(error);
       throw error;

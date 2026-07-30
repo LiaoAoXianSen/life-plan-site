@@ -57,6 +57,7 @@ npm run dev
 - **同步配置键**：  
   - `lifePlanWheelSyncConfig`（默认 `remotePath: /apps/wheel-app/data.json`，复用主同步 `webdavUrl`）  
   - `lifePlanWheelSyncState`
+- **Vue 替换线**：`migration/vue-app-v1` 使用显式 opt-in 的条件自动同步；旧配置里的自定义路径或 `remoteUploadEnabled: true` 会被重置，不会后台首次创建远端文件。
 - **合并入口**（本站）：`getWheelSnapshot` / `applyWheelSnapshot` / `mergeWheelSnapshots`（经 `sync-service.js`）
 
 ### 2.3 旧原生 Android 原型（勿当正线）
@@ -93,7 +94,7 @@ npm run dev
 |---|---|---|---|---|
 | wheel | `D:\project\wheel-app` | `/apps/wheel-app/data.json` | `wheels*` 四集合 | **已有** |
 | fitness | `D:\project\fitness-app`（建议） | `/apps/fitness-app/data.json` | `fitnessPlans` / `fitnessWorkouts` / `bodyMetrics` / `exerciseLibrary` | 未建；本站已有 `fitness-*.js/css` |
-| habit | `D:\project\yuanqidaka`（已有 Android App）；如需 Web/Capacitor 独立壳再另建 `D:\project\habit-app` | `/apps/habit-app/data.json` | `habits` / records / ledger / rewards / currencies / milestones / overdue | App 已有；本站旧习惯页待重做为 PC 习惯中心；协议见 `app-sync-kit/docs/habit-app-schema.md` |
+| habit | `D:\project\yuanqidaka`（已有 Android App）；如需 Web/Capacitor 独立壳再另建 `D:\project\habit-app` | `/apps/habit-app/data.json` | `habits` / records / ledger / rewards / currencies / milestones / overdue | App 已有；Vue 替换线已有受保护手动同步和显式 opt-in 条件自动同步；协议见 `app-sync-kit/docs/habit-app-schema.md` |
 | life-plan-core | 本仓瘦身或新仓 | `/life-plan.json` | records / todos / goals / materials / AI 等 | 仍为本站主体 |
 | todo | `D:\project\yuanqidaka`（手机待办页）+ 本站 PC 待办 | `/apps/todo-app/data.json` | `todos` / `deletedItems(collection=todos)`；`sourceRecordId` 透传 | **已有**：PC 受保护同步；手机手动合并/条件上传 |
 

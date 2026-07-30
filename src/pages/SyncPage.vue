@@ -4,9 +4,12 @@ import { reactive, ref } from 'vue';
 import HabitSyncPanel from '../components/HabitSyncPanel.vue';
 import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import WheelSyncPanel from '../components/WheelSyncPanel.vue';
+import { bindHabitCloudSync, runHabitCloudSyncBoth, startHabitAutoSyncEngine } from '../services/habitCloudSync';
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
 import { bindMainCloudSync, getMainSyncConfig, runMainCloudSyncBoth, saveMainSyncConfig, startMainAutoSyncEngine } from '../services/mainCloudSync';
+import { startTodoAutoSyncEngine } from '../services/todoCloudSync';
+import { bindWheelCloudSync, runWheelCloudSyncBoth, startWheelAutoSyncEngine } from '../services/wheelCloudSync';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 
 type SyncState = Record<string, unknown> & {
@@ -33,6 +36,20 @@ bindMainCloudSync({
   replaceData: (next, reason) => store.replace(next, reason, 'sync'),
   onStatus: (message, isError) => {
     autoStatus.value = isError ? `自动同步失败：${message}` : message;
+  },
+});
+bindWheelCloudSync({
+  getData: () => store.data,
+  replaceData: (next, reason) => store.replace(next, reason, 'sync'),
+  onStatus: (message, isError) => {
+    autoStatus.value = isError ? `Wheel 自动同步失败：${message}` : message;
+  },
+});
+bindHabitCloudSync({
+  getData: () => store.data,
+  replaceData: (next, reason) => store.replace(next, reason, 'sync'),
+  onStatus: (message, isError) => {
+    autoStatus.value = isError ? `Habit 自动同步失败：${message}` : message;
   },
 });
 
@@ -111,6 +128,9 @@ function saveConfig() {
   normalizeRemotePath();
   Object.assign(config, saveMainSyncConfig({ ...config, autoSync: !!config.autoSync }));
   startMainAutoSyncEngine();
+  startTodoAutoSyncEngine();
+  startWheelAutoSyncEngine();
+  startHabitAutoSyncEngine();
   status.value = config.autoSync
     ? '配置已保存；主数据自动同步与页面恢复同步已启用。'
     : '配置已保存；主数据自动同步已关闭。';
@@ -279,7 +299,7 @@ async function importFile(event: Event) {
     </article>
 
     <TodoSyncPanel :sync-config="config" />
-    <WheelSyncPanel :sync-config="config" />
-    <HabitSyncPanel :sync-config="config" />
+    <WheelSyncPanel :sync-config="config" :run-auto-sync="() => runWheelCloudSyncBoth({ force: true, source: 'wheel-manual-auto-both' })" :restart-auto-sync="startWheelAutoSyncEngine" />
+    <HabitSyncPanel :sync-config="config" :run-auto-sync="() => runHabitCloudSyncBoth({ force: true, source: 'habit-manual-auto-both' })" :restart-auto-sync="startHabitAutoSyncEngine" />
   </section>
 </template>

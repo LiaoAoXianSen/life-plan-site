@@ -17,16 +17,16 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 | Area | Legacy baseline | Vue baseline | Blocking gaps | Replacement acceptance |
 | --- | --- | --- | --- | --- |
 | Dashboard | Summaries, today focus, command center, active periods, bounded timeline, and entry points into record preview and domain pages. | Read-only command center, today's Todo/habit ratios, active-goal/week-record summaries, today/floating Todo links, random Material links, active-period links, and bounded recent timeline links. | No open blocker in the current read-only Dashboard parity audit; legacy quick-write actions remain a later audited slice and replacement remains blocked by other modules. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss or incidental writes. |
-| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, and protected independent remote flows. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
+| Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, protected independent remote flows, and guarded existing-file auto-sync. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
 | Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | New-record modal with meaningful-input autosave plus persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, legacy filters/day ordering, list/calendar operation events, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | No open blocker in the current Records parity audit; replacement remains blocked by other modules. | Users can create, preview, edit, delete, template, filter, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, editable pre-create Todo draft conversion, and compatible linked-Todo open exist. | No open blocker in the current Ideas AI next-action plus editable draft audit; replacement remains blocked by other modules. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
 | Materials | Material CRUD, type colors, source/note/tags, search. | Legacy-compatible create/edit/delete, content-only required field, type/tag normalization, keyword/type/tag filters, descending sort, random review, `material`/`tag` deep links, and tombstones. | No open blocker in the current Materials parity audit; replacement remains blocked by other modules. | Material fields and tombstones remain compatible and searchable. |
 | Tags/Search | Cross-module search and tag navigation across records, todos, goals, materials, templates, and wheel public items; tag center with idea/material/wheel scopes. | Grouped module search with scope filtering, exact detail/query navigation, template-management and wheel-library/tag entry points, and combined tag center with summaries, search, scopes, previews, and read-only module jumps. | No open blocker in the current Search/Tags parity audit; replacement remains blocked by other modules. | Search covers legacy modules with matching labels and navigation targets without mutating persisted data. |
 | Goals | CRUD/progress/status, detail modal entry points, search/Dashboard deep links, and tombstones. | Detail modal create/edit/delete, `goal=<id>` deep links, Dashboard goal-row restoration, legacy `createDate` and tombstones, and progress/status persistence exist. | No open blocker in the current Goals parity audit; replacement remains blocked by other modules. | Goal writes keep existing fields, avoid Vue-only timestamp churn, and delete with legacy `manual-delete` tombstones. |
-| Habits | Full rule editor, edit/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic rule create/edit/delete, advanced reward/penalty/milestone fields, quick check-in, note/backfill check-ins, note edit, undo-latest check-in, reward/penalty ledger reversals, habit/check-in tombstones, dirty-state updates, `habitAppData` local mirror, independent remote preview/apply, existing-file protected upload, and session-armed first create. | No open blocker in the current local Habit management/correction plus remote preview/apply/upload/create audit; archive, wallet redemption/admin, wishes, diagnostics depth, auto/resume sync, and broader penalty settlement UX remain later Habit risks. | Habit local writes preserve legacy `habits`, `checkins`, `habitPointLedger`, tombstones, dirty state, and local-only mirror contracts while keeping `lifePlanData` authoritative. |
+| Habits | Full rule editor, edit/delete, notes, undo,补卡, wallet, multi-currency, rewards/penalties, wishes, milestones, diagnostics, dual-write mirror, protected remote workflows. | Basic rule create/edit/delete, advanced reward/penalty/milestone fields, quick check-in, note/backfill check-ins, note edit, undo-latest check-in, reward/penalty ledger reversals, habit/check-in tombstones, dirty-state updates, `habitAppData` local mirror, independent remote preview/apply, existing-file protected upload, session-armed first create, and guarded conditional auto-sync. | No open blocker in the current local Habit management/correction plus remote preview/apply/upload/create/auto-sync audit; archive, wallet redemption/admin, wishes, diagnostics depth, and broader penalty settlement UX remain later Habit risks. | Habit local writes preserve legacy `habits`, `checkins`, `habitPointLedger`, tombstones, dirty state, and local-only mirror contracts while keeping `lifePlanData` authoritative. |
 | Fitness | Body metrics, exercise library, multi-exercise plans, workout logging, live workout, set timers, plan writeback. | Full-field body metric create/edit/delete, library, multi-exercise plan create/edit, plan-start live workouts, service-backed last-performance suggestions, rest timer controls, explicit finish-time plan writeback, workout history create/edit/delete, manual-delete tombstones, and dirty-state coverage. | No open blocker in the current Fitness parity audit; replacement remains blocked by other modules. | Fitness writes are delegated to `fitness-service.js` and preserve old body metric, plan/workout exercise, set, planned-set, tombstone, and dirty-state contracts. |
-| Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, canvas rendering, click/drag spin entry points, normal and tag two-stage spin, public-library tag filtering and batch tag/enable/delete actions, labeled management forms, history, Todo conversion, JSON/CSV, independent remote preview/apply, and protected upload/create. | No open blocker in the current Wheel parity audit; replacement remains blocked by other modules. | Wheel writes preserve `wheels`, `wheelTags`, `wheelLibraryItems`, `wheelHistory`, Todo conversion links, dirty state, tombstones, and old `wheel-tool.js` interaction expectations. |
-| Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export, Todo/Wheel/Habit independent preview/apply/conditional upload/create flows, main auto-sync debounce, periodic visible sync, and visibility-resume sync. | No open blocker in the current main auto/visibility-resume audit; module-level independent auto-sync remains later depth. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
+| Wheel | Canvas/interaction, normal/tag wheels, public library, batch management, history, JSON/CSV, independent WebDAV sync/conflicts. | CRUD, canvas rendering, click/drag spin entry points, normal and tag two-stage spin, public-library tag filtering and batch tag/enable/delete actions, labeled management forms, history, Todo conversion, JSON/CSV, independent remote preview/apply, protected upload/create, and guarded conditional auto-sync. | No open blocker in the current Wheel parity audit; replacement remains blocked by other modules. | Wheel writes preserve `wheels`, `wheelTags`, `wheelLibraryItems`, `wheelHistory`, Todo conversion links, dirty state, tombstones, and old `wheel-tool.js` interaction expectations. |
+| Sync | Main WebDAV pull/push, snapshots, merge, tombstones, ETag conditional writes, conflict retry, module-specific remotes. | Main protected upload/import-export, Todo/Wheel/Habit independent preview/apply/conditional upload/create flows, main auto-sync debounce, periodic visible sync, visibility-resume sync, and Todo/Wheel/Habit guarded conditional auto-sync. | No open blocker in the current main plus Todo/Wheel/Habit module auto-sync audit; replacement remains blocked by other modules. | Sync preserves paths, ETags, snapshots, merge behavior, and refuses unsafe overwrites. |
 | AI | Suggestions, diary analysis confirmation writeback, idea next action, todo breakdown, local fallback/remote config. | Chat capture multi-destination writeback, Records diary analysis, Ideas AI next-action confirmed writeback, and Todo breakdown confirmed subtask writeback exist with remote/local generation and editable drafts. | Older today-plan/backlog-triage modes remain later AI depth. | AI actions write back only after confirmation and preserve existing fields. |
 | Import/Export | Complete `lifePlanData` backup, import merge with snapshots, not records-only export. | Complete backup/export path exists, import merge creates before/after snapshots, preserves tombstones, refreshes Todo/Habit mirrors, and marks main sync dirty. | No open blocker in the current Import/Export contract audit; replacement remains blocked by other modules. | Import/export round-trips complete data with snapshots, mirror rebuilds, dirty-state updates, and merge semantics intact. |
 
@@ -201,7 +201,7 @@ Status: verified locally
 
 Remaining Habit scope:
 
-- Archive, wallet redemption/admin, wishes, diagnostics depth, auto/resume sync, and broader penalty settlement UX.
+- Archive, wallet redemption/admin, wishes, diagnostics depth, and broader penalty settlement UX.
 
 ### Habit Advanced Reward Fields Slice
 
@@ -228,7 +228,7 @@ Status: verified locally
 
 Remaining Habit remote scope:
 
-- Automatic or resume-triggered Habit sync remains out of this slice.
+- Automatic or resume-triggered Habit sync is covered by the later Habit Conditional Auto Sync slice.
 
 ### Habit Protected Existing Upload Slice
 
@@ -251,6 +251,17 @@ Status: verified locally
 - Write the missing remote file with `sync-service.js` `pushJson(..., { ifNoneMatch: '*' })`, immediately GET it back, and require the readback Habit hash to match the local snapshot before marking sync state clean.
 - Report HTTP 412 or uncertain PUT/readback failures without automatic retry; reset the session arm after every attempt.
 - Verify in Playwright that first creation is disabled until armed, success uses `GET, GET, PUT, GET` with `If-None-Match: *`, uploads the local Habit snapshot, records clean sync metadata, resets config flags, and that final-recheck races use only `GET, GET` with no local data mutation.
+
+### Habit Conditional Auto Sync Slice
+
+Status: verified locally
+
+- Add an explicit opt-in Habit auto-sync engine that reuses `lifePlanSyncConfig.webdavUrl` and keeps the independent path fixed at `/apps/habit-app/data.json`.
+- Sanitize stale `habitAppSyncConfig` on app startup: unsafe paths and restored upload authorization are reset, and old `autoSync: true` values do not silently enable the new engine without the Vue confirmation marker.
+- Debounce Habit-changing user commits by 20 seconds, run visible periodic/visibility-resume checks, and skip entirely when the Habit module auto-sync switch is off.
+- Keep missing remote files create-only-manual: automatic sync may GET a 404, but it never sends `If-None-Match` or creates the Habit file in the background.
+- For existing remotes, rebuild the Habit app snapshot from authoritative `lifePlanData`, apply remote Habit snapshots back into legacy `habits`, `checkins`, `habitPointLedger`, `habitRewards`, and `habitCurrencies`, mark main `lifePlanSyncState.dirty` when authority changes, and use `If-Match` plus GET hash verification before clearing `habitAppSyncState.dirty`.
+- Verify stale-config idle behavior, dirty local conditional upload, remote visibility-resume pull/main dirty propagation, and missing-remote no-create behavior with Playwright.
 
 ### Search And Tags Index Slice
 
@@ -383,6 +394,19 @@ Remaining Wheel scope:
 
 - No open blocker in the current Wheel parity audit.
 
+### Wheel Conditional Auto Sync Slice
+
+Status: verified locally
+
+- Add a Vue Wheel auto-sync engine that starts from the app shell and uses the existing `sync-service.js` Wheel snapshot, merge, hash, and conditional PUT helpers.
+- Require explicit Vue opt-in through `conditionalAutoSyncEnabled`; unsafe restored config values such as custom remote paths or `remoteUploadEnabled: true` are normalized away.
+- Keep the remote path fixed at `/apps/wheel-app/data.json` and reuse `lifePlanSyncConfig.webdavUrl`; no second endpoint is introduced.
+- Debounce Wheel data changes for 20 seconds, run a 5-minute visible interval, and resume sync on visibility restore.
+- Auto-sync only handles existing remote files: missing remote files are GET-only skips and never trigger background `If-None-Match` creation.
+- Existing-file upload requires a known baseline plus ETag, writes with `If-Match`, and immediately GET-verifies the uploaded Wheel hash.
+- Remote-only updates apply into `lifePlanData` through the repository, mark main sync dirty for later `/life-plan.json` propagation, and keep `remoteUploadEnabled` false.
+- Verify disabled idle behavior, unsafe config sanitization, dirty upload, missing-file no-create, visibility pull, fixed path, state updates, and main dirty preservation with Playwright.
+
 ### Wheel Management Polish Slice
 
 Status: verified locally
@@ -410,9 +434,8 @@ Status: verified locally
 
 Remaining Sync scope:
 
-- Automatic sync and visibility-resume sync.
-- Habit session-armed first-create flow; preview/apply/existing upload are covered in Vue.
-- WebDAV verification readback for independent app mirrors.
+- Replacement-candidate end-to-end sync acceptance across main data and the independent Todo/Wheel/Habit remotes.
+- Vue artifact publication packaging that does not use `scripts/package-clean.ps1`.
 
 ### Todo Detail Contract Slice
 
@@ -474,3 +497,15 @@ Status: verified locally
 - Upload an existing file only against an unchanged preview baseline with `If-Match`; create a missing file with `If-None-Match: *`; always GET-verify the written Todo hash and never auto-retry an uncertain PUT.
 - Add Playwright coverage for GET-only preview, merge persistence, snapshots, both conditional headers, post-write verification, restored authorization reset, and pre-PUT refusal when the remote changes.
 - Pass the complete 14-test Vue suite and verify the comparison/action surface at 1440px and 390px with zero document or main-container horizontal overflow.
+
+### Todo Independent Auto Sync Slice
+
+Status: verified locally
+
+- Add an explicit opt-in Todo auto-sync engine that reuses `lifePlanSyncConfig.webdavUrl` and still hard-codes `/apps/todo-app/data.json`.
+- Sanitize stale `todoAppSyncConfig` on app startup: unsafe paths and restored upload authorization are reset, and old `autoSync: true` values do not silently enable the new engine without the Vue confirmation marker.
+- Debounce Todo-changing user commits by 20 seconds, run visible periodic/visibility-resume checks, and skip entirely when the Todo module auto-sync switch is off.
+- Keep missing remote files create-only-manual: automatic sync may GET a 404, but it never sends `If-None-Match` or creates the Todo file in the background.
+- Match Habit/Wheel's guarded first-difference posture: the first existing remote mismatch records a baseline and requires manual preview before automatic merge/upload.
+- For existing remotes, rebuild and verify the local `todoAppData` mirror from authoritative `lifePlanData`, merge with `todos-service.js`, apply remote changes back to `lifePlanData`, mark main `lifePlanSyncState.dirty` when authority changes, and use `If-Match` plus GET hash verification before clearing `todoAppSyncState.dirty`.
+- Verify stale-config idle behavior, missing-baseline refusal, dirty local conditional upload, remote merge/main dirty propagation, and missing-remote no-create behavior with Playwright.
