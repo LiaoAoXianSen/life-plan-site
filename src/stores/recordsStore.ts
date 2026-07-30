@@ -295,6 +295,20 @@ export const useRecordsStore = defineStore('records', () => {
     lifePlan.commit('create-idea');
   }
   function setIdeaStatus(id: string, status: string) { const idea = lifePlan.data.records.find(record => record.id === id); if (!idea) return; idea.ideaStatus = status; idea.updatedAt = getNowLocal(); lifePlan.commit('update-idea-status'); }
+  function applyIdeaNextAction(id: string, nextAction: string) {
+    const clean = nextAction.trim();
+    if (!clean) return false;
+    let applied = false;
+    lifePlan.mutate('apply-idea-next-action', data => {
+      const idea = data.records.find(record => record.id === id && record.type === '灵感碎片');
+      if (!idea) return;
+      idea.ideaNextAction = clean;
+      if (services.records.getIdeaStatus(idea) === '待整理') idea.ideaStatus = '待实践';
+      idea.updatedAt = getNowLocal();
+      applied = true;
+    });
+    return applied;
+  }
   function linkIdeaTodo(id: string, todoId: string) {
     lifePlan.mutate('link-idea-todo', data => {
       const idea = data.records.find(record => record.id === id && record.type === '灵感碎片');
@@ -359,5 +373,5 @@ export const useRecordsStore = defineStore('records', () => {
       data[collection] = data[collection].filter(entity => entity.id !== id) as never;
     });
   }
-  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
+  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, applyIdeaNextAction, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
 });

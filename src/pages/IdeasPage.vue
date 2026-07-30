@@ -49,17 +49,8 @@ function convert(idea: Record<string, unknown>) {
     void router.push({ path: '/todos', query: { todo: linkedTodo.id } });
     return;
   }
-  const todo = todos.create({
-    text: records.services.records.getIdeaTodoText(idea),
-    note: records.services.records.getIdeaTodoNote(idea),
-    dueDate: '',
-    planStartDate: '',
-    planEndDate: '',
-    urgency: 'medium',
-    group: '学习',
-  });
-  records.linkIdeaTodo(String(idea.id), todo.id);
-  void router.push({ path: '/todos', query: { todo: todo.id } });
+  // Open an editable pre-create draft; nothing is written until the user saves.
+  void router.push({ path: '/todos', query: { ideaDraft: String(idea.id) } });
 }
 
 function removeIdea(idea: Record<string, unknown>) {

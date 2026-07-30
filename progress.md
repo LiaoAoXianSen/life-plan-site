@@ -512,3 +512,12 @@
 - Verified desktop 1440x1000 and mobile 390x1000 Habits advanced form layouts with no horizontal overflow for document, `.vue-main`, `#page-habits`, `.habit-management-card`, `.habit-editor-form`, `.habit-advanced-fields`, or `.habit-milestone-editor`. Screenshots are under `test-results/habit-advanced-fields-1440.png` and `test-results/habit-advanced-fields-390.png`.
 - Created clean runtime package `life-plan-site-runtime-20260729-155944.zip`; package retention removed `life-plan-site-runtime-20260729-143057.zip`.
 - Protected refs remained unchanged before the Habit advanced reward fields commit: `master` at `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`, `experiment/vue-preview-poc` at `d5daf32d752dcf681ccda68c121f05ce2dad6e20`, and `stash@{0}` at `260eef5dfbd45348487f01d0cc103c906a22cb1f` with title `wip-materials-page-v1-before-vue-preview-experiment`.
+
+## 2026-07-30 - Ideas editable pre-create Todo draft
+
+- Kept work on `migration/vue-app-v1`; protected `master`, `experiment/vue-preview-poc`, and stash materials WIP untouched.
+- Replaced immediate Ideas-to-Todo create with editable pre-create draft via `#/todos?ideaDraft=<id>`.
+- Updated `src/pages/IdeasPage.vue`, `src/pages/TodosPage.vue`, and `src/stores/todosStore.ts` create options.
+- Save links through `recordsStore.linkIdeaTodo` and rebuilds `todoAppData`; cancel/close stays read-only.
+- Focused Playwright idea conversion tests 2/2 passed; full suite 51/51 passed; vue-tsc and vite build passed.
+

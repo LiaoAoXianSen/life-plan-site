@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import TodoTable from '../components/TodoTable.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
+import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
 import type { DataEntity, Todo, TodoSubTodo } from '../types/lifePlan';
 import { addDays, getWeekStart } from '../utils/schedule';
@@ -12,6 +13,7 @@ import { addDays, getWeekStart } from '../utils/schedule';
 const route = useRoute();
 const router = useRouter();
 const lifePlan = useLifePlanStore();
+const recordsStore = useRecordsStore();
 const todosStore = useTodosStore();
 const query = ref('');
 const startDate = ref('');
@@ -21,6 +23,7 @@ const urgency = ref('all');
 const group = ref('all');
 const mode = ref<'all' | 'exclusive' | 'shared'>('all');
 const selectedId = ref('');
+const ideaDraftId = ref('');
 const editing = ref(false);
 const detailError = ref('');
 const detailStatus = ref('');
@@ -40,6 +43,11 @@ const filteredTodos = computed(() => todosStore.todos
   .filter(todo => [todo.text, todo.note, todo.group].join(' ').toLowerCase().includes(query.value.trim().toLowerCase()))
   .slice().sort(todosStore.services.todos.compareTodosForFocus));
 const selectedTodo = computed(() => todosStore.todos.find(todo => todo.id === selectedId.value) ?? null);
+const draftIdea = computed(() => ideaDraftId.value
+  ? lifePlan.data.records.find(record => record.id === ideaDraftId.value && record.type === '灵感碎片') ?? null
+  : null);
+const isIdeaDraft = computed(() => !!draftIdea.value);
+const showDetailPanel = computed(() => !!selectedTodo.value || isIdeaDraft.value);
 const linkedRecords = computed(() => selectedTodo.value
   ? lifePlan.data.records.filter(record => {
       const todoIds = Array.isArray(record.todoIds) ? record.todoIds.map(String) : [];
@@ -76,31 +84,109 @@ function loadDetailForm(todo: Todo) {
   });
 }
 
-function updateTodoQuery(todoId = '') {
-  const nextQuery = { ...route.query };
-  if (todoId) nextQuery.todo = todoId;
-  else delete nextQuery.todo;
+function updateTodoQuery(options: { todoId?: string; ideaDraftId?: string | null; clearIdeaDraft?: boolean } = {}) {
+  const nextQuery = { ...route.query } as Record<string, string | string[] | undefined>;
+  if (options.todoId) nextQuery.todo = options.todoId;
+  else if (options.todoId === '') delete nextQuery.todo;
+  if (options.clearIdeaDraft || options.ideaDraftId === null) delete nextQuery.ideaDraft;
+  else if (options.ideaDraftId) nextQuery.ideaDraft = options.ideaDraftId;
   void router.replace({ path: route.path, query: nextQuery });
+}
+
+function clearIdeaDraftState() {
+  ideaDraftId.value = '';
+}
+
+function openIdeaDraft(ideaId: string, updateRoute = true) {
+  const idea = lifePlan.data.records.find(record => record.id === ideaId && record.type === '灵感碎片');
+  if (!idea) {
+    clearIdeaDraftState();
+    if (updateRoute && route.query.ideaDraft) updateTodoQuery({ clearIdeaDraft: true });
+    return;
+  }
+  const linkedId = String(idea.ideaTodoId || '');
+  if (linkedId && todosStore.todos.some(todo => todo.id === linkedId)) {
+    clearIdeaDraftState();
+    selectTodo(linkedId, true);
+    if (route.query.ideaDraft) updateTodoQuery({ todoId: linkedId, clearIdeaDraft: true });
+    return;
+  }
+  const textValue = recordsStore.services.records.getIdeaTodoText(idea);
+  const nextAction = String(idea.ideaNextAction || '').trim();
+  ideaDraftId.value = ideaId;
+  selectedId.value = '';
+  editing.value = true;
+  detailError.value = '';
+  detailStatus.value = '来自灵感的待办草稿，保存后才会写入数据';
+  recordLinkId.value = '';
+  Object.assign(detailForm, {
+    text: textValue,
+    note: recordsStore.services.records.getIdeaTodoNote(idea),
+    dueDate: '',
+    planStartDate: '',
+    planEndDate: '',
+    urgency: 'medium' as Todo['urgency'],
+    group: '学习',
+    subTodos: nextAction && nextAction !== textValue ? [{ text: nextAction, done: false }] : [],
+  });
+  if (updateRoute) {
+    const current = Array.isArray(route.query.ideaDraft) ? route.query.ideaDraft[0] : route.query.ideaDraft;
+    if (current !== ideaId || route.query.todo) updateTodoQuery({ ideaDraftId: ideaId, todoId: '' });
+  }
+}
+
+function saveIdeaDraft() {
+  if (!ideaDraftId.value) return;
+  try {
+    const textValue = detailForm.text.trim();
+    if (!textValue) throw new Error('请输入任务名称');
+    const todo = todosStore.create({
+      text: textValue,
+      note: detailForm.note,
+      dueDate: detailForm.dueDate,
+      planStartDate: detailForm.planStartDate,
+      planEndDate: detailForm.planEndDate,
+      urgency: detailForm.urgency,
+      group: detailForm.group.trim() || '学习',
+      subTodos: detailForm.subTodos,
+      sourceType: 'idea-convert',
+      sourceRecordId: ideaDraftId.value,
+    });
+    recordsStore.linkIdeaTodo(ideaDraftId.value, todo.id);
+    clearIdeaDraftState();
+    selectedId.value = todo.id;
+    editing.value = false;
+    detailError.value = '';
+    detailStatus.value = '灵感已转成待办';
+    loadDetailForm(todo);
+    updateTodoQuery({ todoId: todo.id, clearIdeaDraft: true });
+  } catch (error) {
+    detailError.value = error instanceof Error ? error.message : String(error);
+  }
 }
 
 function selectTodo(id: string, updateRoute = true) {
   const todo = todosStore.todos.find(item => item.id === id);
   if (!todo) return;
+  clearIdeaDraftState();
   selectedId.value = id;
   editing.value = false;
   detailError.value = '';
   detailStatus.value = '';
   recordLinkId.value = '';
   loadDetailForm(todo);
-  if (updateRoute && route.query.todo !== id) updateTodoQuery(id);
+  if (updateRoute && (route.query.todo !== id || route.query.ideaDraft)) {
+    updateTodoQuery({ todoId: id, clearIdeaDraft: true });
+  }
 }
 
 function closeDetail() {
   selectedId.value = '';
+  clearIdeaDraftState();
   editing.value = false;
   detailError.value = '';
   detailStatus.value = '';
-  if (route.query.todo) updateTodoQuery();
+  if (route.query.todo || route.query.ideaDraft) updateTodoQuery({ todoId: '', clearIdeaDraft: true });
 }
 
 function startEditing() {
@@ -112,12 +198,20 @@ function startEditing() {
 }
 
 function cancelEditing() {
+  if (isIdeaDraft.value) {
+    closeDetail();
+    return;
+  }
   if (selectedTodo.value) loadDetailForm(selectedTodo.value);
   editing.value = false;
   detailError.value = '';
 }
 
 function saveDetail() {
+  if (isIdeaDraft.value) {
+    saveIdeaDraft();
+    return;
+  }
   if (!selectedTodo.value) return;
   try {
     todosStore.update(selectedTodo.value.id, detailForm);
@@ -225,10 +319,19 @@ function unlinkRecord(record: DataEntity) {
   }
 }
 
-watch([() => route.query.todo, () => todosStore.todos.length], ([value]) => {
-  const todoId = Array.isArray(value) ? value[0] : value;
-  if (!todoId || selectedId.value === todoId) return;
-  if (todosStore.todos.some(todo => todo.id === todoId)) selectTodo(todoId, false);
+watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.todos.length, () => lifePlan.data.records.length], () => {
+  const draftValue = route.query.ideaDraft;
+  const draftId = Array.isArray(draftValue) ? draftValue[0] : draftValue;
+  if (draftId) {
+    if (ideaDraftId.value !== draftId || !isIdeaDraft.value) openIdeaDraft(String(draftId), false);
+    return;
+  }
+  if (ideaDraftId.value) clearIdeaDraftState();
+  const todoValue = route.query.todo;
+  const todoId = Array.isArray(todoValue) ? todoValue[0] : todoValue;
+  if (!todoId) return;
+  if (selectedId.value === todoId) return;
+  if (todosStore.todos.some(todo => todo.id === todoId)) selectTodo(String(todoId), false);
 }, { immediate: true });
 </script>
 
@@ -263,21 +366,22 @@ watch([() => route.query.todo, () => todosStore.todos.length], ([value]) => {
       <select v-model="mode" aria-label="待办类型"><option value="all">全部类型</option><option value="exclusive">专属待办</option><option value="shared">通用待办</option></select>
     </div>
 
-    <div class="todo-workspace" :class="{ 'has-detail': selectedTodo }">
+    <div class="todo-workspace" :class="{ 'has-detail': showDetailPanel }">
       <div class="todo-list-pane">
         <TodoTable :todos="filteredTodos" :selected-id="selectedId" @toggle="todosStore.toggle" @select="selectTodo" />
       </div>
 
-      <aside v-if="selectedTodo" class="todo-detail-panel" aria-labelledby="todo-detail-heading">
+      <aside v-if="showDetailPanel" class="todo-detail-panel" aria-labelledby="todo-detail-heading">
         <div class="todo-detail-header">
           <div>
-            <span :class="`todo-urgency todo-urgency-${selectedTodo.urgency}`">{{ todosStore.services.todos.getTodoUrgencyMeta(selectedTodo.urgency).label }}</span>
-            <h2 id="todo-detail-heading">{{ editing ? '编辑待办' : selectedTodo.text }}</h2>
+            <span :class="`todo-urgency todo-urgency-${isIdeaDraft ? detailForm.urgency : selectedTodo!.urgency}`">{{ todosStore.services.todos.getTodoUrgencyMeta(isIdeaDraft ? detailForm.urgency : selectedTodo!.urgency).label }}</span>
+            <h2 id="todo-detail-heading">{{ isIdeaDraft ? '灵感转待办' : (editing ? '编辑待办' : selectedTodo!.text) }}</h2>
+            <p v-if="isIdeaDraft && draftIdea" class="todo-detail-copy">来源灵感：{{ draftIdea.title || '未命名灵感' }}</p>
           </div>
           <button class="close-btn" type="button" aria-label="关闭待办详情" title="关闭" @click="closeDetail">×</button>
         </div>
 
-        <form v-if="editing" class="todo-detail-form" @submit.prevent="saveDetail">
+        <form v-if="editing || isIdeaDraft" class="todo-detail-form" @submit.prevent="saveDetail">
           <div class="form-group"><label for="todo-detail-text">任务</label><input id="todo-detail-text" v-model="detailForm.text" required /></div>
           <div class="form-group"><label for="todo-detail-note">备注</label><textarea id="todo-detail-note" v-model="detailForm.note" /></div>
           <div class="todo-date-presets" aria-label="日期预设">
@@ -306,10 +410,10 @@ watch([() => route.query.todo, () => todosStore.todos.length], ([value]) => {
           </section>
 
           <p v-if="detailError" class="form-error" role="alert">{{ detailError }}</p>
-          <div class="todo-detail-actions"><button class="btn btn-primary" type="submit">保存修改</button><button class="btn btn-secondary" type="button" @click="cancelEditing">取消</button></div>
+          <div class="todo-detail-actions"><button class="btn btn-primary" type="submit">{{ isIdeaDraft ? '创建并关联灵感' : '保存修改' }}</button><button class="btn btn-secondary" type="button" @click="cancelEditing">取消</button></div>
         </form>
 
-        <template v-else>
+        <template v-else-if="selectedTodo">
           <div class="todo-detail-meta-list">
             <span>{{ selectedTodo.done ? '已完成' : '未完成' }}</span><span>{{ selectedTodo.group || '其他' }}</span><span>截止 {{ selectedTodo.dueDate || '未设置' }}</span><span>计划 {{ selectedTodo.planStartDate || '未设置' }}{{ selectedTodo.planEndDate ? ` 至 ${selectedTodo.planEndDate}` : '' }}</span>
           </div>

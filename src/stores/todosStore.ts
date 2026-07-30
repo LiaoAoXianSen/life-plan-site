@@ -24,13 +24,23 @@ export const useTodosStore = defineStore('todos', () => {
     });
   }
 
-  function create(input: Pick<Todo, 'text' | 'note' | 'dueDate' | 'planStartDate' | 'planEndDate' | 'urgency' | 'group'>) {
+  type TodoCreateInput = Pick<Todo, 'text' | 'note' | 'dueDate' | 'planStartDate' | 'planEndDate' | 'urgency' | 'group'> & {
+    subTodos?: TodoSubTodo[];
+    sourceType?: string;
+    sourceRecordId?: string;
+  };
+
+  function create(input: TodoCreateInput) {
     const range = services.todos.normalizeTodoDateRange(input.planStartDate, input.planEndDate);
     if (!range.isValid) throw new Error('计划开始日期不能晚于结束日期');
     const todo = services.todos.createTodoFromAiItem({
       ...input,
       ...range,
-      sourceType: 'manual',
+      subTodos: (input.subTodos || [])
+        .map(item => ({ text: String(item.text || '').trim(), done: !!item.done }))
+        .filter(item => item.text),
+      sourceType: input.sourceType || 'manual',
+      sourceRecordId: input.sourceRecordId || '',
     }) as Todo;
     lifePlan.mutate('create-todo', data => data.todos.unshift(todo));
     return todo;
