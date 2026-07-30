@@ -19,6 +19,7 @@ type AiDraftItem = {
   subTodos: Array<{ text: string; done?: boolean }>;
   selected: boolean;
 };
+type CaptureDraftKey = 'diaryText' | 'workText' | 'planText' | 'ideaText';
 
 const route = useRoute();
 const router = useRouter();
@@ -37,6 +38,12 @@ const drafts = ref<AiDraftItem[]>([]);
 const running = ref(false);
 const error = ref('');
 const status = ref('');
+const captureDraft = reactive<Record<CaptureDraftKey, string>>({
+  diaryText: '',
+  workText: '',
+  planText: '',
+  ideaText: '',
+});
 
 const modeMeta: Record<AiMode, { title: string; subtitle: string; placeholder: string; action: string }> = {
   chatCapture: {
@@ -111,6 +118,10 @@ function resetResult() {
   drafts.value = [];
   error.value = '';
   status.value = '';
+  captureDraft.diaryText = '';
+  captureDraft.workText = '';
+  captureDraft.planText = '';
+  captureDraft.ideaText = '';
 }
 
 function setMode(next: AiMode) {
@@ -136,6 +147,15 @@ function toDrafts(items: any[] = []): AiDraftItem[] {
   })).filter(item => item.text);
 }
 
+function updateCaptureDraft(raw: any) {
+  const capture = raw?.capture || {};
+  const cleanText = String(capture.cleanText || '').trim();
+  captureDraft.diaryText = String(capture.diaryText || cleanText).trim();
+  captureDraft.workText = String(capture.workText || '').trim();
+  captureDraft.planText = String(capture.planText || '').trim();
+  captureDraft.ideaText = String(capture.ideaText || '').trim();
+}
+
 async function run() {
   running.value = true;
   error.value = '';
@@ -156,7 +176,9 @@ async function run() {
       : ai.generateLocalAiResult(payload);
     result.value = raw;
     drafts.value = toDrafts(raw?.items || []);
-    status.value = drafts.value.length ? '已生成建议，确认后再写入' : '没有可用建议';
+    if (mode.value === 'chatCapture') updateCaptureDraft(raw);
+    const hasCapture = Object.values(captureDraft).some(value => value.trim());
+    status.value = drafts.value.length || hasCapture ? '已生成建议，确认后再写入' : '没有可用建议';
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -174,8 +196,40 @@ function applyChatItem(item: AiDraftItem) {
     urgency: (item.urgency as any) || 'medium',
     group: item.group || '其他',
     subTodos: item.subTodos.map(sub => ({ text: sub.text, done: false })),
+    sourceType: 'ai-capture',
   });
   status.value = '已创建待办';
+}
+
+function applyChatTodos() {
+  const selected = selectedDrafts.value;
+  if (!selected.length) {
+    error.value = '请至少选择一条待办并保留标题';
+    return;
+  }
+  selected.forEach(applyChatItem);
+  status.value = `已创建待办 ${selected.length} 项`;
+  error.value = '';
+}
+
+function applyCaptureToDiary() {
+  const applied = records.applyAiCaptureToDiary(captureDraft.diaryText);
+  if (!applied) {
+    error.value = '没有可写入日记的整理内容';
+    return;
+  }
+  status.value = applied.created ? '已新建今天的日记' : '已追加到今天的日记';
+  error.value = '';
+}
+
+function applyCaptureRecord(type: '工作记录' | '日计划' | '灵感碎片', key: CaptureDraftKey) {
+  const applied = records.applyAiCaptureRecord(type, captureDraft[key]);
+  if (!applied) {
+    error.value = `没有可写入${type}的整理内容`;
+    return;
+  }
+  status.value = type === '日计划' && !applied.created ? '已追加到今天的日计划' : `已创建${type}`;
+  error.value = '';
 }
 
 function applyIdeaDrafts() {
@@ -242,8 +296,7 @@ function applySelected() {
     applyTodoBreakdown();
     return;
   }
-  selectedDrafts.value.forEach(applyChatItem);
-  status.value = `已创建待办 ${selectedDrafts.value.length} 项`;
+  applyChatTodos();
 }
 
 watch(() => route.query.mode, value => {
@@ -319,6 +372,36 @@ watch(() => route.query.todo, value => {
     <article v-if="result" class="card">
       <div class="card-title">{{ result.title || 'AI' }}</div>
       <p>{{ result.summary }}</p>
+      <div v-if="mode === 'chatCapture'" class="ai-capture-section-list">
+        <section class="ai-capture-section">
+          <div class="ai-capture-section-head">
+            <label for="ai-capture-draft-diaryText">日记草稿</label>
+            <button class="btn btn-secondary" type="button" @click="applyCaptureToDiary">追加到日记</button>
+          </div>
+          <textarea id="ai-capture-draft-diaryText" v-model="captureDraft.diaryText" rows="4" />
+        </section>
+        <section class="ai-capture-section">
+          <div class="ai-capture-section-head">
+            <label for="ai-capture-draft-workText">工作记录草稿</label>
+            <button class="btn btn-secondary" type="button" @click="applyCaptureRecord('工作记录', 'workText')">创建工作记录</button>
+          </div>
+          <textarea id="ai-capture-draft-workText" v-model="captureDraft.workText" rows="4" />
+        </section>
+        <section class="ai-capture-section">
+          <div class="ai-capture-section-head">
+            <label for="ai-capture-draft-planText">计划草稿</label>
+            <button class="btn btn-secondary" type="button" @click="applyCaptureRecord('日计划', 'planText')">写入日计划</button>
+          </div>
+          <textarea id="ai-capture-draft-planText" v-model="captureDraft.planText" rows="4" />
+        </section>
+        <section class="ai-capture-section">
+          <div class="ai-capture-section-head">
+            <label for="ai-capture-draft-ideaText">灵感草稿</label>
+            <button class="btn btn-secondary" type="button" @click="applyCaptureRecord('灵感碎片', 'ideaText')">存为灵感</button>
+          </div>
+          <textarea id="ai-capture-draft-ideaText" v-model="captureDraft.ideaText" rows="4" />
+        </section>
+      </div>
       <div class="ai-result-list">
         <div v-for="(item, index) in drafts" :key="`${index}-${item.text}`" class="ai-result-item">
           <label class="todo-check-row">
@@ -329,6 +412,8 @@ watch(() => route.query.todo, value => {
           <div class="form-group"><label :for="`ai-draft-note-${index}`">备注</label><textarea :id="`ai-draft-note-${index}`" v-model="item.note" /></div>
           <div v-if="mode !== 'todoBreakdown'" class="form-row">
             <div class="form-group"><label :for="`ai-draft-due-${index}`">截止日期</label><input :id="`ai-draft-due-${index}`" v-model="item.dueDate" type="date" /></div>
+            <div class="form-group"><label :for="`ai-draft-plan-start-${index}`">计划开始</label><input :id="`ai-draft-plan-start-${index}`" v-model="item.planStartDate" type="date" /></div>
+            <div class="form-group"><label :for="`ai-draft-plan-end-${index}`">计划结束</label><input :id="`ai-draft-plan-end-${index}`" v-model="item.planEndDate" type="date" /></div>
             <div class="form-group"><label :for="`ai-draft-group-${index}`">分组</label><input :id="`ai-draft-group-${index}`" v-model="item.group" /></div>
           </div>
           <p v-if="item.subTodos.length" class="todo-detail-copy">建议子任务：{{ item.subTodos.map(sub => sub.text).join(' / ') }}</p>
@@ -337,7 +422,7 @@ watch(() => route.query.todo, value => {
       </div>
       <div class="todo-detail-actions">
         <button class="btn btn-primary" type="button" :disabled="!selectedDrafts.length" @click="applySelected">
-          {{ mode === 'ideaNext' ? '转成关联待办' : mode === 'todoBreakdown' ? '写入子任务' : '批量创建待办' }}
+          {{ mode === 'ideaNext' ? '转成关联待办' : mode === 'todoBreakdown' ? '写入子任务' : '创建这些待办' }}
         </button>
       </div>
     </article>
@@ -361,6 +446,27 @@ watch(() => route.query.todo, value => {
   border-color: var(--accent, #c7923e);
 }
 .ai-result-list { display: grid; gap: 12px; margin-top: 12px; }
+.ai-capture-section-list { display: grid; gap: 12px; margin-top: 12px; }
+.ai-capture-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+}
+.ai-capture-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ai-capture-section-head label { font-weight: 800; }
+.ai-capture-section textarea {
+  width: 100%;
+  resize: vertical;
+}
 .ai-result-item {
   display: grid;
   gap: 8px;

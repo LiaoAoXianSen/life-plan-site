@@ -42,6 +42,7 @@ type RecordDraftInput = {
 
 type DiaryAiSectionKey = 'oneLine' | 'review' | 'tomorrow' | 'improve' | 'thinking' | 'smallJoy';
 type DiaryAiTodoInput = Partial<Todo> & Pick<Todo, 'text'>;
+type AiCaptureApplyResult = { id: string; type: string; created: boolean };
 type MaterialInput = {
   type: string;
   content: string;
@@ -289,6 +290,94 @@ export const useRecordsStore = defineStore('records', () => {
     return createdIds;
   }
 
+  function getAiCaptureRecordTitle(type: string, content: string) {
+    const firstLine = String(content || '').split('\n').map(line => line.trim()).find(Boolean) || '';
+    const clean = firstLine.replace(/^#+\s*/, '').slice(0, 28);
+    if (clean) return clean;
+    return type === '灵感碎片' ? 'AI 整理的灵感' : `AI 整理的${type}`;
+  }
+
+  function appendAiCaptureSection(record: DataEntity, content: string) {
+    const section = `# AI 对话整理\n${content}`;
+    record.content = [record.content || '', section].filter(part => String(part).trim()).join('\n\n');
+    record.updatedAt = getNowLocal();
+  }
+
+  function buildAiCaptureRecord(type: string, content: string) {
+    const range = services.records.getSuggestedRangeForType(type);
+    const now = getNowLocal();
+    const diaryTemplate = type === '日记' ? services.records.getBuiltInTemplate('builtin-diary-daily-review') : null;
+    const initialContent = diaryTemplate
+      ? services.records.composeTemplateContent(diaryTemplate, { body: `AI 对话整理\n${content}` })
+      : content;
+    const record: DataEntity = {
+      id: genId(),
+      type,
+      title: getAiCaptureRecordTitle(type, content),
+      startDate: range.start,
+      endDate: range.end,
+      recordTime: new Date().toTimeString().slice(0, 5),
+      recordEndTime: '',
+      content: initialContent,
+      templateId: diaryTemplate?.id || '',
+      todoIds: [],
+      ideaStatus: '',
+      ideaTags: [],
+      ideaNextAction: '',
+      ideaTodoId: '',
+      ideaConclusion: '',
+      createdAt: now,
+      updatedAt: now,
+    };
+    if (type === '灵感碎片') {
+      record.ideaStatus = '待整理';
+      record.ideaTags = ['AI整理'];
+      record.templateId = '';
+    }
+    return record;
+  }
+
+  function applyAiCaptureToDiary(content: string): AiCaptureApplyResult | null {
+    const clean = content.trim();
+    if (!clean) return null;
+    let result: AiCaptureApplyResult | null = null;
+    lifePlan.mutate('ai-capture-diary', data => {
+      const today = getTodayStr();
+      const existing = data.records.find(record => record.type === '日记' && record.startDate === today);
+      if (existing) {
+        if (!existing.title) existing.title = `${services.records.getRecordDateRangeLabel(existing)} 日记`;
+        appendAiCaptureSection(existing, clean);
+        result = { id: String(existing.id), type: '日记', created: false };
+        return;
+      }
+      const record = buildAiCaptureRecord('日记', clean);
+      data.records.push(record);
+      result = { id: String(record.id), type: '日记', created: true };
+    });
+    return result;
+  }
+
+  function applyAiCaptureRecord(type: '工作记录' | '日计划' | '灵感碎片', content: string): AiCaptureApplyResult | null {
+    const clean = content.trim();
+    if (!clean) return null;
+    let result: AiCaptureApplyResult | null = null;
+    lifePlan.mutate(`ai-capture-${type}`, data => {
+      if (type === '日计划') {
+        const range = services.records.getSuggestedRangeForType('日计划');
+        const existing = data.records.find(record => record.type === '日计划' && record.startDate === range.start && record.endDate === range.end);
+        if (existing) {
+          appendAiCaptureSection(existing, clean);
+          result = { id: String(existing.id), type, created: false };
+          return;
+        }
+      }
+      const record = buildAiCaptureRecord(type, clean);
+      data.records.push(record);
+      result = { id: String(record.id), type, created: true };
+    });
+    return result;
+  }
+
   function addIdea(title: string, content = '') {
     const now = getNowLocal();
     lifePlan.data.records.unshift({ id: genId(), type: '灵感碎片', title, content, startDate: getTodayStr(), endDate: getTodayStr(), recordTime: '', recordEndTime: '', todoIds: [], ideaStatus: '待整理', ideaTags: [], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '', createdAt: now, updatedAt: now });
@@ -423,5 +512,5 @@ export const useRecordsStore = defineStore('records', () => {
       data[collection] = data[collection].filter(entity => entity.id !== id) as never;
     });
   }
-  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, applyIdeaNextAction, applyIdeaAiActions, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
+  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, applyAiCaptureToDiary, applyAiCaptureRecord, addIdea, setIdeaStatus, applyIdeaNextAction, applyIdeaAiActions, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
 });

@@ -1906,6 +1906,91 @@ test('AI ideaNext keeps drafts read-only until confirmed writeback', async ({ pa
     expect(stored.mirror.todos.map(item => item.id)).toContain(todo.id);
 });
 
+test('AI chatCapture keeps multi-destination drafts read-only until confirmed writeback', async ({ page }) => {
+    const source = emptyData({
+        records: [{
+            id: 'today-plan-existing', type: '日计划', title: '已有今日计划', content: '旧计划正文',
+            startDate: '2026-07-30', endDate: '2026-07-30', recordTime: '', recordEndTime: '', todoIds: [],
+            templateId: '', updatedAt: '2026-07-30T08:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
+    }, source);
+    await page.goto('/#/ai?mode=chatCapture');
+    const aiPage = page.locator('#page-ai');
+    await aiPage.getByLabel('AI 对话整理').fill('明天想把 Vue AI 对话整理跑通，顺手记个待办；今天工作里把页面写回做完了。这个想法先放灵感池。');
+    await aiPage.getByRole('button', { name: '生成建议' }).click();
+    await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
+    await expect(page.locator('#ai-capture-draft-diaryText')).toHaveValue(/Vue AI 对话整理/);
+    await expect(page.locator('#ai-capture-draft-workText')).toHaveValue(/页面写回|Vue AI/);
+    await expect(page.locator('#ai-capture-draft-planText')).toHaveValue(/明天|待办|Vue AI/);
+    await expect(page.locator('#ai-capture-draft-ideaText')).toHaveValue(/灵感池|想法/);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('todoAppData'))).toBeNull();
+
+    await page.locator('#ai-draft-text-0').fill('检查 AI 对话整理首屏');
+    await page.locator('#ai-draft-note-0').fill('确认后创建的待办备注');
+    await page.locator('#ai-draft-due-0').fill('2026-07-31');
+    await page.locator('#ai-draft-plan-start-0').fill('2026-07-30');
+    await page.locator('#ai-draft-plan-end-0').fill('2026-07-31');
+    await page.locator('#ai-draft-group-0').fill('迁移');
+    await page.locator('#ai-capture-draft-workText').fill('编辑后的工作记录：chatCapture 多落点写回完成。');
+    await page.locator('#ai-capture-draft-planText').fill('编辑后的日计划：先检查 AI 页面写回。');
+    await page.locator('#ai-capture-draft-ideaText').fill('编辑后的灵感：把对话整理做成轻量收集入口。');
+    await page.locator('#ai-capture-draft-diaryText').fill('编辑后的日记：今天把 AI 对话整理接进 Vue。');
+
+    await aiPage.getByRole('button', { name: '创建这些待办' }).click();
+    await expect(aiPage.getByText(/已创建待办/)).toBeVisible();
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+        sync: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    const captureTodo = stored.data.todos.find(item => item.sourceType === 'ai-capture');
+    expect(captureTodo).toMatchObject({
+        text: '检查 AI 对话整理首屏',
+        note: '确认后创建的待办备注',
+        dueDate: '2026-07-31',
+        planStartDate: '2026-07-30',
+        planEndDate: '2026-07-31',
+        group: '迁移',
+    });
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.mirror.todos.map(item => item.id)).toContain(captureTodo.id);
+    expect(stored.sync.dirty).toBe(true);
+    expect(stored.data.records).toHaveLength(1);
+
+    await aiPage.getByRole('button', { name: '创建工作记录' }).click();
+    await aiPage.getByRole('button', { name: '写入日计划' }).click();
+    await aiPage.getByRole('button', { name: '存为灵感' }).click();
+    await aiPage.getByRole('button', { name: '追加到日记' }).click();
+
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+        sync: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    const work = stored.data.records.find(item => item.type === '工作记录');
+    const plan = stored.data.records.find(item => item.id === 'today-plan-existing');
+    const idea = stored.data.records.find(item => item.type === '灵感碎片');
+    const diary = stored.data.records.find(item => item.type === '日记');
+    expect(work.content).toContain('编辑后的工作记录');
+    expect(plan.content).toContain('旧计划正文');
+    expect(plan.content).toContain('# AI 对话整理');
+    expect(plan.content).toContain('编辑后的日计划');
+    expect(stored.data.records.filter(item => item.type === '日计划')).toHaveLength(1);
+    expect(idea).toMatchObject({ ideaStatus: '待整理', ideaTags: ['AI整理'] });
+    expect(idea.content).toContain('编辑后的灵感');
+    expect(diary.templateId).toBe('builtin-diary-daily-review');
+    expect(diary.content).toContain('# 正文');
+    expect(diary.content).toContain('编辑后的日记');
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.sync.dirty).toBe(true);
+});
+
 test('AI todoBreakdown writes selected subtasks only after confirmation', async ({ page }) => {
     const source = emptyData({
         todos: [todoFixture('todo-break', '拆解这个待办', {

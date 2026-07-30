@@ -535,3 +535,17 @@
 - Bound the engine from `src/App.vue` and user commits in `src/stores/lifePlanStore.ts`; Sync page now saves `autoSync` and can force one run.
 - Playwright covers debounce upload with If-Match, visibility resume, and autoSync-off idle behavior.
 
+
+## 2026-07-30 - AI chatCapture multi-destination writeback stage
+
+- Started phases 198-202 after commit `7a9f788`; `HEAD` and `origin/migration/vue-app-v1` were confirmed at `7a9f788e98646b4b97e0089c4b3064b6a7f3d194` after `git push origin migration/vue-app-v1` returned `Everything up-to-date`.
+- Protected `master`, `experiment/vue-preview-poc`, and `stash@{0}` were read-only checked before implementation and remained unchanged.
+- Used multi-agent sidecars: `Halley` as a read-only context sentinel and `Banach` as a read-only legacy/Vue `chatCapture` parity auditor.
+- Added Vue `chatCapture` editable multi-destination drafts for Todo, diary, work record, day plan, and idea capture in `src/pages/AiPage.vue`.
+- Added Records-store writeback helpers in `src/stores/recordsStore.ts` so diary append/create, same-day day-plan append/create, work record create, and idea capture all persist through `lifePlanData` and the repository commit path.
+- Preserved generation as read-only until explicit confirmation; Todo writeback uses `sourceType: ai-capture`, diary creation uses `builtin-diary-daily-review`, same-day `日计划` reuses the scoped record, and idea capture writes `ideaStatus: 待整理` plus `ideaTags: ['AI整理']`.
+- Added focused Playwright coverage proving no-write generation, per-target confirmed writes, Todo mirror rebuild, main dirty state, scoped day-plan reuse, structured diary content, and idea fields.
+- Updated Vue migration parity docs and preview notes to mark chatCapture multi-destination writeback as covered while leaving older AI plan/triage depth as follow-up.
+- Verification passed: `npx vue-tsc -b --pretty false`; focused `npx playwright test tests/vue-smoke.spec.js -g "AI chatCapture"` 1/1; `npm run build`; focused `npx playwright test tests/vue-smoke.spec.js -g "AI|diary AI"` 17/17; full `./scripts/check.ps1` 57/57; `git diff --check` with LF/CRLF warnings only.
+- Responsive verification passed at 1440x1000 and 390x1000 with zero horizontal overflow for document, `.vue-main`, `#page-ai`, `.ai-capture-section-list`, `.ai-result-list`, and `.ai-result-item`; screenshots are under `test-results/ai-chat-capture-1440.png` and `test-results/ai-chat-capture-390.png`.
+- Did not run `scripts/package-clean.ps1` because Vue artifact packaging must not use the legacy static runtime packaging script; `dist/` production build is the artifact verification for this slice.

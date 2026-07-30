@@ -213,6 +213,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 195. Status: complete - Extend `habitsStore` create/update normalization so advanced fields persist and referenced currencies are created.
 196. Status: complete - Add focused Habit management coverage for advanced field editing, milestone persistence, currency creation, mirror rebuild, dirty state, and tombstones.
 197. Status: complete - Run full verification, package, commit, push, and append dual-store memory for the Habit advanced reward fields stage.
+198. Status: complete - Audit Vue `chatCapture` against legacy multi-destination writeback and preserve generate-as-draft behavior.
+199. Status: complete - Implement Vue `chatCapture` confirmed writeback for Todo, diary append/create, work record, day plan append/create, and idea capture without adding a new authority.
+200. Status: complete - Add focused AI chat-capture contract coverage for no-write generation, per-target writes, mirrors, dirty state, scoped record reuse, and structured diary content.
+201. Status: complete - Run build/typecheck/focused/full checks plus responsive verification for the expanded AI page.
+202. Status: complete - Update parity evidence, package if applicable, verify protected refs, commit, push, and append dual-store memory for the chatCapture writeback stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
