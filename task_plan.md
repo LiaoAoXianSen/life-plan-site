@@ -227,6 +227,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 209. Status: complete - Map diagnostics UI to legacy `makeIssue` fields (`label`/`hint`) and keep diagnostics free of `lifePlanData` / `habitAppData` writes.
 210. Status: complete - Add focused Habit archive/wishes/wallet/diagnostics Playwright coverage and pass full Vue smoke 74/74 plus build/check.
 211. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the Habit archive/wallet/wishes/diagnostics stage.
+212. Status: complete - Implement Dashboard Todo quick-writes: planForToday, quickSession, and checkbox toggle with local todo mirror rebuild.
+213. Status: complete - Add focused Dashboard quick-write Playwright coverage while keeping the read-only Dashboard contract green; full Vue smoke 75/75.
+214. Status: complete - Update parity evidence, verify protected refs, commit, push, and append dual-store memory for the Dashboard Todo quick-write stage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

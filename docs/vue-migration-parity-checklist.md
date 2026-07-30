@@ -16,7 +16,7 @@ This checklist tracks whether `migration/vue-app-v1` can become a replacement ca
 
 | Area | Legacy baseline | Vue baseline | Blocking gaps | Replacement acceptance |
 | --- | --- | --- | --- | --- |
-| Dashboard | Summaries, today focus, command center, active periods, bounded timeline, and entry points into record preview and domain pages. | Read-only command center, today's Todo/habit ratios, active-goal/week-record summaries, today/floating Todo links, random Material links, active-period links, and bounded recent timeline links. | No open blocker in the current read-only Dashboard parity audit; legacy quick-write actions remain a later audited slice and replacement remains blocked by other modules. | Dashboard cards reflect the same persisted data and navigate to migrated workflows without data loss or incidental writes. |
+| Dashboard | Summaries, today focus, command center, active periods, bounded timeline, and entry points into record preview and domain pages. | Command center, today's Todo/habit ratios, active-goal/week-record summaries, today/floating Todo quick-writes (toggle, 今天做, 执行一次), random Material links, active-period links, and bounded recent timeline links. | No open blocker in the current Dashboard read-only plus Todo quick-write audit; Dashboard habit quick check-in remains optional later polish and replacement remains blocked by other modules. | Dashboard cards reflect the same persisted data, support legacy Todo quick-writes through `lifePlanData` + `todoAppData` mirrors, and navigate to migrated workflows without data loss. |
 | Todos | Full CRUD, urgency/focus sorting, sub-todos, sessions, detail links, idea/record relationships, mirror rebuild. | Create/list/filter/toggle/delete plus inline detail and relationship editing, subtask completion, execution sessions, legacy filters/date presets, Dashboard/calendar detail entry points, linked-record navigation, mirror rebuild, protected independent remote flows, and guarded existing-file auto-sync. | No open blocker in the current Todo parity audit; replacement remains blocked by other modules. | Todo writes use `todos-service.js`, preserve tombstones, update linked records, and mirror `todoAppData`. |
 | Records | Full editor, auto/manual save, preview, date ranges, templates, structured template fields, linked/exclusive todos, idea fields, list/day/week/month views. | New-record modal with meaningful-input autosave plus persisted editor/preview, manual and 3-second existing-record autosave, close/switch/navigation flush, date ranges, linked/exclusive todos, idea-specific fields, diary AI confirmation writeback, legacy filters/day ordering, list/calendar operation events, six legacy-compatible structured templates, and custom template management. Day view preserves fixed 160px timed event width and hover title. | No open blocker in the current Records parity audit; replacement remains blocked by other modules. | Users can create, preview, edit, delete, template, filter, and link records/todos with legacy-compatible `content`, `templateId`, `todoIds`, idea fields, and tombstones. |
 | Ideas | Status colors, tags, next action, conversion to todo, conclusion, filters, search. | Special-state/status/tag/search filters, record-owned detail editing, Records/Todo deep links, editable pre-create Todo draft conversion, and compatible linked-Todo open exist. | No open blocker in the current Ideas AI next-action plus editable draft audit; replacement remains blocked by other modules. | Idea status/tag/next/conclusion/todo link flows round-trip through records and todos without changing field names. |
@@ -178,6 +178,17 @@ Status: verified locally
 - Surface active period records for weekly/monthly/yearly reviews/plans, `3年计划`, and `终身愿景`, routing to `#/records?record=<id>`.
 - Build a bounded recent timeline from records, Todo execution sessions, and checked-habit events while excluding Todo plan/due-only events for Dashboard.
 - Verify navigation restoration and exact `lifePlanData` / `todoAppData` immutability in Playwright, plus 1440px/390px screenshots with no horizontal overflow after long-title wrapping fixes.
+
+### Dashboard Todo Quick-Write Slice
+
+Status: verified locally
+
+- Add Dashboard Todo quick-write controls matching legacy: checkbox toggle, floating-pool `今天做`, and `执行一次`.
+- `planForToday` writes `planStartDate`/`planEndDate` to today and `updatedAt` through `lifePlan.mutate('plan-todo-for-today')`.
+- `quickSession` appends one same-day session with `note: '快捷执行'`, current `HH:mm` start time, empty end time, and refuses a second same-day session with the legacy Chinese error.
+- Toggle reuses `todos-service.js.toggleTodoDone`, keeps `lifePlanData` authoritative, marks main sync dirty, and rebuilds local-only `todoAppData` with `remoteUploadEnabled: false` and `authority: 'lifePlanData.todos'`.
+- Keep the existing read-only Dashboard contract test green when write buttons are not clicked; add focused quick-write Playwright coverage.
+- Full Vue smoke is 75/75.
 
 ### Goals Detail Contract Slice
 

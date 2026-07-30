@@ -333,6 +333,81 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     expect(persisted.mirror).toBeNull();
 });
 
+test('dashboard quick writes plan today execute once toggle and rebuild todo mirror', async ({ page }) => {
+    const today = (() => {
+        const date = new Date();
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    })();
+    const source = emptyData({
+        todos: [
+            todoFixture('todo-float', '浮动待办可今天做', { urgency: 'medium' }),
+            todoFixture('todo-due-today', '今日截止待办', { dueDate: today, urgency: 'high' }),
+            todoFixture('todo-has-session', '已执行待办', {
+                dueDate: today,
+                sessions: [{ id: 's1', date: today, startTime: '09:00', endTime: '', note: '已有', createdAt: `${today}T09:00:00` }],
+            }),
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'dashboard-quick-before' }));
+    }, source);
+
+    await page.goto('/#/dashboard');
+    const floating = page.locator('.card').filter({ hasText: '无截止待办池' }).locator('.todo-item').filter({ hasText: '浮动待办可今天做' });
+    await expect(floating).toHaveCount(1);
+    await floating.getByRole('button', { name: '今天做', exact: true }).click();
+    await expect(page.locator('.notice.success')).toContainText('已将「浮动待办可今天做」加入今日计划');
+    await expect(page.locator('.card').filter({ hasText: '无截止待办池' }).locator('.todo-item').filter({ hasText: '浮动待办可今天做' })).toHaveCount(0);
+    await expect(page.locator('.card').filter({ hasText: '今日待办' }).locator('.todo-item').filter({ hasText: '浮动待办可今天做' })).toHaveCount(1);
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    const planned = stored.data.todos.find(item => item.id === 'todo-float');
+    expect(planned).toMatchObject({ planStartDate: today, planEndDate: today });
+    expect(planned.updatedAt).not.toBe('2026-07-27T08:00:00');
+    expect(stored.syncState.dirty).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.mirror.todos).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'todo-float', planStartDate: today, planEndDate: today })]));
+
+    const dueRow = page.locator('.card').filter({ hasText: '今日待办' }).locator('.todo-item').filter({ hasText: '今日截止待办' });
+    await dueRow.getByRole('button', { name: '执行一次', exact: true }).click();
+    await expect(page.locator('.notice.success')).toContainText('已为「今日截止待办」记录一次执行');
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    const executed = stored.data.todos.find(item => item.id === 'todo-due-today');
+    expect(executed.sessions).toHaveLength(1);
+    expect(executed.sessions[0]).toMatchObject({ date: today, note: '快捷执行', endTime: '' });
+    expect(executed.sessions[0].startTime).toMatch(/^\d{2}:\d{2}$/);
+    expect(stored.syncState.dirty).toBe(true);
+    expect(stored.mirror.todos).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'todo-due-today', sessions: expect.arrayContaining([expect.objectContaining({ note: '快捷执行' })]) }),
+    ]));
+
+    await dueRow.getByRole('button', { name: '执行一次', exact: true }).click();
+    await expect(page.locator('.notice.warning')).toContainText('已经记录过一次执行');
+
+    await dueRow.getByRole('checkbox', { name: '完成 今日截止待办' }).click();
+    await expect(page.locator('.notice.success')).toContainText('已标记完成「今日截止待办」');
+    await expect(page.locator('.card').filter({ hasText: '今日待办' }).locator('.todo-item').filter({ hasText: '今日截止待办' })).toHaveCount(0);
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    const doneTodo = stored.data.todos.find(item => item.id === 'todo-due-today');
+    expect(doneTodo.done).toBe(true);
+    expect(doneTodo.completedAt).toBeTruthy();
+    expect(stored.data.deletedItems).toEqual([]);
+    expect(stored.mirror.todos).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'todo-due-today', done: true })]));
+});
+
 test('goals detail route save and delete preserve the legacy contract', async ({ page }) => {
     const today = (() => {
         const date = new Date();

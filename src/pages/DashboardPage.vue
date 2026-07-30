@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { getTodayStr } from '../services/legacyServices';
@@ -80,6 +80,48 @@ function openScheduleItem(item: ScheduleItem) {
 
 function openMaterial(materialId: string) {
   void router.push({ path: '/materials', query: { material: materialId } });
+}
+
+const notice = ref('');
+const noticeVariant = ref<'success' | 'warning'>('success');
+
+function announce(message: string, variant: 'success' | 'warning' = 'success') {
+  notice.value = message;
+  noticeVariant.value = variant;
+}
+
+function toggleTodo(todoId: string) {
+  try {
+    todosStore.toggle(todoId);
+    const todo = lifePlan.data.todos.find(item => item.id === todoId);
+    announce(todo?.done ? `已标记完成「${todo.text || '待办'}」` : `已恢复「${todo?.text || '待办'}」为未完成`);
+  } catch (error) {
+    announce(error instanceof Error ? error.message : String(error), 'warning');
+  }
+}
+
+function planTodayFromDashboard(todoId: string) {
+  try {
+    const changed = todosStore.planForToday(todoId);
+    if (!changed) {
+      announce('待办不存在', 'warning');
+      return;
+    }
+    const todo = lifePlan.data.todos.find(item => item.id === todoId);
+    announce(`已将「${todo?.text || '待办'}」加入今日计划`);
+  } catch (error) {
+    announce(error instanceof Error ? error.message : String(error), 'warning');
+  }
+}
+
+function quickSessionFromDashboard(todoId: string) {
+  try {
+    todosStore.quickSession(todoId);
+    const todo = lifePlan.data.todos.find(item => item.id === todoId);
+    announce(`已为「${todo?.text || '待办'}」记录一次执行`);
+  } catch (error) {
+    announce(error instanceof Error ? error.message : String(error), 'warning');
+  }
 }
 
 function sampleMaterials(items: MaterialEntity[], count: number) {
@@ -173,6 +215,8 @@ const timelineGroups = computed(() => {
       <button class="btn btn-primary" type="button" @click="router.push('/todos')">+ 新建待办</button>
     </header>
 
+    <div v-if="notice" class="notice" :class="noticeVariant" role="status">{{ notice }}</div>
+
     <div class="dashboard-hero">
       <div class="hero-panel">
         <div>
@@ -263,10 +307,20 @@ const timelineGroups = computed(() => {
         <h2 class="card-title">今日待办</h2>
         <ul v-if="todayTodos.length" class="todo-list">
           <li v-for="todo in todayTodos" :key="todo.id" class="todo-item">
+            <input
+              class="todo-check"
+              type="checkbox"
+              :checked="todo.done"
+              :aria-label="`完成 ${todo.text}`"
+              @change="toggleTodo(todo.id)"
+            >
             <button class="todo-text todo-dashboard-link" type="button" :aria-label="todo.text" @click="openTodo(todo.id)">
               {{ todo.text }}<small>{{ getTodayTodoReason(todo) }}</small>
             </button>
             <span class="todo-urgency" :class="`todo-urgency-${todo.urgency}`">{{ urgencyLabels[todo.urgency] }}</span>
+            <span class="todo-actions">
+              <button class="btn btn-secondary todo-mini-btn" type="button" @click="quickSessionFromDashboard(todo.id)">执行一次</button>
+            </span>
           </li>
         </ul>
         <div v-else class="empty-state">今日暂无待办</div>
@@ -276,10 +330,21 @@ const timelineGroups = computed(() => {
         <h2 class="card-title">无截止待办池</h2>
         <ul v-if="floatingTodos.length" class="todo-list">
           <li v-for="todo in floatingTodos" :key="todo.id" class="todo-item">
+            <input
+              class="todo-check"
+              type="checkbox"
+              :checked="todo.done"
+              :aria-label="`完成 ${todo.text}`"
+              @change="toggleTodo(todo.id)"
+            >
             <button class="todo-text todo-dashboard-link" type="button" :aria-label="todo.text" @click="openTodo(todo.id)">
               {{ todo.text }}<small>无截止 · 可转入今天</small>
             </button>
             <span class="todo-urgency" :class="`todo-urgency-${todo.urgency}`">{{ urgencyLabels[todo.urgency] }}</span>
+            <span class="todo-actions">
+              <button class="btn btn-secondary todo-mini-btn" type="button" @click="planTodayFromDashboard(todo.id)">今天做</button>
+              <button class="btn btn-secondary todo-mini-btn" type="button" @click="quickSessionFromDashboard(todo.id)">执行一次</button>
+            </span>
           </li>
         </ul>
         <div v-else class="empty-state">暂无无截止待办</div>
@@ -356,10 +421,34 @@ const timelineGroups = computed(() => {
 }
 .dashboard-main-grid { margin-bottom: 16px; }
 .dashboard-timeline { min-width: 0; }
-.todo-list { display: grid; gap: 8px; padding: 0; margin: 0; }
-.todo-item { align-items: center; min-width: 0; }
-.todo-dashboard-link { display: grid; gap: 3px; width: 100%; min-width: 0; }
+.todo-list { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.todo-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.todo-check { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; }
+.todo-dashboard-link { display: grid; gap: 3px; width: 100%; min-width: 0; text-align: left; }
 .todo-dashboard-link small { color: var(--faint); font-size: 12px; font-weight: 650; }
+.todo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+@media (min-width: 720px) {
+  .todo-item {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+  .todo-actions {
+    grid-column: auto;
+    justify-content: flex-end;
+  }
+}
 .period-item { width: 100%; min-width: 0; text-align: left; }
 .period-info { min-width: 0; }
 .period-info h4 { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }

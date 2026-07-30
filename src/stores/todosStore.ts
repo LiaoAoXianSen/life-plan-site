@@ -98,6 +98,50 @@ export const useTodosStore = defineStore('todos', () => {
     return session;
   }
 
+  function planForToday(id: string): boolean {
+    const todo = lifePlan.data.todos.find(item => item.id === id);
+    if (!todo) return false;
+    const today = getTodayStr();
+    const stamp = getNowLocal();
+    lifePlan.mutate('plan-todo-for-today', data => {
+      const target = data.todos.find(item => item.id === id);
+      if (!target) return;
+      target.planStartDate = today;
+      target.planEndDate = today;
+      target.updatedAt = stamp;
+    });
+    return true;
+  }
+
+  function quickSession(id: string): TodoSession {
+    if (!id) throw new Error('请先保存待办，再记录执行时间');
+    const todo = lifePlan.data.todos.find(item => item.id === id);
+    if (!todo) throw new Error('待办不存在');
+    const today = getTodayStr();
+    if ((todo.sessions || []).some(session => session.date === today)) {
+      throw new Error('这个待办今天已经记录过一次执行了');
+    }
+    const now = new Date();
+    const stamp = getNowLocal(now);
+    const clock = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const session: TodoSession = {
+      id: genId(),
+      date: today,
+      startTime: clock,
+      endTime: '',
+      note: '快捷执行',
+      createdAt: stamp,
+    };
+    lifePlan.mutate('add-todo-quick-session', data => {
+      const target = data.todos.find(item => item.id === id);
+      if (!target) return;
+      if (!Array.isArray(target.sessions)) target.sessions = [];
+      target.sessions.push(session);
+      target.updatedAt = stamp;
+    });
+    return session;
+  }
+
   function removeSession(todoId: string, sessionId: string) {
     lifePlan.mutate('delete-todo-session', data => {
       const todo = data.todos.find(item => item.id === todoId);
@@ -164,5 +208,18 @@ export const useTodosStore = defineStore('todos', () => {
     });
   }
 
-  return { todos, toggle, create, update, addSession, removeSession, linkRecord, unlinkRecord, remove, services };
+  return {
+    todos,
+    toggle,
+    create,
+    update,
+    addSession,
+    removeSession,
+    planForToday,
+    quickSession,
+    linkRecord,
+    unlinkRecord,
+    remove,
+    services,
+  };
 });
