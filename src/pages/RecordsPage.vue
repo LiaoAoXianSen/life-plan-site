@@ -639,7 +639,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page active" id="page-records">
-    <header class="page-header"><div class="page-title">所有记录</div><div class="page-actions"><button class="btn btn-primary" type="button" @click="showRecordCreate = true">新建记录</button></div></header>
+    <header class="page-header"><div class="page-title">所有记录</div><div class="page-actions"><button class="btn btn-secondary" type="button" @click="showTemplateManager = true">模板管理</button><button class="btn btn-primary" type="button" @click="showRecordCreate = true">+ 新建记录</button></div></header>
 
     <RecordCreateModal v-model="showRecordCreate" @open-existing="openExistingFromCreate" />
 
@@ -672,7 +672,7 @@ onBeforeUnmount(() => {
 
     <div class="calendar-toolbar">
       <div class="segmented">
-        <button v-for="item in ['list','day','week','month'] as const" :key="item" :class="{ active: view === item }" type="button" @click="view = item">{{ ({ list: '列表', day: '日', week: '周', month: '月' })[item] }}</button>
+        <button v-for="item in ['list','day','week','month'] as const" :key="item" :class="{ active: view === item }" type="button" @click="view = item">{{ ({ list: '列表', day: '日视图', week: '周视图', month: '月视图' })[item] }}</button>
       </div>
       <template v-if="view !== 'list'">
         <div class="page-actions">

@@ -65,25 +65,35 @@ const summary = computed(() => ({
   ideas: allItems.value.filter(item => item.ideas.length).length,
   materials: allItems.value.filter(item => item.materials.length).length,
   wheel: allItems.value.filter(item => item.wheelItems.length || item.wheelTags.length).length,
+  filtered: filteredItems.value.length,
 }));
 
 function firstId(items: DataEntity[]) {
   return String(items[0]?.id || '');
+}
+
+function totalCount(item: TagCenterItem) {
+  return item.ideas.length + item.materials.length + item.wheelItems.length;
 }
 </script>
 
 <template>
   <section class="page active" id="page-tags">
     <header class="page-header">
-      <div class="page-title">标签中心</div>
+      <div>
+        <div class="page-title">标签中心</div>
+        <p class="page-subtitle">先统一查看灵感、素材和转盘标签，避免标签体系越用越散。</p>
+      </div>
     </header>
-    <div class="mini-summary-row tag-summary" aria-label="标签摘要">
+
+    <div class="mini-summary-grid tag-summary" aria-label="标签摘要">
       <div class="mini-summary-card"><strong>{{ summary.all }}</strong><span>全部标签</span></div>
       <div class="mini-summary-card"><strong>{{ summary.ideas }}</strong><span>灵感标签</span></div>
       <div class="mini-summary-card"><strong>{{ summary.materials }}</strong><span>素材标签</span></div>
       <div class="mini-summary-card"><strong>{{ summary.wheel }}</strong><span>转盘标签</span></div>
-      <div class="mini-summary-card"><strong>{{ filteredItems.length }}</strong><span>当前筛选</span></div>
+      <div class="mini-summary-card"><strong>{{ summary.filtered }}</strong><span>当前筛选</span></div>
     </div>
+
     <div class="filter-bar tag-filter-bar">
       <input v-model="keyword" type="search" aria-label="搜索标签" placeholder="搜索标签名称" />
       <select v-model="scope" aria-label="标签范围">
@@ -93,13 +103,23 @@ function firstId(items: DataEntity[]) {
         <option value="wheel">转盘</option>
       </select>
     </div>
+
     <div class="tag-center-grid">
       <article v-for="item in filteredItems" :key="item.name" class="tag-center-card">
-        <div class="tag-center-head"><span class="tag-pill">{{ item.name }}</span><strong>{{ item.ideas.length + item.materials.length + item.wheelItems.length }}</strong></div>
+        <div class="tag-center-head">
+          <span class="tag-pill">{{ item.name }}</span>
+          <strong>{{ totalCount(item) }}</strong>
+        </div>
         <div class="tag-center-counts">
-          <button type="button" @click="router.push({ path: '/ideas', query: { tag: item.name } })"><strong>{{ item.ideas.length }}</strong><span>灵感</span></button>
-          <button type="button" @click="router.push({ path: '/materials', query: { tag: item.name } })"><strong>{{ item.materials.length }}</strong><span>素材</span></button>
-          <button type="button" @click="router.push({ path: '/wheel', query: { tag: firstId(item.wheelTags) } })"><strong>{{ item.wheelItems.length }}</strong><span>转盘项</span></button>
+          <button type="button" @click="router.push({ path: '/ideas', query: { tag: item.name } })">
+            <strong>{{ item.ideas.length }}</strong><span>灵感</span>
+          </button>
+          <button type="button" @click="router.push({ path: '/materials', query: { tag: item.name } })">
+            <strong>{{ item.materials.length }}</strong><span>素材</span>
+          </button>
+          <button type="button" @click="router.push({ path: '/wheel', query: { tag: firstId(item.wheelTags) } })">
+            <strong>{{ item.wheelItems.length }}</strong><span>转盘项</span>
+          </button>
         </div>
         <div class="tag-center-preview">
           <span v-if="item.ideas[0]">灵感：{{ item.ideas[0].title || '未命名灵感' }}</span>
@@ -114,7 +134,10 @@ function firstId(items: DataEntity[]) {
 
 <style scoped>
 .tag-summary { margin-bottom: 14px; }
-.tag-filter-bar { grid-template-columns: minmax(0, 1fr) minmax(150px, .28fr); margin-bottom: 16px; }
+.tag-filter-bar {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, .28fr);
+  margin-bottom: 14px;
+}
 .tag-center-card,
 .tag-center-head,
 .tag-center-preview,
@@ -124,6 +147,26 @@ function firstId(items: DataEntity[]) {
 .tag-center-head,
 .tag-center-preview span {
   overflow-wrap: anywhere;
+}
+#page-tags .tag-center-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+#page-tags .tag-center-card {
+  padding: 14px;
+}
+#page-tags .tag-center-head {
+  margin-bottom: 10px;
+}
+#page-tags .tag-center-counts {
+  gap: 6px;
+}
+#page-tags .tag-center-counts button {
+  padding: 8px;
+}
+#page-tags .tag-center-preview {
+  margin-top: 8px;
+  gap: 4px;
 }
 @media (max-width: 640px) {
   .tag-filter-bar { grid-template-columns: minmax(0, 1fr); }

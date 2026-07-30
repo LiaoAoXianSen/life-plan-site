@@ -242,6 +242,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 224. Status: complete - Add Vue dist packaging via scripts/package-vue-dist.ps1 and npm run package:vue without using package-clean.ps1.
 225. Status: complete - Mark replacement-candidate acceptance READY after modular sync suite + Vue packaging + checklist/preview wording cleanup.
 226. Status: complete - Verify protected refs, package Vue dist, commit, push, and append dual-store memory for the replacement-candidate acceptance stage.
+227. Status: complete - UI/IA shell parity pass: Habit center tabs/KPI, Todos browse-first create, Ideas/Tags denser shells, Records view labels + template entry, Fitness overview KPI, Wheel mode hero.
+228. Status: complete - Update tests for Habit tab navigation and Records 日视图 labels; full Vue smoke 78/78; commit and push.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

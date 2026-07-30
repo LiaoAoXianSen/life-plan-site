@@ -80,11 +80,26 @@
 }
 
 .todo-page-summary { margin-top: 4px; color: var(--muted); font-size: 13px; }
-#page-todos .filter-bar { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+#page-todos .page-header { align-items: flex-end; margin-bottom: 12px; }
+#page-todos .todo-create-form { margin-bottom: 12px; padding: 14px 16px; }
+#page-todos .todo-create-form .card-title { margin-bottom: 10px; font-size: 14px; }
+#page-todos .todo-create-form .form-row { gap: 10px; }
+#page-todos .todo-create-form .form-group { margin-bottom: 8px; }
+#page-todos .todo-create-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+#page-todos .filter-bar { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-bottom: 12px; padding: 10px 12px; }
 #page-todos .filter-bar .todo-filter-query { grid-column: span 2; }
 #page-todos .filter-bar .todo-filter-date { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; min-width: 0; }
-.todo-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 14px; align-items: start; }
+.todo-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 12px; align-items: start; }
 .todo-list-pane { min-width: 0; overflow-x: auto; }
+/* Denser browse-first table */
+#page-todos .todo-table th,
+#page-todos .todo-table td { padding: 8px 10px; font-size: 13px; }
+#page-todos .todo-table th { font-size: 11px; letter-spacing: 0.02em; }
+#page-todos .todo-table .todo-title-button { gap: 2px; }
+#page-todos .todo-table .todo-title-button strong { font-size: 13px; line-height: 1.35; }
+#page-todos .todo-table .todo-title-button small { font-size: 11px; }
+#page-todos .todo-table .btn-secondary { min-height: 28px; padding: 3px 10px; font-size: 12px; }
+#page-todos .todo-table input[type="checkbox"] { width: 15px; height: 15px; }
 .todo-table tbody tr.selected td { background: var(--accent-soft); }
 .todo-title-button { display: grid; gap: 3px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .todo-title-button strong { overflow-wrap: anywhere; }

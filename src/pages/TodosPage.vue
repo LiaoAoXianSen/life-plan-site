@@ -29,6 +29,8 @@ const detailError = ref('');
 const detailStatus = ref('');
 const newSubTodo = ref('');
 const recordLinkId = ref('');
+/** Browse-first: create form is secondary and collapsed until the user opens it. */
+const showCreateForm = ref(false);
 const form = reactive({ text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium' as Todo['urgency'], group: '其他' });
 const detailForm = reactive({ text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium' as Todo['urgency'], group: '其他', subTodos: [] as TodoSubTodo[] });
 const sessionForm = reactive({ date: getTodayStr(), startTime: new Date().toTimeString().slice(0, 5), endTime: '', note: '' });
@@ -64,10 +66,15 @@ const availableRecords = computed(() => {
 const sortedSessions = computed(() => [...(selectedTodo.value?.sessions ?? [])].sort((left, right) =>
   `${right.date}T${right.startTime || '00:00'}`.localeCompare(`${left.date}T${left.startTime || '00:00'}`)));
 
+function toggleCreateForm() {
+  showCreateForm.value = !showCreateForm.value;
+}
+
 function submit() {
   if (!form.text.trim()) return;
   const todo = todosStore.create({ ...form, text: form.text.trim() });
   Object.assign(form, { text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他' });
+  showCreateForm.value = false;
   selectTodo(todo.id);
 }
 
@@ -342,10 +349,15 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
         <div class="page-title">待办总览</div>
         <p class="todo-page-summary">{{ todosStore.todos.filter(todo => !todo.done).length }} 项待推进，{{ todosStore.todos.filter(todo => todo.done).length }} 项已完成</p>
       </div>
+      <div class="page-actions">
+        <button class="btn btn-primary" type="button" :aria-expanded="showCreateForm" aria-controls="todo-create-panel" @click="toggleCreateForm">
+          {{ showCreateForm ? '收起新建' : '+ 新建待办' }}
+        </button>
+      </div>
     </header>
 
-    <form class="card todo-create-form" @submit.prevent="submit">
-      <div class="card-title">新建待办</div>
+    <form v-if="showCreateForm" id="todo-create-panel" class="card todo-create-form" @submit.prevent="submit">
+      <div class="card-title">新建通用待办</div>
       <div class="form-row">
         <div class="form-group"><label for="todo-create-text">任务</label><input id="todo-create-text" v-model="form.text" required placeholder="下一步要推进什么？" /></div>
         <div class="form-group"><label for="todo-create-group">分组</label><input id="todo-create-group" v-model="form.group" /></div>
@@ -353,7 +365,10 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
         <div class="form-group"><label for="todo-create-urgency">紧急度</label><select id="todo-create-urgency" v-model="form.urgency"><option value="urgent">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></div>
       </div>
       <div class="form-group"><label for="todo-create-note">备注</label><input id="todo-create-note" v-model="form.note" placeholder="可选备注" /></div>
-      <button class="btn btn-primary" type="submit">保存待办</button>
+      <div class="todo-create-actions">
+        <button class="btn btn-primary" type="submit">保存待办</button>
+        <button class="btn btn-secondary" type="button" @click="showCreateForm = false">取消</button>
+      </div>
     </form>
 
     <div class="filter-bar">

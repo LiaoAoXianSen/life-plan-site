@@ -50,6 +50,33 @@ const restTimer = reactive({ remaining: 0, total: 0, exerciseName: '' });
 let restTimerId: ReturnType<typeof window.setInterval> | null = null;
 
 const doneHistory = computed(() => fitness.workouts.filter(item => item.status === 'done' || item.status === 'skipped'));
+const recentWorkoutCount = computed(() => {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const key = getTodayStr(cutoff);
+  return doneHistory.value.filter(item => String(item.date || item.createdAt || '').slice(0, 10) >= key).length;
+});
+const activePlanCount = computed(() => fitness.plans.filter(plan => String(plan.status || 'active') === 'active').length);
+const latestMetric = computed(() => fitness.metrics[0] || null);
+const latestWeight = computed(() => {
+  const metric = latestMetric.value as Record<string, any> | null;
+  if (!metric) return '—';
+  const parsed = fitness.services.fitness.parseMetricNumber(metric.weight);
+  if (parsed === null) return '—';
+  return fitness.services.fitness.formatMetricValue(metric.weight, 'kg');
+});
+const overviewKpis = computed(() => [
+  { label: '当前体重', value: latestWeight.value, hint: latestMetric.value ? String((latestMetric.value as any).date || '') : '还没有身材记录' },
+  { label: '近 30 天训练', value: String(recentWorkoutCount.value), hint: '已完成 / 跳过' },
+  { label: '进行中计划', value: String(activePlanCount.value), hint: `全部计划 ${fitness.plans.length}` },
+  { label: '动作库', value: String(fitness.library.length), hint: '可用于自由训练' },
+]);
+
+function jumpToFreeWorkout() {
+  const el = document.getElementById('fitness-free-start');
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!freeForm.exerciseId && fitness.library[0]) freeForm.exerciseId = String(fitness.library[0].id || '');
+}
 const activeCompleted = computed(() => fitness.activeWorkout ? fitness.services.fitness.countCompletedSets(fitness.activeWorkout) : 0);
 const activeTotal = computed(() => fitness.activeWorkout ? fitness.services.fitness.countTotalSets(fitness.activeWorkout) : 0);
 const activePlan = computed(() => fitness.activeWorkout?.planId ? fitness.services.fitness.findFitnessPlan(fitness.plans, fitness.activeWorkout.planId) : null);
@@ -475,7 +502,12 @@ onUnmounted(stopRestTimer);
     <header class="page-header">
       <div>
         <div class="page-title">运动健身</div>
-        <p class="page-subtitle">训练、动作库和身体指标均通过原有健身服务写入 <code>lifePlanData</code>。</p>
+        <p class="page-subtitle">选计划开练，顺手记录身材与训练结果。</p>
+      </div>
+      <div class="fitness-header-actions">
+        <button class="btn btn-secondary" type="button" @click="seedLibrary">动作库</button>
+        <button class="btn btn-secondary" type="button" @click="resetPlanForm">新建计划</button>
+        <button class="btn btn-primary" type="button" @click="jumpToFreeWorkout">自由开练</button>
       </div>
     </header>
 
@@ -484,6 +516,29 @@ onUnmounted(stopRestTimer);
     <datalist id="fitness-exercise-datalist">
       <option v-for="item in fitness.library" :key="item.id" :value="item.name" />
     </datalist>
+
+    <section v-if="!fitness.activeWorkout" class="card fitness-overview-hero" aria-label="今日健身状态">
+      <div class="section-title-row">
+        <div>
+          <div class="fitness-kicker">今日状态</div>
+          <h2>{{ fitness.plans[0] ? `最近计划：${fitness.plans[0].name}` : '今天还没开始训练' }}</h2>
+          <p class="section-hint">先从计划开练，或直接自由开练；身体指标和历史训练都在下方。</p>
+        </div>
+        <button
+          v-if="fitness.plans[0]"
+          class="btn btn-primary"
+          type="button"
+          @click="run(() => fitness.startFromPlan(String(fitness.plans[0].id)))"
+        >继续训练：{{ fitness.plans[0].name }}</button>
+      </div>
+      <div class="fitness-kpi-grid">
+        <article v-for="item in overviewKpis" :key="item.label" class="fitness-kpi-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <em>{{ item.hint }}</em>
+        </article>
+      </div>
+    </section>
 
     <article v-if="fitness.activeWorkout" class="card">
       <div class="section-title-row">
@@ -533,7 +588,7 @@ onUnmounted(stopRestTimer);
     </article>
 
     <div v-else class="form-row">
-      <form class="card" @submit.prevent="startFreeWorkout">
+      <form id="fitness-free-start" class="card" @submit.prevent="startFreeWorkout">
         <div class="card-title">开始自由训练</div>
         <div v-if="!fitness.library.length" class="empty-state">请先初始化或添加动作库。</div>
         <div v-else class="form-row">
@@ -759,3 +814,60 @@ onUnmounted(stopRestTimer);
     </article>
   </section>
 </template>
+
+<style scoped>
+.fitness-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.fitness-overview-hero {
+  margin-bottom: 16px;
+}
+.fitness-kicker {
+  color: var(--faint, #7a8b80);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fitness-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.fitness-kpi-card {
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(33, 110, 78, 0.05);
+  border: 1px solid rgba(33, 110, 78, 0.1);
+  display: grid;
+  gap: 4px;
+}
+.fitness-kpi-card span,
+.fitness-kpi-card em {
+  color: var(--faint, #7a8b80);
+  font-size: 12px;
+  font-style: normal;
+}
+.fitness-kpi-card strong {
+  font-size: 1.35rem;
+  color: #216e4e;
+}
+@media (max-width: 900px) {
+  .fitness-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .fitness-header-actions {
+    width: 100%;
+  }
+  .fitness-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

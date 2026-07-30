@@ -96,6 +96,11 @@ master only: wheel library AI tag-suggest and deeper Habit diagnostics repair
 beyond read-only diagnostics plus settle-through-yesterday. Do not substitute
 incompatible shortcuts; ship those as separately tested follow-ups.
 
+UI/IA shell parity has been tightened toward the legacy product surfaces:
+Habit center tabs/KPI, browse-first Todos, Ideas KPI strip and card actions,
+Tags denser center, Records day/week/month labels plus template entry, Fitness
+overview KPI hero, and Wheel mode hero for tag two-stage spin.
+
 The Vue branch has operational Dashboard, Todos, Records, Materials, Libraries,
 Search, Goals, Habits, Fitness, Wheel, AI and main Sync workflows. The
 Dashboard now covers the command center, active-period links, bounded recent

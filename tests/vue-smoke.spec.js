@@ -52,7 +52,7 @@ test('Vue shell navigates through migrated pages without browser errors', async 
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/');
     await expect(page.locator('#page-dashboard')).toBeVisible();
-    for (const [label, title] of [['所有记录', '所有记录'], ['灵感池', '灵感池'], ['素材库', '素材库'], ['标签中心', '标签中心'], ['全局搜索', '全局搜索'], ['待办总览', '待办总览'], ['习惯打卡', '习惯打卡'], ['运动健身', '运动健身'], ['目标管理', '目标管理'], ['工具转盘', '工具转盘'], ['AI 助手', 'AI 助手'], ['云同步', '云同步']]) {
+    for (const [label, title] of [['所有记录', '所有记录'], ['灵感池', '灵感池'], ['素材库', '素材库'], ['标签中心', '标签中心'], ['全局搜索', '全局搜索'], ['待办总览', '待办总览'], ['习惯打卡', '习惯中心'], ['运动健身', '运动健身'], ['目标管理', '目标管理'], ['工具转盘', '工具转盘'], ['AI 助手', 'AI 助手'], ['云同步', '云同步']]) {
         await page.getByRole('link', { name: label }).click();
         await expect(page.locator('.page-title')).toHaveText(title);
     }
@@ -62,6 +62,7 @@ test('Vue shell navigates through migrated pages without browser errors', async 
 test('todo writes main data and the compatible todo mirror', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/todos');
+    await page.getByRole('button', { name: '+ 新建待办' }).click();
     await page.locator('#page-todos input[required]').fill('Vue 待办');
     await page.getByRole('button', { name: '保存待办' }).click();
     await expect(page.locator('.todo-table')).toContainText('Vue 待办');
@@ -240,7 +241,7 @@ test('todo dashboard route presets and calendar entries preserve one read-only d
 
     const openCalendarEntry = async (selector, name) => {
         await page.goto('/#/records');
-        await page.getByRole('button', { name: '日', exact: true }).click();
+        await page.getByRole('button', { name: '日视图', exact: true }).click();
         const entry = page.locator(selector).filter({ hasText: name });
         await expect(entry).toBeVisible();
         await entry.click();
@@ -1475,6 +1476,7 @@ test('habit archive and restore preserve history without tombstones', async ({ p
     }, source);
 
     await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '习惯库' }).click();
     await expect(page.locator('.habit-quick-card').filter({ hasText: '归档习惯' })).toHaveCount(1);
     const row = page.locator('.habit-management-card .habit-library-row').filter({ hasText: '归档习惯' });
     page.once('dialog', dialog => dialog.accept());
@@ -1515,6 +1517,7 @@ test('habit wishes create and archive preserve reward mirror contract', async ({
     }, emptyData());
 
     await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '钱包' }).click();
     const wallet = page.locator('.habit-wallet-panel');
     await wallet.getByLabel('心愿名称').fill('买一本好书');
     await wallet.getByLabel('花费').fill('12');
@@ -1557,6 +1560,7 @@ test('habit wallet redeem deducts points and blocks unavailable wishes', async (
     }, source);
 
     await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '钱包' }).click();
     const wallet = page.locator('.habit-wallet-panel');
     await expect(wallet.locator('.habit-reward-card').filter({ hasText: '大愿望' }).getByRole('button', { name: '兑换' })).toBeDisabled();
     await expect(wallet.locator('.habit-reward-card').filter({ hasText: '售罄愿望' }).getByRole('button', { name: '兑换' })).toBeDisabled();
@@ -1601,6 +1605,7 @@ test('habit diagnostics stays read-only and surfaces legacy issues', async ({ pa
     }, source);
 
     await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '分析' }).click();
     const diagnostics = page.locator('.habit-diagnostics-panel');
     await expect(diagnostics).toContainText('只读');
     await expect(diagnostics).toContainText('重复习惯 ID');
@@ -1647,6 +1652,7 @@ test('habit penalty settle writes miss ledger once and keeps local mirror upload
     }, source);
 
     await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '分析' }).click();
     const diagnostics = page.locator('.habit-diagnostics-panel');
     await diagnostics.getByRole('button', { name: '结算昨日扣分' }).click();
     await expect(page.locator('.notice.success')).toContainText('已结算扣分');
@@ -1697,7 +1703,7 @@ test('records day view maintains a fixed-width timed event with a complete hover
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({ ...data, records: [{ id: 'record-1', type: '日记', title: '这是一个完整的日程标题', content: '', startDate: date, endDate: date, recordTime: '09:00', recordEndTime: '10:00' }] })), { data: emptyData(), date: today });
     await page.goto('/#/records');
-    await page.getByRole('button', { name: '日', exact: true }).click();
+    await page.getByRole('button', { name: '日视图', exact: true }).click();
     const event = page.locator('.agenda-day-column .agenda-event-block').first();
     await expect(event).toHaveAttribute('title', /09:00 - 10:00 这是一个完整的日程标题/);
     await expect(event).toHaveCSS('width', '160px');
@@ -1806,7 +1812,7 @@ test('records legacy filters and operation events stay read-only', async ({ page
     await expect(results).toContainText('未来范围外记录');
     await expect(results).toContainText('未设置日期记录');
 
-    await recordsPage.getByRole('button', { name: '日', exact: true }).click();
+    await recordsPage.getByRole('button', { name: '日视图', exact: true }).click();
     await expect(recordsPage.getByLabel('记录日期范围')).toHaveCount(0);
     await expect(results).toContainText('执行：迁移执行事项');
     await expect(results).toContainText('聚合阅读习惯');
@@ -4264,6 +4270,7 @@ test('todo independent auto sync stays idle for stale unsafe config', async ({ p
 
     await page.clock.install();
     await page.goto('/#/todos');
+    await page.getByRole('button', { name: '+ 新建待办' }).click();
     await page.locator('#page-todos input[required]').fill('禁用状态编辑');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(25000);
@@ -4365,6 +4372,7 @@ test('todo independent auto sync uploads local dirty data with If-Match and veri
             lastRemoteEtag: '"todo-auto-v1"',
         }));
     }, hashes);
+    await page.getByRole('button', { name: '+ 新建待办' }).click();
     await page.locator('#page-todos input[required]').fill('自动同步新增待办');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.goto('/#/sync');
@@ -4441,6 +4449,7 @@ test('todo independent auto sync never creates a missing remote file', async ({ 
 
     await page.clock.install();
     await page.goto('/#/todos');
+    await page.getByRole('button', { name: '+ 新建待办' }).click();
     await page.locator('#page-todos input[required]').fill('缺失云端后仍不创建');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(20000);
@@ -4569,6 +4578,7 @@ test('main auto sync uploads local dirty data after the debounce window', async 
     // Allow startup auto-sync (if any) to settle with a clean, non-dirty local state.
     await page.waitForTimeout(200);
     const putsBeforeEdit = calls.filter(item => item.method === 'PUT').length;
+    await page.getByRole('button', { name: '+ 新建待办' }).click();
     await page.locator('#page-todos input[required]').fill('触发自动同步');
     await page.getByRole('button', { name: '保存待办' }).click();
     await expect(page.locator('.todo-table')).toContainText('触发自动同步');
@@ -4651,6 +4661,7 @@ test('main auto sync stays idle when autoSync is disabled', async ({ page }) => 
 
     await page.clock.install();
     await page.goto('/#/todos');
+    await page.getByRole('button', { name: '+ 新建待办' }).click();
     await page.locator('#page-todos input[required]').fill('关闭自动同步后编辑');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(25000);

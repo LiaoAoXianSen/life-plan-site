@@ -242,20 +242,28 @@
         background: rgba(255,255,255,.86);
     }
     #page-ideas .mini-summary-grid {
-        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+        gap: 8px;
         margin-bottom: 14px;
     }
     #page-ideas .mini-summary-card {
-        min-height: 72px;
+        min-height: 68px;
         display: grid;
         align-content: center;
         background: rgba(255,255,255,.78);
         border-radius: var(--radius-lg);
         box-shadow: 0 2px 8px rgba(60,55,40,.05);
+        color: inherit;
+        font: inherit;
+    }
+    #page-ideas button.mini-summary-card {
+        appearance: none;
+        -webkit-appearance: none;
+        cursor: pointer;
+        text-align: left;
     }
     #page-ideas .mini-summary-card strong {
-        font-size: 24px;
+        font-size: 22px;
         color: var(--accent);
     }
     #page-ideas .mini-summary-card span {
@@ -263,8 +271,8 @@
         font-weight: 700;
     }
     #page-ideas .idea-grid {
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
     }
     #page-ideas .idea-card {
         --idea-tint: rgba(250,248,242,.74);
@@ -451,8 +459,13 @@
     }
     .tag-center-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 10px;
+    }
+    #page-tags .mini-summary-grid {
+        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+        gap: 8px;
+        margin-bottom: 14px;
     }
     .tag-center-head strong {
         color: var(--accent);

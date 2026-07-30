@@ -267,8 +267,8 @@ const timelineGroups = computed(() => {
           <button class="btn btn-secondary todo-mini-btn" type="button" @click="router.push('/tags')">标签中心</button>
         </div>
         <div class="command-metric-grid">
-          <button class="command-metric" type="button" @click="router.push('/ideas')"><strong>{{ unprocessedIdeas.length }}</strong><span>未处理灵感</span></button>
-          <button class="command-metric" type="button" @click="router.push('/ideas')"><strong>{{ needsConclusionIdeas.length }}</strong><span>待写结论</span></button>
+          <button class="command-metric" type="button" @click="router.push({ path: '/ideas', query: { status: 'unprocessed' } })"><strong>{{ unprocessedIdeas.length }}</strong><span>未处理灵感</span></button>
+          <button class="command-metric" type="button" @click="router.push({ path: '/ideas', query: { status: 'needsConclusion' } })"><strong>{{ needsConclusionIdeas.length }}</strong><span>待写结论</span></button>
           <button class="command-metric" type="button" @click="router.push('/todos')"><strong>{{ urgentTodos.length }}</strong><span>高压待办</span></button>
         </div>
         <div v-if="urgentTodos.length" class="command-list">

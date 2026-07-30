@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
+import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { HabitRule } from '../stores/habitsStore';
 
 const habits = useHabitsStore();
+const lifePlan = useLifePlanStore();
 const route = useRoute();
+const router = useRouter();
 const formError = ref('');
+const activeTab = ref<'today' | 'backfill' | 'library' | 'wallet' | 'diagnostics' | 'sync'>('today');
 const actionDrafts = reactive<Record<string, { date: string; note: string }>>({});
 const checkinNoteDrafts = reactive<Record<string, string>>({});
 const rewardForm = reactive({ name: '', cost: 10, currency: '金币', stock: 0, note: '' });
@@ -28,6 +32,59 @@ const balanceText = computed(() => Object.entries(habits.balances)
   .join(' · ') || '0 金币');
 const diagnosticSummary = computed(() => habits.diagnostics.summary || {});
 const diagnosticIssues = computed(() => habits.diagnosticIssues.slice(0, 3));
+const doneTodayCount = computed(() => todayItems.value.filter(item => item.count >= item.target).length);
+const recentCheckinCount = computed(() => {
+  const today = getTodayStr();
+  const start = (() => {
+    const date = new Date(`${today}T12:00:00`);
+    date.setDate(date.getDate() - 6);
+    return getTodayStr(date);
+  })();
+  return lifePlan.data.checkins.filter(item => {
+    const date = String(item.date || '');
+    return date >= start && date <= today;
+  }).length;
+});
+const yesterdayPendingCount = computed(() => {
+  const yesterday = (() => {
+    const date = new Date(`${getTodayStr()}T12:00:00`);
+    date.setDate(date.getDate() - 1);
+    return getTodayStr(date);
+  })();
+  return habits.habits.filter(habit => {
+    if (habit.archived) return false;
+    if (habit.startDate && habit.startDate > yesterday) return false;
+    return habits.getCheckinCount(habit.id, yesterday) < habits.targetCount(habit);
+  }).length;
+});
+const centerKpis = computed(() => [
+  { label: '今日达标', value: `${doneTodayCount.value}/${todayItems.value.length}`, hint: todayItems.value.length ? '按今日规则' : '今日无待办习惯' },
+  { label: '习惯库', value: String(habits.habits.length), hint: `${habits.habits.filter(item => item.archived).length} 已归档` },
+  { label: '近 7 天打卡', value: String(recentCheckinCount.value), hint: 'checkins 条数' },
+  { label: '昨日待处理', value: String(yesterdayPendingCount.value), hint: '可到补卡页处理' },
+  { label: '钱包余额', value: balanceText.value, hint: 'habitPointLedger' },
+]);
+const tabItems = [
+  { id: 'today', label: '今日' },
+  { id: 'backfill', label: '补卡' },
+  { id: 'library', label: '习惯库' },
+  { id: 'wallet', label: '钱包' },
+  { id: 'diagnostics', label: '分析' },
+  { id: 'sync', label: '云同步' },
+] as const;
+
+function openTab(tab: typeof activeTab.value) {
+  activeTab.value = tab;
+}
+
+function openCreateHabit() {
+  resetHabitForm();
+  activeTab.value = 'library';
+}
+
+function openCreateWish() {
+  activeTab.value = 'wallet';
+}
 const weekdayOptions = [
   { value: '1', label: '一' },
   { value: '2', label: '二' },
@@ -111,6 +168,7 @@ function editHabit(item: {
   rewardPoints?: unknown; rewardCurrency?: string; penaltyPoints?: unknown; penaltyCurrency?: string; randomReward?: boolean; rewardMin?: unknown; rewardMax?: unknown;
   breakPenaltyMode?: string; breakPenaltyPoints?: unknown; breakPenaltyCurrency?: string; milestoneRewards?: unknown;
 }) {
+  activeTab.value = 'library';
   habitForm.id = item.id;
   habitForm.name = item.name || '';
   habitForm.rule = item.rule || 'daily';
@@ -278,33 +336,50 @@ watch(focusedHabitId, value => {
   <section class="page active" id="page-habits">
     <header class="page-header">
       <div>
-        <div class="page-title">习惯打卡</div>
-        <p class="page-subtitle">今天的打卡会保留旧版 checkins、钱包流水与本地 habit-app 镜像格式。</p>
+        <div class="page-title">习惯中心</div>
+        <p class="page-subtitle">PC 端负责执行、补卡审计、习惯库、钱包和分析；数据仍沿用 life 旧字段。</p>
+      </div>
+      <div class="habit-header-actions">
+        <button class="btn btn-secondary" type="button" @click="openTab('wallet')">币种/钱包</button>
+        <button class="btn btn-secondary" type="button" @click="openCreateWish">新增心愿</button>
+        <button class="btn btn-primary" type="button" @click="openCreateHabit">新建习惯</button>
       </div>
     </header>
 
     <article class="card habit-center-hero">
       <div>
-        <h2>今日习惯概览</h2>
-        <p>已迁移日常打卡与新建基础习惯。打卡会写入原有 <code>lifePlanData</code>、奖励流水与 <code>habitAppData</code> 本地镜像；远端同步不会由此页面触发。</p>
+        <div class="habit-kicker">HABIT OPERATIONS</div>
+        <h2>今天先执行，历史在补卡页处理，规则和钱包集中管理。</h2>
+        <p>日常在「今日 / 补卡 / 习惯库 / 钱包」完成；需要和手机对齐时，到「云同步」或全局云同步页手动操作。</p>
       </div>
+      <button class="btn btn-secondary" type="button" @click="openTab('sync')">云同步指引</button>
     </article>
 
     <div v-if="habits.lastAction" class="notice success" role="status">{{ habits.lastAction }}</div>
     <div v-if="habits.lastError" class="notice warning" role="alert">{{ habits.lastError }}</div>
 
-    <div class="habit-kpi-grid">
-      <article v-for="(amount, currency) in habits.balances" :key="currency" class="habit-kpi-card">
-        <span>{{ currency }}</span>
-        <strong>{{ amount }}</strong>
-      </article>
-      <article v-if="!Object.keys(habits.balances).length" class="habit-kpi-card">
-        <span>金币</span>
-        <strong>0</strong>
+    <div class="habit-kpi-grid habit-center-kpis">
+      <article v-for="item in centerKpis" :key="item.label" class="habit-kpi-card">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+        <em>{{ item.hint }}</em>
       </article>
     </div>
 
-    <section class="card habit-wallet-panel" aria-labelledby="habit-wallet-title">
+    <div class="habit-center-tabs" role="tablist" aria-label="习惯中心分区">
+      <button
+        v-for="tab in tabItems"
+        :key="tab.id"
+        type="button"
+        role="tab"
+        class="habit-center-tab"
+        :class="{ active: activeTab === tab.id }"
+        :aria-selected="activeTab === tab.id"
+        @click="openTab(tab.id)"
+      >{{ tab.label }}</button>
+    </div>
+
+    <section v-show="activeTab === 'wallet'" class="card habit-wallet-panel" aria-labelledby="habit-wallet-title">
       <div class="section-title-row">
         <div>
           <h2 id="habit-wallet-title">钱包与心愿</h2>
@@ -348,7 +423,7 @@ watch(focusedHabitId, value => {
       </div>
     </section>
 
-    <section class="card habit-diagnostics-panel" aria-labelledby="habit-diagnostics-title">
+    <section v-show="activeTab === 'diagnostics'" class="card habit-diagnostics-panel" aria-labelledby="habit-diagnostics-title">
       <div class="section-title-row">
         <div>
           <h2 id="habit-diagnostics-title">习惯诊断</h2>
@@ -374,11 +449,11 @@ watch(focusedHabitId, value => {
       </div>
     </section>
 
-    <section class="card" aria-labelledby="today-habits-title">
+    <section v-show="activeTab === 'today' || activeTab === 'backfill'" class="card" aria-labelledby="today-habits-title">
       <div class="section-title-row">
         <div>
-          <h2 id="today-habits-title">今日待做</h2>
-          <p class="section-hint">多次习惯可继续记录；单次习惯完成后仍可在旧版补充备注或撤销。</p>
+          <h2 id="today-habits-title">{{ activeTab === 'backfill' ? '补卡与修正' : '今日执行' }}</h2>
+          <p class="section-hint">{{ activeTab === 'backfill' ? '选择日期后可备注打卡、补卡或撤销最近一次。' : '保留原来的快速打卡、备注、再记一次、撤销和减少次数。' }}</p>
         </div>
       </div>
       <div class="habit-quick-list">
@@ -421,7 +496,7 @@ watch(focusedHabitId, value => {
       </div>
     </section>
 
-    <section class="card habit-management-card" aria-labelledby="habit-management-title">
+    <section v-show="activeTab === 'library'" class="card habit-management-card" aria-labelledby="habit-management-title">
       <div class="section-title-row">
         <div>
           <h2 id="habit-management-title">{{ formTitle }}</h2>
@@ -490,10 +565,106 @@ watch(focusedHabitId, value => {
         <div v-if="!habits.habits.length" class="empty-state">还没有习惯。</div>
       </div>
     </section>
+
+    <section v-show="activeTab === 'sync'" class="card habit-sync-panel" aria-labelledby="habit-sync-title">
+      <div class="section-title-row">
+        <div>
+          <h2 id="habit-sync-title">习惯云同步</h2>
+          <p class="section-hint">独立文件 <code>/apps/habit-app/data.json</code>。手动合并与受保护上传在全局云同步页维护，不在此页自动触发。</p>
+        </div>
+        <button class="btn btn-primary" type="button" @click="router.push('/sync')">打开云同步</button>
+      </div>
+      <div class="habit-sync-points">
+        <article><strong>本地权威</strong><span>lifePlanData 习惯字段优先</span></article>
+        <article><strong>本地镜像</strong><span>habitAppData 仅兼容，remoteUploadEnabled=false</span></article>
+        <article><strong>远端操作</strong><span>预览 / 应用 / 受保护上传 / 首次创建 / 条件自动同步</span></article>
+      </div>
+    </section>
   </section>
 </template>
 
 <style scoped>
+.habit-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.habit-center-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.habit-kicker {
+  color: var(--faint, #7a8b80);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.habit-center-hero h2 {
+  margin: 6px 0;
+  font-size: 1.35rem;
+  color: #1f4633;
+}
+.habit-center-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.habit-center-kpis .habit-kpi-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(33, 110, 78, 0.05);
+  border: 1px solid rgba(33, 110, 78, 0.1);
+}
+.habit-center-kpis em {
+  color: var(--faint, #7a8b80);
+  font-size: 12px;
+  font-style: normal;
+}
+.habit-center-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.habit-center-tab {
+  border: 1px solid rgba(33, 110, 78, 0.14);
+  background: #f7faf8;
+  color: #5d7266;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.habit-center-tab.active {
+  background: #216e4e;
+  color: #fff;
+  border-color: #216e4e;
+}
+.habit-sync-points {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.habit-sync-points article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8faf8;
+  border: 1px solid rgba(42, 75, 56, 0.1);
+}
+.habit-sync-points span {
+  color: var(--faint, #7a8b80);
+  font-size: 13px;
+}
 .habit-quick-card.is-target { outline: 3px solid rgba(47, 128, 237, .24); outline-offset: 2px; }
 .habit-quick-actions.compact {
   display: flex;
@@ -869,6 +1040,13 @@ watch(focusedHabitId, value => {
   }
 }
 @media (max-width: 900px) {
+  .habit-center-kpis,
+  .habit-sync-points {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .habit-center-hero {
+    flex-direction: column;
+  }
   .habit-editor-form,
   .habit-advanced-grid,
   .habit-reward-form,
@@ -895,6 +1073,8 @@ watch(focusedHabitId, value => {
   }
 }
 @media (max-width: 620px) {
+  .habit-center-kpis,
+  .habit-sync-points,
   .habit-editor-form,
   .habit-advanced-grid,
   .habit-milestone-row,
