@@ -340,9 +340,9 @@ watch(focusedHabitId, value => {
         <p class="page-subtitle">PC 端负责执行、补卡审计、习惯库、钱包和分析；数据仍沿用 life 旧字段。</p>
       </div>
       <div class="habit-header-actions">
-        <button class="btn btn-secondary" type="button" @click="openTab('wallet')">币种/钱包</button>
+        <button class="btn btn-secondary" type="button" @click="openTab('wallet')">币种管理</button>
         <button class="btn btn-secondary" type="button" @click="openCreateWish">新增心愿</button>
-        <button class="btn btn-primary" type="button" @click="openCreateHabit">新建习惯</button>
+        <button class="btn btn-primary" type="button" @click="openCreateHabit">+ 新建习惯</button>
       </div>
     </header>
 
@@ -473,10 +473,12 @@ watch(focusedHabitId, value => {
               <button class="habit-quick-btn primary" type="button" :disabled="item.target === 1 && item.count > 0" @click="checkin(item.habit.id)">
                 {{ item.target > 1 && item.count > 0 ? '再记一次' : '打卡' }}
               </button>
+              <button class="btn btn-secondary habit-edit-shortcut" type="button" @click="draftFor(item.habit.id); openTab('backfill')">备注</button>
+              <button class="btn btn-secondary habit-edit-shortcut" type="button" :disabled="!checkinsForDraft(item.habit.id).length" @click="undoWithDraft(item.habit.id)">撤销</button>
               <button class="btn btn-secondary habit-edit-shortcut" type="button" @click="editHabit(item.habit)">编辑</button>
             </div>
           </div>
-          <div class="habit-correction-panel">
+          <div v-show="activeTab === 'backfill'" class="habit-correction-panel">
             <div class="habit-correction-form">
               <label><span>日期</span><input v-model="draftFor(item.habit.id).date" type="date" /></label>
               <label><span>备注</span><input v-model="draftFor(item.habit.id).note" maxlength="120" placeholder="本次打卡备注" /></label>

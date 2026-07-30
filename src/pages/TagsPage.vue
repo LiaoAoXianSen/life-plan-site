@@ -86,22 +86,22 @@ function totalCount(item: TagCenterItem) {
       </div>
     </header>
 
+    <div class="filter-bar tag-filter-bar">
+      <input v-model="keyword" type="search" aria-label="搜索标签" placeholder="搜索标签，例如 AI / 工作 / 学习" />
+      <select v-model="scope" aria-label="标签范围">
+        <option value="all">全部来源</option>
+        <option value="ideas">灵感</option>
+        <option value="materials">素材</option>
+        <option value="wheel">转盘</option>
+      </select>
+    </div>
+
     <div class="mini-summary-grid tag-summary" aria-label="标签摘要">
       <div class="mini-summary-card"><strong>{{ summary.all }}</strong><span>全部标签</span></div>
       <div class="mini-summary-card"><strong>{{ summary.ideas }}</strong><span>灵感标签</span></div>
       <div class="mini-summary-card"><strong>{{ summary.materials }}</strong><span>素材标签</span></div>
       <div class="mini-summary-card"><strong>{{ summary.wheel }}</strong><span>转盘标签</span></div>
       <div class="mini-summary-card"><strong>{{ summary.filtered }}</strong><span>当前筛选</span></div>
-    </div>
-
-    <div class="filter-bar tag-filter-bar">
-      <input v-model="keyword" type="search" aria-label="搜索标签" placeholder="搜索标签名称" />
-      <select v-model="scope" aria-label="标签范围">
-        <option value="all">全部范围</option>
-        <option value="ideas">灵感</option>
-        <option value="materials">素材</option>
-        <option value="wheel">转盘</option>
-      </select>
     </div>
 
     <div class="tag-center-grid">

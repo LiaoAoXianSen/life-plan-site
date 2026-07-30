@@ -62,7 +62,7 @@ test('Vue shell navigates through migrated pages without browser errors', async 
 test('todo writes main data and the compatible todo mirror', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/todos');
-    await page.getByRole('button', { name: '+ 新建待办' }).click();
+    await page.getByRole('button', { name: /新建.*待办/ }).click();
     await page.locator('#page-todos input[required]').fill('Vue 待办');
     await page.getByRole('button', { name: '保存待办' }).click();
     await expect(page.locator('.todo-table')).toContainText('Vue 待办');
@@ -662,8 +662,8 @@ test('wheel canvas click drag and tag stage preserve interaction contracts', asy
     await page.mouse.up();
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).wheelHistory.length)).toBe(2);
 
-    await page.locator('.wheel-selector select').selectOption('wheel-tag');
-    await expect(page.locator('.wheel-result')).toContainText('2 个候选标签');
+    await page.getByLabel('当前转盘', { exact: true }).selectOption('wheel-tag');
+    await expect(page.locator('.wheel-result')).toContainText('2 个候选');
     await canvasWrap.click();
     await expect(page.locator('.wheel-result')).toContainText('已锁定：晚餐');
     await canvasWrap.click();
@@ -1275,6 +1275,7 @@ test('habit note backfill edit and undo keep local mirror and ledger contracts',
     }, source);
 
     await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '补卡' }).click();
     const card = page.locator('.habit-quick-card').filter({ hasText: '复盘习惯' });
     const actionForm = card.locator('.habit-correction-form');
     await actionForm.locator('label').filter({ hasText: '日期' }).locator('input').fill(yesterday);
@@ -2509,7 +2510,7 @@ test('new record modal keeps blank initialization read-only then autosaves and r
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/records');
 
-    await page.getByRole('button', { name: '新建记录' }).click();
+    await page.locator('#page-records').getByRole('button', { name: /新建记录/ }).click();
     let modal = page.getByRole('dialog');
     await modal.getByRole('button', { name: '日记', exact: true }).click();
     await expect(modal.getByLabel('标题')).toHaveValue(/^\d{4}年\d{1,2}月\d{1,2}日 星期[一二三四五六日]$/);
@@ -2517,7 +2518,7 @@ test('new record modal keeps blank initialization read-only then autosaves and r
     await page.keyboard.press('Escape');
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records)).toEqual([]);
 
-    await page.getByRole('button', { name: '新建记录' }).click();
+    await page.locator('#page-records').getByRole('button', { name: /新建记录/ }).click();
     modal = page.getByRole('dialog');
     await modal.getByRole('button', { name: '日记', exact: true }).click();
     await modal.locator('summary').filter({ hasText: /^正文$/ }).click();
@@ -2541,7 +2542,7 @@ test('new record modal keeps blank initialization read-only then autosaves and r
     expect(stored.records[0].id).toBe(diaryId);
     expect(stored.records[0].content).toContain('# 明日重点\n关闭前立即保存的新重点');
 
-    await page.getByRole('button', { name: '新建记录' }).click();
+    await page.locator('#page-records').getByRole('button', { name: /新建记录/ }).click();
     modal = page.getByRole('dialog');
     await modal.getByRole('button', { name: '日记', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -2556,7 +2557,7 @@ test('new idea record flushes its structured and idea fields when the route leav
     const source = emptyData({ todos: [todoFixture('idea-draft-todo', '草稿关联待办')] });
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/records');
-    await page.getByRole('button', { name: '新建记录' }).click();
+    await page.locator('#page-records').getByRole('button', { name: /新建记录/ }).click();
     const modal = page.getByRole('dialog');
     await modal.getByRole('button', { name: '灵感碎片', exact: true }).click();
     await modal.getByLabel('标题').fill('路由离开前的灵感草稿');
@@ -4270,7 +4271,7 @@ test('todo independent auto sync stays idle for stale unsafe config', async ({ p
 
     await page.clock.install();
     await page.goto('/#/todos');
-    await page.getByRole('button', { name: '+ 新建待办' }).click();
+    await page.getByRole('button', { name: /新建.*待办/ }).click();
     await page.locator('#page-todos input[required]').fill('禁用状态编辑');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(25000);
@@ -4372,7 +4373,7 @@ test('todo independent auto sync uploads local dirty data with If-Match and veri
             lastRemoteEtag: '"todo-auto-v1"',
         }));
     }, hashes);
-    await page.getByRole('button', { name: '+ 新建待办' }).click();
+    await page.getByRole('button', { name: /新建.*待办/ }).click();
     await page.locator('#page-todos input[required]').fill('自动同步新增待办');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.goto('/#/sync');
@@ -4449,7 +4450,7 @@ test('todo independent auto sync never creates a missing remote file', async ({ 
 
     await page.clock.install();
     await page.goto('/#/todos');
-    await page.getByRole('button', { name: '+ 新建待办' }).click();
+    await page.getByRole('button', { name: /新建.*待办/ }).click();
     await page.locator('#page-todos input[required]').fill('缺失云端后仍不创建');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(20000);
@@ -4578,7 +4579,7 @@ test('main auto sync uploads local dirty data after the debounce window', async 
     // Allow startup auto-sync (if any) to settle with a clean, non-dirty local state.
     await page.waitForTimeout(200);
     const putsBeforeEdit = calls.filter(item => item.method === 'PUT').length;
-    await page.getByRole('button', { name: '+ 新建待办' }).click();
+    await page.getByRole('button', { name: /新建.*待办/ }).click();
     await page.locator('#page-todos input[required]').fill('触发自动同步');
     await page.getByRole('button', { name: '保存待办' }).click();
     await expect(page.locator('.todo-table')).toContainText('触发自动同步');
@@ -4661,7 +4662,7 @@ test('main auto sync stays idle when autoSync is disabled', async ({ page }) => 
 
     await page.clock.install();
     await page.goto('/#/todos');
-    await page.getByRole('button', { name: '+ 新建待办' }).click();
+    await page.getByRole('button', { name: /新建.*待办/ }).click();
     await page.locator('#page-todos input[required]').fill('关闭自动同步后编辑');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(25000);

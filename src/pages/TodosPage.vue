@@ -347,11 +347,10 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
     <header class="page-header">
       <div>
         <div class="page-title">待办总览</div>
-        <p class="todo-page-summary">{{ todosStore.todos.filter(todo => !todo.done).length }} 项待推进，{{ todosStore.todos.filter(todo => todo.done).length }} 项已完成</p>
       </div>
       <div class="page-actions">
         <button class="btn btn-primary" type="button" :aria-expanded="showCreateForm" aria-controls="todo-create-panel" @click="toggleCreateForm">
-          {{ showCreateForm ? '收起新建' : '+ 新建待办' }}
+          {{ showCreateForm ? '收起新建' : '+ 新建通用待办' }}
         </button>
       </div>
     </header>
@@ -371,14 +370,15 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
       </div>
     </form>
 
-    <div class="filter-bar">
-      <input v-model="query" class="todo-filter-query" type="search" aria-label="搜索待办" placeholder="搜索待办" />
-      <label class="todo-filter-date"><span>开始</span><input v-model="startDate" type="date" aria-label="筛选开始日期" /></label>
-      <label class="todo-filter-date"><span>结束</span><input v-model="endDate" type="date" aria-label="筛选结束日期" /></label>
+    <div class="filter-bar todo-legacy-filters">
+      <label class="todo-filter-date"><span>日期：</span><input v-model="startDate" type="date" aria-label="筛选开始日期" /></label>
+      <span class="todo-filter-sep">至</span>
+      <label class="todo-filter-date"><input v-model="endDate" type="date" aria-label="筛选结束日期" /></label>
       <select v-model="status" aria-label="待办状态"><option value="all">全部状态</option><option value="open">未完成</option><option value="done">已完成</option></select>
       <select v-model="urgency" aria-label="待办紧急度"><option value="all">全部紧急度</option><option value="urgent">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select>
       <select v-model="group" aria-label="待办分组"><option value="all">全部分组</option><option v-for="item in groupOptions" :key="item" :value="item">{{ item }}</option></select>
-      <select v-model="mode" aria-label="待办类型"><option value="all">全部类型</option><option value="exclusive">专属待办</option><option value="shared">通用待办</option></select>
+      <select v-model="mode" aria-label="待办类型"><option value="all">全部模式</option><option value="exclusive">专属待办</option><option value="shared">通用待办</option></select>
+      <input v-model="query" class="todo-filter-query" type="search" aria-label="搜索待办" placeholder="搜索任务" />
     </div>
 
     <div class="todo-workspace" :class="{ 'has-detail': showDetailPanel }">

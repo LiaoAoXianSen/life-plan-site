@@ -86,10 +86,36 @@
 #page-todos .todo-create-form .form-row { gap: 10px; }
 #page-todos .todo-create-form .form-group { margin-bottom: 8px; }
 #page-todos .todo-create-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-#page-todos .filter-bar { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-bottom: 12px; padding: 10px 12px; }
-#page-todos .filter-bar .todo-filter-query { grid-column: span 2; }
-#page-todos .filter-bar .todo-filter-date { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; min-width: 0; }
-.todo-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 12px; align-items: start; }
+#page-todos .filter-bar,
+#page-todos .todo-legacy-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+#page-todos .todo-legacy-filters .todo-filter-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+#page-todos .todo-legacy-filters .todo-filter-sep {
+  color: var(--muted);
+  font-size: 12px;
+}
+#page-todos .todo-legacy-filters .todo-filter-query {
+  min-width: 160px;
+  flex: 1 1 180px;
+}
+#page-todos .todo-legacy-filters select,
+#page-todos .todo-legacy-filters input[type="date"],
+#page-todos .todo-legacy-filters input[type="search"] {
+  min-height: 36px;
+}
+.todo-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.todo-workspace.has-detail { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); }
 .todo-list-pane { min-width: 0; overflow-x: auto; }
 /* Denser browse-first table */
 #page-todos .todo-table th,

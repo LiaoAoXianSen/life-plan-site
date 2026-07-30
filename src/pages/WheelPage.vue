@@ -12,6 +12,7 @@ const resultId = ref('');
 const spinning = ref(false);
 const rotation = ref(0);
 const notice = ref('');
+const showManagement = ref(true);
 let spinTimer: number | undefined;
 let dragState: { x: number; y: number; moved: boolean } | null = null;
 let suppressCanvasClick = false;
@@ -182,7 +183,7 @@ function confirmAction(message: string, action: () => void, success = '') { if (
 function itemTagIds(item: WheelItem) { return Array.isArray(item.tagIds) ? item.tagIds as string[] : []; }
 function libraryTagNames(item: WheelItem) { return itemTagIds(item).map(id => wheelStore.tags.find(tag => tag.id === id)?.name).filter(Boolean).join('、') || '未分类'; }
 function resetWheelForm() { Object.assign(wheelForm, { id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' }); }
-function editWheel() { const wheel = selectedWheel.value; if (!wheel) return; Object.assign(wheelForm, { id: wheel.id, name: wheel.name, mode: wheel.mode, tagIds: [...(wheel.tagIds || [])], itemsText: wheel.items.map(item => `${item.name},${item.weight}`).join('\n') }); }
+function editWheel() { const wheel = selectedWheel.value; if (!wheel) return; showManagement.value = true; Object.assign(wheelForm, { id: wheel.id, name: wheel.name, mode: wheel.mode, tagIds: [...(wheel.tagIds || [])], itemsText: wheel.items.map(item => `${item.name},${item.weight}`).join('\n') }); }
 function parseItems(text: string) {
   return text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
     const match = line.match(/^(.*?)[,，\t]\s*(\d+(?:\.\d+)?)%?\s*$/);
@@ -321,6 +322,7 @@ function importJson(event: Event) {
         <p class="wheel-subtitle">普通转盘、标签二段抽取、公共项库和抽取历史都在这里。</p>
       </div>
       <div class="wheel-actions">
+        <button class="btn btn-secondary" type="button" @click="showManagement = !showManagement">{{ showManagement ? '收起管理' : '管理' }}</button>
         <button class="btn btn-secondary" type="button" @click="exportJson">导出 JSON</button>
         <label class="btn btn-secondary import-button">恢复备份<input type="file" accept=".json,application/json" @change="importJson" /></label>
         <button class="btn btn-secondary" type="button" @click="exportCsv">导出 CSV</button>
@@ -329,79 +331,107 @@ function importJson(event: Event) {
 
     <p v-if="notice" class="wheel-notice" role="status">{{ notice }}</p>
 
-    <section v-if="selectedWheel" class="card wheel-mode-hero" aria-label="当前转盘摘要">
-      <div class="wheel-mode-hero-main">
+    <section v-if="selectedWheel" class="card wheel-focus-shell" aria-label="转盘主舞台">
+      <div class="wheel-focus-toolbar">
         <div class="wheel-mode-pills">
-          <span class="wheel-mode-pill" :class="{ active: selectedWheel.mode !== 'tag' }">普通转盘</span>
-          <span class="wheel-mode-pill" :class="{ active: selectedWheel.mode === 'tag' }">标签转盘</span>
-          <span class="wheel-mode-pill soft">{{ selectedWheel.name }}</span>
+          <button type="button" class="wheel-mode-pill" :class="{ active: selectedWheel.mode !== 'tag' }" @click="selectedWheel.mode === 'tag' ? undefined : null">普通转盘</button>
+          <button type="button" class="wheel-mode-pill" :class="{ active: selectedWheel.mode === 'tag' }">标签转盘</button>
         </div>
-        <h2 class="wheel-mode-title">{{ selectedWheel.name }}</h2>
-        <p class="wheel-subtitle">
-          <template v-if="selectedWheel.mode === 'tag' && !stageTag">先抽一个标签，再抽标签下的公共项；也可以单独点某个标签直接转。</template>
-          <template v-else-if="stageTag">已锁定标签「{{ stageTag.name }}」，下一转抽取具体内容。</template>
-          <template v-else>点击转盘或下方按钮开始；结果可转入今日待办。</template>
-        </p>
-        <div v-if="selectedWheel.mode === 'tag' && availableTags.length" class="direct-tags hero-tags">
-          <button
-            v-for="tag in availableTags"
-            :key="tag.id"
-            type="button"
-            class="tag-chip"
-            :style="{ '--tag-color': tag.color }"
-            @click="directTag(tag)"
-          >{{ tag.name }} · {{ wheelStore.candidates(selectedWheel, tag.id).length }} 项</button>
-        </div>
+        <label class="form-group wheel-selector compact">
+          <select v-model="selectedId" :disabled="!wheelStore.wheels.length" aria-label="当前转盘">
+            <option v-for="wheel in wheelStore.wheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }}{{ wheel.mode === 'tag' ? ' · 标签' : '' }}</option>
+          </select>
+        </label>
+        <button class="btn btn-secondary" type="button" @click="showManagement = !showManagement">{{ showManagement ? '收起管理' : '管理' }}</button>
       </div>
-      <div class="wheel-mode-hero-actions">
-        <button class="btn btn-primary wheel-spin" type="button" :disabled="spinning || !displayEntries.length" @click="nextSpin">
-          {{ spinning ? '转动中…' : isTagSecondStage ? '抽取具体内容' : selectedWheel.mode === 'tag' ? '先抽一个标签' : '转一转' }}
-        </button>
-        <button class="btn btn-secondary" type="button" :disabled="spinning" @click="stageTag = null; resultId = ''; say('已重置本轮状态')">刷新</button>
+
+      <div class="wheel-focus-stage">
+        <div class="wheel-focus-copy">
+          <div class="wheel-mode-badge" v-if="selectedWheel.mode === 'tag'">标签转盘 · 两段抽取</div>
+          <h2 class="wheel-mode-title">{{ selectedWheel.name }}</h2>
+          <p class="wheel-subtitle">
+            <template v-if="selectedWheel.mode === 'tag' && !stageTag">先抽一个标签，再抽该标签下的公共项；也可以单独点某个标签直接转。</template>
+            <template v-else-if="stageTag">已锁定标签「{{ stageTag.name }}」，下一转抽取具体内容。</template>
+            <template v-else>准备开始，点击下方大按钮或转盘本身。</template>
+          </p>
+          <div v-if="selectedWheel.mode === 'tag' && availableTags.length" class="direct-tags hero-tags">
+            <button
+              v-for="tag in availableTags"
+              :key="tag.id"
+              type="button"
+              class="tag-chip"
+              :style="{ '--tag-color': tag.color }"
+              @click="directTag(tag)"
+            >{{ tag.name }} · {{ wheelStore.candidates(selectedWheel, tag.id).length }} 项</button>
+          </div>
+          <div class="wheel-focus-actions">
+            <button class="btn btn-primary wheel-spin large" type="button" :disabled="spinning || !displayEntries.length" @click="nextSpin">
+              {{ spinning ? '转动中…' : isTagSecondStage ? '抽取具体内容' : selectedWheel.mode === 'tag' ? '先抽一个标签' : '转一转' }}
+            </button>
+            <button class="btn btn-secondary" type="button" :disabled="spinning" @click="stageTag = null; resultId = ''; say('已重置本轮状态')">刷新</button>
+          </div>
+          <div class="wheel-result focus" aria-live="polite">
+            <template v-if="currentResult">
+              <strong>{{ currentResult!.resultName }}</strong>
+              <span>{{ currentResult!.mode === 'tag' ? `标签：${currentResult!.tagName || '-'}` : '普通转盘结果' }}</span>
+              <button class="btn btn-primary" :disabled="Boolean(currentResult!.convertedTodoId)" @click="handle(() => wheelStore.convertHistoryToTodo(currentResult!.id), '已转入今日待办')">{{ currentResult!.convertedTodoId ? '已转入待办' : '转入待办' }}</button>
+            </template>
+            <template v-else-if="stageTag">
+              <strong>已锁定：{{ stageTag.name }}</strong>
+              <span>再转一次，从该标签的公共项里抽取。</span>
+            </template>
+            <template v-else>
+              <strong>准备开始</strong>
+              <span>{{ displayEntries.length }} 个候选</span>
+            </template>
+          </div>
+        </div>
+
+        <div class="wheel-focus-canvas">
+          <div class="wheel-pointer">▼</div>
+          <div
+            class="wheel-canvas-wrap"
+            :class="{ spinning }"
+            role="button"
+            tabindex="0"
+            :aria-label="isTagSecondStage ? '抽取具体内容' : selectedWheel?.mode === 'tag' ? '开始抽标签' : '开始转动'"
+            @click="canvasClick"
+            @keydown.enter.prevent="nextSpin"
+            @keydown.space.prevent="nextSpin"
+            @pointerdown="canvasPointerDown"
+            @pointermove="canvasPointerMove"
+            @pointerup="canvasPointerUp"
+            @pointercancel="dragState = null"
+          >
+            <canvas ref="canvasRef" class="wheel-canvas" :style="{ transform: `rotate(${rotation}deg)` }" />
+            <span class="wheel-center-label">{{ spinning ? '转动中' : isTagSecondStage ? '抽项目' : selectedWheel?.mode === 'tag' ? '抽标签' : 'GO' }}</span>
+          </div>
+        </div>
       </div>
     </section>
 
-    <div class="wheel-layout">
-      <article class="card wheel-stage-card">
-        <div class="wheel-toolbar">
-          <label class="form-group wheel-selector"><span>当前转盘</span><select v-model="selectedId" :disabled="!wheelStore.wheels.length"><option v-for="wheel in wheelStore.wheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }} · {{ wheel.mode === 'tag' ? '标签' : '普通' }}</option></select></label>
-          <button class="btn btn-secondary" type="button" @click="editWheel" :disabled="!selectedWheel">编辑当前</button>
-          <button class="btn btn-danger" type="button" @click="removeWheel" :disabled="!selectedWheel">删除</button>
-        </div>
-        <div class="wheel-pointer">▼</div>
-        <div
-          class="wheel-canvas-wrap"
-          :class="{ spinning }"
-          role="button"
-          tabindex="0"
-          :aria-label="isTagSecondStage ? '抽取具体内容' : selectedWheel?.mode === 'tag' ? '开始抽标签' : '开始转动'"
-          @click="canvasClick"
-          @keydown.enter.prevent="nextSpin"
-          @keydown.space.prevent="nextSpin"
-          @pointerdown="canvasPointerDown"
-          @pointermove="canvasPointerMove"
-          @pointerup="canvasPointerUp"
-          @pointercancel="dragState = null"
-        >
-          <canvas ref="canvasRef" class="wheel-canvas" :style="{ transform: `rotate(${rotation}deg)` }" />
-          <span class="wheel-center-label">{{ spinning ? '转动中' : isTagSecondStage ? '抽项目' : selectedWheel?.mode === 'tag' ? '抽标签' : 'GO' }}</span>
-        </div>
-        <div class="wheel-result" aria-live="polite"><template v-if="currentResult"><strong>{{ currentResult!.resultName }}</strong><span>{{ currentResult!.mode === 'tag' ? `标签：${currentResult!.tagName || '-'}` : '普通转盘结果' }}</span><button class="btn btn-primary" :disabled="Boolean(currentResult!.convertedTodoId)" @click="handle(() => wheelStore.convertHistoryToTodo(currentResult!.id), '已转入今日待办')">{{ currentResult!.convertedTodoId ? '已转入待办' : '转入待办' }}</button></template><template v-else-if="stageTag"><strong>已锁定：{{ stageTag.name }}</strong><span>再转一次，从该标签的公共项里抽取。</span></template><template v-else><strong>{{ selectedWheel ? '准备开始' : '先创建一个转盘' }}</strong><span>{{ displayEntries.length }} 个{{ selectedWheel?.mode === 'tag' ? '候选标签' : '候选' }}</span></template></div>
-        <button class="btn btn-primary wheel-spin" type="button" :disabled="spinning || !selectedWheel" @click="nextSpin">{{ isTagSecondStage ? '抽取具体内容' : selectedWheel?.mode === 'tag' ? '开始抽标签' : '开始转动' }}</button>
-        <div v-if="selectedWheel?.mode === 'tag' && availableTags.length" class="direct-tags"><span>直接抽标签：</span><button v-for="tag in availableTags" :key="tag.id" type="button" class="tag-chip" :style="{ '--tag-color': tag.color }" @click="directTag(tag)">{{ tag.name }} · {{ wheelStore.candidates(selectedWheel, tag.id).length }}</button></div>
-      </article>
+    <div v-show="showManagement" class="wheel-management-block">
+      <div class="wheel-layout">
+        <article class="card wheel-stage-card">
+          <div class="wheel-toolbar">
+            <label class="form-group wheel-selector"><span>当前转盘</span><select v-model="selectedId" :disabled="!wheelStore.wheels.length"><option v-for="wheel in wheelStore.wheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }} · {{ wheel.mode === 'tag' ? '标签' : '普通' }}</option></select></label>
+            <button class="btn btn-secondary" type="button" @click="editWheel" :disabled="!selectedWheel">编辑当前</button>
+            <button class="btn btn-danger" type="button" @click="removeWheel" :disabled="!selectedWheel">删除</button>
+          </div>
+          <p class="hint">下方表单用于创建/编辑转盘、标签和公共项；主舞台默认保持专注抽取。</p>
+        </article>
 
-      <aside class="wheel-side-stack">
-        <form class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式<select v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)"><option value="normal">普通转盘</option><option value="tag">标签转盘（两段抽取）</option></select></label></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><label>选项（每行一项；可用“名称,权重”）<textarea v-model="wheelForm.itemsText" rows="4" placeholder="阅读,2&#10;散步,1" /></label></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
-        <article class="card history-card"><div class="card-title-row"><div class="card-title">最近抽取</div><button v-if="wheelStore.history.length" type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div><div v-for="entry in wheelStore.history.slice(0, 8)" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ entry.createdAt }}</span></div><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></div><p v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</p></article>
-      </aside>
-    </div>
+        <aside class="wheel-side-stack">
+          <form class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式<select v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)"><option value="normal">普通转盘</option><option value="tag">标签转盘（两段抽取）</option></select></label></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><label>选项（每行一项；可用“名称,权重”）<textarea v-model="wheelForm.itemsText" rows="4" placeholder="阅读,2&#10;散步,1" /></label></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
+          <article class="card history-card"><div class="card-title-row"><div class="card-title">最近抽取</div><button v-if="wheelStore.history.length" type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div><div v-for="entry in wheelStore.history.slice(0, 8)" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ entry.createdAt }}</span></div><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></div><p v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</p></article>
+        </aside>
+      </div>
 
-    <div class="wheel-management-summary" aria-label="转盘管理概览">
-      <span v-for="item in managementStats" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</span>
-    </div>
+      <div class="wheel-management-summary" aria-label="转盘管理概览">
+        <span v-for="item in managementStats" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</span>
+      </div>
 
-    <div class="wheel-management-grid">
+      <div class="wheel-management-grid">
       <article class="card management-card">
         <div class="card-title">普通转盘选项</div>
         <form v-if="selectedWheel?.mode === 'normal'" class="inline-editor management-form option-form" @submit.prevent="submitOption">
@@ -464,18 +494,27 @@ function importJson(event: Event) {
         <p v-if="!filteredLibraryItems.length" class="empty-state">当前筛选下没有公共项。</p>
       </article>
     </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.wheel-mode-hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px;padding:18px 20px}
-.wheel-mode-hero-main{display:grid;gap:10px;min-width:0;flex:1}
-.wheel-mode-hero-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.wheel-focus-shell{margin-bottom:16px;padding:18px 20px 22px}
+.wheel-focus-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+.wheel-focus-toolbar .wheel-selector{margin:0;min-width:180px}
+.wheel-focus-toolbar .wheel-selector select{min-height:36px}
+.wheel-focus-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.9fr);gap:18px;align-items:center}
+.wheel-focus-copy{display:grid;gap:12px;min-width:0;justify-items:start;text-align:left}
+.wheel-focus-canvas{display:grid;justify-items:center;min-width:0}
+.wheel-mode-badge{display:inline-flex;padding:4px 10px;border-radius:999px;background:#fff4ea;color:#b15c18;font-size:.78rem;font-weight:800}
+.wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
+.wheel-result.focus{align-items:flex-start;text-align:left;min-height:auto;padding:10px 0 0}
+.wheel-management-block{margin-top:8px}
 .wheel-mode-pills{display:flex;flex-wrap:wrap;gap:8px}
-.wheel-mode-pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;background:#eef4f0;color:#5d7266;font-size:.82rem;font-weight:700}
+.wheel-mode-pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;border:1px solid transparent;background:#eef4f0;color:#5d7266;font-size:.82rem;font-weight:700;cursor:default}
 .wheel-mode-pill.active{background:#216e4e;color:#fff}
-.wheel-mode-pill.soft{background:#f7faf8;border:1px solid rgba(33,110,78,.12)}
-.wheel-mode-title{margin:0;font-size:1.45rem;color:#1f4633}
+.wheel-mode-title{margin:0;font-size:1.7rem;color:#1f4633}
 .hero-tags{justify-content:flex-start;margin-top:0}
-.wheel-header,.wheel-toolbar,.wheel-actions,.inline-actions,.card-title-row,.entity-row,.history-row,.wheel-result,.wheel-management-grid,.inline-editor,.direct-tags{display:flex;align-items:center}.wheel-header,.wheel-toolbar,.card-title-row,.entity-row,.history-row{justify-content:space-between;gap:12px}.wheel-header{align-items:flex-start}.wheel-subtitle,.hint{margin:5px 0 0;color:var(--text-secondary,#66756c);font-size:.9rem}.wheel-actions,.inline-actions{flex-wrap:wrap}.import-button{cursor:pointer}.import-button input{display:none}.wheel-notice{margin:0 0 14px;padding:10px 13px;border-radius:9px;background:#edf6ef;color:#25613d}.wheel-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(290px,.8fr);gap:18px}.wheel-side-stack{display:grid;gap:18px}.wheel-stage-card{text-align:center}.wheel-selector{text-align:left;min-width:200px}.wheel-selector span{display:block;margin-bottom:4px}.wheel-pointer{position:relative;z-index:2;color:#e75d4d;font-size:28px;line-height:.5;margin-top:16px}.wheel-canvas-wrap{position:relative;width:min(390px,86vw);aspect-ratio:1;margin:-1px auto 14px;border:10px solid #f7faf8;border-radius:50%;background:#eef4f0;box-shadow:0 8px 28px rgba(25,61,42,.16),inset 0 0 0 2px rgba(31,83,57,.08);cursor:pointer;touch-action:none;user-select:none;overflow:hidden}.wheel-canvas-wrap:focus-visible{outline:3px solid rgba(47,128,237,.32);outline-offset:4px}.wheel-canvas{display:block;width:100%;height:100%;border-radius:50%;transition:transform 560ms cubic-bezier(.16,.85,.22,1);will-change:transform}.wheel-canvas-wrap.spinning .wheel-canvas{transition-duration:560ms}.wheel-center-label{position:absolute;inset:50% auto auto 50%;display:grid;place-items:center;width:82px;height:82px;border-radius:50%;background:#fff;color:#285940;font-weight:800;transform:translate(-50%,-50%);box-shadow:0 2px 9px rgba(0,0,0,.12);pointer-events:none}.wheel-result{min-height:68px;justify-content:center;flex-direction:column;gap:3px}.wheel-result strong{font-size:1.15rem}.wheel-result span,.history-row span,.entity-row em{color:var(--text-secondary,#66756c);font-style:normal;font-size:.82rem}.wheel-spin{min-width:180px}.direct-tags{justify-content:center;flex-wrap:wrap;margin-top:15px;gap:7px;font-size:.85rem}.tag-chip{border:1px solid color-mix(in srgb,var(--tag-color) 35%,white);background:color-mix(in srgb,var(--tag-color) 12%,white);color:#32483a;border-radius:999px;padding:5px 9px;cursor:pointer}.compact-form label{display:block}.tag-checks,.batch-tag-checks{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}.tag-checks label,.batch-tag-checks label{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;background:#f5f7f5;border-radius:7px;font-size:.84rem}.inline-editor{gap:8px;flex-wrap:wrap;margin:10px 0 14px}.inline-editor input:not([type=checkbox]){width:100px}.inline-editor input:first-child{flex:1;min-width:130px}.entity-row,.history-row{padding:9px 0;border-top:1px solid rgba(42,75,56,.1);text-align:left}.entity-row>span:first-child,.history-row>div{display:flex;align-items:center;gap:7px;min-width:0}.entity-row em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.entity-row strong,.history-row strong{min-width:0;overflow-wrap:anywhere}.library-row{justify-content:start;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px}.library-row>span:nth-child(2){display:grid;gap:2px;min-width:0}.library-row>span:last-child{display:flex;justify-content:flex-end;gap:4px;min-width:0}.library-row.selected{background:rgba(33,110,78,.05)}.library-select{display:grid;place-items:center}.library-filter{display:flex;align-items:center;gap:8px;font-size:.86rem;color:var(--text-secondary,#66756c)}.library-filter select{min-width:130px}.library-batch-bar{display:grid;grid-template-columns:auto auto minmax(180px,1fr);gap:10px;align-items:center;margin:8px 0 4px;padding:10px;border:1px solid rgba(42,75,56,.12);border-radius:8px;background:#f8faf8}.library-batch-bar .inline-actions{grid-column:1/-1}.select-all-row{display:inline-flex;align-items:center;gap:6px;font-size:.88rem}.color-dot{display:inline-block;width:10px;height:10px;border-radius:50%}.link-button{border:0;background:transparent;color:#316c4a;cursor:pointer;padding:3px}.link-button:disabled{color:#98a49d;cursor:not-allowed}.danger-text{color:#b84f45}.wheel-management-grid{align-items:start;display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:12px}.wheel-management-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:18px}.wheel-management-summary span{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:5px;min-width:0;padding:9px 11px;border:1px solid rgba(42,75,56,.12);border-radius:8px;background:#f8faf8;color:var(--text-secondary,#66756c);font-size:.86rem}.wheel-management-summary strong{color:#285940;font-size:1.05rem}.management-card{min-width:0}.management-form{display:grid;grid-template-columns:minmax(160px,1fr) 92px auto;align-items:end}.management-form .inline-actions{grid-column:1/-1}.field-label{display:grid;gap:4px;min-width:0;color:var(--text-secondary,#66756c);font-size:.82rem}.field-label input,.field-label select,.field-label textarea{width:100%;min-width:0}.field-small{max-width:110px}.color-field{max-width:90px}.color-field input{min-height:38px;padding:4px}.check-label{display:inline-flex;align-items:center;gap:6px;min-height:38px;white-space:nowrap}.library-card{grid-column:1/-1}.library-form{display:grid;grid-template-columns:minmax(180px,1fr) 92px auto;gap:8px;align-items:end;margin:10px 0}.library-form .tag-checks,.library-form .inline-actions{grid-column:1/-1}.empty-state{padding:12px 0}.history-card{max-height:430px;overflow:auto}@media (max-width:850px){.wheel-layout,.wheel-management-grid{grid-template-columns:1fr}.wheel-mode-hero{flex-direction:column}.wheel-header{flex-direction:column}.library-card{grid-column:auto}.library-form,.management-form{grid-template-columns:minmax(0,1fr) 92px auto}.wheel-canvas-wrap{width:min(350px,82vw)}}@media (max-width:560px){.wheel-toolbar{align-items:stretch;flex-wrap:wrap}.wheel-selector{width:100%}.wheel-canvas-wrap{width:280px}.wheel-management-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.library-form,.management-form{grid-template-columns:1fr}.field-small,.color-field{max-width:none}.library-form>label,.management-form>label{grid-column:1/-1}.library-batch-bar{grid-template-columns:1fr}.library-row{grid-template-columns:auto minmax(0,1fr);align-items:start}.library-row>span:last-child{grid-column:1/-1;justify-content:flex-start}.library-filter{width:100%;justify-content:space-between}.wheel-actions .btn{font-size:.82rem}}
+.wheel-header,.wheel-toolbar,.wheel-actions,.inline-actions,.card-title-row,.entity-row,.history-row,.wheel-result,.wheel-management-grid,.inline-editor,.direct-tags{display:flex;align-items:center}.wheel-header,.wheel-toolbar,.card-title-row,.entity-row,.history-row{justify-content:space-between;gap:12px}.wheel-header{align-items:flex-start}.wheel-subtitle,.hint{margin:5px 0 0;color:var(--text-secondary,#66756c);font-size:.9rem}.wheel-actions,.inline-actions{flex-wrap:wrap}.import-button{cursor:pointer}.import-button input{display:none}.wheel-notice{margin:0 0 14px;padding:10px 13px;border-radius:9px;background:#edf6ef;color:#25613d}.wheel-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(290px,.8fr);gap:18px}.wheel-side-stack{display:grid;gap:18px}.wheel-stage-card{text-align:center}.wheel-selector{text-align:left;min-width:200px}.wheel-selector span{display:block;margin-bottom:4px}.wheel-pointer{position:relative;z-index:2;color:#e75d4d;font-size:28px;line-height:.5;margin-top:16px}.wheel-canvas-wrap{position:relative;width:min(390px,86vw);aspect-ratio:1;margin:-1px auto 14px;border:10px solid #f7faf8;border-radius:50%;background:#eef4f0;box-shadow:0 8px 28px rgba(25,61,42,.16),inset 0 0 0 2px rgba(31,83,57,.08);cursor:pointer;touch-action:none;user-select:none;overflow:hidden}.wheel-canvas-wrap:focus-visible{outline:3px solid rgba(47,128,237,.32);outline-offset:4px}.wheel-canvas{display:block;width:100%;height:100%;border-radius:50%;transition:transform 560ms cubic-bezier(.16,.85,.22,1);will-change:transform}.wheel-canvas-wrap.spinning .wheel-canvas{transition-duration:560ms}.wheel-center-label{position:absolute;inset:50% auto auto 50%;display:grid;place-items:center;width:82px;height:82px;border-radius:50%;background:#fff;color:#285940;font-weight:800;transform:translate(-50%,-50%);box-shadow:0 2px 9px rgba(0,0,0,.12);pointer-events:none}.wheel-result{min-height:68px;justify-content:center;flex-direction:column;gap:3px}.wheel-result strong{font-size:1.15rem}.wheel-result span,.history-row span,.entity-row em{color:var(--text-secondary,#66756c);font-style:normal;font-size:.82rem}.wheel-spin{min-width:180px}.direct-tags{justify-content:center;flex-wrap:wrap;margin-top:15px;gap:7px;font-size:.85rem}.tag-chip{border:1px solid color-mix(in srgb,var(--tag-color) 35%,white);background:color-mix(in srgb,var(--tag-color) 12%,white);color:#32483a;border-radius:999px;padding:5px 9px;cursor:pointer}.compact-form label{display:block}.tag-checks,.batch-tag-checks{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}.tag-checks label,.batch-tag-checks label{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;background:#f5f7f5;border-radius:7px;font-size:.84rem}.inline-editor{gap:8px;flex-wrap:wrap;margin:10px 0 14px}.inline-editor input:not([type=checkbox]){width:100px}.inline-editor input:first-child{flex:1;min-width:130px}.entity-row,.history-row{padding:9px 0;border-top:1px solid rgba(42,75,56,.1);text-align:left}.entity-row>span:first-child,.history-row>div{display:flex;align-items:center;gap:7px;min-width:0}.entity-row em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.entity-row strong,.history-row strong{min-width:0;overflow-wrap:anywhere}.library-row{justify-content:start;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px}.library-row>span:nth-child(2){display:grid;gap:2px;min-width:0}.library-row>span:last-child{display:flex;justify-content:flex-end;gap:4px;min-width:0}.library-row.selected{background:rgba(33,110,78,.05)}.library-select{display:grid;place-items:center}.library-filter{display:flex;align-items:center;gap:8px;font-size:.86rem;color:var(--text-secondary,#66756c)}.library-filter select{min-width:130px}.library-batch-bar{display:grid;grid-template-columns:auto auto minmax(180px,1fr);gap:10px;align-items:center;margin:8px 0 4px;padding:10px;border:1px solid rgba(42,75,56,.12);border-radius:8px;background:#f8faf8}.library-batch-bar .inline-actions{grid-column:1/-1}.select-all-row{display:inline-flex;align-items:center;gap:6px;font-size:.88rem}.color-dot{display:inline-block;width:10px;height:10px;border-radius:50%}.link-button{border:0;background:transparent;color:#316c4a;cursor:pointer;padding:3px}.link-button:disabled{color:#98a49d;cursor:not-allowed}.danger-text{color:#b84f45}.wheel-management-grid{align-items:start;display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:12px}.wheel-management-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:18px}.wheel-management-summary span{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:5px;min-width:0;padding:9px 11px;border:1px solid rgba(42,75,56,.12);border-radius:8px;background:#f8faf8;color:var(--text-secondary,#66756c);font-size:.86rem}.wheel-management-summary strong{color:#285940;font-size:1.05rem}.management-card{min-width:0}.management-form{display:grid;grid-template-columns:minmax(160px,1fr) 92px auto;align-items:end}.management-form .inline-actions{grid-column:1/-1}.field-label{display:grid;gap:4px;min-width:0;color:var(--text-secondary,#66756c);font-size:.82rem}.field-label input,.field-label select,.field-label textarea{width:100%;min-width:0}.field-small{max-width:110px}.color-field{max-width:90px}.color-field input{min-height:38px;padding:4px}.check-label{display:inline-flex;align-items:center;gap:6px;min-height:38px;white-space:nowrap}.library-card{grid-column:1/-1}.library-form{display:grid;grid-template-columns:minmax(180px,1fr) 92px auto;gap:8px;align-items:end;margin:10px 0}.library-form .tag-checks,.library-form .inline-actions{grid-column:1/-1}.empty-state{padding:12px 0}.history-card{max-height:430px;overflow:auto}@media (max-width:980px){.wheel-focus-stage{grid-template-columns:1fr}.wheel-focus-copy{justify-items:center;text-align:center}.wheel-focus-actions,.hero-tags,.wheel-result.focus{justify-content:center;align-items:center;text-align:center}.wheel-layout,.wheel-management-grid{grid-template-columns:1fr}.wheel-header{flex-direction:column}.library-card{grid-column:auto}.library-form,.management-form{grid-template-columns:minmax(0,1fr) 92px auto}.wheel-canvas-wrap{width:min(350px,82vw)}}@media (max-width:560px){.wheel-toolbar,.wheel-focus-toolbar{align-items:stretch;flex-wrap:wrap}.wheel-selector{width:100%}.wheel-canvas-wrap{width:280px}.wheel-management-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.library-form,.management-form{grid-template-columns:1fr}.field-small,.color-field{max-width:none}.library-form>label,.management-form>label{grid-column:1/-1}.library-batch-bar{grid-template-columns:1fr}.library-row{grid-template-columns:auto minmax(0,1fr);align-items:start}.library-row>span:last-child{grid-column:1/-1;justify-content:flex-start}.library-filter{width:100%;justify-content:space-between}.wheel-actions .btn{font-size:.82rem}}
 </style>

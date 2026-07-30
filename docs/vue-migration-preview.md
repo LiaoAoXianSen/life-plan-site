@@ -97,9 +97,10 @@ beyond read-only diagnostics plus settle-through-yesterday. Do not substitute
 incompatible shortcuts; ship those as separately tested follow-ups.
 
 UI/IA shell parity has been tightened toward the legacy product surfaces:
-Habit center tabs/KPI, browse-first Todos, Ideas KPI strip and card actions,
-Tags denser center, Records day/week/month labels plus template entry, Fitness
-overview KPI hero, and Wheel mode hero for tag two-stage spin.
+Habit center tabs/KPI with compact today actions, browse-first Todos filters,
+Ideas header create + filter-first layout, Tags filter-above-KPI order, sidebar
+primary `+ 新建记录`, Fitness overview KPI hero, and Wheel focus-stage plus
+management drawer.
 
 The Vue branch has operational Dashboard, Todos, Records, Materials, Libraries,
 Search, Goals, Habits, Fitness, Wheel, AI and main Sync workflows. The

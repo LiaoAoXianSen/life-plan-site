@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import { ref } from 'vue';
+
+import RecordCreateModal from './RecordCreateModal.vue';
+
+const showCreateRecord = ref(false);
+
 const navigation = [
   { to: '/dashboard', icon: '📊', label: '首页仪表盘' },
   { to: '/records', icon: '📝', label: '所有记录' },
@@ -18,7 +24,7 @@ const navigation = [
 
 <template>
   <aside class="sidebar" aria-label="主导航">
-    <RouterLink class="app-brand" to="/" aria-label="返回迁移总览">
+    <RouterLink class="app-brand" to="/dashboard" aria-label="返回首页仪表盘">
       <h2>人生规划系统</h2>
     </RouterLink>
 
@@ -38,7 +44,9 @@ const navigation = [
     </nav>
 
     <div class="sidebar-primary-action">
-      <RouterLink class="btn btn-secondary" to="/">迁移第 0 步</RouterLink>
+      <button class="btn btn-primary" type="button" @click="showCreateRecord = true">+ 新建记录</button>
     </div>
+
+    <RecordCreateModal v-model="showCreateRecord" />
   </aside>
 </template>
