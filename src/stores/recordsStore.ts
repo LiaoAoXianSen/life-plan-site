@@ -309,6 +309,56 @@ export const useRecordsStore = defineStore('records', () => {
     });
     return applied;
   }
+
+  function applyIdeaAiActions(
+    id: string,
+    items: Array<Record<string, unknown>>,
+    options: { replaceNextAction?: boolean } = {},
+  ) {
+    const selected = items
+      .map(item => ({
+        text: String(item.text || '').trim(),
+        note: String(item.note || item.reason || '').trim(),
+        dueDate: String(item.dueDate || ''),
+        planStartDate: String(item.planStartDate || ''),
+        planEndDate: String(item.planEndDate || ''),
+        urgency: String(item.urgency || 'medium'),
+        group: String(item.group || '学习'),
+        subTodos: Array.isArray(item.subTodos) ? item.subTodos : [],
+      }))
+      .filter(item => item.text);
+    if (!selected.length) return [] as string[];
+
+    const createdIds: string[] = [];
+    lifePlan.mutate('apply-idea-ai-actions', data => {
+      const idea = data.records.find(record => record.id === id && record.type === '灵感碎片');
+      if (!idea) return;
+      const created = selected.map(item => {
+        const todo = services.todos.createTodoFromAiItem({
+          ...item,
+          dueDate: item.dueDate || getTodayStr(),
+          sourceType: 'idea-ai',
+          sourceRecordId: id,
+        });
+        data.todos.unshift(todo);
+        createdIds.push(todo.id);
+        return todo;
+      });
+      const todoIds = Array.isArray(idea.todoIds) ? idea.todoIds.map(String) : [];
+      created.forEach(todo => {
+        if (!todoIds.includes(todo.id)) todoIds.push(todo.id);
+      });
+      idea.todoIds = todoIds;
+      idea.ideaTodoId = created[0].id;
+      idea.ideaStatus = '待实践';
+      const nextLines = selected.map(item => item.text);
+      idea.ideaNextAction = options.replaceNextAction === false
+        ? [String(idea.ideaNextAction || ''), ...nextLines].filter(Boolean).join('\n')
+        : nextLines.join('\n');
+      idea.updatedAt = getNowLocal();
+    });
+    return createdIds;
+  }
   function linkIdeaTodo(id: string, todoId: string) {
     lifePlan.mutate('link-idea-todo', data => {
       const idea = data.records.find(record => record.id === id && record.type === '灵感碎片');
@@ -373,5 +423,5 @@ export const useRecordsStore = defineStore('records', () => {
       data[collection] = data[collection].filter(entity => entity.id !== id) as never;
     });
   }
-  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, applyIdeaNextAction, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
+  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, addIdea, setIdeaStatus, applyIdeaNextAction, applyIdeaAiActions, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
 });

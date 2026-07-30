@@ -521,3 +521,11 @@
 - Save links through `recordsStore.linkIdeaTodo` and rebuilds `todoAppData`; cancel/close stays read-only.
 - Focused Playwright idea conversion tests 2/2 passed; full suite 51/51 passed; vue-tsc and vite build passed.
 
+## 2026-07-30 - Ideas AI next-action and todo breakdown
+
+- Kept work on `migration/vue-app-v1`; protected `master`, `experiment/vue-preview-poc`, and materials stash untouched.
+- Expanded `src/pages/AiPage.vue` with mode tabs for chatCapture, ideaNext, and todoBreakdown plus editable draft confirmation.
+- Added `recordsStore.applyIdeaAiActions` for confirmed idea-ai Todo creation, idea link/status/next-action updates, and mirror rebuild.
+- Playwright covers ideaNext generate no-write then confirmed writeback, and todoBreakdown confirmed subtask append.
+- Focused AI/idea conversion tests 4/4 passed.
+

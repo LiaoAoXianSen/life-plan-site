@@ -1856,6 +1856,92 @@ test('idea conversion draft cancel leaves lifePlanData and todo mirror untouched
     expect(await page.evaluate(() => localStorage.getItem('todoAppData'))).toBeNull();
 });
 
+
+test('AI ideaNext keeps drafts read-only until confirmed writeback', async ({ page }) => {
+    const source = emptyData({
+        records: [{
+            id: 'idea-ai-next', type: '灵感碎片', title: 'AI 灵感转化', content: '需要最小验证',
+            startDate: '2026-07-30', endDate: '2026-07-30', todoIds: [], ideaStatus: '待整理',
+            ideaTags: ['AI'], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '', updatedAt: '2026-07-30T08:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
+    }, source);
+    await page.goto('/#/ai?mode=ideaNext&idea=idea-ai-next');
+    const aiPage = page.locator('#page-ai');
+    await expect(aiPage.getByLabel('选择灵感')).toHaveValue('idea-ai-next');
+    await aiPage.getByRole('button', { name: '生成灵感行动' }).click();
+    await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('todoAppData'))).toBeNull();
+
+    await aiPage.getByLabel('标题').fill('验证灵感：最小实验');
+    await aiPage.getByLabel('备注').fill('确认后才创建');
+    await aiPage.getByRole('button', { name: '转成关联待办' }).click();
+    await expect.poll(async () => page.evaluate(() => location.hash)).toMatch(/#\/todos\?todo=/);
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    const idea = stored.data.records.find(item => item.id === 'idea-ai-next');
+    const todo = stored.data.todos.find(item => item.id === idea.ideaTodoId);
+    expect(idea).toMatchObject({
+        ideaStatus: '待实践',
+        ideaNextAction: '验证灵感：最小实验',
+        ideaTodoId: todo.id,
+    });
+    expect(idea.todoIds).toEqual(expect.arrayContaining([todo.id]));
+    expect(todo).toMatchObject({
+        text: '验证灵感：最小实验',
+        note: '确认后才创建',
+        sourceType: 'idea-ai',
+        sourceRecordId: 'idea-ai-next',
+        group: '学习',
+    });
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.mirror.todos.map(item => item.id)).toContain(todo.id);
+});
+
+test('AI todoBreakdown writes selected subtasks only after confirmation', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-break', '拆解这个待办', {
+            note: '原备注',
+            group: '工作',
+            subTodos: [{ text: '已有步骤', done: false }],
+        })],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false }));
+    }, source);
+    await page.goto('/#/ai?mode=todoBreakdown&todo=todo-break');
+    const aiPage = page.locator('#page-ai');
+    await expect(aiPage.getByLabel('选择待办')).toHaveValue('todo-break');
+    await aiPage.getByRole('button', { name: '生成子任务' }).click();
+    await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await aiPage.getByLabel('标题').first().fill('准备材料');
+    await aiPage.getByRole('button', { name: '写入子任务' }).click();
+    await expect(aiPage.getByText(/已写入子任务/)).toBeVisible();
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    const todo = stored.data.todos.find(item => item.id === 'todo-break');
+    expect(todo.subTodos.map(item => item.text)).toEqual(expect.arrayContaining(['已有步骤', '准备材料']));
+    expect(todo.note).toContain('原备注');
+    expect(todo.note).toContain('AI 拆解：');
+    expect(stored.mirror.todos[0].subTodos.map(item => item.text)).toEqual(expect.arrayContaining(['已有步骤', '准备材料']));
+});
+
+
 test('record editor autosaves after three seconds and flushes before close switch and navigation', async ({ page }) => {
     const source = emptyData({
         records: [
