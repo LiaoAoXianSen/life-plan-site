@@ -321,7 +321,7 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-session' });
 
     await page.goto('/#/dashboard');
-    await page.getByRole('button', { name: /Dashboard 习惯/ }).click();
+    await page.locator('.dashboard-timeline').getByRole('button', { name: /Dashboard 习惯/ }).click();
     await expectHashRoute(page, '/habits', { habit: 'habit-dashboard' });
 
     await page.goto('/#/dashboard');
@@ -406,6 +406,71 @@ test('dashboard quick writes plan today execute once toggle and rebuild todo mir
     expect(doneTodo.completedAt).toBeTruthy();
     expect(stored.data.deletedItems).toEqual([]);
     expect(stored.mirror.todos).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'todo-due-today', done: true })]));
+});
+
+test('dashboard habit quick check-in writes checkin and rebuilds habit mirror', async ({ page }) => {
+    const today = (() => {
+        const date = new Date();
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    })();
+    const source = emptyData({
+        habits: [{
+            id: 'habit-dash-checkin',
+            name: '首页打卡习惯',
+            tag: '健康',
+            rule: 'daily',
+            timesPerDay: '1',
+            startDate: today,
+            rewardPoints: 3,
+            rewardCurrency: '金币',
+            createdAt: `${today}T08:00:00`,
+            updatedAt: `${today}T08:00:00`,
+        }],
+        checkins: [],
+        habitPointLedger: [],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'dashboard-habit-before' }));
+    }, source);
+
+    await page.goto('/#/dashboard');
+    const habitCard = page.locator('.card').filter({ hasText: '今日习惯' });
+    const row = habitCard.locator('.todo-item').filter({ hasText: '首页打卡习惯' });
+    await expect(row).toHaveCount(1);
+    await expect(page.locator('.summary-card').filter({ hasText: '今日习惯' })).toContainText('0/1');
+    await row.getByRole('button', { name: '打卡', exact: true }).click();
+    await expect(page.locator('.notice.success')).toContainText('已为「首页打卡习惯」打卡');
+    await expect(page.locator('.summary-card').filter({ hasText: '今日习惯' })).toContainText('1/1');
+    await expect(row.getByRole('button', { name: '打卡', exact: true })).toBeDisabled();
+
+    let stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.checkins).toEqual(expect.arrayContaining([
+        expect.objectContaining({ habitId: 'habit-dash-checkin', date: today }),
+    ]));
+    expect(stored.data.habitPointLedger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'checkin', amount: 3, habitId: 'habit-dash-checkin', currency: '金币' }),
+    ]));
+    expect(stored.data.deletedItems).toEqual([]);
+    expect(stored.syncState.dirty).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('append-checkin');
+
+    await row.getByRole('button', { name: '撤销', exact: true }).click();
+    await expect(page.locator('.notice.success')).toContainText('已撤销');
+    stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+    }));
+    expect(stored.data.checkins.filter(item => item.habitId === 'habit-dash-checkin')).toHaveLength(0);
+    expect(stored.data.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'checkins', reason: 'manual-decrease', habitId: 'habit-dash-checkin' }),
+    ]));
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
 });
 
 test('goals detail route save and delete preserve the legacy contract', async ({ page }) => {

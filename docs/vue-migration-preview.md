@@ -77,7 +77,8 @@ changes. Keep a manually exported data file before testing complex data flows.
 The Vue branch has operational Dashboard, Todos, Records, Materials, Libraries,
 Search, Goals, basic Habits, Fitness, Wheel, AI and main Sync workflows. The
 Dashboard now covers the command center, active-period links, bounded recent
-timeline, and Todo quick-writes (`今天做`, `执行一次`, checkbox toggle);
+timeline, Todo quick-writes (`今天做`, `执行一次`, checkbox toggle), and today
+habit quick check-in/undo;
 Goals now covers detail deep links and legacy tombstones; Search/Tags now
 restore grouped module indexes and read-only tag entry points across migrated
 modules; Import/Export now covers snapshots, tombstone-aware merge, dirty-state
@@ -98,7 +99,7 @@ Todo-breakdown confirmation flows.
 Replacement remains blocked until the remaining module audits and write-heavy
 specialist flows are closed. The following specialist controls still live in the
 proven static app and should be migrated only as separately tested follow-up
-releases: deeper Habit diagnostics repair actions, optional Dashboard habit
-quick check-in polish, and older AI plan/triage modes. They are not replaced
-by incompatible shortcuts. Habit settle-through-yesterday miss/break penalty
-writes are now covered on this branch.
+releases: deeper Habit diagnostics repair actions and older AI plan/triage
+modes. They are not replaced by incompatible shortcuts. Habit
+settle-through-yesterday miss/break penalty writes and Dashboard habit quick
+check-in are now covered on this branch.

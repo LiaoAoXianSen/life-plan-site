@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { getTodayStr } from '../services/legacyServices';
+import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
@@ -15,6 +16,7 @@ const router = useRouter();
 const lifePlan = useLifePlanStore();
 const recordsStore = useRecordsStore();
 const todosStore = useTodosStore();
+const habitsStore = useHabitsStore();
 const today = getTodayStr();
 const periodTypes = ['周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
 const urgencyLabels: Record<Todo['urgency'], string> = { urgent: '紧急', high: '高', medium: '中', low: '低' };
@@ -124,6 +126,26 @@ function quickSessionFromDashboard(todoId: string) {
   }
 }
 
+function openHabit(habitId: string) {
+  void router.push({ path: '/habits', query: { habit: habitId } });
+}
+
+function quickHabitCheckin(habitId: string) {
+  if (!habitsStore.quickCheckin(habitId)) {
+    announce(habitsStore.lastError || '打卡失败', 'warning');
+    return;
+  }
+  announce(habitsStore.lastAction || '已打卡');
+}
+
+function undoHabitCheckin(habitId: string) {
+  if (!habitsStore.undoLatestCheckin(habitId)) {
+    announce(habitsStore.lastError || '撤销失败', 'warning');
+    return;
+  }
+  announce(habitsStore.lastAction || '已撤销');
+}
+
 function sampleMaterials(items: MaterialEntity[], count: number) {
   const pool = [...items].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   for (let index = 0; index < Math.min(count, pool.length); index += 1) {
@@ -143,28 +165,19 @@ const floatingTodos = computed(() => lifePlan.data.todos
   .filter(todo => !todo.done && !todo.dueDate && !todo.planStartDate && !todo.planEndDate)
   .sort(todosStore.services.todos.compareTodosForFocus)
   .slice(0, 5));
-const dueHabits = computed(() => lifePlan.data.habits.filter(habit => {
-    const startDate = entityString(habit, 'startDate');
-    if (startDate && today < startDate) return false;
-    const date = new Date(`${today}T12:00:00`);
-    switch (entityString(habit, 'rule')) {
-      case 'weekly-fixed':
-        return Array.isArray(habit.weekdays) && habit.weekdays.map(String).includes(String(date.getDay()));
-      case 'weekly-count':
-        return (date.getDay() || 7) === 1;
-      case 'monthly-count':
-        return date.getDate() === 1;
-      case 'interval': {
-        if (!startDate) return true;
-        const elapsed = Math.floor((date.getTime() - new Date(`${startDate}T12:00:00`).getTime()) / 86_400_000);
-        const every = Math.max(1, Number.parseInt(String(habit.count || 1), 10) || 1);
-        return elapsed >= 0 && elapsed % every === 0;
-      }
-      default:
-        return true;
-    }
-  }));
-const doneHabitCount = computed(() => dueHabits.value.filter(habit => lifePlan.data.checkins.some(checkin => entityString(checkin, 'habitId') === String(habit.id || '') && entityString(checkin, 'date') === today)).length);
+const dueHabits = computed(() => habitsStore.todayHabits);
+const todayHabitItems = computed(() => dueHabits.value.map(habit => {
+  const count = habitsStore.getCheckinCount(habit.id, today);
+  const target = habitsStore.targetCount(habit);
+  return {
+    habit,
+    count,
+    target,
+    done: count >= target,
+    canCheckin: !(target === 1 && count > 0),
+  };
+}).slice(0, 8));
+const doneHabitCount = computed(() => todayHabitItems.value.filter(item => item.count > 0).length);
 const activeGoals = computed(() => lifePlan.data.goals.filter(goal => goal.status === '进行中'));
 const weekStart = computed(() => {
   const date = new Date(`${today}T12:00:00`);
@@ -351,6 +364,37 @@ const timelineGroups = computed(() => {
       </article>
 
       <article class="card">
+        <div class="section-title-row timeline-title-row">
+          <h2 class="card-title">今日习惯</h2>
+          <button class="btn btn-secondary todo-mini-btn" type="button" @click="router.push('/habits')">习惯页</button>
+        </div>
+        <ul v-if="todayHabitItems.length" class="todo-list dashboard-habit-list">
+          <li v-for="item in todayHabitItems" :key="item.habit.id" class="todo-item dashboard-habit-item">
+            <button class="todo-text todo-dashboard-link" type="button" :aria-label="item.habit.name" @click="openHabit(item.habit.id)">
+              {{ item.habit.name }}
+              <small>{{ item.count }}/{{ item.target }} · {{ item.habit.tag || '习惯' }}</small>
+            </button>
+            <span class="todo-urgency" :class="item.done ? 'todo-urgency-low' : 'todo-urgency-high'">{{ item.done ? '已完成' : '待打卡' }}</span>
+            <span class="todo-actions">
+              <button
+                class="btn btn-secondary todo-mini-btn"
+                type="button"
+                :disabled="!item.canCheckin"
+                @click="quickHabitCheckin(item.habit.id)"
+              >打卡</button>
+              <button
+                class="btn btn-secondary todo-mini-btn"
+                type="button"
+                :disabled="item.count <= 0"
+                @click="undoHabitCheckin(item.habit.id)"
+              >撤销</button>
+            </span>
+          </li>
+        </ul>
+        <div v-else class="empty-state">今日暂无习惯</div>
+      </article>
+
+      <article class="card">
         <h2 class="card-title">进行中的周期记录</h2>
         <div v-if="activePeriods.length">
           <button v-for="record in activePeriods" :key="String(record.id)" class="period-item" type="button" @click="openRecord(String(record.id))">
@@ -440,6 +484,9 @@ const timelineGroups = computed(() => {
   grid-column: 1 / -1;
   min-width: 0;
 }
+.dashboard-habit-item .todo-dashboard-link small {
+  color: var(--faint);
+}
 @media (min-width: 720px) {
   .todo-item {
     grid-template-columns: auto minmax(0, 1fr) auto auto;
@@ -447,6 +494,9 @@ const timelineGroups = computed(() => {
   .todo-actions {
     grid-column: auto;
     justify-content: flex-end;
+  }
+  .dashboard-habit-item {
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 }
 .period-item { width: 100%; min-width: 0; text-align: left; }
