@@ -443,6 +443,18 @@ test('sidebar reads the legacy wheel sync state key', async ({ page }) => {
     await expect(page.locator('.sync-status-inline').filter({ hasText: '转盘：' })).toHaveText('转盘：已同步');
 });
 
+test('sidebar summarizes main sync state with legacy status labels', async ({ page }) => {
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://dav.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastSyncAt: '2026-07-31T12:34:56.000Z', lastRemoteHash: 'main-hash' }));
+    }, emptyData());
+    await page.goto('/#/dashboard');
+    const status = page.locator('.sync-status-inline').filter({ hasText: '同步：' });
+    await expect(status).toHaveText('同步：已同步');
+    await expect(status).not.toContainText('2026-07-31');
+});
+
 test('dashboard quick writes plan today execute once toggle and rebuild todo mirror', async ({ page }) => {
     const today = (() => {
         const date = new Date();
