@@ -71,6 +71,23 @@ const balanceText = computed(() => Object.entries(habits.balances)
   .sort(([a], [b]) => a.localeCompare(b, 'zh-Hans-CN'))
   .map(([currency, amount]) => `${amount} ${currency}`)
   .join(' · ') || '0 金币');
+function summarizeWalletLedger(predicate: (entry: Record<string, any>) => boolean, absolute = false) {
+  const totals = new Map<string, number>();
+  lifePlan.data.habitPointLedger
+    .map(entry => entry as Record<string, any>)
+    .filter(predicate)
+    .forEach(entry => {
+      const currency = String(entry.currency || '金币');
+      const amount = Number(entry.amount || 0) || 0;
+      totals.set(currency, (totals.get(currency) || 0) + (absolute ? Math.abs(amount) : amount));
+    });
+  return [...totals.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, 'zh-Hans-CN'))
+    .map(([currency, amount]) => `${amount} ${currency}`)
+    .join(' · ') || '0 金币';
+}
+const walletEarnedText = computed(() => summarizeWalletLedger(entry => Number(entry.amount || 0) > 0));
+const walletRedeemedText = computed(() => summarizeWalletLedger(entry => Number(entry.amount || 0) < 0 && entry.type === 'redeem', true));
 const diagnosticSummary = computed(() => habits.diagnostics.summary || {});
 const diagnosticIssues = computed(() => habits.diagnosticIssues.slice(0, 3));
 const doneTodayCount = computed(() => todayItems.value.filter(item => item.count >= item.target).length);
@@ -672,7 +689,13 @@ watch(focusedHabitId, value => {
           <h2 id="habit-wallet-title">钱包与心愿</h2>
           <p class="section-hint">兑换会写入旧版 <code>habitPointLedger</code> 的 <code>type: redeem</code> 流水，并更新心愿兑换次数。</p>
         </div>
-        <strong class="habit-wallet-total">{{ balanceText }}</strong>
+        <div class="habit-wallet-summary">
+          <strong class="habit-wallet-total">{{ balanceText }}</strong>
+          <div class="habit-wallet-stats">
+            <span>累计获得 {{ walletEarnedText }}</span>
+            <span>已兑换 {{ walletRedeemedText }}</span>
+          </div>
+        </div>
       </div>
 
       <form class="habit-reward-form" @submit.prevent="saveReward">

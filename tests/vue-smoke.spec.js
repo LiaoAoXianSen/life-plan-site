@@ -1992,12 +1992,15 @@ test('habit wallet redeem deducts points and blocks unavailable wishes', async (
     await page.goto('/#/habits');
     await page.locator('.habit-center-tabs').getByRole('tab', { name: '钱包' }).click();
     const wallet = page.locator('.habit-wallet-panel');
+    await expect(wallet.locator('.habit-wallet-stats')).toContainText('累计获得 12 星星');
+    await expect(wallet.locator('.habit-wallet-stats')).toContainText('已兑换 0 金币');
     await expect(wallet.locator('.habit-reward-card').filter({ hasText: '大愿望' }).getByRole('button', { name: '兑换' })).toBeDisabled();
     await expect(wallet.locator('.habit-reward-card').filter({ hasText: '售罄愿望' }).getByRole('button', { name: '兑换' })).toBeDisabled();
     page.once('dialog', dialog => dialog.accept());
     await wallet.locator('.habit-reward-card').filter({ hasText: '小奖励' }).getByRole('button', { name: '兑换' }).click();
     await expect(page.locator('.notice.success')).toContainText('已兑换「小奖励」');
     await expect(wallet.locator('.habit-reward-card').filter({ hasText: '小奖励' }).getByRole('button', { name: '兑换' })).toBeDisabled();
+    await expect(wallet.locator('.habit-wallet-stats')).toContainText('已兑换 5 星星');
 
     const stored = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
