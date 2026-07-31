@@ -1602,6 +1602,11 @@ test('fitness overview renders service-backed body metric trends without writes'
     await expect(trends).toContainText('近 30 天体重变化');
     await expect(trends.locator('.fitness-trend-summary-card').filter({ hasText: '体重' })).toContainText('+1.5 kg');
     await expect(trends.locator('.fitness-trend-summary-card').filter({ hasText: '腰围' })).toContainText('-0.5 cm');
+    const charts = page.locator('.fitness-trend-grid');
+    await expect(charts.locator('.fitness-trend-card').filter({ hasText: '体重趋势' })).toContainText('2026-07-29');
+    await expect(charts.locator('.fitness-trend-card').filter({ hasText: '体重趋势' })).toContainText('71.5');
+    await expect(charts.locator('.fitness-trend-card').filter({ hasText: '腰围趋势' })).toContainText('81.5');
+    await expect(charts.locator('svg.fitness-sparkline')).toHaveCount(2);
     const unchanged = await page.evaluate(() => ({
         sameData: window.__fitnessTrendBefore === localStorage.getItem('lifePlanData'),
         mirror: localStorage.getItem('fitnessAppData'),
