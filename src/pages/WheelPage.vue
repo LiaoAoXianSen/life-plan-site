@@ -53,6 +53,8 @@ const displayEntries = computed(() => {
 const wheelForm = reactive<{ id: string; name: string; mode: WheelMode; tagIds: string[]; itemsText: string }>({ id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' });
 const optionForm = reactive({ id: '', name: '', weight: 1, enabled: true });
 const optionBatchText = ref('');
+const copyLibraryTagFilter = ref('');
+const copyLibraryId = ref('');
 const tagForm = reactive({ id: '', name: '', color: '#216e4e', weight: 1, enabled: true });
 const libraryForm = reactive({ id: '', name: '', tagIds: [] as string[], weight: 1, enabled: true });
 const libraryTagFilter = ref('');
@@ -111,6 +113,10 @@ watch(() => wheelStore.tags.map(tag => tag.id).join('|'), () => {
 onBeforeUnmount(() => {
   if (spinTimer) window.clearTimeout(spinTimer);
   if (spinFrame) window.cancelAnimationFrame(spinFrame);
+});
+const copyableLibraryItems = computed(() => {
+  if (!copyLibraryTagFilter.value) return wheelStore.libraryItems;
+  return wheelStore.libraryItems.filter(item => itemTagIds(item).includes(copyLibraryTagFilter.value));
 });
 
 const wheelPalette = ['#ff6b6b', '#ff9f43', '#ffd166', '#06d6a0', '#2ec4b6', '#00bbf9', '#5c7cfa', '#9b5de5', '#f15bb5', '#8ac926'];
@@ -322,6 +328,16 @@ function submitBatchOptions() {
     const result = wheelStore.batchAddOptions(wheel.id, items);
     optionBatchText.value = '';
     say(result.skipped ? `已添加 ${result.added} 个选项，跳过 ${result.skipped} 个重复或空行` : `已添加 ${result.added} 个选项`);
+  });
+}
+function copyLibraryItem() {
+  const wheel = selectedWheel.value;
+  if (!wheel || wheel.mode !== 'normal') return;
+  if (!copyLibraryId.value) return say('请选择公共项');
+  handle(() => {
+    const copiedName = wheelStore.copyLibraryItemToWheel(wheel.id, copyLibraryId.value);
+    copyLibraryId.value = '';
+    say(`已复制公共项：${copiedName || '未命名选项'}`);
   });
 }
 function resetTagForm() { Object.assign(tagForm, { id: '', name: '', color: '#216e4e', weight: 1, enabled: true }); }
@@ -764,6 +780,20 @@ function importJson(event: Event) {
           <textarea v-model="optionBatchText" rows="4" placeholder="每行一个选项，也可写成：散步,2" />
           <button class="btn btn-secondary" type="button" @click="submitBatchOptions">导入到当前转盘</button>
         </details>
+        <details v-if="selectedWheel?.mode === 'normal'" class="wheel-batch-tools wheel-copy-tools">
+          <summary>从公共项复制</summary>
+          <div class="wheel-copy-row">
+            <select v-model="copyLibraryTagFilter" aria-label="复制公共项标签筛选">
+              <option value="">全部标签</option>
+              <option v-for="tag in wheelStore.tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
+            </select>
+            <select v-model="copyLibraryId" aria-label="复制公共项">
+              <option value="">选择公共项</option>
+              <option v-for="item in copyableLibraryItems" :key="item.id" :value="item.id">{{ item.name }} · 权重 {{ item.weight }}</option>
+            </select>
+            <button class="btn btn-secondary" type="button" @click="copyLibraryItem">复制到当前转盘</button>
+          </div>
+        </details>
         <div v-for="item in selectedWheel?.mode === 'normal' ? selectedWheel.items : []" :key="item.id" class="entity-row"><span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }}</em></span><span><button class="link-button" @click="editOption(item)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除选项“${item.name}”吗？`, () => wheelStore.deleteOption(selectedWheel!.id, item.id), '已删除选项')">删除</button></span></div>
       </article>
       <article id="wheel-tags-panel" class="card management-card">
@@ -835,6 +865,7 @@ function importJson(event: Event) {
 .wheel-focus-actions .wheel-spin{flex:1 1 260px}
 .wheel-focus-actions .btn-secondary{min-width:92px}
 .wheel-batch-tools{display:grid;gap:8px;margin:12px 0;padding:10px 12px;border:1px solid rgba(223,231,239,.9);border-radius:12px;background:#fafbfd}.wheel-batch-tools summary{cursor:pointer;font-weight:850;color:#53625a}.wheel-batch-tools textarea{width:100%;resize:vertical;min-height:76px}
+.wheel-copy-row{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(180px,1.3fr) auto;gap:8px;align-items:center}.wheel-copy-row select{min-height:38px;min-width:0}
 .wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
 .wheel-result.focus{align-items:center;text-align:center;min-height:auto;padding:4px 0 0}
 .wheel-management-block{margin-top:8px}.wheel-management-landing{margin:0 0 14px;padding:14px 16px;border:1px solid rgba(42,75,56,.12);border-radius:10px;background:#fbfdfb}.wheel-management-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.wheel-management-nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.wheel-management-nav .btn{min-height:34px}.wheel-management-landing .wheel-management-summary{margin-top:12px}

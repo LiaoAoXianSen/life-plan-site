@@ -859,6 +859,26 @@ test('wheel normal option batch import skips duplicate names and preserves weigh
     expect(stored.wheels[0].items.filter(item => item.name === '已有选项')).toHaveLength(1);
 });
 
+test('wheel normal option copy imports a public item with source metadata', async ({ page }) => {
+    const source = emptyData({
+        wheels: [{ id: 'wheel-copy', name: '公共项复制盘', mode: 'normal', items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+        wheelTags: [{ id: 'tag-copy', name: '学习', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+        wheelLibraryItems: [{ id: 'library-copy', name: '公共阅读', note: '来自公共项库', tagIds: ['tag-copy'], weight: 3, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    await page.locator('.wheel-stage-card').getByRole('button', { name: '编辑当前' }).click();
+    const tools = page.locator('.wheel-copy-tools');
+    await tools.locator('summary').click();
+    await tools.getByLabel('复制公共项', { exact: true }).selectOption('library-copy');
+    await tools.getByRole('button', { name: '复制到当前转盘' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('已复制公共项：公共阅读');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheels[0].items).toEqual([expect.objectContaining({ name: '公共阅读', note: '来自公共项库', weight: 3, sourceLibraryItemId: 'library-copy', enabled: true })]);
+});
+
 test('wheel management landing keeps workspace navigation focused', async ({ page }) => {
     await page.goto('/#/wheel');
     await page.locator('#wheel-action-menu-button').click();
