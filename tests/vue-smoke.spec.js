@@ -973,6 +973,36 @@ test('wheel management list filters modes and exposes card actions', async ({ pa
     await expect(page.locator('.wheel-stage-title')).toContainText('重命名后的普通盘');
 });
 
+test('wheel history workspace shows all rows and converts a result to todo', async ({ page }) => {
+    const history = Array.from({ length: 9 }, (_, index) => ({
+        id: `history-row-${index}`,
+        wheelId: 'wheel-history-all',
+        wheelName: '完整历史盘',
+        mode: 'normal',
+        resultId: `history-result-${index}`,
+        resultName: `历史结果 ${index}`,
+        note: '',
+        convertedTodoId: '',
+        createdAt: `2026-07-29T0${index}:00:00`,
+        updatedAt: `2026-07-29T0${index}:00:00`,
+    }));
+    const source = emptyData({
+        wheels: [{ id: 'wheel-history-all', name: '完整历史盘', mode: 'normal', items: [{ id: 'history-option', name: '选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+        wheelHistory: history,
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '记录/备份' }).click();
+    const panel = page.locator('#wheel-history-panel');
+    await expect(panel.locator('.history-row')).toHaveCount(9);
+    await expect(panel.getByRole('button', { name: '导出 JSON' })).toBeVisible();
+    await panel.locator('.history-row').first().getByRole('button', { name: '转入待办' }).click();
+    await expect(panel.locator('.history-row').first()).toContainText('已转待办');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.todos).toEqual(expect.arrayContaining([expect.objectContaining({ text: '历史结果 0', group: '转盘' })]));
+});
+
 test('wheel empty state keeps a no-write canvas stage and create entry', async ({ page }) => {
     const source = emptyData();
     await page.addInitScript(data => {
