@@ -690,7 +690,7 @@ watch(focusedHabitId, value => {
       </div>
 
       <div class="habit-matrix-block" aria-label="近期执行矩阵">
-        <div class="section-title-row compact">
+          <div class="section-title-row compact">
           <div>
             <h3>近期执行矩阵</h3>
             <p class="section-hint">只读预览近 {{ matrixDays }} 天打卡分布；点选日期仍请到补卡页处理。</p>
@@ -761,9 +761,21 @@ watch(focusedHabitId, value => {
             <select v-model.number="analysisYear" aria-label="选择分析年份">
               <option v-for="year in analysisYears" :key="year" :value="year">{{ year }} 年</option>
             </select>
+            </div>
           </div>
-        </div>
-        <template v-if="selectedAnalysisHabit">
+          <div class="habit-annual-habit-pills" role="tablist" aria-label="年度分析习惯">
+            <button
+              v-for="habit in habits.habits.filter(item => !item.archived)"
+              :key="`annual-pill-${habit.id}`"
+              type="button"
+              role="tab"
+              class="habit-annual-habit-pill"
+              :class="{ active: selectedAnalysisHabit?.id === habit.id }"
+              :aria-selected="selectedAnalysisHabit?.id === habit.id"
+              @click="analysisHabitId = habit.id"
+            >{{ habit.name || '未命名习惯' }}</button>
+          </div>
+          <template v-if="selectedAnalysisHabit">
           <div class="habit-annual-title"><strong>{{ selectedAnalysisHabit.name || '未命名习惯' }}</strong><span>{{ analysisYear }} 年 · 每格代表一天</span></div>
           <div class="habit-annual-heatmap-shell">
             <div
@@ -1225,6 +1237,26 @@ watch(focusedHabitId, value => {
   border-radius: 8px;
   background: #fff;
   color: var(--text, #17211b);
+}
+.habit-annual-habit-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.habit-annual-habit-pill {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid rgba(42, 75, 56, .14);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text, #17211b);
+  font-weight: 750;
+  cursor: pointer;
+}
+.habit-annual-habit-pill.active {
+  border-color: #216e4e;
+  background: #216e4e;
+  color: #fff;
 }
 .habit-annual-title {
   display: flex;
