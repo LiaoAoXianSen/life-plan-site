@@ -74,9 +74,21 @@ const latestWeight = computed(() => {
 });
 const bodyMetricSummary = computed(() => fitness.services.fitness.buildBodyMetricSummary(fitness.metrics));
 const trendSummaries = computed(() => [
-  { key: 'weight', label: '近 30 天体重变化', unit: 'kg', change: bodyMetricSummary.value.weightChange },
-  { key: 'waist', label: '近 30 天腰围变化', unit: 'cm', change: bodyMetricSummary.value.waistChange },
+  { key: 'weight', label: '近 30 天体重变化', trendLabel: '体重趋势', unit: 'kg', change: bodyMetricSummary.value.weightChange, series: bodyMetricSummary.value.weightSeries },
+  { key: 'waist', label: '近 30 天腰围变化', trendLabel: '腰围趋势', unit: 'cm', change: bodyMetricSummary.value.waistChange, series: bodyMetricSummary.value.waistSeries },
 ]);
+function sparklinePoints(series: Array<{ value: number }>) {
+  if (!series.length) return '';
+  const values = series.map(item => Number(item.value));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  return series.map((item, index) => {
+    const x = series.length === 1 ? 50 : (index / (series.length - 1)) * 100;
+    const y = 100 - ((Number(item.value) - min) / span) * 100;
+    return `${x},${y}`;
+  }).join(' ');
+}
 const overviewKpis = computed(() => [
   { label: '当前体重', value: latestWeight.value, hint: latestMetric.value ? String((latestMetric.value as any).date || '') : '还没有身材记录' },
   { label: '近 30 天训练', value: String(recentWorkoutCount.value), hint: '已完成 / 跳过' },
@@ -694,6 +706,22 @@ onUnmounted(stopRestTimer);
           <strong>{{ item.change.delta === null ? '—' : fitness.services.fitness.formatSignedChange(item.change.delta, item.unit) }}</strong>
           <em v-if="item.change.previous && item.change.latest">{{ item.change.previous.date }} → {{ item.change.latest.date }}</em>
           <em v-else>至少两次记录后显示变化</em>
+        </article>
+      </div>
+      <div class="fitness-trend-grid" aria-label="身材趋势图">
+        <article v-for="item in trendSummaries" :key="`${item.key}-chart`" class="card fitness-trend-card">
+          <div class="section-title">{{ item.trendLabel }}</div>
+          <div v-if="item.series.length" class="fitness-sparkline-wrap">
+            <svg class="fitness-sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" :aria-label="`${item.trendLabel}折线图`" role="img">
+              <polyline fill="none" stroke="currentColor" stroke-width="3" :points="sparklinePoints(item.series)" />
+            </svg>
+            <div class="fitness-sparkline-meta">
+              <span>{{ item.series[0].date }}</span>
+              <strong>{{ item.series[item.series.length - 1].value }}</strong>
+              <span>{{ item.series[item.series.length - 1].date }}</span>
+            </div>
+          </div>
+          <div v-else class="fitness-empty compact">暂无趋势数据</div>
         </article>
       </div>
     </section>
