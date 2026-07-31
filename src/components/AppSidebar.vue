@@ -63,7 +63,7 @@ const mainSyncLabel = computed(() => {
 const wheelSyncLabel = computed(() => {
   try {
     const config = JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}') as { webdavUrl?: string };
-    const state = JSON.parse(localStorage.getItem('wheelAppSyncState') || '{}') as {
+    const state = JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}') as {
       dirty?: boolean;
       lastSyncAt?: string;
       lastRemoteHash?: string;
