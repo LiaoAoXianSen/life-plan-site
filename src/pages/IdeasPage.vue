@@ -51,7 +51,7 @@ function ideaStatus(idea: Record<string, unknown>) {
   return records.services.records.getIdeaStatus(idea);
 }
 
-function truncatePreview(text: unknown, maxLen = 96) {
+function truncatePreview(text: unknown, maxLen = 80) {
   const normalized = String(text || '').replace(/\s+/g, ' ').trim();
   if (!normalized) return '还没有正文';
   if (normalized.length <= maxLen) return normalized;
