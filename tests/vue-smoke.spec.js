@@ -1285,6 +1285,42 @@ test('fitness browse index exposes read-only section summaries and jump actions'
     await expect(page.locator('#fitness-library-section')).toBeInViewport();
 });
 
+test('fitness browse plan rows expose legacy exercise summaries', async ({ page }) => {
+    const source = emptyData({
+        fitnessPlans: [{
+            id: 'fitness-browse-plan',
+            name: '推拉腿计划',
+            status: 'paused',
+            goal: 'strength',
+            notes: '训练前先热身',
+            exercises: [
+                { id: 'browse-squat', name: '深蹲', targetSets: 3, sets: [{ weight: 80, reps: 5 }, { weight: 80, reps: 5 }, { weight: 80, reps: 5 }] },
+                { id: 'browse-bench', name: '卧推', targetSets: 4, sets: [{ weight: 60, reps: 6 }, { weight: 60, reps: 6 }, { weight: 60, reps: 6 }, { weight: 60, reps: 6 }] },
+                { id: 'browse-row', name: '划船', targetSets: 3, targetWeight: 45, sets: [] },
+                { id: 'browse-pull', name: '引体', targetSets: 3, targetReps: '8', sets: [] },
+                { id: 'browse-curl', name: '弯举', targetSets: 2, targetReps: '12', sets: [] },
+                { id: 'browse-plank', name: '平板支撑', targetSets: 2, targetReps: '45秒', sets: [] },
+            ],
+        }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-browse-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    const row = page.locator('.fitness-plan-browse-row').filter({ hasText: '推拉腿计划' });
+    await expect(row).toContainText('暂停');
+    await expect(row).toContainText('力量 · 6 个动作');
+    await expect(row).toContainText('深蹲 · 3×80kg/5');
+    await expect(row).toContainText('卧推 · 4×60kg/6');
+    await expect(row).toContainText('划船 · 3×45kg');
+    await expect(row).toContainText('+1');
+    await expect(row).toContainText('训练前先热身');
+    await expect(row.getByRole('button', { name: '按计划开练' })).toBeVisible();
+    await expect(row.getByRole('button', { name: '编辑' })).toBeVisible();
+});
+
 test('fitness hero secondary actions jump to body and workout forms', async ({ page }) => {
     await page.goto('/#/fitness');
 

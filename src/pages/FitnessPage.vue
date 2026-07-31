@@ -588,6 +588,23 @@ function planGoalLabel(goal: string) {
   return fitness.services.fitness.getPlanGoalLabel(goal);
 }
 
+function planStatusLabel(status: string) {
+  return fitness.services.fitness.getPlanStatusLabel(status);
+}
+
+function planExercises(plan: Record<string, any>) {
+  return fitness.services.fitness.getPlanExercises(plan) as Record<string, any>[];
+}
+
+function planExerciseDetail(exercise: Record<string, any>) {
+  const setCount = exercise.targetSets || (Array.isArray(exercise.sets) ? exercise.sets.length : 0) || 0;
+  const sample = (Array.isArray(exercise.sets) ? exercise.sets : [])
+    .find((set: Record<string, any>) => set.weight != null || set.reps != null);
+  if (sample) return `${setCount}×${sample.weight ?? '—'}kg/${sample.reps ?? '—'}`;
+  if (exercise.targetWeight != null) return `${setCount}×${exercise.targetWeight}kg`;
+  return `${setCount} 组`;
+}
+
 resetPlanForm();
 resetWorkoutForm();
 onUnmounted(stopRestTimer);
@@ -751,12 +768,26 @@ onUnmounted(stopRestTimer);
       <article class="card">
         <div class="card-title">开始计划训练</div>
         <div v-if="fitness.plans.length" class="fitness-metric-list">
-          <div v-for="plan in fitness.plans" :key="plan.id" class="fitness-metric-row">
-            <div><strong>{{ plan.name }}</strong><span>{{ planGoalLabel(plan.goal) }} · {{ plan.exercises.length }} 个动作</span></div>
-            <button class="btn btn-primary" type="button" @click="run(() => fitness.startFromPlan(plan.id))">按计划开练</button>
-            <button class="btn btn-secondary" type="button" @click="editPlan(plan)">{{ planEditingId === plan.id ? '正在编辑' : '编辑' }}</button>
-            <button class="btn btn-danger" type="button" @click="run(() => fitness.removePlan(plan.id))">删除</button>
-          </div>
+          <article v-for="plan in fitness.plans" :key="plan.id" class="fitness-metric-row fitness-plan-browse-row">
+            <div class="fitness-plan-browse-main">
+              <div class="fitness-plan-name-row">
+                <strong class="fitness-plan-name">{{ plan.name }}</strong>
+                <span class="fitness-status-badge" :class="`status-${plan.status || 'active'}`">{{ planStatusLabel(plan.status) }}</span>
+              </div>
+              <span class="fitness-plan-meta">{{ planGoalLabel(plan.goal) }} · {{ planExercises(plan).length }} 个动作</span>
+              <div class="fitness-exercise-tag-row">
+                <span v-for="exercise in planExercises(plan).slice(0, 5)" :key="exercise.id || exercise.name" class="fitness-exercise-tag">{{ exercise.name }} · {{ planExerciseDetail(exercise) }}</span>
+                <span v-if="!planExercises(plan).length" class="fitness-exercise-tag is-empty">暂无动作</span>
+                <span v-if="planExercises(plan).length > 5" class="fitness-exercise-tag is-more">+{{ planExercises(plan).length - 5 }}</span>
+              </div>
+              <div v-if="plan.notes" class="fitness-metric-note">{{ plan.notes }}</div>
+            </div>
+            <div class="fitness-plan-browse-actions">
+              <button class="btn btn-primary" type="button" @click="run(() => fitness.startFromPlan(plan.id))">按计划开练</button>
+              <button class="btn btn-secondary" type="button" @click="editPlan(plan)">{{ planEditingId === plan.id ? '正在编辑' : '编辑' }}</button>
+              <button class="btn btn-danger" type="button" @click="run(() => fitness.removePlan(plan.id))">删除</button>
+            </div>
+          </article>
         </div>
         <div v-else class="empty-state">还没有训练计划。</div>
       </article>
