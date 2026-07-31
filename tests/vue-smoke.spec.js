@@ -3009,6 +3009,19 @@ test('search does not match a todo only through its localized module label', asy
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('record editor keeps an old custom type as a controlled option', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'record-legacy-type', type: '旧自定义类型', title: '旧类型记录', content: '兼容旧数据', startDate: localDate(), endDate: localDate(), todoIds: [] }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records?record=record-legacy-type');
+    const typeSelect = page.locator('.record-editor-panel').getByLabel('类型');
+    await expect(typeSelect).toHaveValue('旧自定义类型');
+    await expect(typeSelect.locator('option', { hasText: '旧自定义类型（旧类型）' })).toHaveCount(1);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('record editor persists linked and exclusive todos through the main data contract', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({
@@ -3197,7 +3210,9 @@ test('idea filters deep-link to one Records editor and persist all legacy idea f
     await expect(page.locator('.todo-detail-panel')).toContainText('可选待办');
 
     await page.goto('/#/records?record=idea-needs-conclusion');
-    await editor.getByLabel('类型').fill('日记');
+    const recordType = editor.getByLabel('类型');
+    await expect(recordType.locator('option')).toHaveCount(12);
+    await recordType.selectOption('日记');
     await editor.getByRole('button', { name: '保存修改' }).click();
     const converted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.find(item => item.id === 'idea-needs-conclusion'));
     expect(converted).toMatchObject({
