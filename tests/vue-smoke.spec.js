@@ -1750,6 +1750,47 @@ test('habit analysis summary reports per-habit window stats without writes', asy
     expect(unchanged.mirror).toBeNull();
 });
 
+test('habit annual analysis renders a read-only selected habit heatmap', async ({ page }) => {
+    const dateAt = amount => {
+        const date = new Date();
+        date.setHours(12, 0, 0, 0);
+        date.setDate(date.getDate() + amount);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const today = dateAt(0);
+    const yesterday = dateAt(-1);
+    const source = emptyData({
+        habits: [
+            { id: 'habit-annual-a', name: '年度阅读', rule: 'daily', timesPerDay: '1', startDate: dateAt(-90) },
+            { id: 'habit-annual-b', name: '年度拉伸', rule: 'daily', timesPerDay: '1', startDate: dateAt(-90) },
+        ],
+        checkins: [
+            { id: 'checkin-annual-a-1', habitId: 'habit-annual-a', date: yesterday, time: '08:00' },
+            { id: 'checkin-annual-a-2', habitId: 'habit-annual-a', date: today, time: '08:00' },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        window.__habitBefore = localStorage.getItem('lifePlanData');
+    }, source);
+
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '分析' }).click();
+    const annual = page.locator('.habit-annual-analysis');
+    await expect(annual).toBeVisible();
+    await expect(annual).toContainText('年度阅读');
+    expect(await annual.locator('.habit-annual-cell').count()).toBeGreaterThan(300);
+    await expect(annual.locator('.habit-annual-stats')).toContainText('当前连续天数');
+    await annual.getByLabel('选择分析习惯').selectOption('habit-annual-b');
+    await expect(annual).toContainText('年度拉伸');
+    const unchanged = await page.evaluate(() => ({
+        sameData: window.__habitBefore === localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData'),
+    }));
+    expect(unchanged.sameData).toBe(true);
+    expect(unchanged.mirror).toBeNull();
+});
+
 test('habit penalty settle writes miss ledger once and keeps local mirror upload disabled', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();

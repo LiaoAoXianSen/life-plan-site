@@ -105,6 +105,74 @@ const analysisHabitSummaries = computed(() => matrixRows.value
     return { ...row, checkins, activeDays, checkinStreak, latestDate: latest?.date || '' };
   })
   .sort((a, b) => b.checkins - a.checkins || b.activeDays - a.activeDays || a.name.localeCompare(b.name, 'zh-Hans-CN')));
+const analysisHabitId = ref(focusedHabitId.value);
+const analysisYear = ref(new Date().getFullYear());
+const analysisYears = computed(() => {
+  const currentYear = new Date().getFullYear();
+  return [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+});
+const selectedAnalysisHabit = computed(() => habits.habits.find(item => item.id === analysisHabitId.value && !item.archived)
+  || habits.habits.find(item => !item.archived)
+  || null);
+const annualHeatmapCells = computed(() => {
+  const habit = selectedAnalysisHabit.value;
+  if (!habit) return [];
+  const year = Number(analysisYear.value);
+  const start = new Date(year, 0, 1, 12);
+  const end = new Date(year, 11, 31, 12);
+  const startDay = start.getDay() || 7;
+  const endDay = end.getDay() || 7;
+  const gridStart = new Date(start);
+  gridStart.setDate(start.getDate() - startDay + 1);
+  const gridEnd = new Date(end);
+  gridEnd.setDate(end.getDate() + 7 - endDay);
+  const cells: Array<{ date: string; count: number; level: number; outside: boolean; future: boolean }> = [];
+  for (const date = new Date(gridStart); date <= gridEnd; date.setDate(date.getDate() + 1)) {
+    const dateKey = getTodayStr(date);
+    const count = habits.getCheckinCount(habit.id, dateKey);
+    const level = count >= 7 ? 4 : count >= 4 ? 3 : count >= 2 ? 2 : count >= 1 ? 1 : 0;
+    cells.push({
+      date: dateKey,
+      count,
+      level,
+      outside: date.getFullYear() !== year,
+      future: dateKey > getTodayStr(),
+    });
+  }
+  return cells;
+});
+const annualHeatmapColumns = computed(() => Math.max(1, Math.ceil(annualHeatmapCells.value.length / 7)));
+const annualStats = computed(() => {
+  const habit = selectedAnalysisHabit.value;
+  if (!habit) return { totalDays: 0, currentStreak: 0, maxStreak: 0, yearDays: 0, yearRate: 0 };
+  const allDates = new Set(lifePlan.data.checkins
+    .filter(item => item.habitId === habit.id && item.date)
+    .map(item => String(item.date)));
+  const sortedDates = [...allDates].sort();
+  let maxStreak = 0;
+  let streak = 0;
+  let previous = '';
+  sortedDates.forEach(dateKey => {
+    const date = new Date(`${dateKey}T12:00:00`);
+    const previousDate = previous ? new Date(`${previous}T12:00:00`) : null;
+    if (previousDate && (date.getTime() - previousDate.getTime()) === 86400000) streak += 1;
+    else streak = 1;
+    previous = dateKey;
+    maxStreak = Math.max(maxStreak, streak);
+  });
+  let currentStreak = 0;
+  for (const date = new Date(`${getTodayStr()}T12:00:00`); allDates.has(getTodayStr(date)); date.setDate(date.getDate() - 1)) currentStreak += 1;
+  const year = Number(analysisYear.value);
+  const yearDates = annualHeatmapCells.value.filter(item => !item.outside && item.count > 0).length;
+  const yearDays = Math.round((new Date(year, 11, 31).getTime() - new Date(year, 0, 1).getTime()) / 86400000) + 1;
+  return {
+    totalDays: allDates.size,
+    currentStreak,
+    maxStreak,
+    yearDays,
+    yearRate: yearDays ? Math.round(yearDates / yearDays * 100) : 0,
+  };
+});
 const yesterdayPendingCount = computed(() => {
   const yesterday = (() => {
     const date = new Date(`${getTodayStr()}T12:00:00`);
@@ -628,6 +696,52 @@ watch(focusedHabitId, value => {
         <div v-else class="empty-state">暂无可统计的习惯。</div>
       </div>
 
+      <div class="habit-annual-analysis" aria-label="单习惯年度热力图">
+        <div class="section-title-row compact">
+          <div>
+            <h3>单习惯年度分析</h3>
+            <p class="section-hint">沿用旧版年度热力图，只读展示每天打卡次数与年度完成率。</p>
+          </div>
+          <div class="habit-annual-controls">
+            <select v-model="analysisHabitId" aria-label="选择分析习惯">
+              <option value="" disabled>选择习惯</option>
+              <option v-for="habit in habits.habits.filter(item => !item.archived)" :key="habit.id" :value="habit.id">{{ habit.name || '未命名习惯' }}</option>
+            </select>
+            <select v-model.number="analysisYear" aria-label="选择分析年份">
+              <option v-for="year in analysisYears" :key="year" :value="year">{{ year }} 年</option>
+            </select>
+          </div>
+        </div>
+        <template v-if="selectedAnalysisHabit">
+          <div class="habit-annual-title"><strong>{{ selectedAnalysisHabit.name || '未命名习惯' }}</strong><span>{{ analysisYear }} 年 · 每格代表一天</span></div>
+          <div class="habit-annual-heatmap-shell">
+            <div
+              class="habit-annual-heatmap"
+              :style="{ gridTemplateColumns: `repeat(${annualHeatmapColumns}, 18px)` }"
+            >
+              <div
+                v-for="cell in annualHeatmapCells"
+                :key="cell.date"
+                class="habit-annual-cell"
+                :class="[`level-${cell.level}`, { outside: cell.outside, future: cell.future }]"
+                :title="`${cell.date} · 打卡 ${cell.count} 次${cell.future ? ' · 尚未到达' : ''}`"
+                :aria-label="`${cell.date}，打卡 ${cell.count} 次`"
+              />
+            </div>
+          </div>
+          <div class="habit-annual-legend" aria-label="年度热力图图例">
+            <span>少</span><i class="level-0" /><i class="level-1" /><i class="level-2" /><i class="level-3" /><i class="level-4" /><span>多</span>
+          </div>
+          <div class="habit-annual-stats">
+            <article><strong>{{ annualStats.totalDays }}</strong><span>累计打卡天数</span></article>
+            <article><strong>{{ annualStats.currentStreak }}</strong><span>当前连续天数</span></article>
+            <article><strong>{{ annualStats.maxStreak }}</strong><span>最长连续天数</span></article>
+            <article><strong>{{ annualStats.yearRate }}%</strong><span>{{ analysisYear }} 年完成率</span></article>
+          </div>
+        </template>
+        <div v-else class="empty-state">暂无可分析的习惯。</div>
+      </div>
+
       <div class="habit-diagnostics-grid">
         <article><span>权威源</span><strong>{{ habits.diagnostics.authority || 'lifePlanData' }}</strong></article>
         <article><span>习惯/打卡</span><strong>{{ Number(diagnosticSummary.habits || 0) }} / {{ Number(diagnosticSummary.checkins || 0) }}</strong></article>
@@ -1016,6 +1130,104 @@ watch(focusedHabitId, value => {
 .habit-analysis-summary-values strong {
   color: #285940;
   font-size: 1.1rem;
+}
+.habit-annual-analysis {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(42, 75, 56, .1);
+}
+.habit-annual-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.habit-annual-controls select {
+  min-width: 128px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid var(--line, #dfe7e1);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text, #17211b);
+}
+.habit-annual-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.habit-annual-title span {
+  color: var(--muted, #647269);
+  font-size: 12px;
+}
+.habit-annual-heatmap-shell {
+  overflow-x: auto;
+  padding: 10px 4px 8px;
+  border: 1px solid rgba(42, 75, 56, .1);
+  border-radius: 10px;
+  background: #fbfdfb;
+}
+.habit-annual-heatmap {
+  display: grid;
+  grid-template-rows: repeat(7, 18px);
+  grid-auto-flow: column;
+  gap: 4px;
+  width: max-content;
+  min-width: 720px;
+}
+.habit-annual-cell {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #e3e9e5;
+  box-sizing: border-box;
+}
+.habit-annual-cell.level-1 { background: #bfe5ca; }
+.habit-annual-cell.level-2 { background: #79c98f; }
+.habit-annual-cell.level-3 { background: #36a766; }
+.habit-annual-cell.level-4 { background: #16633d; }
+.habit-annual-cell.outside { background: transparent; }
+.habit-annual-cell.future { opacity: .38; }
+.habit-annual-legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted, #647269);
+  font-size: 11px;
+}
+.habit-annual-legend i {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: #e3e9e5;
+}
+.habit-annual-legend i.level-1 { background: #bfe5ca; }
+.habit-annual-legend i.level-2 { background: #79c98f; }
+.habit-annual-legend i.level-3 { background: #36a766; }
+.habit-annual-legend i.level-4 { background: #16633d; }
+.habit-annual-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.habit-annual-stats article {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid rgba(42, 75, 56, .1);
+  border-radius: 10px;
+  background: #f8faf8;
+}
+.habit-annual-stats strong {
+  color: #285940;
+  font-size: 1.15rem;
+}
+.habit-annual-stats span {
+  color: var(--muted, #647269);
+  font-size: 12px;
 }
 .habit-center-tab {
   border: 1px solid rgba(33, 110, 78, 0.14);
@@ -1435,7 +1647,8 @@ watch(focusedHabitId, value => {
   .habit-reward-form,
   .habit-wallet-layout,
   .habit-diagnostics-grid,
-  .habit-analysis-summary-grid {
+  .habit-analysis-summary-grid,
+  .habit-annual-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .habit-reward-form .reward-note,
@@ -1466,6 +1679,7 @@ watch(focusedHabitId, value => {
   .habit-wallet-layout,
   .habit-diagnostics-grid,
   .habit-analysis-summary-grid,
+  .habit-annual-stats,
   .habit-reward-card {
     grid-template-columns: minmax(0, 1fr);
   }
