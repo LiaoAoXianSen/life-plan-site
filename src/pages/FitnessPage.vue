@@ -47,6 +47,8 @@ const planEditingId = ref('');
 const workoutEditingId = ref('');
 const bodySectionOpen = ref(false);
 const workoutSectionOpen = ref(false);
+const librarySectionOpen = ref(false);
+const planEditorOpen = ref(false);
 const writeBackPlan = ref(false);
 const restTimer = reactive({ remaining: 0, total: 0, exerciseName: '' });
 let restTimerId: ReturnType<typeof window.setInterval> | null = null;
@@ -132,6 +134,7 @@ function jumpToFreeWorkout() {
 }
 
 function openLibrarySection() {
+  librarySectionOpen.value = true;
   if (!fitness.library.length) seedLibrary();
   const el = document.getElementById('fitness-library-section');
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -139,6 +142,7 @@ function openLibrarySection() {
 
 function openPlanCreate() {
   resetPlanForm();
+  planEditorOpen.value = true;
   const el = document.getElementById('fitness-plan-section');
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -158,6 +162,7 @@ function openBodySection() {
 }
 
 function browseTo(target: string) {
+  if (target === 'fitness-library-section') librarySectionOpen.value = true;
   document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -349,6 +354,7 @@ function savePlan() {
       exercises,
     }, planEditingId.value);
     resetPlanForm();
+    planEditorOpen.value = false;
   });
 }
 
@@ -366,6 +372,7 @@ function finishActiveWorkout() {
 
 function editPlan(plan: Record<string, any>) {
   run(() => {
+    planEditorOpen.value = true;
     const exercises = fitness.services.fitness.getPlanExercises(plan)
       .map((exercise: Record<string, any>) => ({
         localId: localDraftId(),
@@ -787,83 +794,89 @@ onUnmounted(stopRestTimer);
     </details>
 
     <div class="form-row" id="fitness-library-section">
-      <form class="card" @submit.prevent="saveLibraryItem">
-        <div class="section-title-row"><div><h2>动作库</h2><p class="section-hint">初始化会按旧版默认动作创建可编辑副本。</p></div><button class="btn btn-secondary" type="button" @click="seedLibrary">初始化默认动作</button></div>
-        <div class="form-row">
-          <div class="form-group"><label>动作名称</label><input v-model="libraryForm.name" required maxlength="80" /></div>
-          <div class="form-group"><label>肌群</label><select v-model="libraryForm.muscle"><option v-for="option in muscleOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
-          <div class="form-group"><label>默认组数</label><input v-model.number="libraryForm.defaultSets" type="number" min="1" max="99" /></div>
-          <div class="form-group"><label>默认次数</label><input v-model="libraryForm.defaultReps" placeholder="8-12" /></div>
-          <div class="form-group"><label>默认重量 kg</label><input v-model="libraryForm.defaultWeight" inputmode="decimal" /></div>
-          <div class="form-group"><label>组间休息 秒</label><input v-model.number="libraryForm.restSec" type="number" min="0" /></div>
-        </div>
-        <div class="form-group"><label>备注</label><input v-model="libraryForm.note" /></div>
-        <button class="btn btn-primary">添加动作</button>
-        <div v-if="fitness.library.length" class="fitness-metric-list">
-          <div v-for="item in fitness.library" :key="item.id" class="fitness-metric-row"><strong>{{ item.name }}</strong><span>{{ fitness.services.fitness.getMuscleLabel(item.muscle) }} · {{ item.defaultSets }} 组 × {{ item.defaultReps }}</span><button class="btn btn-danger" type="button" @click="run(() => fitness.removeLibraryItem(item.id))">删除</button></div>
-        </div>
-      </form>
-
-      <form class="card" @submit.prevent="savePlan">
-        <div class="section-title-row">
-          <div>
-            <div class="card-title">{{ planEditingId ? '编辑训练计划' : '创建训练计划' }}</div>
-            <p class="section-hint">计划可包含多个动作和每组处方，保存后可直接按计划开练。</p>
+      <details class="fitness-form-disclosure" :open="librarySectionOpen">
+        <summary><strong>动作库管理</strong><span>初始化或添加常用动作</span></summary>
+        <form class="card" @submit.prevent="saveLibraryItem">
+          <div class="section-title-row"><div><h2>动作库</h2><p class="section-hint">初始化会按旧版默认动作创建可编辑副本。</p></div><button class="btn btn-secondary" type="button" @click="seedLibrary">初始化默认动作</button></div>
+          <div class="form-row">
+            <div class="form-group"><label>动作名称</label><input v-model="libraryForm.name" required maxlength="80" /></div>
+            <div class="form-group"><label>肌群</label><select v-model="libraryForm.muscle"><option v-for="option in muscleOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+            <div class="form-group"><label>默认组数</label><input v-model.number="libraryForm.defaultSets" type="number" min="1" max="99" /></div>
+            <div class="form-group"><label>默认次数</label><input v-model="libraryForm.defaultReps" placeholder="8-12" /></div>
+            <div class="form-group"><label>默认重量 kg</label><input v-model="libraryForm.defaultWeight" inputmode="decimal" /></div>
+            <div class="form-group"><label>组间休息 秒</label><input v-model.number="libraryForm.restSec" type="number" min="0" /></div>
           </div>
-          <button v-if="planEditingId" class="btn btn-secondary" type="button" @click="resetPlanForm">取消编辑</button>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>计划名称</label><input v-model="planForm.name" required maxlength="80" /></div>
-          <div class="form-group"><label>目标</label><select v-model="planForm.goal"><option v-for="option in goalOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
-          <div class="form-group"><label>状态</label><select v-model="planForm.status"><option v-for="option in planStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
-        </div>
-        <div class="form-group"><label>备注</label><input v-model="planForm.notes" /></div>
-        <div class="fitness-plan-exercise-list">
-          <section v-for="(exercise, exerciseIndex) in planForm.exercises" :key="exercise.localId" class="fitness-plan-exercise-card">
-            <div class="fitness-plan-exercise-card-head">
-              <input v-model="exercise.name" type="text" list="fitness-exercise-datalist" placeholder="动作名称" required />
-              <button class="btn btn-secondary fitness-icon-btn" type="button" :disabled="planForm.exercises.length <= 1" title="删除动作" @click="removePlanExercise(exerciseIndex)">×</button>
+          <div class="form-group"><label>备注</label><input v-model="libraryForm.note" /></div>
+          <button class="btn btn-primary">添加动作</button>
+          <div v-if="fitness.library.length" class="fitness-metric-list">
+            <div v-for="item in fitness.library" :key="item.id" class="fitness-metric-row"><strong>{{ item.name }}</strong><span>{{ fitness.services.fitness.getMuscleLabel(item.muscle) }} · {{ item.defaultSets }} 组 × {{ item.defaultReps }}</span><button class="btn btn-danger" type="button" @click="run(() => fitness.removeLibraryItem(item.id))">删除</button></div>
+          </div>
+        </form>
+      </details>
+
+      <details class="fitness-form-disclosure" :open="planEditorOpen">
+        <summary><strong>{{ planEditingId ? '编辑训练计划' : '创建训练计划' }}</strong><span>设置动作和每组处方</span></summary>
+        <form class="card" @submit.prevent="savePlan">
+          <div class="section-title-row">
+            <div>
+              <div class="card-title">{{ planEditingId ? '编辑训练计划' : '创建训练计划' }}</div>
+              <p class="section-hint">计划可包含多个动作和每组处方，保存后可直接按计划开练。</p>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>套用动作库</label>
-                <select @change="applyLibraryToPlanExercise(exerciseIndex, ($event.target as HTMLSelectElement).value)">
-                  <option value="">手动输入</option>
-                  <option v-for="item in fitness.library" :key="item.id" :value="item.id">{{ item.name }}</option>
-                </select>
+            <button v-if="planEditingId" class="btn btn-secondary" type="button" @click="resetPlanForm">取消编辑</button>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>计划名称</label><input v-model="planForm.name" required maxlength="80" /></div>
+            <div class="form-group"><label>目标</label><select v-model="planForm.goal"><option v-for="option in goalOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+            <div class="form-group"><label>状态</label><select v-model="planForm.status"><option v-for="option in planStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+          </div>
+          <div class="form-group"><label>备注</label><input v-model="planForm.notes" /></div>
+          <div class="fitness-plan-exercise-list">
+            <section v-for="(exercise, exerciseIndex) in planForm.exercises" :key="exercise.localId" class="fitness-plan-exercise-card">
+              <div class="fitness-plan-exercise-card-head">
+                <input v-model="exercise.name" type="text" list="fitness-exercise-datalist" placeholder="动作名称" required />
+                <button class="btn btn-secondary fitness-icon-btn" type="button" :disabled="planForm.exercises.length <= 1" title="删除动作" @click="removePlanExercise(exerciseIndex)">×</button>
               </div>
-              <div class="form-group"><label>动作备注</label><input v-model="exercise.note" placeholder="角度、节奏或注意事项" /></div>
-            </div>
-            <div class="fitness-plan-set-table">
-              <div class="fitness-plan-set-head">
-                <span>组</span>
-                <span>重量</span>
-                <span>次数</span>
-                <span></span>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>套用动作库</label>
+                  <select @change="applyLibraryToPlanExercise(exerciseIndex, ($event.target as HTMLSelectElement).value)">
+                    <option value="">手动输入</option>
+                    <option v-for="item in fitness.library" :key="item.id" :value="item.id">{{ item.name }}</option>
+                  </select>
+                </div>
+                <div class="form-group"><label>动作备注</label><input v-model="exercise.note" placeholder="角度、节奏或注意事项" /></div>
               </div>
-              <div v-for="(set, setIndex) in exercise.sets" :key="set.id || setIndex" class="fitness-plan-set-row">
-                <span class="fitness-set-index">{{ setIndex + 1 }}</span>
-                <label class="fitness-live-field">
-                  <input v-model="set.weight" type="number" min="0" step="0.5" placeholder="kg" />
-                  <span class="fitness-live-unit">kg</span>
-                </label>
-                <label class="fitness-live-field">
-                  <input v-model="set.reps" type="number" min="0" step="1" placeholder="次" />
-                  <span class="fitness-live-unit">次</span>
-                </label>
-                <button class="btn btn-secondary fitness-icon-btn" type="button" :disabled="exercise.sets.length <= 1" title="删除组" @click="removePlanSet(exercise, setIndex)">×</button>
+              <div class="fitness-plan-set-table">
+                <div class="fitness-plan-set-head">
+                  <span>组</span>
+                  <span>重量</span>
+                  <span>次数</span>
+                  <span></span>
+                </div>
+                <div v-for="(set, setIndex) in exercise.sets" :key="set.id || setIndex" class="fitness-plan-set-row">
+                  <span class="fitness-set-index">{{ setIndex + 1 }}</span>
+                  <label class="fitness-live-field">
+                    <input v-model="set.weight" type="number" min="0" step="0.5" placeholder="kg" />
+                    <span class="fitness-live-unit">kg</span>
+                  </label>
+                  <label class="fitness-live-field">
+                    <input v-model="set.reps" type="number" min="0" step="1" placeholder="次" />
+                    <span class="fitness-live-unit">次</span>
+                  </label>
+                  <button class="btn btn-secondary fitness-icon-btn" type="button" :disabled="exercise.sets.length <= 1" title="删除组" @click="removePlanSet(exercise, setIndex)">×</button>
+                </div>
               </div>
-            </div>
-            <div class="fitness-plan-day-actions compact">
-              <button class="btn btn-secondary todo-mini-btn" type="button" @click="addPlanSet(exercise)">+ 加一组</button>
-            </div>
-          </section>
-        </div>
-        <div class="fitness-plan-day-actions">
-          <button class="btn btn-secondary" type="button" @click="addPlanExercise">添加动作</button>
-          <button class="btn btn-primary">{{ planEditingId ? '保存计划' : '创建计划' }}</button>
-        </div>
-      </form>
+              <div class="fitness-plan-day-actions compact">
+                <button class="btn btn-secondary todo-mini-btn" type="button" @click="addPlanSet(exercise)">+ 加一组</button>
+              </div>
+            </section>
+          </div>
+          <div class="fitness-plan-day-actions">
+            <button class="btn btn-secondary" type="button" @click="addPlanExercise">添加动作</button>
+            <button class="btn btn-primary">{{ planEditingId ? '保存计划' : '创建计划' }}</button>
+          </div>
+        </form>
+      </details>
     </div>
 
     <details id="fitness-workout-section" class="fitness-form-disclosure" :open="workoutSectionOpen">

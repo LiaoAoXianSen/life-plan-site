@@ -1250,6 +1250,7 @@ test('fitness plans support multiple exercises and explicit plan writeback', asy
     }, source);
 
     await page.goto('/#/fitness');
+    await page.locator('.fitness-page-header .fitness-header-actions').getByRole('button', { name: '新建计划' }).click();
     const planForm = page.locator('form.card').filter({ hasText: '创建训练计划' });
     await planForm.locator('.form-group').filter({ hasText: '计划名称' }).locator('input').fill('力量计划');
     await planForm.locator('.form-group').filter({ hasText: '目标' }).locator('select').selectOption('strength');
