@@ -1,12 +1,40 @@
+html,
+body {
+  height: 100%;
+}
+
 #app,
 .vue-app-shell {
   width: 100%;
   min-width: 0;
+  height: 100%;
   min-height: 100%;
 }
 
 .vue-app-shell {
   display: flex;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Keep sidebar pinned to the viewport so bottom backup/AI actions stay visible. */
+.vue-app-shell > .sidebar {
+  height: 100vh;
+  max-height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.vue-app-shell > .sidebar .nav-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.vue-app-shell > .sidebar .sidebar-primary-action,
+.vue-app-shell > .sidebar .sidebar-bottom {
+  flex: 0 0 auto;
 }
 
 .app-brand {
@@ -20,6 +48,9 @@
 
 .vue-main {
   flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .migration-page {

@@ -190,7 +190,7 @@ function restoreSnapshot(item: SnapshotItem) {
         <button class="btn btn-secondary sync-btn" type="button" @click="openSnapshotModal">🛟 本地快照</button>
         <button class="btn btn-secondary sync-btn" type="button" @click="router.push('/sync')">☁️ 云同步</button>
       </div>
-      <div class="sidebar-button-row sidebar-button-row-compact">
+      <div class="sidebar-button-row sidebar-button-row-compact sidebar-ai-row">
         <button class="btn btn-secondary sync-btn" type="button" @click="router.push({ path: '/ai', query: { mode: 'todayPlan' } })">AI 助手</button>
         <button class="btn btn-secondary sync-btn" type="button" @click="router.push('/ai')">AI 设置</button>
       </div>
@@ -244,6 +244,23 @@ function restoreSnapshot(item: SnapshotItem) {
 </template>
 
 <style scoped>
+.sidebar {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+.nav-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.sidebar-primary-action,
+.sidebar-bottom {
+  flex: 0 0 auto;
+}
+.sidebar-ai-row {
+  margin-bottom: 4px;
+}
 .snapshot-modal {
   width: min(720px, calc(100vw - 32px));
   max-height: min(860px, calc(100vh - 32px));
