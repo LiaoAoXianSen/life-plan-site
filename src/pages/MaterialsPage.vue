@@ -170,7 +170,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
     <header class="page-header">
       <div>
         <div class="page-title">素材库</div>
-        <p class="page-subtitle">金句、提示词、摘抄和方法，按标签收纳与复习。</p>
+        <p class="page-subtitle">金句、提示词、摘抄和方法，都可以按标签收纳与随机展示。</p>
       </div>
       <button class="btn btn-primary" type="button" @click="openMaterial()">+ 新增素材</button>
     </header>
