@@ -804,6 +804,19 @@ test('wheel management forms focus editable rows without mutating data', async (
     expect(persisted.mirror).toBeNull();
 });
 
+test('wheel management landing keeps workspace navigation focused', async ({ page }) => {
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+
+    const landing = page.locator('.wheel-management-landing');
+    await expect(landing).toBeVisible();
+    await expect(landing.locator('.wheel-management-summary')).toContainText('转盘');
+    await expect(landing.getByRole('button', { name: '公共项库' })).toBeVisible();
+    await landing.getByRole('button', { name: '公共项库' }).click();
+    await expect(page.locator('#wheel-library-panel')).toBeInViewport();
+});
+
 test('main import export keeps snapshots tombstones mirrors and dirty state compatible', async ({ page }) => {
     const local = emptyData({
         records: [

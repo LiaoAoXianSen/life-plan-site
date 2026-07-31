@@ -248,10 +248,13 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 230. Status: complete - Full smoke 78/78 after visual parity fixes; commit and push.
 231. Status: complete - Add a compact Fitness browse index beneath the overview hero with read-only summaries and section jump actions.
 232. Status: complete - Add focused Fitness browse-index smoke coverage without changing persistence contracts.
-233. Status: in_progress - Commit, push, and append dual-store memory for the verified Fitness browse-index shell.
+233. Status: complete - Commit, push, and append dual-store memory for the verified Fitness browse-index shell.
 234. Status: complete - Add Fitness hero secondary actions for body metrics and workout-log browsing without changing form contracts.
 235. Status: complete - Add focused hero-action navigation coverage and rerun Fitness build/check gates.
-236. Status: in_progress - Commit, push, and append dual-store memory for the Fitness hero-action shell.
+236. Status: complete - Commit, push, and append dual-store memory for the Fitness hero-action shell.
+237. Status: complete - Audit the Vue Wheel management shell and choose one bounded IA refinement that preserves canvas and sync contracts.
+238. Status: complete - Implement the bounded Wheel management refinement and focused Playwright coverage.
+239. Status: in_progress - Commit, push, and append dual-store memory for the management-shell slice.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

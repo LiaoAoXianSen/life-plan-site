@@ -565,3 +565,12 @@
 - Scope: add `记录身材` and `补记训练` secondary hero actions that reuse existing scroll/reset helpers; no service, store, or persistence changes.
 - Added the two secondary actions in `src/pages/FitnessPage.vue` and covered both destinations in `tests/vue-smoke.spec.js`.
 - `npm run build` passed; Fitness focused smoke passed 6/6; `git diff --check` passed with only LF/CRLF working-copy warnings.
+- Committed as `1f0370c` and pushed successfully to `origin/migration/vue-app-v1`; remote now includes both Fitness browse-first shell commits.
+
+## 2026-07-31 - Wheel management shell audit (in progress)
+
+- Fitness browse-first minimum is closed for this pass: overview hero, secondary actions, four browse summaries, and section jump behavior are all covered.
+- Next bounded slice targets Wheel management IA only; canvas rendering, public-library behavior, and sync/data contracts stay untouched.
+- Added a management landing strip to `src/pages/WheelPage.vue` with the existing stats moved above the full editor dump and scoped workspace jump buttons.
+- Added focused coverage in `tests/vue-smoke.spec.js` for landing visibility and Public Library navigation while preserving existing management form selectors.
+- `npm run build` passed; Wheel focused smoke passed 4/4 (canvas/tag, public library batch, management forms, landing); `git diff --check` passed with only LF/CRLF working-copy warnings.

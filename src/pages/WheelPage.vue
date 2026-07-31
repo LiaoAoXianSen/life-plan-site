@@ -502,6 +502,25 @@ function importJson(event: Event) {
     </section>
 
     <div v-show="showManagement" id="wheel-management-block" class="wheel-management-block">
+      <section class="wheel-management-landing" aria-label="转盘管理入口">
+        <div class="wheel-management-landing-head">
+          <div>
+            <div class="card-title">管理概览</div>
+            <p class="hint">先选工作区，再处理对应内容；主舞台会保持在上方。</p>
+          </div>
+          <div class="wheel-management-nav" role="navigation" aria-label="管理工作区">
+            <button class="btn btn-secondary" type="button" @click="openManagement('list')">转盘列表</button>
+            <button class="btn btn-secondary" type="button" @click="openManagement('create')">新建转盘</button>
+            <button class="btn btn-secondary" type="button" @click="openManagement('library')">公共项库</button>
+            <button class="btn btn-secondary" type="button" @click="openManagement('tags')">标签管理</button>
+            <button class="btn btn-secondary" type="button" @click="openManagement('history')">记录/备份</button>
+          </div>
+        </div>
+        <div class="wheel-management-summary" aria-label="转盘管理概览">
+          <span v-for="item in managementStats" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</span>
+        </div>
+      </section>
+
       <div class="wheel-layout">
         <article class="card wheel-stage-card">
           <div class="wheel-toolbar">
@@ -521,10 +540,6 @@ function importJson(event: Event) {
           <form id="wheel-create-panel" class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式<select v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)"><option value="normal">普通转盘</option><option value="tag">标签转盘（两段抽取）</option></select></label></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><label>选项（每行一项；可用“名称,权重”）<textarea v-model="wheelForm.itemsText" rows="4" placeholder="阅读,2&#10;散步,1" /></label></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
           <article id="wheel-history-panel" class="card history-card"><div class="card-title-row"><div class="card-title">最近抽取</div><button v-if="wheelStore.history.length" type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div><div v-for="entry in wheelStore.history.slice(0, 8)" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ entry.createdAt }}</span></div><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></div><p v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</p></article>
         </aside>
-      </div>
-
-      <div class="wheel-management-summary" aria-label="转盘管理概览">
-        <span v-for="item in managementStats" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</span>
       </div>
 
       <div class="wheel-management-grid">
@@ -606,7 +621,7 @@ function importJson(event: Event) {
 .wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
 .wheel-result.focus{align-items:flex-start;text-align:left;min-height:auto;padding:10px 0 0}
-.wheel-management-block{margin-top:8px}
+.wheel-management-block{margin-top:8px}.wheel-management-landing{margin:0 0 14px;padding:14px 16px;border:1px solid rgba(42,75,56,.12);border-radius:10px;background:#fbfdfb}.wheel-management-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.wheel-management-nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.wheel-management-nav .btn{min-height:34px}.wheel-management-landing .wheel-management-summary{margin-top:12px}
 .wheel-mode-pills{display:flex;flex-wrap:wrap;gap:8px}
 .wheel-mode-pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;border:1px solid transparent;background:#eef4f0;color:#5d7266;font-size:.82rem;font-weight:700;cursor:pointer}
 .wheel-mode-pills.segmented{padding:3px;border-radius:999px;background:#eef4f0;gap:4px}
