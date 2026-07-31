@@ -348,6 +348,44 @@ function editTag(tag: WheelTag) {
   Object.assign(tagForm, { id: tag.id, name: tag.name, color: tag.color, weight: tag.weight, enabled: tag.enabled });
 }
 function submitTag() { handle(() => { wheelStore.saveTag(tagForm); resetTagForm(); }, tagForm.id ? '已更新标签' : '已添加标签'); }
+function tagCandidateCount(tag: WheelTag) { return wheelStore.libraryItems.filter(item => item.enabled !== false && itemTagIds(item).includes(tag.id)).length; }
+function ensureTagWheelContext() {
+  if (selectedWheel.value?.mode === 'tag') return selectedWheel.value;
+  const tagWheel = wheelStore.wheels.find(wheel => wheel.mode === 'tag');
+  if (!tagWheel) {
+    say('请先创建一个标签转盘');
+    return null;
+  }
+  selectedId.value = tagWheel.id;
+  stageTag.value = null;
+  resultId.value = '';
+  return tagWheel;
+}
+function previewTagStage(tag: WheelTag) {
+  const wheel = ensureTagWheelContext();
+  if (!wheel || !tagCandidateCount(tag)) return say('这个标签下没有可抽公共项');
+  const activate = () => {
+    stageTag.value = tag;
+    resultId.value = '';
+    showManagement.value = false;
+    say(`已预览标签池：${tag.name}`);
+  };
+  void nextTick(activate);
+}
+function directTag(tag: WheelTag) {
+  const wheel = ensureTagWheelContext();
+  if (!wheel || !tagCandidateCount(tag)) return say('这个标签下没有可抽公共项');
+  const activate = () => {
+    stageTag.value = tag;
+    resultId.value = '';
+    showManagement.value = false;
+    void nextTick(nextSpin);
+  };
+  void nextTick(activate);
+}
+function toggleTagEnabled(tag: WheelTag) {
+  handle(() => wheelStore.toggleTagEnabled(tag.id), tag.enabled === false ? '已启用标签' : '已停用标签');
+}
 function resetLibraryForm() { Object.assign(libraryForm, { id: '', name: '', tagIds: [], weight: 1, enabled: true }); }
 function editLibrary(item: WheelItem) {
   showManagement.value = true;
@@ -408,7 +446,6 @@ function nextSpin() {
     resultId.value = history.id; stageTag.value = null; say(`抽中了：${picked.name}`);
   });
 }
-function directTag(tag: WheelTag) { stageTag.value = tag; resultId.value = ''; nextSpin(); }
 function animate(entries: Array<WheelRenderEntry>, selectedIndex: number, done: () => void) {
   if (spinning.value) return;
   spinning.value = true;
@@ -805,7 +842,7 @@ function importJson(event: Event) {
           <label class="check-label"><input v-model="tagForm.enabled" type="checkbox" />启用</label>
           <div class="inline-actions"><button class="btn btn-primary">{{ tagForm.id ? '保存' : '添加' }}</button><button v-if="tagForm.id" type="button" class="btn btn-secondary" @click="resetTagForm">取消</button></div>
         </form>
-        <div v-for="tag in wheelStore.tags" :key="tag.id" class="entity-row"><span><i class="color-dot" :style="{ background: tag.color }" /><strong>{{ tag.name }}</strong><em>权重 {{ tag.weight }} · {{ tag.enabled ? '启用' : '停用' }}</em></span><span><button class="link-button" @click="editTag(tag)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除标签“${tag.name}”吗？`, () => wheelStore.deleteTag(tag.id))">删除</button></span></div>
+        <div v-for="tag in wheelStore.tags" :key="tag.id" class="entity-row"><span><i class="color-dot" :style="{ background: tag.color }" /><strong>{{ tag.name }}</strong><em>权重 {{ tag.weight }} · {{ tagCandidateCount(tag) }} 个公共项 · {{ tag.enabled ? '启用' : '停用' }}</em></span><span class="tag-row-actions"><button class="link-button" :disabled="tag.enabled === false || !tagCandidateCount(tag)" @click="directTag(tag)">只转这个标签</button><button class="link-button" :disabled="tag.enabled === false || !tagCandidateCount(tag)" @click="previewTagStage(tag)">先看这个标签池</button><button class="link-button" @click="toggleTagEnabled(tag)">{{ tag.enabled === false ? '启用' : '停用' }}</button><button class="link-button" @click="editTag(tag)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除标签“${tag.name}”吗？`, () => wheelStore.deleteTag(tag.id))">删除</button></span></div>
       </article>
       <article id="wheel-library-panel" class="card library-card">
         <div class="card-title-row">
@@ -866,6 +903,7 @@ function importJson(event: Event) {
 .wheel-focus-actions .btn-secondary{min-width:92px}
 .wheel-batch-tools{display:grid;gap:8px;margin:12px 0;padding:10px 12px;border:1px solid rgba(223,231,239,.9);border-radius:12px;background:#fafbfd}.wheel-batch-tools summary{cursor:pointer;font-weight:850;color:#53625a}.wheel-batch-tools textarea{width:100%;resize:vertical;min-height:76px}
 .wheel-copy-row{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(180px,1.3fr) auto;gap:8px;align-items:center}.wheel-copy-row select{min-height:38px;min-width:0}
+.tag-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
 .wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
 .wheel-result.focus{align-items:center;text-align:center;min-height:auto;padding:4px 0 0}
 .wheel-management-block{margin-top:8px}.wheel-management-landing{margin:0 0 14px;padding:14px 16px;border:1px solid rgba(42,75,56,.12);border-radius:10px;background:#fbfdfb}.wheel-management-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.wheel-management-nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.wheel-management-nav .btn{min-height:34px}.wheel-management-landing .wheel-management-summary{margin-top:12px}

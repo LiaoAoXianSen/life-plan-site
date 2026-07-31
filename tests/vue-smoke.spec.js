@@ -879,6 +879,39 @@ test('wheel normal option copy imports a public item with source metadata', asyn
     expect(stored.wheels[0].items).toEqual([expect.objectContaining({ name: '公共阅读', note: '来自公共项库', weight: 3, sourceLibraryItemId: 'library-copy', enabled: true })]);
 });
 
+test('wheel tag management previews, directly spins, and toggles tag state', async ({ page }) => {
+    const source = emptyData({
+        wheels: [
+            { id: 'wheel-normal-tag-actions', name: '普通盘', mode: 'normal', items: [{ id: 'normal-action', name: '普通项', note: '', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'wheel-tag-actions', name: '标签盘', mode: 'tag', tagIds: ['tag-actions'], items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+        ],
+        wheelTags: [{ id: 'tag-actions', name: '学习', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+        wheelLibraryItems: [{ id: 'library-action', name: '公共阅读', note: '', tagIds: ['tag-actions'], weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        Math.random = () => 0;
+        window.__wheelSpinDurationMs = 1;
+    }, source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '标签管理' }).click();
+    const tagRow = page.locator('#wheel-tags-panel .entity-row').filter({ hasText: '学习' });
+    await tagRow.getByRole('button', { name: '先看这个标签池' }).click();
+    await expect(page.locator('.wheel-stage-title')).toContainText('已锁定：学习');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).wheelHistory.length)).toBe(0);
+
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '标签管理' }).click();
+    await page.locator('#wheel-tags-panel .entity-row').filter({ hasText: '学习' }).getByRole('button', { name: '只转这个标签' }).click();
+    await expect(page.locator('.wheel-result')).toContainText('公共阅读');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '标签管理' }).click();
+    await page.locator('#wheel-tags-panel .entity-row').filter({ hasText: '学习' }).getByRole('button', { name: '停用' }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelTags.find(tag => tag.id === 'tag-actions').enabled).toBe(false);
+});
+
 test('wheel management landing keeps workspace navigation focused', async ({ page }) => {
     await page.goto('/#/wheel');
     await page.locator('#wheel-action-menu-button').click();
