@@ -84,8 +84,11 @@ function formatBytes(bytes = 0) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
-function formatTime(value = '') {
-  return String(value || '').slice(0, 19).replace('T', ' ');
+function formatStoredDateTime(value = '') {
+  const raw = String(value || '');
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return raw.replace('T', ' ');
+  return `${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${match[4]}:${match[5]}:${match[6] || '00'}`;
 }
 
 function exportBackup() {
@@ -239,7 +242,7 @@ function restoreSnapshot(item: SnapshotItem) {
             <article v-for="item in snapshots" :key="String(item.id)" class="snapshot-item card">
               <div>
                 <strong>v{{ item.version || '-' }} · {{ item.reason || '本地快照' }}</strong>
-                <p>{{ formatTime(item.createdAt) }} · {{ formatBytes(Number(item.bytes || 0)) }}</p>
+                <p>{{ formatStoredDateTime(item.createdAt) }} · {{ formatBytes(Number(item.bytes || 0)) }}</p>
               </div>
               <div class="page-actions">
                 <button class="btn btn-secondary" type="button" @click="downloadSnapshot(item)">下载</button>

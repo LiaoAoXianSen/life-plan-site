@@ -409,6 +409,21 @@ test('dashboard command center restores the legacy fitness card', async ({ page 
     await expect(fitnessCard.getByRole('button', { name: '按计划开练' })).toBeVisible();
 });
 
+test('sidebar snapshot list keeps the legacy timestamp format', async ({ page }) => {
+    const source = emptyData();
+    const snapshot = {
+        id: 'snapshot-time', version: 3, reason: '格式测试快照', createdAt: '2026-07-28T08:09:10',
+        bytes: 128, hash: 'snapshot-hash', data: source,
+    };
+    await page.addInitScript(({ data, item }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSnapshots', JSON.stringify([item]));
+    }, { data: source, item: snapshot });
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /本地快照/ }).click();
+    await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('2026年7月28日 08:09:10');
+});
+
 test('dashboard quick writes plan today execute once toggle and rebuild todo mirror', async ({ page }) => {
     const today = (() => {
         const date = new Date();
