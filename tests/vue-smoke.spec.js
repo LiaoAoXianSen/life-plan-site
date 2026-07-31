@@ -6,6 +6,10 @@ function emptyData(overrides = {}) {
     };
 }
 
+function localDate(date = new Date()) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function todoFixture(id, text, overrides = {}) {
     return {
         id, text, note: '', done: false, dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他',
@@ -249,10 +253,10 @@ test('todo page keeps the legacy cloud sync panel below the workspace', async ({
 });
 
 test('todo dashboard route presets and calendar entries preserve one read-only detail target', async ({ page }) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDate();
     const tomorrow = new Date(`${today}T12:00:00`);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowDate = tomorrow.toISOString().slice(0, 10);
+    const tomorrowDate = localDate(tomorrow);
     const source = emptyData({
         todos: [{
             id: 'todo-cross-entry', text: '跨入口待办', note: '保持只读导航', done: false,
@@ -642,6 +646,32 @@ test('dashboard habit quick check-in writes checkin and rebuilds habit mirror', 
         expect.objectContaining({ collection: 'checkins', reason: 'manual-decrease', habitId: 'habit-dash-checkin' }),
     ]));
     expect(stored.mirror.remoteUploadEnabled).toBe(false);
+});
+
+test('dashboard today habit metadata mirrors legacy action card', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [{
+            id: 'habit-dashboard-metadata', name: '晨间阅读', tag: '成长', rule: 'daily', timesPerDay: 2,
+            rewardPoints: 5, rewardCurrency: '金币', penaltyPoints: 2, startDate: today,
+        }],
+        checkins: [{
+            id: 'checkin-dashboard-metadata', habitId: 'habit-dashboard-metadata', date: today,
+            time: '08:15', checkinAt: `${today}T08:15:00`, createdAt: `${today}T08:15:00`, note: '读完一章',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+    const row = page.locator('.dashboard-today-habits .todo-item').filter({ hasText: '晨间阅读' });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('每天');
+    await expect(row).toContainText('进行中 1/2');
+    await expect(row).toContainText('08:15');
+    await expect(row).toContainText('+5 金币');
+    await expect(row).toContainText('漏打 -2');
+    await expect(row).toContainText('备注：读完一章');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
 test('goals detail route save and delete preserve the legacy contract', async ({ page }) => {
@@ -1851,7 +1881,7 @@ test('todo detail edits record-owned relationships and protects an exclusive sou
 });
 
 test('habit quick check-in writes the legacy fields and rebuilds its local mirror', async ({ page }) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDate();
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({
         ...data,
         habits: [{ id: 'habit-1', name: '阅读', rule: 'daily', timesPerDay: '1', startDate: date, rewardPoints: 2, rewardCurrency: '金币' }],
@@ -1997,7 +2027,7 @@ test('habit backfill list follows the selected date schedule', async ({ page }) 
 });
 
 test('habit action cards expose legacy rule reward timing and note metadata', async ({ page }) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDate();
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData({
         habits: [{
             id: 'habit-card-metadata', name: '晨间阅读', rule: 'daily', timesPerDay: 2,
@@ -2510,7 +2540,7 @@ test('habit penalty settle writes miss ledger once and keeps local mirror upload
 });
 
 test('records day view maintains a fixed-width timed event with a complete hover title', async ({ page }) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDate();
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({ ...data, records: [{ id: 'record-1', type: '日记', title: '这是一个完整的日程标题', content: '', startDate: date, endDate: date, recordTime: '09:00', recordEndTime: '10:00' }] })), { data: emptyData(), date: today });
     await page.goto('/#/records');
     await page.getByRole('button', { name: '日视图', exact: true }).click();
