@@ -1080,7 +1080,7 @@ watch(focusedHabitId, value => {
             <button class="btn btn-danger" type="button" @click="deleteHabit(item.id)">删除</button>
           </span>
         </div>
-        <div v-if="!habits.habits.length" class="empty-state">还没有习惯。</div>
+        <div v-if="!habits.habits.length" class="empty-state">暂无习惯，先新建一个习惯。</div>
       </div>
     </section>
 
