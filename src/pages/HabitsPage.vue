@@ -1010,7 +1010,7 @@ watch(focusedHabitId, value => {
             </div>
           </div>
         </article>
-        <div v-if="!activeHabitItems.length" class="empty-state">{{ activeTab === 'backfill' ? '这一天没有按规则应完成的习惯。' : '今日没有按规则待完成的习惯。' }}</div>
+        <div v-if="!activeHabitItems.length" class="empty-state">{{ activeTab === 'backfill' ? '这一天没有按规则应完成的习惯。' : '今日暂无安排的习惯' }}</div>
       </div>
     </section>
 

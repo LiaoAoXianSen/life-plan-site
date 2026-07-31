@@ -2011,6 +2011,12 @@ test('habit base edit and delete preserve legacy management contracts', async ({
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('habit today empty state keeps the legacy wording', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/habits');
+    await expect(page.locator('#page-habits .habit-quick-list')).toContainText('今日暂无安排的习惯');
+});
+
 test('habit archive and restore preserve history without tombstones', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({
