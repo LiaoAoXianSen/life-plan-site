@@ -188,7 +188,7 @@ test('todo legacy filters and linked record navigation stay read-only', async ({
     await expect(rows.first()).toContainText('下周生活待办');
 
     await page.getByLabel('待办分组').selectOption('all');
-    await page.getByLabel('待办类型').selectOption('exclusive');
+    await page.getByLabel('待办模式').selectOption('exclusive');
     await expect(rows).toHaveCount(1);
     await expect(rows.first()).toContainText('专属');
     await page.getByRole('button', { name: /专属工作待办/ }).click();

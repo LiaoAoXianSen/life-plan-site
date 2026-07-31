@@ -1,35 +1,106 @@
 <script setup lang="ts">
-import type { Todo } from '../types/lifePlan';
+import { computed } from 'vue';
 
-defineProps<{ todos: Todo[]; selectedId?: string }>();
+import { createLegacyServices } from '../services/legacyServices';
+import type { DataEntity, Todo } from '../types/lifePlan';
+import { useLifePlanStore } from '../stores/lifePlanStore';
+
+const props = defineProps<{ todos: Todo[]; selectedId?: string }>();
 const emit = defineEmits<{ toggle: [id: string]; select: [id: string] }>();
 
-const urgencyLabel: Record<Todo['urgency'], string> = { urgent: '紧急', high: '高', medium: '中', low: '低' };
+const lifePlan = useLifePlanStore();
+const services = createLegacyServices();
 
-function subTodoSummary(todo: Todo) {
-  if (!todo.subTodos.length) return '';
-  return `子任务 ${todo.subTodos.filter(item => item.done).length}/${todo.subTodos.length}`;
+function linkedRecordNames(todo: Todo) {
+  const names = lifePlan.data.records
+    .filter(record => {
+      const todoIds = Array.isArray(record.todoIds) ? record.todoIds.map(String) : [];
+      return todoIds.includes(todo.id) || String(record.ideaTodoId || '') === todo.id;
+    })
+    .map(record => String(record.title || record.type || '未命名记录'));
+  return names.join('、') || '无归属';
 }
+
+function planMeta(todo: Todo) {
+  const plan = services.todos.getTodoPlanLabel(todo);
+  const sessions = (todo.sessions || []).length;
+  const subDone = (todo.subTodos || []).filter(item => item.done).length;
+  const subTotal = (todo.subTodos || []).length;
+  const parts = [plan, `执行 ${sessions} 次`];
+  if (subTotal) parts.unshift(`${subDone}/${subTotal}`);
+  return parts.join(' · ');
+}
+
+function dueClass(todo: Todo) {
+  return todo.dueDate ? 'todo-due' : 'todo-due todo-due-none';
+}
+
+function groupClass(group: string) {
+  const safe = String(group || '其他').replace(/[^\w\u4e00-\u9fff-]+/g, '-').toLowerCase() || 'todo-group';
+  return `tag tag-${safe}`;
+}
+
+const rows = computed(() => props.todos.map(todo => ({
+  todo,
+  dueText: services.todos.formatTodoDueDate(todo),
+  urgencyLabel: services.todos.getTodoUrgencyMeta(todo).label,
+  planMeta: planMeta(todo),
+  linked: linkedRecordNames(todo),
+})));
 </script>
 
 <template>
-  <div v-if="todos.length" class="todo-table-shell">
+  <div v-if="rows.length" class="todo-table-shell">
     <table class="todo-table">
       <thead>
-        <tr><th>完成</th><th>任务</th><th>计划 / 截止</th><th>紧急度</th><th>分组</th><th>类型</th><th aria-label="操作"></th></tr>
+        <tr>
+          <th style="width: 36px;"></th>
+          <th>任务名称</th>
+          <th style="width: 110px;">截止日期</th>
+          <th style="width: 86px;">紧急度</th>
+          <th style="width: 80px;">分组</th>
+          <th style="width: 80px;">模式</th>
+          <th>关联记录</th>
+        </tr>
       </thead>
       <tbody>
-        <tr v-for="todo in todos" :key="todo.id" :class="{ done: todo.done, selected: todo.id === selectedId }">
-          <td><input :checked="todo.done" type="checkbox" :aria-label="`完成 ${todo.text}`" @change="emit('toggle', todo.id)" /></td>
-          <td class="todo-title-cell"><button class="todo-title-button" type="button" @click="emit('select', todo.id)"><strong>{{ todo.text || '未命名待办' }}</strong><small v-if="todo.note">{{ todo.note }}</small><small v-if="subTodoSummary(todo)">{{ subTodoSummary(todo) }} · 执行 {{ todo.sessions.length }} 次</small></button></td>
-          <td><span class="todo-due">{{ todo.dueDate || todo.planStartDate || '无日期' }}</span></td>
-          <td><span :class="`todo-urgency todo-urgency-${todo.urgency}`">{{ urgencyLabel[todo.urgency] }}</span></td>
-          <td>{{ todo.group || '其他' }}</td>
-          <td>{{ todo.isExclusive ? '专属' : '通用' }}</td>
-          <td><button class="btn btn-secondary" type="button" @click="emit('select', todo.id)">详情</button></td>
+        <tr
+          v-for="row in rows"
+          :key="row.todo.id"
+          :class="{ done: row.todo.done, selected: row.todo.id === selectedId }"
+        >
+          <td>
+            <input
+              :checked="row.todo.done"
+              type="checkbox"
+              :aria-label="`完成 ${row.todo.text}`"
+              @change="emit('toggle', row.todo.id)"
+            >
+          </td>
+          <td
+            class="todo-title-cell"
+            :class="{ 'is-done': row.todo.done }"
+            role="button"
+            tabindex="0"
+            @click="emit('select', row.todo.id)"
+            @keydown.enter.prevent="emit('select', row.todo.id)"
+          >
+            {{ row.todo.text || '未命名待办' }}
+            <span v-if="row.todo.subTodos?.length" class="todo-subtodo-count">
+              ({{ row.todo.subTodos.filter(item => item.done).length }}/{{ row.todo.subTodos.length }})
+            </span>
+            <div class="todo-title-meta">{{ row.planMeta }}</div>
+          </td>
+          <td><span :class="dueClass(row.todo)">{{ row.dueText }}</span></td>
+          <td>
+            <span :class="`todo-urgency todo-urgency-${row.todo.urgency || 'medium'}`">{{ row.urgencyLabel }}</span>
+          </td>
+          <td><span :class="groupClass(row.todo.group || '其他')">{{ row.todo.group || '其他' }}</span></td>
+          <td>{{ row.todo.isExclusive ? '专属' : '通用' }}</td>
+          <td class="todo-linked-cell">{{ row.linked }}</td>
         </tr>
       </tbody>
     </table>
   </div>
-  <div v-else class="empty-state">还没有符合条件的待办。</div>
+  <div v-else class="empty-state">暂无符合条件的待办</div>
 </template>
