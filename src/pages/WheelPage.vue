@@ -101,9 +101,118 @@ watch(() => wheelStore.tags.map(tag => tag.id).join('|'), () => {
 }, { immediate: true });
 onBeforeUnmount(() => { if (spinTimer) window.clearTimeout(spinTimer); });
 
-function entryColor(item: unknown, index: number) {
-  const value = String((item as { color?: unknown }).color || '');
-  return /^#[0-9a-f]{6}$/i.test(value) ? value : segmentColors[index % segmentColors.length];
+const wheelPalette = ['#ff6b6b', '#ff9f43', '#ffd166', '#06d6a0', '#2ec4b6', '#00bbf9', '#5c7cfa', '#9b5de5', '#f15bb5', '#8ac926'];
+let wheelRenderCache: { key: string; canvas: HTMLCanvasElement; radius: number; innerRadius: number; count: number } | null = null;
+
+function splitWheelLabel(value: string, maxCharsPerLine: number, maxLines: number) {
+  const text = String(value || '').trim();
+  if (!text || maxLines <= 0 || maxCharsPerLine <= 0) return [];
+  const lines: string[] = [];
+  for (let index = 0; index < text.length && lines.length < maxLines; index += maxCharsPerLine) lines.push(text.slice(index, index + maxCharsPerLine));
+  if (text.length > maxCharsPerLine * maxLines) {
+    const last = lines.length - 1;
+    lines[last] = `${lines[last].slice(0, Math.max(1, maxCharsPerLine - 1))}…`;
+  }
+  return lines;
+}
+
+function wheelLabelPlan(count: number) {
+  if (count <= 8) return { maxChars: 6, maxLines: 2, fontSize: 15, showStroke: true, shadow: true, layout: 'tangent', textColor: '#ffffff' };
+  if (count <= 18) return { maxChars: 5, maxLines: 2, fontSize: 12, showStroke: true, shadow: false, layout: 'tangent', textColor: '#ffffff' };
+  if (count <= 40) return { maxChars: 8, maxLines: 1, fontSize: 11, showStroke: true, shadow: false, layout: 'radial', textColor: '#3a322c' };
+  if (count <= 80) return { maxChars: 7, maxLines: 1, fontSize: 10, showStroke: true, shadow: false, layout: 'radial', textColor: '#3a322c' };
+  return { maxChars: 6, maxLines: 1, fontSize: 9, showStroke: true, shadow: false, layout: 'radial', textColor: '#3a322c' };
+}
+
+function wheelSliceColor(entry: unknown, index: number, count: number) {
+  const own = String((entry as { color?: unknown }).color || '');
+  if (count <= wheelPalette.length && /^#[0-9a-f]{6}$/i.test(own)) return own;
+  if (count <= wheelPalette.length) return wheelPalette[index % wheelPalette.length];
+  const hue = Math.round((index / Math.max(1, count)) * 360);
+  const saturation = count >= 80 ? 52 : count >= 40 ? 56 : 60;
+  const lightness = count >= 80 ? 80 : count >= 40 ? 76 : 72;
+  return `hsl(${hue} ${saturation}% ${lightness}%)`;
+}
+
+function wheelLabel(entry: unknown, index: number, plan: ReturnType<typeof wheelLabelPlan>) {
+  const raw = String((entry as { name?: unknown }).name || '未命名').trim();
+  const compact = raw.replace(/^[\d]+[\.、．\s]*/, '').replace(/\s+/g, '').replace(/[（(].*?[）)]/g, '').trim() || '未命名';
+  if (plan.layout === 'radial') {
+    const short = compact.slice(0, plan.maxChars);
+    return [`${index + 1} ${short}${compact.length > plan.maxChars ? '…' : ''}`];
+  }
+  return splitWheelLabel(compact, plan.maxChars, plan.maxLines);
+}
+
+type WheelRenderEntry = { id?: unknown; name?: unknown; color?: unknown; weight?: unknown };
+
+function buildWheelRenderCache(entries: WheelRenderEntry[]) {
+  const key = entries.map(entry => `${entry.id || ''}|${entry.name || ''}|${entry.color || ''}|${entry.weight || 1}`).join('||');
+  if (wheelRenderCache?.key === key && wheelRenderCache.count === entries.length) return wheelRenderCache;
+  const size = entries.length >= 48 ? 900 : 720;
+  const offscreen = document.createElement('canvas');
+  offscreen.width = size;
+  offscreen.height = size;
+  const ctx = offscreen.getContext('2d');
+  if (!ctx) return null;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size / 2 - (entries.length >= 48 ? 22 : 28);
+  const count = entries.length;
+  const plan = wheelLabelPlan(count);
+  const innerRadius = Math.max(54, radius * (count >= 80 ? 0.2 : count >= 40 ? 0.24 : count >= 20 ? 0.26 : 0.28));
+  const labelRadius = innerRadius + (radius - innerRadius) * (plan.layout === 'radial' ? 0.62 : count <= 8 ? 0.52 : 0.58);
+  const radialTextMaxWidth = Math.max(36, radius - innerRadius - 18);
+  ctx.clearRect(0, 0, size, size);
+  ctx.beginPath(); ctx.fillStyle = '#e8edf2'; ctx.arc(cx, cy, radius + 14, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.fillStyle = '#f8fafc'; ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2); ctx.fill();
+  if (count) {
+    const slice = (Math.PI * 2) / count;
+    entries.forEach((entry, index) => {
+      const start = index * slice;
+      const end = start + slice;
+      const mid = start + slice / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(start) * innerRadius, cy + Math.sin(start) * innerRadius);
+      ctx.arc(cx, cy, radius, start, end);
+      ctx.arc(cx, cy, innerRadius, end, start, true);
+      ctx.closePath();
+      ctx.fillStyle = wheelSliceColor(entry, index, count);
+      ctx.fill();
+      if (plan.showStroke) {
+        ctx.lineWidth = count <= 16 ? 2 : count <= 48 ? 1.1 : .7;
+        ctx.strokeStyle = count >= 36 ? 'rgba(255,255,255,.82)' : 'rgba(255,255,255,.92)';
+        ctx.stroke();
+      }
+      const lines = wheelLabel(entry, index, plan);
+      if (!lines.length) return;
+      ctx.save();
+      if (plan.layout === 'radial') {
+        ctx.translate(cx, cy); ctx.rotate(mid);
+        const flip = Math.cos(mid) < 0;
+        if (flip) ctx.rotate(Math.PI);
+        ctx.fillStyle = plan.textColor; ctx.font = `700 ${plan.fontSize}px Microsoft YaHei, sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(lines[0], flip ? -labelRadius : labelRadius, 0, radialTextMaxWidth);
+      } else {
+        ctx.translate(cx + Math.cos(mid) * labelRadius, cy + Math.sin(mid) * labelRadius);
+        let angle = mid; if (angle > Math.PI / 2 && angle < Math.PI * 1.5) angle += Math.PI;
+        ctx.rotate(angle); ctx.fillStyle = plan.textColor;
+        if (plan.shadow) { ctx.shadowColor = 'rgba(16,23,19,.14)'; ctx.shadowBlur = 8; }
+        ctx.font = `800 ${plan.fontSize}px Microsoft YaHei, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const lineHeight = plan.fontSize + 4; const offset = lines.length > 1 ? lineHeight / 2 : 0;
+        lines.forEach((line, lineIndex) => ctx.fillText(line, 0, lineIndex * lineHeight - offset));
+      }
+      ctx.restore();
+    });
+  } else {
+    ctx.beginPath(); ctx.fillStyle = '#eef2f7'; ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,.98)'; ctx.lineWidth = count >= 48 ? 8 : 10; ctx.arc(cx, cy, radius + 1, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.strokeStyle = 'rgba(120,132,146,.18)'; ctx.lineWidth = 3; ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(cx, cy, innerRadius + 2, 0, Math.PI * 2); ctx.fill();
+  wheelRenderCache = { key, canvas: offscreen, radius, innerRadius, count };
+  return wheelRenderCache;
 }
 
 function drawWheelCanvas() {
@@ -114,80 +223,28 @@ function drawWheelCanvas() {
   const cssSize = 390;
   canvas.width = cssSize * ratio;
   canvas.height = cssSize * ratio;
-  canvas.style.width = '100%';
-  canvas.style.height = '100%';
+  canvas.style.width = '100%'; canvas.style.height = '100%';
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  const cx = cssSize / 2;
-  const cy = cssSize / 2;
-  const radius = cssSize / 2 - 12;
-  const innerRadius = Math.max(42, radius * (entries.length > 28 ? 0.24 : 0.29));
   ctx.clearRect(0, 0, cssSize, cssSize);
-  ctx.beginPath();
-  ctx.fillStyle = '#e9eef1';
-  ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2);
-  ctx.fill();
-  if (!entries.length) {
-    ctx.beginPath();
-    ctx.fillStyle = '#edf2ee';
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fill();
-    drawCenter(ctx, cx, cy, '空');
-    return;
-  }
-  const slice = (Math.PI * 2) / entries.length;
-  entries.forEach((entry, index) => {
-    const start = index * slice - Math.PI / 2;
-    const end = start + slice;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(start) * innerRadius, cy + Math.sin(start) * innerRadius);
-    ctx.arc(cx, cy, radius, start, end);
-    ctx.arc(cx, cy, innerRadius, end, start, true);
-    ctx.closePath();
-    ctx.fillStyle = entryColor(entry, index);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.9)';
-    ctx.lineWidth = entries.length > 32 ? 0.8 : 1.4;
-    ctx.stroke();
-    drawSliceLabel(ctx, String(entry.name || '未命名'), cx, cy, innerRadius, radius, start + slice / 2, entries.length, index);
-  });
-  drawCenter(ctx, cx, cy, selectedWheel.value?.mode === 'tag' && !stageTag.value ? '标签' : 'GO');
+  const cache = buildWheelRenderCache(entries);
+  if (!cache) return;
+  const scale = cssSize / cache.canvas.width;
+  ctx.drawImage(cache.canvas, 0, 0, cache.canvas.width * scale, cache.canvas.height * scale);
+  drawCenter(ctx, cssSize / 2, cssSize / 2, entries.length ? 'GO' : '空');
 }
 
 function drawCenter(ctx: CanvasRenderingContext2D, cx: number, cy: number, label: string) {
-  ctx.beginPath();
-  ctx.fillStyle = '#ffffff';
-  ctx.arc(cx, cy, 43, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(31,83,57,.16)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.fillStyle = '#285940';
-  ctx.font = '700 18px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, cx, cy);
-}
-
-function drawSliceLabel(ctx: CanvasRenderingContext2D, raw: string, cx: number, cy: number, innerRadius: number, radius: number, angle: number, count: number, index: number) {
-  const compact = raw.replace(/\s+/g, '').replace(/^[\d]+[.、．\s]*/, '');
-  const max = count > 32 ? 6 : count > 16 ? 7 : 9;
-  const label = count > 32 ? `${index + 1} ${compact.slice(0, max)}` : compact.slice(0, max);
-  const text = compact.length > max ? `${label}…` : label;
-  const labelRadius = innerRadius + (radius - innerRadius) * (count > 20 ? 0.62 : 0.58);
-  ctx.save();
-  ctx.translate(cx + Math.cos(angle) * labelRadius, cy + Math.sin(angle) * labelRadius);
-  ctx.rotate(angle + Math.PI / 2);
-  ctx.fillStyle = count > 20 ? '#314036' : '#ffffff';
-  ctx.strokeStyle = count > 20 ? 'rgba(255,255,255,.7)' : 'rgba(35,48,39,.42)';
-  ctx.lineWidth = 3;
-  ctx.font = `${count > 32 ? 10 : count > 16 ? 11 : 13}px system-ui, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.strokeText(text, 0, 0, Math.max(48, radius - innerRadius - 16));
-  ctx.fillText(text, 0, 0, Math.max(48, radius - innerRadius - 16));
-  ctx.restore();
+  const radius = label === '空' ? 43 : 43;
+  ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2); ctx.fill();
+  const gradient = ctx.createRadialGradient(cx, cy, 10, cx, cy, radius + 8);
+  gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#f2f5f9');
+  ctx.beginPath(); ctx.fillStyle = gradient; ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.strokeStyle = 'rgba(23,33,27,.08)'; ctx.lineWidth = 2; ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#68766f'; ctx.font = '700 12px Microsoft YaHei, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label === 'GO' ? '点击旋转' : '暂无可抽内容', cx, cy - 9);
+  ctx.fillStyle = '#16201b'; ctx.font = '900 16px Microsoft YaHei, sans-serif'; ctx.fillText(label, cx, cy + 13);
 }
 
 function say(message: string) { notice.value = message; }
@@ -697,6 +754,7 @@ function importJson(event: Event) {
 .wheel-action-menu-button{min-height:42px;padding:10px 16px;border-radius:16px;font-weight:900}
 .wheel-mode-title{margin:0;color:var(--text);font-size:clamp(22px,3.4vw,34px);font-weight:900;line-height:1.24}
 .hero-tags{justify-content:center;margin-top:0}
+.wheel-center-label{display:none}
 .wheel-action-menu-wrap{position:relative;justify-self:end;z-index:30}.wheel-action-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:40;display:grid;width:178px;padding:8px;border:1px solid rgba(222,229,238,.96);border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 18px 42px rgba(35,60,45,.16)}.wheel-action-menu button{width:100%;min-height:36px;padding:8px 10px;border:0;background:transparent;text-align:left;border-radius:12px;color:var(--text);cursor:pointer;font:inherit;font-size:13px;font-weight:850}.wheel-action-menu button:hover{background:#f6f8fb;color:#c64d2d}.wheel-header-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
 .wheel-management-block[data-management-panel="list"] #wheel-create-panel,
 .wheel-management-block[data-management-panel="list"] #wheel-history-panel,
