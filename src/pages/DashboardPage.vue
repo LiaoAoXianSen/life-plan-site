@@ -509,7 +509,7 @@ const timelineGroups = computed(() => {
               </span>
             </li>
           </ul>
-          <div v-else class="empty-state">今日暂无习惯</div>
+          <div v-else class="empty-state">今日暂无安排的习惯</div>
         </section>
       </div>
     </div>

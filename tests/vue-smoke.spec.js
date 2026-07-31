@@ -382,6 +382,12 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     expect(persisted.mirror).toBeNull();
 });
 
+test('dashboard empty habit state keeps the legacy wording', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/dashboard');
+    await expect(page.locator('.dashboard-today-habits')).toContainText('今日暂无安排的习惯');
+});
+
 test('dashboard command center restores the legacy fitness card', async ({ page }) => {
     const today = (() => {
         const date = new Date();
