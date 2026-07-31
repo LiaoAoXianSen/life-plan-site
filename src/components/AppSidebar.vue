@@ -250,7 +250,7 @@ function restoreSnapshot(item: SnapshotItem) {
                 <button class="btn btn-danger" type="button" @click="deleteSnapshot(item)">删除</button>
               </div>
             </article>
-            <div v-if="!snapshots.length" class="empty-state">还没有本地快照。</div>
+            <div v-if="!snapshots.length" class="empty-state">还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。</div>
           </div>
         </section>
       </div>
