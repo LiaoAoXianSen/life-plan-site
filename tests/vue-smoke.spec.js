@@ -934,10 +934,10 @@ test('wheel management forms focus editable rows without mutating data', async (
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
     const summary = page.locator('.wheel-management-summary');
-    await expect(summary).toContainText('1转盘');
+    await expect(summary).toContainText('1当前选项');
     await expect(summary).toContainText('1标签');
     await expect(summary).toContainText('1公共项');
-    await expect(summary).toContainText('1历史');
+    await expect(summary).toContainText('1记录');
     await expect(page.locator('#wheel-create-panel')).toBeHidden();
     await expect(page.locator('#wheel-history-panel')).toBeHidden();
 
@@ -1087,10 +1087,45 @@ test('wheel management landing keeps workspace navigation focused', async ({ pag
 
     const landing = page.locator('.wheel-management-landing');
     await expect(landing).toBeVisible();
-    await expect(landing.locator('.wheel-management-summary')).toContainText('转盘');
+    await expect(landing.locator('.wheel-management-summary')).toContainText('当前选项');
     await expect(landing.getByRole('button', { name: '公共项库' })).toBeVisible();
     await landing.getByRole('button', { name: '公共项库' }).click();
     await expect(page.locator('#wheel-library-panel')).toBeInViewport();
+});
+
+test('wheel management summary reflects active wheel counts', async ({ page }) => {
+    const source = emptyData({
+        wheels: [
+            { id: 'wheel-summary-tag', name: '摘要标签盘', mode: 'tag', tagIds: ['tag-summary-on', 'tag-summary-off'], items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'wheel-summary-other', name: '其他转盘', mode: 'normal', items: [{ id: 'summary-other-item', name: '其他项', weight: 1, enabled: true }], createdAt: '2026-07-29T09:00:00', updatedAt: '2026-07-29T09:00:00' },
+        ],
+        wheelTags: [
+            { id: 'tag-summary-on', name: '启用标签', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'tag-summary-off', name: '停用标签', color: '#4f7cac', weight: 1, enabled: false, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+        ],
+        wheelLibraryItems: [
+            { id: 'library-summary-on', name: '启用公共项', tagIds: ['tag-summary-on'], weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'library-summary-off', name: '停用公共项', tagIds: ['tag-summary-on'], weight: 1, enabled: false, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+        ],
+        wheelHistory: [
+            { id: 'summary-history-1', wheelId: 'wheel-summary-tag', wheelName: '摘要标签盘', mode: 'tag', resultId: 'library-summary-on', resultName: '启用公共项', createdAt: '2026-07-29T10:00:00', updatedAt: '2026-07-29T10:00:00' },
+            { id: 'summary-history-2', wheelId: 'wheel-summary-tag', wheelName: '摘要标签盘', mode: 'tag', resultId: 'library-summary-on', resultName: '启用公共项', createdAt: '2026-07-29T11:00:00', updatedAt: '2026-07-29T11:00:00' },
+            { id: 'summary-history-other', wheelId: 'wheel-summary-other', wheelName: '其他转盘', mode: 'normal', resultId: 'summary-other-item', resultName: '其他项', createdAt: '2026-07-29T12:00:00', updatedAt: '2026-07-29T12:00:00' },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        window.__wheelSummaryBefore = localStorage.getItem('lifePlanData');
+    }, source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    const summary = page.locator('.wheel-management-summary');
+    await expect(summary).toContainText('1可抽标签');
+    await expect(summary).toContainText('1公共项');
+    await expect(summary).toContainText('1标签');
+    await expect(summary).toContainText('2记录');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData') === window.__wheelSummaryBefore)).toBe(true);
 });
 
 test('wheel management list filters modes and exposes card actions', async ({ page }) => {

@@ -81,12 +81,23 @@ const allVisibleLibrarySelected = computed(() => Boolean(filteredLibraryItems.va
 const librarySelectionSummary = computed(() => libraryTagFilter.value && selectedLibraryIds.value.length !== selectedVisibleLibraryCount.value
   ? `选中 ${selectedLibraryIds.value.length}（当前筛选 ${selectedVisibleLibraryCount.value}/${filteredLibraryItems.value.length}）`
   : `选中 ${selectedLibraryIds.value.length}/${filteredLibraryItems.value.length}`);
-const managementStats = computed(() => [
-  { label: '转盘', value: wheelStore.wheels.length },
-  { label: '标签', value: wheelStore.tags.length },
-  { label: '公共项', value: wheelStore.libraryItems.length },
-  { label: '历史', value: wheelStore.history.length },
-]);
+const managementStats = computed(() => {
+  const wheel = selectedWheel.value;
+  const activeCount = wheel
+    ? wheel.mode === 'tag'
+      ? (stageTag.value ? selectedOptions.value.length : availableTags.value.length)
+      : selectedOptions.value.length
+    : 0;
+  const activeLabel = wheel?.mode === 'tag'
+    ? (stageTag.value ? '标签内候选' : '可抽标签')
+    : '当前选项';
+  return [
+    { label: activeLabel, value: activeCount },
+    { label: '公共项', value: wheelStore.libraryItems.filter(item => item.enabled !== false).length },
+    { label: '标签', value: wheelStore.tags.filter(tag => tag.enabled !== false).length },
+    { label: '记录', value: wheel ? wheelStore.history.filter(entry => entry.wheelId === wheel.id).length : 0 },
+  ];
+});
 const managementWheels = computed(() => wheelStore.wheels
   .filter(wheel => managementListMode.value === 'all' || wheel.mode === managementListMode.value)
   .slice()
