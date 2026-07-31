@@ -249,6 +249,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 231. Status: complete - Add a compact Fitness browse index beneath the overview hero with read-only summaries and section jump actions.
 232. Status: complete - Add focused Fitness browse-index smoke coverage without changing persistence contracts.
 233. Status: in_progress - Commit, push, and append dual-store memory for the verified Fitness browse-index shell.
+234. Status: complete - Add Fitness hero secondary actions for body metrics and workout-log browsing without changing form contracts.
+235. Status: complete - Add focused hero-action navigation coverage and rerun Fitness build/check gates.
+236. Status: in_progress - Commit, push, and append dual-store memory for the Fitness hero-action shell.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

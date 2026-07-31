@@ -574,6 +574,8 @@ onUnmounted(stopRestTimer);
       <div class="fitness-header-actions">
         <button class="btn btn-secondary" type="button" @click="openLibrarySection">动作库</button>
         <button class="btn btn-secondary" type="button" @click="openPlanCreate">新建计划</button>
+        <button class="btn btn-secondary" type="button" @click="openBodySection">记录身材</button>
+        <button class="btn btn-secondary" type="button" @click="openWorkoutCreate">补记训练</button>
         <button class="btn btn-primary" type="button" @click="jumpToFreeWorkout">自由开练</button>
       </div>
     </header>

@@ -558,3 +558,10 @@
 - Added `browseItems` and `browseTo()` in `src/pages/FitnessPage.vue`, rendering four compact browse items below the overview hero and preserving all existing form visibility and selectors.
 - Added focused Playwright coverage in `tests/vue-smoke.spec.js` for the four summaries and action-to-library scroll behavior.
 - `npm run build` passed; Fitness focused smoke passed 5/5; `git diff --check` passed with only LF/CRLF working-copy warnings.
+
+## 2026-07-31 - Fitness hero secondary actions (in progress)
+
+- Started the next bounded Fitness shell slice while the prior `6ff7e7d` commit remains locally ahead of origin because Git upload is unavailable.
+- Scope: add `记录身材` and `补记训练` secondary hero actions that reuse existing scroll/reset helpers; no service, store, or persistence changes.
+- Added the two secondary actions in `src/pages/FitnessPage.vue` and covered both destinations in `tests/vue-smoke.spec.js`.
+- `npm run build` passed; Fitness focused smoke passed 6/6; `git diff --check` passed with only LF/CRLF working-copy warnings.

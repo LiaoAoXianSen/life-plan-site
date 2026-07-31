@@ -887,6 +887,16 @@ test('fitness browse index exposes read-only section summaries and jump actions'
     await expect(page.locator('#fitness-library-section')).toBeInViewport();
 });
 
+test('fitness hero secondary actions jump to body and workout forms', async ({ page }) => {
+    await page.goto('/#/fitness');
+
+    const actions = page.locator('.fitness-page-header .fitness-header-actions');
+    await actions.getByRole('button', { name: '记录身材' }).click();
+    await expect(page.locator('#fitness-body-section')).toBeInViewport();
+    await actions.getByRole('button', { name: '补记训练' }).click();
+    await expect(page.locator('#fitness-workout-section')).toBeInViewport();
+});
+
 test('fitness plans support multiple exercises and explicit plan writeback', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [
