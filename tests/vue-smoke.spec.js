@@ -846,7 +846,7 @@ test('wheel normal option batch import skips duplicate names and preserves weigh
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
     await page.locator('.wheel-stage-card').getByRole('button', { name: '编辑当前' }).click();
-    const tools = page.locator('.wheel-batch-tools');
+    const tools = page.locator('.wheel-batch-tools').filter({ hasText: '批量导入选项' });
     await tools.locator('summary').click();
     await tools.locator('textarea').fill('晨跑,2\n已有选项\n拉伸');
     await tools.getByRole('button', { name: '导入到当前转盘' }).click();
