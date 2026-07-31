@@ -13,6 +13,7 @@ const spinning = ref(false);
 const rotation = ref(0);
 const notice = ref('');
 const showManagement = ref(false);
+const activeManagementPanel = ref<'create' | 'edit' | 'library' | 'tags' | 'history' | 'list'>('list');
 const menuOpen = ref(false);
 const modeFilter = ref<'all' | WheelMode>('all');
 let spinTimer: number | undefined;
@@ -193,6 +194,7 @@ function editWheel() {
   const wheel = selectedWheel.value;
   if (!wheel) return;
   showManagement.value = true;
+  activeManagementPanel.value = 'edit';
   menuOpen.value = false;
   Object.assign(wheelForm, { id: wheel.id, name: wheel.name, mode: wheel.mode, tagIds: [...(wheel.tagIds || [])], itemsText: wheel.items.map(item => `${item.name},${item.weight}`).join('\n') });
 }
@@ -219,6 +221,7 @@ function submitOption() { const wheel = selectedWheel.value; if (!wheel) return;
 function resetTagForm() { Object.assign(tagForm, { id: '', name: '', color: '#216e4e', weight: 1, enabled: true }); }
 function editTag(tag: WheelTag) {
   showManagement.value = true;
+  activeManagementPanel.value = 'tags';
   menuOpen.value = false;
   Object.assign(tagForm, { id: tag.id, name: tag.name, color: tag.color, weight: tag.weight, enabled: tag.enabled });
 }
@@ -226,6 +229,7 @@ function submitTag() { handle(() => { wheelStore.saveTag(tagForm); resetTagForm(
 function resetLibraryForm() { Object.assign(libraryForm, { id: '', name: '', tagIds: [], weight: 1, enabled: true }); }
 function editLibrary(item: WheelItem) {
   showManagement.value = true;
+  activeManagementPanel.value = 'library';
   menuOpen.value = false;
   Object.assign(libraryForm, { id: item.id, name: item.name, tagIds: [...(Array.isArray(item.tagIds) ? item.tagIds as string[] : [])], weight: item.weight, enabled: item.enabled });
 }
@@ -329,6 +333,7 @@ function setModeFilter(mode: WheelMode) {
 
 function openManagement(panel: 'create' | 'edit' | 'library' | 'tags' | 'history' | 'list' = 'list') {
   showManagement.value = true;
+  activeManagementPanel.value = panel;
   menuOpen.value = false;
   if (panel === 'create') resetWheelForm();
   if (panel === 'edit') editWheel();
@@ -517,7 +522,7 @@ function importJson(event: Event) {
       </div>
     </section>
 
-    <div v-show="showManagement" id="wheel-management-block" class="wheel-management-block">
+    <div v-show="showManagement" id="wheel-management-block" class="wheel-management-block" :data-management-panel="activeManagementPanel">
       <section class="wheel-management-landing" aria-label="转盘管理入口">
         <div class="wheel-management-landing-head">
           <div>
@@ -538,7 +543,7 @@ function importJson(event: Event) {
       </section>
 
       <div class="wheel-layout">
-        <article class="card wheel-stage-card">
+        <article v-show="['list', 'edit', 'history'].includes(activeManagementPanel)" class="card wheel-stage-card">
           <div class="wheel-toolbar">
             <label class="form-group wheel-selector"><span>当前转盘</span><select v-model="selectedId" :disabled="!wheelStore.wheels.length"><option v-for="wheel in wheelStore.wheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }} · {{ wheel.mode === 'tag' ? '标签' : '普通' }}</option></select></label>
             <button class="btn btn-secondary" type="button" @click="editWheel" :disabled="!selectedWheel">编辑当前</button>
@@ -647,5 +652,23 @@ function importJson(event: Event) {
 .wheel-mode-title{margin:0;font-size:1.7rem;color:#1f4633}
 .hero-tags{justify-content:flex-start;margin-top:0}
 .wheel-action-menu-wrap{position:relative}.wheel-action-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:8;display:grid;min-width:160px;padding:6px;border:1px solid rgba(42,75,56,.14);border-radius:10px;background:#fff;box-shadow:0 10px 24px rgba(25,61,42,.14)}.wheel-action-menu button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:8px;color:#285940;cursor:pointer;font:inherit}.wheel-action-menu button:hover{background:#edf6ef}.wheel-header-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
-.wheel-header,.wheel-toolbar,.wheel-actions,.inline-actions,.card-title-row,.entity-row,.history-row,.wheel-result,.wheel-management-grid,.inline-editor,.direct-tags{display:flex;align-items:center}.wheel-header,.wheel-toolbar,.card-title-row,.entity-row,.history-row{justify-content:space-between;gap:12px}.wheel-header{align-items:flex-start}.wheel-subtitle,.hint{margin:5px 0 0;color:var(--text-secondary,#66756c);font-size:.9rem}.wheel-actions,.inline-actions{flex-wrap:wrap}.import-button{cursor:pointer}.import-button input{display:none}.wheel-notice{margin:0 0 14px;padding:10px 13px;border-radius:9px;background:#edf6ef;color:#25613d}.wheel-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(290px,.8fr);gap:18px}.wheel-side-stack{display:grid;gap:18px}.wheel-stage-card{text-align:center}.wheel-selector{text-align:left;min-width:200px}.wheel-selector span{display:block;margin-bottom:4px}.wheel-pointer{position:relative;z-index:2;color:#e75d4d;font-size:28px;line-height:.5;margin-top:16px}.wheel-canvas-wrap{position:relative;width:min(390px,86vw);aspect-ratio:1;margin:-1px auto 14px;border:10px solid #f7faf8;border-radius:50%;background:#eef4f0;box-shadow:0 8px 28px rgba(25,61,42,.16),inset 0 0 0 2px rgba(31,83,57,.08);cursor:pointer;touch-action:none;user-select:none;overflow:hidden}.wheel-canvas-wrap:focus-visible{outline:3px solid rgba(47,128,237,.32);outline-offset:4px}.wheel-canvas{display:block;width:100%;height:100%;border-radius:50%;transition:transform 560ms cubic-bezier(.16,.85,.22,1);will-change:transform}.wheel-canvas-wrap.spinning .wheel-canvas{transition-duration:560ms}.wheel-center-label{position:absolute;inset:50% auto auto 50%;display:grid;place-items:center;width:82px;height:82px;border-radius:50%;background:#fff;color:#285940;font-weight:800;transform:translate(-50%,-50%);box-shadow:0 2px 9px rgba(0,0,0,.12);pointer-events:none}.wheel-result{min-height:68px;justify-content:center;flex-direction:column;gap:3px}.wheel-result strong{font-size:1.15rem}.wheel-result span,.history-row span,.entity-row em{color:var(--text-secondary,#66756c);font-style:normal;font-size:.82rem}.wheel-spin{min-width:180px}.direct-tags{justify-content:center;flex-wrap:wrap;margin-top:15px;gap:7px;font-size:.85rem}.tag-chip{border:1px solid color-mix(in srgb,var(--tag-color) 35%,white);background:color-mix(in srgb,var(--tag-color) 12%,white);color:#32483a;border-radius:999px;padding:5px 9px;cursor:pointer}.compact-form label{display:block}.tag-checks,.batch-tag-checks{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}.tag-checks label,.batch-tag-checks label{display:inline-flex;gap:4px;align-items:center;padding:4px 7px;background:#f5f7f5;border-radius:7px;font-size:.84rem}.inline-editor{gap:8px;flex-wrap:wrap;margin:10px 0 14px}.inline-editor input:not([type=checkbox]){width:100px}.inline-editor input:first-child{flex:1;min-width:130px}.entity-row,.history-row{padding:9px 0;border-top:1px solid rgba(42,75,56,.1);text-align:left}.entity-row>span:first-child,.history-row>div{display:flex;align-items:center;gap:7px;min-width:0}.entity-row em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.entity-row strong,.history-row strong{min-width:0;overflow-wrap:anywhere}.library-row{justify-content:start;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px}.library-row>span:nth-child(2){display:grid;gap:2px;min-width:0}.library-row>span:last-child{display:flex;justify-content:flex-end;gap:4px;min-width:0}.library-row.selected{background:rgba(33,110,78,.05)}.library-select{display:grid;place-items:center}.library-filter{display:flex;align-items:center;gap:8px;font-size:.86rem;color:var(--text-secondary,#66756c)}.library-filter select{min-width:130px}.library-batch-bar{display:grid;grid-template-columns:auto auto minmax(180px,1fr);gap:10px;align-items:center;margin:8px 0 4px;padding:10px;border:1px solid rgba(42,75,56,.12);border-radius:8px;background:#f8faf8}.library-batch-bar .inline-actions{grid-column:1/-1}.select-all-row{display:inline-flex;align-items:center;gap:6px;font-size:.88rem}.color-dot{display:inline-block;width:10px;height:10px;border-radius:50%}.link-button{border:0;background:transparent;color:#316c4a;cursor:pointer;padding:3px}.link-button:disabled{color:#98a49d;cursor:not-allowed}.danger-text{color:#b84f45}.wheel-management-grid{align-items:start;display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:12px}.wheel-management-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:18px}.wheel-management-summary span{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:5px;min-width:0;padding:9px 11px;border:1px solid rgba(42,75,56,.12);border-radius:8px;background:#f8faf8;color:var(--text-secondary,#66756c);font-size:.86rem}.wheel-management-summary strong{color:#285940;font-size:1.05rem}.management-card{min-width:0}.management-form{display:grid;grid-template-columns:minmax(160px,1fr) 92px auto;align-items:end}.management-form .inline-actions{grid-column:1/-1}.field-label{display:grid;gap:4px;min-width:0;color:var(--text-secondary,#66756c);font-size:.82rem}.field-label input,.field-label select,.field-label textarea{width:100%;min-width:0}.field-small{max-width:110px}.color-field{max-width:90px}.color-field input{min-height:38px;padding:4px}.check-label{display:inline-flex;align-items:center;gap:6px;min-height:38px;white-space:nowrap}.library-card{grid-column:1/-1}.library-form{display:grid;grid-template-columns:minmax(180px,1fr) 92px auto;gap:8px;align-items:end;margin:10px 0}.library-form .tag-checks,.library-form .inline-actions{grid-column:1/-1}.empty-state{padding:12px 0}.history-card{max-height:430px;overflow:auto}@media (max-width:980px){.wheel-focus-stage{grid-template-columns:1fr}.wheel-focus-copy{justify-items:center;text-align:center}.wheel-focus-actions,.hero-tags,.wheel-result.focus{justify-content:center;align-items:center;text-align:center}.wheel-layout,.wheel-management-grid{grid-template-columns:1fr}.wheel-header{flex-direction:column}.library-card{grid-column:auto}.library-form,.management-form{grid-template-columns:minmax(0,1fr) 92px auto}.wheel-canvas-wrap{width:min(350px,82vw)}}@media (max-width:560px){.wheel-toolbar,.wheel-focus-toolbar{align-items:stretch;flex-wrap:wrap}.wheel-selector{width:100%}.wheel-canvas-wrap{width:280px}.wheel-management-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.library-form,.management-form{grid-template-columns:1fr}.field-small,.color-field{max-width:none}.library-form>label,.management-form>label{grid-column:1/-1}.library-batch-bar{grid-template-columns:1fr}.library-row{grid-template-columns:auto minmax(0,1fr);align-items:start}.library-row>span:last-child{grid-column:1/-1;justify-content:flex-start}.library-filter{width:100%;justify-content:space-between}.wheel-actions .btn{font-size:.82rem}}
+.wheel-management-block[data-management-panel="list"] #wheel-create-panel,
+.wheel-management-block[data-management-panel="list"] #wheel-history-panel,
+.wheel-management-block[data-management-panel="list"] .wheel-management-grid .management-card,
+.wheel-management-block[data-management-panel="list"] #wheel-library-panel,
+.wheel-management-block[data-management-panel="create"] #wheel-history-panel,
+.wheel-management-block[data-management-panel="create"] .wheel-management-grid,
+.wheel-management-block[data-management-panel="edit"] #wheel-history-panel,
+.wheel-management-block[data-management-panel="edit"] #wheel-tags-panel,
+.wheel-management-block[data-management-panel="edit"] #wheel-library-panel,
+.wheel-management-block[data-management-panel="library"] #wheel-create-panel,
+.wheel-management-block[data-management-panel="library"] #wheel-history-panel,
+.wheel-management-block[data-management-panel="library"] .wheel-management-grid > article:not(#wheel-library-panel),
+.wheel-management-block[data-management-panel="tags"] #wheel-create-panel,
+.wheel-management-block[data-management-panel="tags"] #wheel-history-panel,
+.wheel-management-block[data-management-panel="tags"] .wheel-management-grid > article:not(#wheel-tags-panel),
+.wheel-management-block[data-management-panel="history"] #wheel-create-panel,
+.wheel-management-block[data-management-panel="history"] .wheel-management-grid {
+  display: none !important;
+}
 </style>

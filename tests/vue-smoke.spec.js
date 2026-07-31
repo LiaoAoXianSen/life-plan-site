@@ -791,11 +791,18 @@ test('wheel management forms focus editable rows without mutating data', async (
     await expect(summary).toContainText('1标签');
     await expect(summary).toContainText('1公共项');
     await expect(summary).toContainText('1历史');
+    await expect(page.locator('#wheel-create-panel')).toBeHidden();
+    await expect(page.locator('#wheel-history-panel')).toBeHidden();
 
-    await page.locator('.entity-row').filter({ hasText: '需要编辑的长选项名称' }).getByRole('button', { name: '编辑' }).click();
+    await page.locator('.wheel-stage-card').getByRole('button', { name: '编辑当前' }).click();
+    await page.locator('.management-card').filter({ hasText: '普通转盘选项' }).locator('.entity-row').filter({ hasText: '需要编辑的长选项名称' }).getByRole('button', { name: '编辑' }).click();
     await expect(page.getByLabel('选项名称')).toHaveValue('需要编辑的长选项名称');
+
+    await page.locator('.wheel-management-nav').getByRole('button', { name: '标签管理' }).click();
     await page.locator('.management-card').filter({ hasText: '标签管理' }).locator('.entity-row').filter({ hasText: '管理标签' }).getByRole('button', { name: '编辑' }).click();
     await expect(page.getByLabel('标签名称')).toHaveValue('管理标签');
+
+    await page.locator('.wheel-management-nav').getByRole('button', { name: '公共项库' }).click();
     await page.locator('.library-row').filter({ hasText: '管理公共项长名称' }).getByRole('button', { name: '编辑' }).click();
     await expect(page.getByLabel('公共项名称')).toHaveValue('管理公共项长名称');
 
