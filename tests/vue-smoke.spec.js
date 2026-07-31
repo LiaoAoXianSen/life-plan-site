@@ -936,6 +936,26 @@ test('wheel library batch import uses selected tags and row toggle persists', as
     ]));
 });
 
+test('wheel library AI suggestions stay within existing tags before save', async ({ page }) => {
+    const source = emptyData({
+        wheelTags: [
+            { id: 'tag-ai-study', name: '学习', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'tag-ai-health', name: '健康', color: '#4f7cac', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
+    const panel = page.locator('#wheel-library-panel');
+    await panel.getByLabel('公共项名称').fill('学习');
+    await panel.getByRole('button', { name: 'AI 推荐标签' }).click();
+    await expect(panel.locator('.library-ai-suggestion')).toContainText('学习');
+    await panel.getByRole('button', { name: '添加公共项' }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems).toEqual(expect.arrayContaining([expect.objectContaining({ name: '学习', tagIds: ['tag-ai-study'] })]));
+});
+
 test('wheel management landing keeps workspace navigation focused', async ({ page }) => {
     await page.goto('/#/wheel');
     await page.locator('#wheel-action-menu-button').click();

@@ -2,9 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
+import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useWheelStore, type WheelItem, type WheelMode, type WheelTag } from '../stores/wheelStore';
 
 const wheelStore = useWheelStore();
+const wheelServices = createLegacyServices();
 const route = useRoute();
 const selectedId = ref('');
 const stageTag = ref<WheelTag | null>(null);
@@ -66,6 +68,9 @@ const libraryBatchText = ref('');
 const libraryTagFilter = ref('');
 const selectedLibraryIds = ref<string[]>([]);
 const batchLibraryTagIds = ref<string[]>([]);
+const libraryAiSuggestions = ref<Array<{ tagId: string; name: string; reason: string; selected: boolean }>>([]);
+const libraryAiStatus = ref('');
+const libraryAiRunning = ref(false);
 const filteredLibraryItems = computed(() => {
   if (!libraryTagFilter.value) return wheelStore.libraryItems;
   return wheelStore.libraryItems.filter(item => itemTagIds(item).includes(libraryTagFilter.value));
@@ -426,12 +431,91 @@ function directTag(tag: WheelTag) {
 function toggleTagEnabled(tag: WheelTag) {
   handle(() => wheelStore.toggleTagEnabled(tag.id), tag.enabled === false ? '已启用标签' : '已停用标签');
 }
-function resetLibraryForm() { Object.assign(libraryForm, { id: '', name: '', tagIds: [], weight: 1, enabled: true }); }
+function resetLibraryForm() { Object.assign(libraryForm, { id: '', name: '', tagIds: [], weight: 1, enabled: true }); libraryAiSuggestions.value = []; libraryAiStatus.value = ''; }
 function editLibrary(item: WheelItem) {
   showManagement.value = true;
   activeManagementPanel.value = 'library';
   menuOpen.value = false;
   Object.assign(libraryForm, { id: item.id, name: item.name, tagIds: [...(Array.isArray(item.tagIds) ? item.tagIds as string[] : [])], weight: item.weight, enabled: item.enabled });
+}
+function getWheelAiConfig() {
+  try {
+    return wheelServices.ai.normalizeConfig(JSON.parse(localStorage.getItem('lifePlanAiConfig') || '{}'));
+  } catch {
+    return wheelServices.ai.normalizeConfig({});
+  }
+}
+function buildWheelTagSuggestPayload(itemText: string) {
+  return {
+    mode: 'wheelTagSuggest',
+    title: '公共项标签推荐',
+    today: getTodayStr(),
+    userInput: itemText,
+    context: {
+      itemText,
+      existingTags: wheelStore.tags.map(tag => ({ id: tag.id, name: tag.name, enabled: tag.enabled !== false })),
+      sampleLibraryItems: wheelStore.libraryItems.slice(0, 20).map(item => ({ name: item.name, tags: libraryTagNames(item) })),
+    },
+    instruction: '只从 existingTags 中推荐 1-5 个标签；返回 tags[{name,reason}]，不要创建新标签。',
+  };
+}
+function applyLibraryAiSuggestion(index: number, selected: boolean) {
+  const suggestion = libraryAiSuggestions.value[index];
+  if (!suggestion) return;
+  suggestion.selected = selected;
+  const next = new Set(libraryForm.tagIds);
+  if (selected) next.add(suggestion.tagId); else next.delete(suggestion.tagId);
+  libraryForm.tagIds = [...next];
+}
+async function suggestLibraryTags() {
+  if (libraryAiRunning.value) return;
+  const itemText = libraryForm.name.trim();
+  if (!itemText) return say('请先输入公共项名称');
+  if (!wheelStore.tags.length) return say('还没有标签，请先在标签管理中添加');
+  libraryAiRunning.value = true;
+  libraryAiStatus.value = '正在根据现有标签推荐…';
+  libraryAiSuggestions.value = [];
+  const config = getWheelAiConfig();
+  const payload = buildWheelTagSuggestPayload(itemText);
+  let usedFallback = false;
+  try {
+    let result: any;
+    if (wheelServices.ai.isRemoteReady(config)) {
+      try {
+        result = await wheelServices.ai.requestRemoteAi(config, payload);
+      } catch {
+        usedFallback = true;
+        result = wheelServices.ai.generateLocalAiResult(payload);
+      }
+    } else {
+      result = wheelServices.ai.generateLocalAiResult(payload);
+    }
+    const byName = new Map(wheelStore.tags.map(tag => [String(tag.name).trim().toLowerCase(), tag]));
+    const seen = new Set<string>();
+    libraryAiSuggestions.value = (Array.isArray(result?.tags) ? result.tags : [])
+      .map((tag: any) => {
+        const name = String(tag?.name || tag || '').trim();
+        const existing = byName.get(name.toLowerCase());
+        if (!existing || seen.has(existing.id)) return null;
+        seen.add(existing.id);
+        return { tagId: existing.id, name: existing.name, reason: String(tag?.reason || '').trim(), selected: true };
+      })
+      .filter(Boolean)
+      .slice(0, 5) as Array<{ tagId: string; name: string; reason: string; selected: boolean }>;
+    libraryAiSuggestions.value.forEach((suggestion) => {
+      const next = new Set(libraryForm.tagIds);
+      next.add(suggestion.tagId);
+      libraryForm.tagIds = [...next];
+    });
+    libraryAiStatus.value = usedFallback
+      ? '远程 AI 请求失败，已使用本地规则推荐。'
+      : (result?.summary || `已推荐 ${libraryAiSuggestions.value.length} 个已有标签。`);
+    if (!libraryAiSuggestions.value.length) libraryAiStatus.value = '没有匹配到已有标签，请手动勾选。';
+  } catch (error) {
+    libraryAiStatus.value = error instanceof Error ? error.message : 'AI 推荐失败';
+  } finally {
+    libraryAiRunning.value = false;
+  }
 }
 function submitLibrary() { handle(() => { wheelStore.saveLibraryItem(libraryForm); resetLibraryForm(); }, libraryForm.id ? '已更新公共项' : '已添加公共项'); }
 function submitBatchLibrary() {
@@ -927,7 +1011,12 @@ function importJson(event: Event) {
           <label class="field-label"><span>公共项名称</span><input v-model="libraryForm.name" required placeholder="公共项名称" /></label>
           <label class="field-label field-small"><span>权重</span><input v-model.number="libraryForm.weight" type="number" min="1" /></label>
           <label class="check-label"><input v-model="libraryForm.enabled" type="checkbox" />启用</label>
+          <button class="btn btn-secondary" type="button" :disabled="libraryAiRunning" @click="suggestLibraryTags">{{ libraryAiRunning ? '推荐中…' : 'AI 推荐标签' }}</button>
           <div class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="libraryForm.tagIds.includes(tag.id)" @change="libraryForm.tagIds = toggleTag(libraryForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label></div>
+          <div v-if="libraryAiStatus || libraryAiSuggestions.length" class="library-ai-suggestions" role="status">
+            <span class="hint">{{ libraryAiStatus }}</span>
+            <label v-for="(suggestion, index) in libraryAiSuggestions" :key="suggestion.tagId" class="library-ai-suggestion"><input type="checkbox" :checked="suggestion.selected" @change="applyLibraryAiSuggestion(index, ($event.target as HTMLInputElement).checked)" /><span>{{ suggestion.name }}</span><small v-if="suggestion.reason">{{ suggestion.reason }}</small></label>
+          </div>
           <div class="inline-actions"><button class="btn btn-primary">{{ libraryForm.id ? '保存公共项' : '添加公共项' }}</button><button v-if="libraryForm.id" type="button" class="btn btn-secondary" @click="resetLibraryForm">取消</button></div>
         </form>
         <details class="wheel-batch-tools library-batch-tools">
@@ -982,6 +1071,7 @@ function importJson(event: Event) {
 .wheel-list-management{display:grid;gap:12px;margin-top:16px}.wheel-list-mode-filter{display:flex;flex-wrap:wrap;gap:6px}.wheel-list-mode-filter button{min-height:34px;padding:7px 12px;border:1px solid rgba(215,224,232,.95);border-radius:10px;background:#fff;color:#53625a;cursor:pointer;font:inherit;font-size:12px;font-weight:800}.wheel-list-mode-filter button.active{background:#eaf5ee;border-color:#a6cdb3;color:#216e4e}.wheel-list-stack{display:grid;gap:10px}.wheel-list-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid rgba(220,228,235,.96);border-radius:14px;background:#fff}.wheel-list-card.selected{border-color:#a8cdb4;box-shadow:0 0 0 2px rgba(33,110,78,.08)}.wheel-list-card-main{display:grid;gap:7px;min-width:0}.wheel-list-card-title{display:flex;align-items:center;gap:8px;min-width:0}.wheel-list-card-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wheel-list-card-meta{display:flex;flex-wrap:wrap;gap:8px;color:#74817b;font-size:12px}.wheel-list-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#f3f6f4;color:#53625a;font-size:11px;font-weight:800}.wheel-list-badge.current{background:#e8f5ed;color:#216e4e}.wheel-list-card-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;flex-shrink:0}.wheel-mini-btn{min-height:32px;padding:6px 10px;border:1px solid rgba(215,224,232,.95);border-radius:9px;background:#fff;color:#53625a;cursor:pointer;font:inherit;font-size:12px;font-weight:800}.wheel-mini-btn.primary{background:#eef8f1;border-color:#afd1b8;color:#216e4e}.wheel-mini-btn.danger{color:#b64d47}
 .history-head-actions,.history-row-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}.history-done{color:#688276;font-size:12px}
 .wheel-create-items{display:grid;gap:8px}.wheel-create-item-row{display:grid;grid-template-columns:minmax(0,1fr) 84px auto;gap:8px;align-items:center}.wheel-create-item-row input{min-width:0}
+.library-ai-suggestions{display:grid;gap:6px;padding:8px 10px;border:1px solid rgba(215,224,232,.9);border-radius:10px;background:#fafbfd}.library-ai-suggestion{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px}.library-ai-suggestion small{color:#74817b}
 .wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
 .wheel-result.focus{align-items:center;text-align:center;min-height:auto;padding:4px 0 0}
 .wheel-management-block{margin-top:8px}.wheel-management-landing{margin:0 0 14px;padding:14px 16px;border:1px solid rgba(42,75,56,.12);border-radius:10px;background:#fbfdfb}.wheel-management-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.wheel-management-nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.wheel-management-nav .btn{min-height:34px}.wheel-management-landing .wheel-management-summary{margin-top:12px}
