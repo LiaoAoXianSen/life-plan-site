@@ -509,7 +509,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
               <button v-if="canUnlinkRecord(record)" class="link-button danger-text" type="button" :aria-label="`解除关联 ${record.title || record.type || '未命名记录'}`" @click="unlinkRecord(record)">解除</button>
               <span v-else class="todo-record-lock">专属来源</span>
             </div>
-            <p v-if="!linkedRecords.length" class="todo-detail-empty">暂无关联记录。</p>
+            <p v-if="!linkedRecords.length" class="todo-detail-empty">暂无关联记录</p>
           </section>
 
           <p v-if="detailError" class="form-error" role="alert">{{ detailError }}</p>
