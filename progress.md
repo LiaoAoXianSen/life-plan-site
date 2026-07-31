@@ -601,3 +601,15 @@
 - Reused `fitness-service.js` `buildBodyMetricSummary()` and `formatSignedChange()` for weight/waist deltas, with a responsive two-card summary beneath the Fitness KPIs.
 - Added focused no-write coverage for `+1.5 kg` weight and `-0.5 cm` waist changes; all Fitness tests remain green.
 - `npm run build` passed; Fitness focused smoke passed 7/7; `git diff --check` passed with only LF/CRLF working-copy warnings.
+
+## 2026-07-31 - Wheel empty-stage audit (in progress)
+
+- Fitness trend summary is locally committed as `d09c242`; push is currently retrying around intermittent GitHub 443 failures.
+- Online audit found legacy Wheel keeps a visible canvas stage on empty data, while Vue hides the stage with `v-if="selectedWheel"`.
+- Next slice will add a no-write empty stage with a clear create action; it must not seed or mutate `lifePlanData` automatically.
+- Added a `v-else` Wheel empty stage with a real canvas, explicit `还没有转盘` state, and a no-write `新建转盘` entry to the existing management form.
+- Added focused coverage proving the canvas is visible, the create entry scrolls to `#wheel-create-panel`, and `lifePlanData` remains byte-identical.
+- `npm run build` passed; Wheel focused smoke passed 5/5 (canvas/tag, library batch, management forms, landing, empty stage).
+- Full-suite diagnosis found stale locators after the existing collapsed sidebar/management IA: updated the three Wheel auto-sync tests to open management, scoped import file input to `导入并合并`, and scoped navigation to sidebar buttons for `AI 助手`/`云同步`.
+- Regression group `Vue shell navigates|main import export|wheel conditional auto sync|wheel empty state` passed 7/7. The full run still has one date-sensitive AI chatCapture fixture failure unrelated to this shell change.
+- Final local state: `HEAD=f7e86fe`, `origin/migration/vue-app-v1=2e908cf`; verified commits `d09c242` and `f7e86fe` are not yet pushed because repeated GitHub HTTPS 443 resets/timeouts persisted. Untracked `previews/`, `tmp-legacy.png`, and `tmp-vue.png` were never staged.

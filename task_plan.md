@@ -265,6 +265,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 247. Status: complete - Add read-only Fitness 30-day weight/waist trend summaries using existing metric parsing helpers.
 248. Status: complete - Add focused trend-summary coverage and rerun Fitness build/check gates.
 249. Status: in_progress - Commit, push, and append dual-store memory for the Fitness trend-summary shell.
+250. Status: complete - Audit Wheel empty-data rendering against the legacy default stage without mutating `lifePlanData`.
+251. Status: complete - Implement the bounded Wheel empty-stage shell and focused canvas/management coverage.
+252. Status: in_progress - Run Wheel build/check gates, commit, push, and append dual-store memory for the empty-stage slice.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -329,3 +332,5 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | Habit correction read-only sidecar failed before review | Subagent `Poincare` exceeded retry limit with upstream `429 Too Many Requests` | Continued main-thread contract review and verification; no project files were changed by the sidecar |
 | First Habits analysis summary focused assertion expected a rendered space in `2 次打卡` | Focused summary test reached the correct `2次打卡` UI output | Changed only the text assertion to allow optional whitespace; persistence and read-only assertions remained exact |
 | Habits summary initially labeled any non-zero checkin streak as completed continuity | Read-only sidecar audit compared the new UI with `habitsStore` target-aware streak helpers | Renamed the computed field and UI label to `连续有打卡` so it does not claim target completion for multi-count or non-daily habits |
+| Full 84-test Vue smoke exceeded the first 184-second check gate and the extended 300-second run reported six failures | The alternative full run reached 78/84; three Wheel auto-sync failures were stale hidden-management locators, import/export had two file inputs, navigation used sidebar buttons as links, and AI chatCapture used a fixed prior-day fixture | Updated only the stale Wheel/import/navigation locators; focused reruns passed 7/7. Left the date-sensitive AI fixture unchanged because it is outside this shell slice and no persistence code changed |
+| Push attempts for the verified Fitness trend and Wheel empty-stage commits repeatedly failed with GitHub HTTPS 443 reset/timeout | Retried normal push, HTTP/1.1, and porcelain push after successful local verification | Kept both commits local and intact; remote tracking point remains `2e908cf`, with no force push or branch changes |

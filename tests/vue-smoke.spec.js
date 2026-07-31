@@ -53,7 +53,10 @@ test('Vue shell navigates through migrated pages without browser errors', async 
     await page.goto('/');
     await expect(page.locator('#page-dashboard')).toBeVisible();
     for (const [label, title] of [['所有记录', '所有记录'], ['灵感池', '灵感池'], ['素材库', '素材库'], ['标签中心', '标签中心'], ['全局搜索', '全局搜索'], ['待办总览', '待办总览'], ['习惯打卡', '习惯中心'], ['运动健身', '运动健身'], ['目标管理', '目标管理'], ['工具转盘', '工具转盘'], ['AI 助手', 'AI 助手'], ['云同步', '云同步']]) {
-        await page.getByRole('link', { name: label }).click();
+        const entry = ['AI 助手', '云同步'].includes(label)
+            ? page.getByRole('button', { name: label })
+            : page.getByRole('link', { name: label });
+        await entry.click();
         await expect(page.locator('.page-title')).toHaveText(title);
     }
     expect(errors).toEqual([]);
@@ -817,6 +820,24 @@ test('wheel management landing keeps workspace navigation focused', async ({ pag
     await expect(page.locator('#wheel-library-panel')).toBeInViewport();
 });
 
+test('wheel empty state keeps a no-write canvas stage and create entry', async ({ page }) => {
+    const source = emptyData();
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        window.__wheelEmptyBefore = localStorage.getItem('lifePlanData');
+    }, source);
+
+    await page.goto('/#/wheel');
+    const empty = page.locator('.wheel-empty-shell');
+    await expect(empty).toBeVisible();
+    await expect(empty).toContainText('还没有转盘');
+    await expect(empty.locator('.wheel-canvas-wrap')).toBeVisible();
+    await empty.getByRole('button', { name: '新建转盘' }).click();
+    await expect(page.locator('#wheel-create-panel')).toBeInViewport();
+    const unchanged = await page.evaluate(() => window.__wheelEmptyBefore === localStorage.getItem('lifePlanData'));
+    expect(unchanged).toBe(true);
+});
+
 test('main import export keeps snapshots tombstones mirrors and dirty state compatible', async ({ page }) => {
     const local = emptyData({
         records: [
@@ -844,7 +865,7 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     }, { localData: local });
 
     await page.goto('/#/sync');
-    await page.locator('input[type="file"]').setInputFiles({
+    await page.getByLabel('导入并合并').setInputFiles({
         name: 'import-contract.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
@@ -879,7 +900,7 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     expect(state.snapshots.map(snapshot => snapshot.reason)).toEqual(expect.arrayContaining(['导入前自动备份', '导入合并结果']));
 
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('button', { name: '导出备份' }).click();
+    await page.getByRole('main').getByRole('button', { name: '导出备份' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^life-plan-backup-.*\.json$/);
     const afterExport = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
@@ -3802,6 +3823,8 @@ test('wheel conditional auto sync sanitizes old config and stays idle when disab
 
     await page.clock.install();
     await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
     await page.getByLabel('选项名称').fill('关闭时新增选项');
     await page.locator('.option-form').getByRole('button', { name: '添加' }).click();
     await page.clock.fastForward(25000);
@@ -3858,6 +3881,8 @@ test('wheel conditional auto sync uploads dirty wheel slice after debounce', asy
 
     await page.clock.install();
     await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
     const baselineHash = await page.evaluate(localData => {
         const sync = window.LifePlanSyncService.create();
         return sync.getWheelDataHash(sync.getWheelSnapshot(localData));
@@ -3919,6 +3944,8 @@ test('wheel conditional auto sync never creates a missing remote file', async ({
 
     await page.clock.install();
     await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
     await page.getByLabel('选项名称').fill('缺云端时新增选项');
     await page.locator('.option-form').getByRole('button', { name: '添加' }).click();
     await page.clock.fastForward(20000);

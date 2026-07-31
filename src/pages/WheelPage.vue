@@ -501,6 +501,22 @@ function importJson(event: Event) {
       </div>
     </section>
 
+    <section v-else class="card wheel-focus-shell wheel-empty-shell" aria-label="转盘主舞台">
+      <div class="wheel-empty-copy">
+        <div class="wheel-mode-badge">空白转盘</div>
+        <h2 class="wheel-mode-title">还没有转盘</h2>
+        <p class="wheel-subtitle">先创建一个普通转盘或标签转盘，主舞台会保留在这里。</p>
+        <button class="btn btn-primary" type="button" @click="openManagement('create')">新建转盘</button>
+      </div>
+      <div class="wheel-focus-canvas">
+        <div class="wheel-pointer">▼</div>
+        <div class="wheel-canvas-wrap empty" aria-hidden="true">
+          <canvas ref="canvasRef" class="wheel-canvas" />
+          <span class="wheel-center-label">空</span>
+        </div>
+      </div>
+    </section>
+
     <div v-show="showManagement" id="wheel-management-block" class="wheel-management-block">
       <section class="wheel-management-landing" aria-label="转盘管理入口">
         <div class="wheel-management-landing-head">
@@ -610,7 +626,7 @@ function importJson(event: Event) {
 </template>
 
 <style scoped>
-.wheel-focus-shell{margin-bottom:16px;padding:18px 20px 22px}
+.wheel-focus-shell{margin-bottom:16px;padding:18px 20px 22px}.wheel-empty-shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.9fr);gap:18px;align-items:center}.wheel-empty-copy{display:grid;gap:12px;justify-items:start}.wheel-canvas-wrap.empty{cursor:default}
 .wheel-focus-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
 .wheel-focus-toolbar .wheel-selector{margin:0;min-width:180px}
 .wheel-focus-toolbar .wheel-selector select{min-height:36px}
