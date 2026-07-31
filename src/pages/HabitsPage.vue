@@ -22,6 +22,14 @@ const pointAdjustForm = reactive({
   currency: '金币',
   note: '',
 });
+const currencyOptions = computed(() => {
+  const names = new Set<string>(['金币', ...Object.keys(habits.balances || {})]);
+  lifePlan.data.habitCurrencies.forEach(item => {
+    const name = String(item.name || item.currency || '').trim();
+    if (name) names.add(name);
+  });
+  return [...names];
+});
 const focusedHabitId = computed(() => String(route.query.habit || ''));
 const todayItems = computed(() => habits.todayHabits.map(habit => ({
   habit,
@@ -615,36 +623,53 @@ watch(focusedHabitId, value => {
     </section>
 
     <div v-if="showPointAdjust" class="modal-overlay active" role="presentation" @click.self="showPointAdjust = false">
-      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="habit-point-adjust-title">
+      <section class="modal modal-sm habit-point-adjust-modal" role="dialog" aria-modal="true" aria-labelledby="habit-point-adjust-title">
         <div class="modal-header">
           <div id="habit-point-adjust-title" class="modal-title">调整积分</div>
           <button class="close-btn" type="button" aria-label="关闭调整积分" @click="showPointAdjust = false">×</button>
         </div>
-        <form class="habit-point-adjust-form" @submit.prevent="savePointAdjust">
-          <label class="form-field">
-            <span>类型</span>
-            <select v-model="pointAdjustForm.direction">
-              <option value="add">增加</option>
-              <option value="subtract">扣除</option>
-            </select>
-          </label>
-          <label class="form-field">
-            <span>数量</span>
-            <input v-model.number="pointAdjustForm.amount" type="number" min="1" required />
-          </label>
-          <label class="form-field">
-            <span>币种</span>
-            <input v-model="pointAdjustForm.currency" maxlength="24" required />
-          </label>
-          <label class="form-field">
-            <span>备注</span>
-            <input v-model="pointAdjustForm.note" maxlength="80" placeholder="可选，例如：手动校准" />
-          </label>
-          <div class="form-actions">
-            <button class="btn btn-primary" type="submit">保存调整</button>
+        <form @submit.prevent="savePointAdjust">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="habit-point-adjust-type">类型</label>
+              <select id="habit-point-adjust-type" v-model="pointAdjustForm.direction">
+                <option value="add">加金币</option>
+                <option value="subtract">扣金币</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="habit-point-adjust-amount">数量</label>
+              <input id="habit-point-adjust-amount" v-model.number="pointAdjustForm.amount" type="number" min="1" required>
+            </div>
+            <div class="form-group">
+              <label for="habit-point-adjust-currency">币种</label>
+              <input
+                id="habit-point-adjust-currency"
+                v-model="pointAdjustForm.currency"
+                list="habit-currency-options"
+                maxlength="24"
+                placeholder="金币"
+                required
+              >
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="habit-point-adjust-note">原因</label>
+            <input
+              id="habit-point-adjust-note"
+              v-model="pointAdjustForm.note"
+              maxlength="80"
+              placeholder="例如：额外完成、违规扣分"
+            >
+          </div>
+          <div class="modal-action-row">
             <button class="btn btn-secondary" type="button" @click="showPointAdjust = false">取消</button>
+            <button class="btn btn-primary" type="submit">保存调整</button>
           </div>
         </form>
+        <datalist id="habit-currency-options">
+          <option v-for="currency in currencyOptions" :key="currency" :value="currency" />
+        </datalist>
       </section>
     </div>
   </section>
@@ -680,10 +705,36 @@ watch(focusedHabitId, value => {
   font-size: 12px;
   line-height: 1.5;
 }
-.habit-point-adjust-form {
+.habit-point-adjust-modal {
+  width: min(420px, calc(100vw - 32px));
+}
+.habit-point-adjust-modal .form-row {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  padding: 4px 2px 8px;
+  margin-bottom: 12px;
+}
+.habit-point-adjust-modal .form-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+.habit-point-adjust-modal .form-group label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.habit-point-adjust-modal .modal-action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+@media (max-width: 640px) {
+  .habit-point-adjust-modal .form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .habit-center-hero {
   margin-bottom: 14px;
