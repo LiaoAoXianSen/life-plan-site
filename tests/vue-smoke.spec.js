@@ -3892,6 +3892,7 @@ test('wheel conditional auto sync sanitizes old config and stays idle when disab
     await page.goto('/#/wheel');
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    await page.locator('.wheel-stage-card').getByRole('button', { name: '编辑当前' }).click();
     await page.getByLabel('选项名称').fill('关闭时新增选项');
     await page.locator('.option-form').getByRole('button', { name: '添加' }).click();
     await page.clock.fastForward(25000);
@@ -3950,6 +3951,7 @@ test('wheel conditional auto sync uploads dirty wheel slice after debounce', asy
     await page.goto('/#/wheel');
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    await page.locator('.wheel-stage-card').getByRole('button', { name: '编辑当前' }).click();
     const baselineHash = await page.evaluate(localData => {
         const sync = window.LifePlanSyncService.create();
         return sync.getWheelDataHash(sync.getWheelSnapshot(localData));
@@ -4013,6 +4015,7 @@ test('wheel conditional auto sync never creates a missing remote file', async ({
     await page.goto('/#/wheel');
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    await page.locator('.wheel-stage-card').getByRole('button', { name: '编辑当前' }).click();
     await page.getByLabel('选项名称').fill('缺云端时新增选项');
     await page.locator('.option-form').getByRole('button', { name: '添加' }).click();
     await page.clock.fastForward(20000);
