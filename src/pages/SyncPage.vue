@@ -160,13 +160,14 @@ async function pullAndMerge() {
     }
     createMergeSnapshots('云端合并', remote, 'cloud-pull');
     const stamp = nowIso();
+    const dirty = sync.getDataHash(store.data) !== remote.hash;
     writeSyncState({
       ...readSyncState(),
       lastRemoteHash: remote.hash,
       lastRemoteEtag: remote.etag || '',
       lastPullAt: stamp,
-      lastSyncAt: stamp,
-      dirty: false,
+      ...(dirty ? {} : { lastSyncAt: stamp }),
+      dirty,
     });
     status.value = '已按原 mergeCloudData 规则合并云端数据。';
   } catch (error) {
