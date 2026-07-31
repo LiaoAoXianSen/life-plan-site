@@ -289,15 +289,26 @@ async function run() {
       today: getTodayStr(),
       context: context.value,
     };
-    const raw = ai.isRemoteReady(config)
-      ? await ai.requestRemoteAi(config, payload)
-      : ai.generateLocalAiResult(payload);
+    let remoteError = '';
+    let raw;
+    if (ai.isRemoteReady(config)) {
+      try {
+        raw = await ai.requestRemoteAi(config, payload);
+      } catch (remoteFailure) {
+        remoteError = remoteFailure instanceof Error ? remoteFailure.message : String(remoteFailure);
+        raw = ai.generateLocalAiResult(payload);
+      }
+    } else {
+      raw = ai.generateLocalAiResult(payload);
+    }
     result.value = raw;
     drafts.value = toDrafts(raw?.items || []);
     if (mode.value === 'chatCapture') updateCaptureDraft(raw);
     if (mode.value === 'diaryReview') updateDiaryDraft(raw);
     const hasCapture = Object.values(captureDraft).some(value => value.trim());
-    status.value = drafts.value.length || hasCapture ? '已生成建议，确认后再写入' : '没有可用建议';
+    status.value = remoteError
+      ? `远程 AI 报错：${remoteError}\n已改用本地规则生成建议。`
+      : drafts.value.length || hasCapture ? '已生成建议，确认后再写入' : '没有可用建议';
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
