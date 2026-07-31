@@ -2017,6 +2017,13 @@ test('habit today empty state keeps the legacy wording', async ({ page }) => {
     await expect(page.locator('#page-habits .habit-quick-list')).toContainText('今日暂无安排的习惯');
 });
 
+test('habit library empty state keeps the legacy wording', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '习惯库' }).click();
+    await expect(page.locator('.habit-management-table')).toContainText('暂无习惯，先新建一个习惯。');
+});
+
 test('habit archive and restore preserve history without tombstones', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({
