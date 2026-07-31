@@ -254,7 +254,11 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 236. Status: complete - Commit, push, and append dual-store memory for the Fitness hero-action shell.
 237. Status: complete - Audit the Vue Wheel management shell and choose one bounded IA refinement that preserves canvas and sync contracts.
 238. Status: complete - Implement the bounded Wheel management refinement and focused Playwright coverage.
-239. Status: in_progress - Commit, push, and append dual-store memory for the management-shell slice.
+239. Status: complete - Commit, push, and append dual-store memory for the management-shell slice.
+240. Status: complete - Commit, push, and append dual-store memory for the management-shell slice.
+241. Status: complete - Audit the Vue Habits analysis shell and legacy heatmap/stat helpers for one read-only summary refinement.
+242. Status: complete - Implement the bounded Habits analysis summary and focused diagnostics/base coverage.
+243. Status: in_progress - Run Habits build/check gates, commit, push, and append dual-store memory for the analysis-shell slice.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
@@ -317,3 +321,5 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First Habit correction build rejected `Array.at()` | The project TypeScript lib target does not include ES2022 array helpers | Replaced `.at(-1)` with `checkins[checkins.length - 1]` and reran build |
 | First full Habit correction check failed an existing quick-checkin locator | New `备注打卡/补卡` button also matched the old fuzzy `打卡` role locator | Changed the existing quick-checkin test to `exact: true` |
 | Habit correction read-only sidecar failed before review | Subagent `Poincare` exceeded retry limit with upstream `429 Too Many Requests` | Continued main-thread contract review and verification; no project files were changed by the sidecar |
+| First Habits analysis summary focused assertion expected a rendered space in `2 次打卡` | Focused summary test reached the correct `2次打卡` UI output | Changed only the text assertion to allow optional whitespace; persistence and read-only assertions remained exact |
+| Habits summary initially labeled any non-zero checkin streak as completed continuity | Read-only sidecar audit compared the new UI with `habitsStore` target-aware streak helpers | Renamed the computed field and UI label to `连续有打卡` so it does not claim target completion for multi-count or non-daily habits |

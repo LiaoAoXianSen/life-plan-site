@@ -574,3 +574,14 @@
 - Added a management landing strip to `src/pages/WheelPage.vue` with the existing stats moved above the full editor dump and scoped workspace jump buttons.
 - Added focused coverage in `tests/vue-smoke.spec.js` for landing visibility and Public Library navigation while preserving existing management form selectors.
 - `npm run build` passed; Wheel focused smoke passed 4/4 (canvas/tag, public library batch, management forms, landing); `git diff --check` passed with only LF/CRLF working-copy warnings.
+- Committed as `6768b0b` and pushed successfully to `origin/migration/vue-app-v1`.
+
+## 2026-07-31 - Habits analysis summary audit (in progress)
+
+- Wheel management IA slice is closed with the remote branch synchronized.
+- Next slice is read-only Habits analysis depth: derive a compact per-habit summary from existing checkins/streak helpers and keep all write paths untouched.
+- Added `analysisHabitSummaries` and a responsive `习惯统计摘要` block to `src/pages/HabitsPage.vue`, derived solely from the existing 30-day matrix cells.
+- Added read-only Playwright coverage for per-habit checkin count, active days, consecutive days, and unchanged `lifePlanData`/mirror state.
+- First assertion only differed by rendered whitespace (`2次打卡`); adjusted the locator to allow optional whitespace without weakening persistence checks.
+- `npm run build` passed; focused Habit analysis/diagnostics/base tests passed 3/3.
+- Read-only sidecar review caught that “连续 N 天” could imply target completion for multi-count/non-daily habits; clarified the field and label to `连续有打卡 N 天` before push.

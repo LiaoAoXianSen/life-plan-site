@@ -95,6 +95,16 @@ const matrixRows = computed(() => habits.habits
       count: habits.getCheckinCount(habit.id, date),
     })),
   })));
+const analysisHabitSummaries = computed(() => matrixRows.value
+  .map(row => {
+    const checkins = row.cells.reduce((sum, cell) => sum + cell.count, 0);
+    const activeDays = row.cells.filter(cell => cell.count > 0).length;
+    let checkinStreak = 0;
+    for (let index = row.cells.length - 1; index >= 0 && row.cells[index].count > 0; index -= 1) checkinStreak += 1;
+    const latest = [...row.cells].reverse().find(cell => cell.count > 0);
+    return { ...row, checkins, activeDays, checkinStreak, latestDate: latest?.date || '' };
+  })
+  .sort((a, b) => b.checkins - a.checkins || b.activeDays - a.activeDays || a.name.localeCompare(b.name, 'zh-Hans-CN')));
 const yesterdayPendingCount = computed(() => {
   const yesterday = (() => {
     const date = new Date(`${getTodayStr()}T12:00:00`);
@@ -595,6 +605,29 @@ watch(focusedHabitId, value => {
         <div v-else class="empty-state">暂无习惯，先新建一个习惯。</div>
       </div>
 
+      <div class="habit-analysis-summary" aria-label="习惯统计摘要">
+        <div class="section-title-row compact">
+          <div>
+            <h3>习惯统计摘要</h3>
+            <p class="section-hint">按当前分析窗口聚合，只有读取，不会改变打卡或奖励。</p>
+          </div>
+        </div>
+        <div v-if="analysisHabitSummaries.length" class="habit-analysis-summary-grid">
+          <article v-for="item in analysisHabitSummaries" :key="`${item.id}-summary`" class="habit-analysis-summary-card">
+            <div class="habit-analysis-summary-copy">
+              <strong>{{ item.name }}</strong>
+              <span>{{ item.activeDays }} 天有打卡<span v-if="item.latestDate"> · 最近 {{ item.latestDate }}</span></span>
+            </div>
+            <div class="habit-analysis-summary-values">
+              <strong>{{ item.checkins }}</strong>
+              <span>次打卡</span>
+              <em>连续有打卡 {{ item.checkinStreak }} 天</em>
+            </div>
+          </article>
+        </div>
+        <div v-else class="empty-state">暂无可统计的习惯。</div>
+      </div>
+
       <div class="habit-diagnostics-grid">
         <article><span>权威源</span><strong>{{ habits.diagnostics.authority || 'lifePlanData' }}</strong></article>
         <article><span>习惯/打卡</span><strong>{{ Number(diagnosticSummary.habits || 0) }} / {{ Number(diagnosticSummary.checkins || 0) }}</strong></article>
@@ -939,6 +972,50 @@ watch(focusedHabitId, value => {
 .habit-matrix-summary span {
   color: var(--faint, #7a8b80);
   font-size: 12px;
+}
+.habit-analysis-summary {
+  display: grid;
+  gap: 10px;
+}
+.habit-analysis-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.habit-analysis-summary-card {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(42, 75, 56, .11);
+  border-radius: 10px;
+  background: #fbfdfb;
+}
+.habit-analysis-summary-copy,
+.habit-analysis-summary-values {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.habit-analysis-summary-copy strong {
+  overflow-wrap: anywhere;
+}
+.habit-analysis-summary-copy span,
+.habit-analysis-summary-values span,
+.habit-analysis-summary-values em {
+  color: var(--muted, #647269);
+  font-size: 12px;
+  font-style: normal;
+}
+.habit-analysis-summary-values {
+  flex: 0 0 auto;
+  justify-items: end;
+}
+.habit-analysis-summary-values strong {
+  color: #285940;
+  font-size: 1.1rem;
 }
 .habit-center-tab {
   border: 1px solid rgba(33, 110, 78, 0.14);
@@ -1357,7 +1434,8 @@ watch(focusedHabitId, value => {
   .habit-advanced-grid,
   .habit-reward-form,
   .habit-wallet-layout,
-  .habit-diagnostics-grid {
+  .habit-diagnostics-grid,
+  .habit-analysis-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .habit-reward-form .reward-note,
@@ -1387,6 +1465,7 @@ watch(focusedHabitId, value => {
   .habit-reward-form,
   .habit-wallet-layout,
   .habit-diagnostics-grid,
+  .habit-analysis-summary-grid,
   .habit-reward-card {
     grid-template-columns: minmax(0, 1fr);
   }
