@@ -779,6 +779,9 @@ watch(focusedHabitId, value => {
                 :aria-label="`${cell.date}，打卡 ${cell.count} 次`"
               />
             </div>
+            <div class="habit-annual-months" :style="{ minWidth: `${annualHeatmapColumns * 22}px` }">
+              <span v-for="month in 12" :key="month">{{ month }}月</span>
+            </div>
           </div>
           <div class="habit-annual-legend" aria-label="年度热力图图例">
             <span>少</span><i class="level-0" /><i class="level-1" /><i class="level-2" /><i class="level-3" /><i class="level-4" /><span>多</span>
@@ -1261,6 +1264,19 @@ watch(focusedHabitId, value => {
 .habit-annual-cell.level-4 { background: #16633d; }
 .habit-annual-cell.outside { background: transparent; }
 .habit-annual-cell.future { opacity: .38; }
+.habit-annual-months {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 7px;
+  padding: 0 2px;
+  color: var(--muted, #647269);
+  font-size: 11px;
+  font-weight: 750;
+}
+.habit-annual-months span {
+  text-align: center;
+}
 .habit-annual-legend {
   display: flex;
   align-items: center;

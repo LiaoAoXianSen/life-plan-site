@@ -1806,6 +1806,7 @@ test('habit annual analysis renders a read-only selected habit heatmap', async (
     await expect(annual).toBeVisible();
     await expect(annual).toContainText('年度阅读');
     expect(await annual.locator('.habit-annual-cell').count()).toBeGreaterThan(300);
+    await expect(annual.locator('.habit-annual-months span')).toHaveCount(12);
     await expect(annual.locator('.habit-annual-stats')).toContainText('当前连续天数');
     await expect(annual.locator('.habit-annual-stats')).toContainText('本月完成率');
     await expect(annual.locator('.habit-history-panel')).toContainText('最近打卡备注');
