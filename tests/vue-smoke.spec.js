@@ -348,6 +348,7 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     await expect(commandMetrics.filter({ hasText: '待写结论' })).toContainText('1');
     await expect(commandMetrics.filter({ hasText: '高压待办' })).toContainText('1');
     await expect(page.locator('.dashboard-timeline')).toContainText('Dashboard 日记记录');
+    await expect(page.locator('.dashboard-timeline')).toContainText(/\d{4}年\d{1,2}月\d{1,2}日/);
     await expect(page.locator('.dashboard-timeline')).toContainText('执行：执行入口待办');
     await expect(page.locator('.dashboard-timeline')).toContainText('Dashboard 习惯');
     await expect(page.locator('.dashboard-timeline')).not.toContainText('计划：计划截止不进首页时间轴');

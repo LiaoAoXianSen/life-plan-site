@@ -72,7 +72,7 @@ function activeRecordTodos(record: DataEntity) {
 }
 
 function formatDate(value: unknown) {
-  return String(value || '').replace(/-/g, '/');
+  return formatLongDate(String(value || ''));
 }
 
 function formatLongDate(value: string) {
