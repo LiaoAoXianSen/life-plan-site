@@ -338,6 +338,8 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
 
     await page.goto('/#/dashboard');
     await expect(page.locator('.summary-card').filter({ hasText: '今日待办' })).toContainText('1/4');
+    await expect(page.locator('.hero-meta')).toContainText('近30天训练 0');
+    await expect(page.locator('.hero-meta')).toContainText('连续训练 0 天');
     await expect(page.locator('.summary-card').filter({ hasText: '习惯完成' })).toContainText('1/1');
     await expect(page.locator('.summary-card').filter({ hasText: '进行目标' })).toContainText('1');
     const commandMetrics = page.locator('.command-metric');

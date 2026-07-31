@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 
 import RecordCreateModal from '../components/RecordCreateModal.vue';
 import { getTodayStr } from '../services/legacyServices';
+import { useFitnessStore } from '../stores/fitnessStore';
 import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -19,6 +20,7 @@ const lifePlan = useLifePlanStore();
 const recordsStore = useRecordsStore();
 const todosStore = useTodosStore();
 const habitsStore = useHabitsStore();
+const fitnessStore = useFitnessStore();
 const today = getTodayStr();
 const showCreateRecord = ref(false);
 const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
@@ -220,6 +222,13 @@ const todayHabitItems = computed(() => dueHabits.value.map(habit => {
   };
 }).slice(0, 8));
 const doneHabitCount = computed(() => todayHabitItems.value.filter(item => item.count > 0).length);
+const fitnessOverview = computed(() => fitnessStore.services.fitness.buildFitnessOverview({
+  bodyMetrics: fitnessStore.metrics,
+  fitnessPlans: fitnessStore.plans,
+  fitnessWorkouts: fitnessStore.workouts,
+}) as Record<string, any>);
+const fitnessWorkoutCount = computed(() => Number(fitnessOverview.value.workoutSummary?.doneCount || 0));
+const fitnessStreak = computed(() => Number(fitnessOverview.value.workoutSummary?.streak || 0));
 const activeGoals = computed(() => lifePlan.data.goals.filter(goal => goal.status === '进行中'));
 const weekStart = computed(() => {
   const date = new Date(`${today}T12:00:00`);
@@ -283,6 +292,8 @@ const timelineGroups = computed(() => {
             <span>习惯 {{ doneHabitCount }}/{{ dueHabits.length }}</span>
             <span>进行中目标 {{ activeGoals.length }}</span>
             <span>本周记录 {{ weekRecords }}</span>
+            <span>近30天训练 {{ fitnessWorkoutCount }}</span>
+            <span>连续训练 {{ fitnessStreak }} 天</span>
           </div>
         </div>
         <div class="quick-create">
