@@ -67,6 +67,11 @@ const latestWeight = computed(() => {
   if (parsed === null) return '—';
   return fitness.services.fitness.formatMetricValue(metric.weight, 'kg');
 });
+const bodyMetricSummary = computed(() => fitness.services.fitness.buildBodyMetricSummary(fitness.metrics));
+const trendSummaries = computed(() => [
+  { key: 'weight', label: '近 30 天体重变化', unit: 'kg', change: bodyMetricSummary.value.weightChange },
+  { key: 'waist', label: '近 30 天腰围变化', unit: 'cm', change: bodyMetricSummary.value.waistChange },
+]);
 const overviewKpis = computed(() => [
   { label: '当前体重', value: latestWeight.value, hint: latestMetric.value ? String((latestMetric.value as any).date || '') : '还没有身材记录' },
   { label: '近 30 天训练', value: String(recentWorkoutCount.value), hint: '已完成 / 跳过' },
@@ -632,6 +637,14 @@ onUnmounted(stopRestTimer);
           <button class="btn btn-secondary todo-mini-btn" type="button" @click="browseTo(item.target)">查看</button>
         </article>
       </div>
+      <div class="fitness-trend-summary" aria-label="身材趋势摘要">
+        <article v-for="item in trendSummaries" :key="item.key" class="fitness-trend-summary-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.change.delta === null ? '—' : fitness.services.fitness.formatSignedChange(item.change.delta, item.unit) }}</strong>
+          <em v-if="item.change.previous && item.change.latest">{{ item.change.previous.date }} → {{ item.change.latest.date }}</em>
+          <em v-else>至少两次记录后显示变化</em>
+        </article>
+      </div>
     </section>
 
     <article v-if="fitness.activeWorkout" class="card">
@@ -1058,6 +1071,29 @@ onUnmounted(stopRestTimer);
   font-size: 1.35rem;
   color: #216e4e;
 }
+.fitness-trend-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.fitness-trend-summary-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(33, 110, 78, .12);
+}
+.fitness-trend-summary-card span,
+.fitness-trend-summary-card em {
+  color: var(--faint, #7a8b80);
+  font-size: 12px;
+  font-style: normal;
+}
+.fitness-trend-summary-card strong {
+  color: #216e4e;
+  font-size: 1.1rem;
+}
 @media (max-width: 900px) {
   .fitness-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1074,6 +1110,9 @@ onUnmounted(stopRestTimer);
     grid-template-columns: 1fr;
   }
   .fitness-browse-grid {
+    grid-template-columns: 1fr;
+  }
+  .fitness-trend-summary {
     grid-template-columns: 1fr;
   }
 }

@@ -592,3 +592,12 @@
 - Wrapped body metrics and workout-log surfaces in native disclosure shells, default closed; existing hero actions and edit-row handlers open/reset the relevant section before scrolling.
 - Updated only locator entry steps in the existing history/body focused tests; persistence assertions remain unchanged.
 - `npm run build` passed; all Fitness focused smoke passed 6/6.
+- Committed as `2e908cf` and pushed successfully; the previously pending Habits summary commit `31ff0e1` is now also present on origin.
+
+## 2026-07-31 - Fitness trend summary shell (in progress)
+
+- Online legacy comparison shows two remaining read-only Fitness overview cues: recent weight change and weight/waist trend summaries.
+- Scope is limited to derived display values from existing `bodyMetrics`; no new persistence, mirror, or service write path.
+- Reused `fitness-service.js` `buildBodyMetricSummary()` and `formatSignedChange()` for weight/waist deltas, with a responsive two-card summary beneath the Fitness KPIs.
+- Added focused no-write coverage for `+1.5 kg` weight and `-0.5 cm` waist changes; all Fitness tests remain green.
+- `npm run build` passed; Fitness focused smoke passed 7/7; `git diff --check` passed with only LF/CRLF working-copy warnings.

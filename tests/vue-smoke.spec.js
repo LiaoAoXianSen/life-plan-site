@@ -910,6 +910,32 @@ test('fitness hero secondary actions jump to body and workout forms', async ({ p
     await expect(page.locator('#fitness-workout-section')).toBeInViewport();
 });
 
+test('fitness overview renders service-backed body metric trends without writes', async ({ page }) => {
+    const source = emptyData({
+        bodyMetrics: [
+            { id: 'metric-trend-old', date: '2026-07-29', weight: 70, waist: 82, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'metric-trend-new', date: '2026-07-31', weight: 71.5, waist: 81.5, createdAt: '2026-07-31T08:00:00', updatedAt: '2026-07-31T08:00:00' },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-trend-before' }));
+        window.__fitnessTrendBefore = localStorage.getItem('lifePlanData');
+    }, source);
+
+    await page.goto('/#/fitness');
+    const trends = page.locator('.fitness-trend-summary');
+    await expect(trends).toContainText('近 30 天体重变化');
+    await expect(trends.locator('.fitness-trend-summary-card').filter({ hasText: '体重' })).toContainText('+1.5 kg');
+    await expect(trends.locator('.fitness-trend-summary-card').filter({ hasText: '腰围' })).toContainText('-0.5 cm');
+    const unchanged = await page.evaluate(() => ({
+        sameData: window.__fitnessTrendBefore === localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('fitnessAppData'),
+    }));
+    expect(unchanged.sameData).toBe(true);
+    expect(unchanged.mirror).toBeNull();
+});
+
 test('fitness plans support multiple exercises and explicit plan writeback', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [
