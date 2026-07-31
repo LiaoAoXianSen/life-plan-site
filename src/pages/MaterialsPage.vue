@@ -72,7 +72,7 @@ function resetForm() {
   formError.value = '';
 }
 
-function openMaterial(material?: MaterialEntity, syncRoute = true) {
+function openMaterial(material?: MaterialEntity) {
   activeMaterialId.value = material?.id || '';
   Object.assign(form, {
     type: material?.type || '摘抄',
@@ -84,7 +84,6 @@ function openMaterial(material?: MaterialEntity, syncRoute = true) {
   formError.value = '';
   editorOpen.value = true;
   void nextTick(() => materialContentRef.value?.focus());
-  if (material && syncRoute) void router.replace({ query: { ...route.query, material: material.id } });
 }
 
 function closeMaterial(syncRoute = true) {
@@ -155,7 +154,7 @@ watch(() => route.query.material, value => {
   }
   const material = materials.value.find(item => item.id === id);
   if (material) {
-    openMaterial(material, false);
+    openMaterial(material);
     return;
   }
   closeMaterial(false);
