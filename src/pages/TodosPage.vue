@@ -3,7 +3,9 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import TodoTable from '../components/TodoTable.vue';
+import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import { getTodayStr } from '../services/legacyServices';
+import { getMainSyncConfig } from '../services/mainCloudSync';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
@@ -15,6 +17,7 @@ const router = useRouter();
 const lifePlan = useLifePlanStore();
 const recordsStore = useRecordsStore();
 const todosStore = useTodosStore();
+const syncConfig = reactive(getMainSyncConfig());
 const startDate = ref('');
 const endDate = ref('');
 const status = ref<'all' | 'open' | 'done'>('all');
@@ -496,5 +499,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
       </aside>
       <aside v-else class="todo-detail-placeholder"><strong>选择一项待办</strong><span>查看和编辑子任务、执行记录与关联记录。</span></aside>
     </div>
+
+    <TodoSyncPanel :sync-config="syncConfig" />
   </section>
 </template>

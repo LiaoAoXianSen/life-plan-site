@@ -206,6 +206,23 @@ test('todo legacy filters and linked record navigation stay read-only', async ({
     expect(persisted.mirror).toBeNull();
 });
 
+test('todo page keeps the legacy cloud sync panel below the workspace', async ({ page }) => {
+    const source = emptyData({
+        todos: [{ id: 'todo-sync-shell', text: '同步位置待办', done: false, group: '其他', subTodos: [], sessions: [] }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/todos');
+
+    const workspace = page.locator('.todo-workspace');
+    const syncPanel = page.locator('.todo-sync-card');
+    await expect(syncPanel).toBeVisible();
+    await expect(syncPanel).toContainText('待办独立同步');
+    await expect(syncPanel).toContainText('/apps/todo-app/data.json');
+    expect(await syncPanel.evaluate(node => node.getBoundingClientRect().top)).toBeGreaterThan(await workspace.evaluate(node => node.getBoundingClientRect().top));
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('todo dashboard route presets and calendar entries preserve one read-only detail target', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const tomorrow = new Date(`${today}T12:00:00`);
