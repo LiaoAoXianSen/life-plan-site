@@ -17,7 +17,15 @@ const activeManagementPanel = ref<'create' | 'edit' | 'library' | 'tags' | 'hist
 const menuOpen = ref(false);
 const modeFilter = ref<'all' | WheelMode>('all');
 let spinTimer: number | undefined;
-let dragState: { x: number; y: number; moved: boolean } | null = null;
+let spinFrame: number | undefined;
+let dragState: {
+  x: number;
+  y: number;
+  moved: boolean;
+  startAngle: number;
+  startRotation: number;
+  pointerId: number;
+} | null = null;
 let suppressCanvasClick = false;
 
 const selectedWheel = computed(() => wheelStore.wheels.find(wheel => wheel.id === selectedId.value) || wheelStore.wheels[0]);
@@ -99,7 +107,10 @@ watch(() => wheelStore.tags.map(tag => tag.id).join('|'), () => {
   batchLibraryTagIds.value = batchLibraryTagIds.value.filter(id => existing.has(id));
   if (libraryTagFilter.value && !existing.has(libraryTagFilter.value)) libraryTagFilter.value = '';
 }, { immediate: true });
-onBeforeUnmount(() => { if (spinTimer) window.clearTimeout(spinTimer); });
+onBeforeUnmount(() => {
+  if (spinTimer) window.clearTimeout(spinTimer);
+  if (spinFrame) window.cancelAnimationFrame(spinFrame);
+});
 
 const wheelPalette = ['#ff6b6b', '#ff9f43', '#ffd166', '#06d6a0', '#2ec4b6', '#00bbf9', '#5c7cfa', '#9b5de5', '#f15bb5', '#8ac926'];
 let wheelRenderCache: { key: string; canvas: HTMLCanvasElement; radius: number; innerRadius: number; count: number } | null = null;
@@ -215,7 +226,7 @@ function buildWheelRenderCache(entries: WheelRenderEntry[]) {
   return wheelRenderCache;
 }
 
-function drawWheelCanvas() {
+function drawWheelCanvas(selectedIndex = -1) {
   const canvas = canvasRef.value;
   if (!canvas) return;
   const entries = displayEntries.value;
@@ -232,6 +243,22 @@ function drawWheelCanvas() {
   if (!cache) return;
   const scale = cssSize / cache.canvas.width;
   ctx.drawImage(cache.canvas, 0, 0, cache.canvas.width * scale, cache.canvas.height * scale);
+  if (selectedIndex >= 0 && selectedIndex < entries.length) {
+    const radius = cache.radius * scale;
+    const innerRadius = cache.innerRadius * scale;
+    const slice = (Math.PI * 2) / entries.length;
+    const start = selectedIndex * slice;
+    ctx.beginPath();
+    ctx.moveTo(cssSize / 2 + Math.cos(start) * innerRadius, cssSize / 2 + Math.sin(start) * innerRadius);
+    ctx.arc(cssSize / 2, cssSize / 2, radius, start, start + slice);
+    ctx.arc(cssSize / 2, cssSize / 2, innerRadius, start + slice, start, true);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(251,93,87,.28)';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(251,93,87,.95)';
+    ctx.stroke();
+  }
   drawCenter(ctx, cssSize / 2, cssSize / 2, entries.length ? 'GO' : '空');
 }
 
@@ -333,24 +360,56 @@ function nextSpin() {
   const wheel = selectedWheel.value;
   if (!wheel || spinning.value) return;
   if (wheel.mode === 'tag' && !stageTag.value) {
-    const tag = wheelStore.weightedPick(availableTags.value);
+    const entries = availableTags.value;
+    const tag = wheelStore.weightedPick(entries);
     if (!tag) return say('这个标签转盘没有可抽标签，或标签下没有启用的公共项。');
-    animate(() => { stageTag.value = tag; say(`已锁定标签：${tag.name}，再转一次抽具体内容。`); });
+    const selectedIndex = entries.findIndex(entry => entry.id === tag.id);
+    animate(entries, Math.max(0, selectedIndex), () => { stageTag.value = tag; say(`已锁定标签：${tag.name}，再转一次抽具体内容。`); });
     return;
   }
-  const picked = wheelStore.weightedPick(selectedOptions.value);
+  const entries = selectedOptions.value;
+  const picked = wheelStore.weightedPick(entries);
   if (!picked) return say('当前转盘没有启用的可抽选项。');
-  animate(() => {
+  const selectedIndex = entries.findIndex(entry => entry.id === picked.id);
+  animate(entries, Math.max(0, selectedIndex), () => {
     const history = wheelStore.recordSpin(wheel.id, picked, stageTag.value || undefined);
     resultId.value = history.id; stageTag.value = null; say(`抽中了：${picked.name}`);
   });
 }
 function directTag(tag: WheelTag) { stageTag.value = tag; resultId.value = ''; nextSpin(); }
-function animate(done: () => void) {
-  spinning.value = true; rotation.value += 1440 + Math.floor(Math.random() * 720);
+function animate(entries: Array<WheelRenderEntry>, selectedIndex: number, done: () => void) {
+  if (spinning.value) return;
+  spinning.value = true;
+  buildWheelRenderCache(entries);
+  const start = rotation.value;
+  const slice = 360 / Math.max(1, entries.length);
+  const desired = 270 - (selectedIndex * slice + slice / 2);
+  const normalizedStart = ((start % 360) + 360) % 360;
+  const delta = ((desired - normalizedStart) + 360) % 360;
+  const extraTurns = entries.length >= 80 ? 1080 : entries.length >= 36 ? 1440 : 1800;
+  const target = start + extraTurns + delta;
   const configured = Number((window as unknown as { __wheelSpinDurationMs?: number }).__wheelSpinDurationMs);
-  const duration = Number.isFinite(configured) ? Math.max(1, configured) : 560;
-  spinTimer = window.setTimeout(() => { spinning.value = false; done(); void nextTick(drawWheelCanvas); }, duration);
+  const duration = Number.isFinite(configured) && configured > 0
+    ? configured
+    : entries.length >= 80 ? 2600 : entries.length >= 36 ? 3000 : 3600;
+  const startTime = performance.now();
+  const tick = (time: number) => {
+    const progress = Math.min(1, (time - startTime) / duration);
+    const eased = 1 - Math.pow(1 - progress, 2.4);
+    const nextRotation = start + (target - start) * eased;
+    if (canvasRef.value) canvasRef.value.style.transform = `rotate(${nextRotation}deg)`;
+    if (progress < 1) {
+      spinFrame = window.requestAnimationFrame(tick);
+      return;
+    }
+    rotation.value = ((nextRotation % 360) + 360) % 360;
+    if (canvasRef.value) canvasRef.value.style.transform = `rotate(${rotation.value}deg)`;
+    spinFrame = undefined;
+    spinning.value = false;
+    done();
+    void nextTick(() => drawWheelCanvas());
+  };
+  spinFrame = window.requestAnimationFrame(tick);
 }
 function canvasClick() {
   if (suppressCanvasClick) {
@@ -360,16 +419,25 @@ function canvasClick() {
   nextSpin();
 }
 function canvasPointerDown(event: PointerEvent) {
-  dragState = { x: event.clientX, y: event.clientY, moved: false };
-  (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  if (spinning.value || !displayEntries.value.length) return;
+  const element = event.currentTarget as HTMLElement;
+  const rect = element.getBoundingClientRect();
+  const startAngle = Math.atan2(event.clientY - rect.top - rect.height / 2, event.clientX - rect.left - rect.width / 2) * 180 / Math.PI;
+  dragState = { x: event.clientX, y: event.clientY, moved: false, startAngle, startRotation: rotation.value, pointerId: event.pointerId };
+  element.setPointerCapture?.(event.pointerId);
 }
 function canvasPointerMove(event: PointerEvent) {
-  if (!dragState) return;
+  if (!dragState || spinning.value || dragState.pointerId !== event.pointerId) return;
   const dx = event.clientX - dragState.x;
   const dy = event.clientY - dragState.y;
-  if (Math.hypot(dx, dy) < 8) return;
-  dragState.moved = true;
-  rotation.value += dx * 0.4 + dy * 0.2;
+  if (Math.hypot(dx, dy) > 8) dragState.moved = true;
+  if (!dragState.moved) return;
+  const element = event.currentTarget as HTMLElement;
+  const rect = element.getBoundingClientRect();
+  const currentAngle = Math.atan2(event.clientY - rect.top - rect.height / 2, event.clientX - rect.left - rect.width / 2) * 180 / Math.PI;
+  const nextRotation = dragState.startRotation + currentAngle - dragState.startAngle;
+  rotation.value = nextRotation;
+  if (canvasRef.value) canvasRef.value.style.transform = `rotate(${nextRotation}deg)`;
 }
 function canvasPointerUp(event: PointerEvent) {
   const state = dragState;
@@ -739,6 +807,7 @@ function importJson(event: Event) {
 .wheel-focus-stage{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
 .wheel-focus-copy{position:relative;z-index:2;display:grid;gap:10px;min-width:0;width:100%;max-width:860px;margin:0 auto;justify-items:center;text-align:center}
 .wheel-focus-canvas{position:relative;z-index:1;display:grid;justify-items:center;min-width:0;width:100%;padding-top:2px}
+.wheel-canvas{display:block;transform-origin:center;will-change:transform}
 .wheel-mode-badge{display:inline-flex;align-items:center;min-height:26px;padding:3px 10px;border-radius:999px;background:#fef1ed;color:#d85c38;font-size:11px;font-weight:900;letter-spacing:.04em}
 .wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;width:100%;max-width:520px;padding:10px;border:1px solid rgba(223,231,239,.96);border-radius:22px;background:rgba(245,247,251,.94);box-shadow:inset 0 1px 0 rgba(255,255,255,.92)}
 .wheel-focus-actions .wheel-spin{flex:1 1 260px}
