@@ -636,6 +636,7 @@ test('wheel canvas click drag and tag stage preserve interaction contracts', asy
     }, source);
 
     await page.goto('/#/wheel');
+    await expect(page.locator('.wheel-mode-badge')).toContainText('普通转盘 · 一步出结果');
     const canvasWrap = page.locator('.wheel-canvas-wrap');
     await expect(canvasWrap).toBeVisible();
     await expect.poll(() => page.locator('.wheel-canvas').evaluate(canvas => {
@@ -666,6 +667,7 @@ test('wheel canvas click drag and tag stage preserve interaction contracts', asy
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).wheelHistory.length)).toBe(2);
 
     await page.getByLabel('当前转盘', { exact: true }).selectOption('wheel-tag');
+    await expect(page.locator('.wheel-mode-badge')).toContainText('标签转盘 · 两段抽取');
     await expect(page.locator('.wheel-result')).toContainText('2 个候选');
     await canvasWrap.click();
     await expect(page.locator('.wheel-result')).toContainText('已锁定：晚餐');

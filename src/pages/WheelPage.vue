@@ -21,6 +21,12 @@ let dragState: { x: number; y: number; moved: boolean } | null = null;
 let suppressCanvasClick = false;
 
 const selectedWheel = computed(() => wheelStore.wheels.find(wheel => wheel.id === selectedId.value) || wheelStore.wheels[0]);
+const selectedWheelHeadline = computed(() => {
+  if (selectedWheel.value?.name === '默认普通转盘') return '今天做什么';
+  if (selectedWheel.value?.name === '默认标签转盘') return '先抽个方向';
+  return selectedWheel.value?.name || '未命名转盘';
+});
+const selectedWheelModeLabel = computed(() => selectedWheel.value?.mode === 'tag' ? '标签转盘 · 两段抽取' : '普通转盘 · 一步出结果');
 const modeWheels = computed(() => {
   if (modeFilter.value === 'all') return wheelStore.wheels;
   return wheelStore.wheels.filter(wheel => wheel.mode === modeFilter.value);
@@ -430,8 +436,8 @@ function importJson(event: Event) {
 
       <div class="wheel-focus-stage">
         <div class="wheel-focus-copy">
-          <div class="wheel-mode-badge" v-if="selectedWheel.mode === 'tag'">标签转盘 · 两段抽取</div>
-          <h2 class="wheel-mode-title">{{ selectedWheel.name }}</h2>
+          <div class="wheel-mode-badge">{{ selectedWheelModeLabel }}</div>
+          <h2 class="wheel-mode-title">{{ selectedWheelHeadline }}</h2>
           <p class="wheel-subtitle">
             <template v-if="selectedWheel.mode === 'tag' && !stageTag">先抽一个标签，再抽该标签下的公共项；也可以单独点某个标签直接转。</template>
             <template v-else-if="stageTag">已锁定标签「{{ stageTag.name }}」，下一转抽取具体内容。</template>
