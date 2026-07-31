@@ -1192,9 +1192,13 @@ test('wheel library AI suggestions stay within existing tags before save', async
     await panel.getByLabel('公共项名称').fill('学习');
     await panel.getByRole('button', { name: 'AI 推荐标签' }).click();
     await expect(panel.locator('.library-ai-suggestion')).toContainText('学习');
+    await panel.locator('.tag-checks').getByRole('checkbox', { name: '健康' }).check();
+    const manualStudyTag = panel.locator('.tag-checks').getByRole('checkbox', { name: '学习' });
+    await manualStudyTag.uncheck();
+    await expect(panel.locator('.library-ai-suggestion').getByRole('checkbox', { name: '学习' })).not.toBeChecked();
     await panel.getByRole('button', { name: '添加公共项' }).click();
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
-    expect(stored.wheelLibraryItems).toEqual(expect.arrayContaining([expect.objectContaining({ name: '学习', tagIds: ['tag-ai-study'] })]));
+    expect(stored.wheelLibraryItems).toEqual(expect.arrayContaining([expect.objectContaining({ name: '学习', tagIds: ['tag-ai-health'] })]));
 });
 
 test('wheel management landing keeps workspace navigation focused', async ({ page }) => {
