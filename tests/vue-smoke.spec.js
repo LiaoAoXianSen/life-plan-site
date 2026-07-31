@@ -1184,6 +1184,23 @@ test('fitness hero secondary actions jump to body and workout forms', async ({ p
     await expect(page.locator('#fitness-workout-section')).toBeInViewport();
 });
 
+test('fitness overview hero exposes legacy secondary actions', async ({ page }) => {
+    await page.goto('/#/fitness');
+
+    const hero = page.locator('.fitness-overview-hero');
+    const actions = hero.locator('.fitness-overview-secondary');
+    await expect(actions.getByRole('button', { name: '记录身材' })).toBeVisible();
+    await expect(actions.getByRole('button', { name: '管理计划' })).toBeVisible();
+
+    await actions.getByRole('button', { name: '记录身材' }).click();
+    await expect(page.locator('#fitness-body-section')).toBeInViewport();
+    await expect(page.locator('#fitness-body-section')).toHaveAttribute('open', '');
+
+    await actions.getByRole('button', { name: '管理计划' }).click();
+    await expect(page.locator('#fitness-plan-section')).toBeInViewport();
+    await expect(page.locator('#fitness-library-section details').nth(1)).toHaveAttribute('open', '');
+});
+
 test('fitness overview renders service-backed body metric trends without writes', async ({ page }) => {
     const source = emptyData({
         bodyMetrics: [

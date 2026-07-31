@@ -631,13 +631,19 @@ onUnmounted(stopRestTimer);
             最近：{{ fitnessOverview.latestWorkout.date }} · {{ fitness.services.fitness.getWorkoutTitle(fitnessOverview.latestWorkout) }}
           </div>
         </div>
-        <button
-          v-if="fitnessOverview.suggestion"
-          class="btn btn-primary"
-          type="button"
-          @click="run(() => fitness.startFromPlan(String(fitnessOverview.suggestion.plan.id)))"
-        >按计划开练：{{ fitnessOverview.suggestion.plan.name }}</button>
-        <button v-else class="btn btn-primary" type="button" @click="jumpToFreeWorkout">自由开练</button>
+        <div class="fitness-overview-actions">
+          <button
+            v-if="fitnessOverview.suggestion"
+            class="btn btn-primary"
+            type="button"
+            @click="run(() => fitness.startFromPlan(String(fitnessOverview.suggestion.plan.id)))"
+          >按计划开练：{{ fitnessOverview.suggestion.plan.name }}</button>
+          <button v-else class="btn btn-primary" type="button" @click="jumpToFreeWorkout">自由开练</button>
+          <div class="fitness-overview-secondary">
+            <button class="btn btn-secondary" type="button" @click="openBodySection">记录身材</button>
+            <button class="btn btn-secondary" type="button" @click="openPlanCreate">管理计划</button>
+          </div>
+        </div>
       </div>
       <div class="fitness-kpi-grid">
         <article v-for="item in overviewKpis" :key="item.label" class="fitness-kpi-card">
@@ -985,6 +991,19 @@ onUnmounted(stopRestTimer);
   gap: 8px;
   justify-content: flex-end;
 }
+.fitness-overview-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.fitness-overview-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .fitness-overview-hero {
   margin-bottom: 16px;
 }
@@ -1142,6 +1161,11 @@ onUnmounted(stopRestTimer);
 @media (max-width: 560px) {
   .fitness-header-actions {
     width: 100%;
+  }
+  .fitness-overview-actions,
+  .fitness-overview-secondary {
+    align-items: stretch;
+    justify-content: stretch;
   }
   .fitness-kpi-grid {
     grid-template-columns: 1fr;
