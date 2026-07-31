@@ -800,7 +800,7 @@ watch(focusedHabitId, value => {
             </template>
           </div>
         </div>
-        <div v-else class="empty-state">暂无习惯，先新建一个习惯。</div>
+        <div v-else class="empty-state">暂无习惯，先新建一个习惯</div>
       </div>
 
       <div class="habit-analysis-summary" aria-label="习惯统计摘要">

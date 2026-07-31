@@ -2024,6 +2024,13 @@ test('habit library empty state keeps the legacy wording', async ({ page }) => {
     await expect(page.locator('.habit-management-table')).toContainText('暂无习惯，先新建一个习惯。');
 });
 
+test('habit analysis matrix empty state keeps the legacy wording', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '分析' }).click();
+    await expect(page.locator('.habit-matrix-block')).toContainText('暂无习惯，先新建一个习惯');
+});
+
 test('habit archive and restore preserve history without tombstones', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({
