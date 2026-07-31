@@ -132,7 +132,6 @@ const matrixDates = computed(() => {
   return dates;
 });
 const matrixRows = computed(() => habits.habits
-  .filter(habit => !habit.archived)
   .map(habit => ({
     id: habit.id,
     name: habit.name || '未命名习惯',

@@ -2309,6 +2309,23 @@ test('habit analysis matrix empty state keeps the legacy wording', async ({ page
     await expect(page.locator('.habit-matrix-block')).toContainText('暂无习惯，先新建一个习惯');
 });
 
+test('habit analysis matrix keeps archived history rows', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const source = emptyData({
+        habits: [{ id: 'habit-archived-matrix', name: '归档历史矩阵习惯', rule: 'daily', timesPerDay: '1', startDate: '2026-01-01', archived: true }],
+        checkins: [{ id: 'checkin-archived-matrix', habitId: 'habit-archived-matrix', date: today, time: '08:00', checkinAt: `${today}T08:00:00`, note: '保留分析历史' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/habits');
+
+    await expect(page.locator('.habit-quick-list')).not.toContainText('归档历史矩阵习惯');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '分析' }).click();
+    await expect(page.locator('.habit-matrix-grid')).toContainText('归档历史矩阵习惯');
+    await expect(page.locator('.habit-analysis-summary')).toContainText('归档历史矩阵习惯');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('habit archive and restore preserve history without tombstones', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({
