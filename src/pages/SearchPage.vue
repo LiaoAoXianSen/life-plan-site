@@ -190,7 +190,7 @@ function search() {
           </article>
         </div>
       </section>
-      <div v-if="query && !results.length" class="empty-state">没有找到匹配内容。</div>
+      <div v-if="query && !results.length" class="empty-state">没有找到匹配内容</div>
       <div v-if="!query" class="empty-state">输入关键词后开始搜索，或选择一个模块缩小范围。</div>
     </div>
   </section>

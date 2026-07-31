@@ -127,7 +127,7 @@ function totalCount(item: TagCenterItem) {
           <span v-if="item.wheelItems[0]">转盘：{{ item.wheelItems[0].name || '未命名公共项' }}</span>
         </div>
       </article>
-      <div v-if="!filteredItems.length" class="empty-state">暂无匹配标签。</div>
+      <div v-if="!filteredItems.length" class="empty-state">暂无匹配标签</div>
     </div>
   </section>
 </template>

@@ -174,7 +174,7 @@ watch(() => route.query.status, value => {
         </div>
       </article>
     </div>
-    <div v-else class="empty-state idea-empty">还没有匹配的灵感。</div>
+    <div v-else class="empty-state idea-empty">暂无匹配的灵感</div>
   </section>
 </template>
 
