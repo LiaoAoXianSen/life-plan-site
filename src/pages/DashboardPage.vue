@@ -61,6 +61,53 @@ function getTodayTodoReason(todo: Todo) {
   return reasons.join(' · ') || '今日关注';
 }
 
+const habitRuleLabels: Record<string, string> = {
+  daily: '每天',
+  'weekly-fixed': '每周固定',
+  'weekly-count': '每周次数',
+  'monthly-count': '每月次数',
+  interval: '间隔天数',
+};
+
+function habitRuleText(habit: Record<string, any>) {
+  const rule = String(habit.rule || 'daily');
+  if (rule === 'weekly-count') return `每周${habit.count || 0}次`;
+  if (rule === 'monthly-count') return `每月${habit.count || 0}次`;
+  if (rule === 'interval') return `每${habit.count || 0}天`;
+  return habitRuleLabels[rule] || '自定义';
+}
+
+function latestHabitCheckin(habitId: string) {
+  const checkins = habitsStore.getCheckins(habitId, today);
+  return checkins[checkins.length - 1] || null;
+}
+
+function habitCheckinTimeText(habitId: string) {
+  const latest = latestHabitCheckin(habitId) as Record<string, any> | null;
+  if (!latest) return '未记录';
+  if (/^\d{2}:\d{2}$/.test(String(latest.time || ''))) return latest.time;
+  return String(latest.checkinAt || latest.createdAt || latest.updatedAt || '').slice(11, 16) || '已记录';
+}
+
+function habitCheckinNoteText(habitId: string) {
+  const latest = latestHabitCheckin(habitId) as Record<string, any> | null;
+  const clean = String(latest?.note || '').replace(/\s+/g, ' ').trim();
+  return clean.length > 34 ? `${clean.slice(0, 33)}…` : clean;
+}
+
+function habitRewardText(habit: Record<string, any>) {
+  const currency = String(habit.rewardCurrency || '金币');
+  const min = Math.max(0, Number.parseInt(String(habit.rewardMin ?? habit.rewardPoints ?? 0), 10) || 0);
+  const max = Math.max(0, Number.parseInt(String(habit.rewardMax ?? habit.rewardPoints ?? 0), 10) || 0);
+  if (habit.randomReward && (min > 0 || max > 0)) return `+${habit.rewardMin ?? habit.rewardPoints ?? 0}-${habit.rewardMax ?? habit.rewardPoints ?? 0} ${currency}`;
+  return min > 0 ? `+${habit.rewardPoints} ${currency}` : '';
+}
+
+function habitPenaltyText(habit: Record<string, any>) {
+  const points = Math.max(0, Number.parseInt(String(habit.penaltyPoints || 0), 10) || 0);
+  return points > 0 ? `漏打 -${points}` : '';
+}
+
 function entityString(entity: DataEntity, key: string) {
   return typeof entity[key] === 'string' ? entity[key] as string : '';
 }
@@ -241,6 +288,12 @@ const todayHabitItems = computed(() => dueHabits.value.map(habit => {
     target,
     done: count >= target,
     canCheckin: !(target === 1 && count > 0),
+    statusText: count === 0 ? '待开始' : count >= target ? '已达标' : `进行中 ${count}/${target}`,
+    ruleText: habitRuleText(habit),
+    checkinTimeText: habitCheckinTimeText(habit.id),
+    rewardText: habitRewardText(habit),
+    penaltyText: habitPenaltyText(habit),
+    noteText: habitCheckinNoteText(habit.id),
   };
 }).slice(0, 8));
 const doneHabitCount = computed(() => todayHabitItems.value.filter(item => item.count > 0).length);
@@ -491,8 +544,16 @@ const timelineGroups = computed(() => {
               <button class="todo-text todo-dashboard-link" type="button" :aria-label="item.habit.name" @click="openHabit(item.habit.id)">
                 {{ item.habit.name }}
                 <small>{{ item.count }}/{{ item.target }} · {{ item.habit.tag || '习惯' }}</small>
+                <span class="habit-quick-meta">
+                  <span>{{ item.ruleText }}</span>
+                  <span>{{ item.count }}/{{ item.target }} 次</span>
+                  <span>{{ item.checkinTimeText }}</span>
+                  <span v-if="item.rewardText" class="is-points">{{ item.rewardText }}</span>
+                  <span v-if="item.penaltyText" class="is-penalty">{{ item.penaltyText }}</span>
+                </span>
+                <span v-if="item.noteText" class="habit-quick-note-inline">备注：{{ item.noteText }}</span>
               </button>
-              <span class="todo-urgency" :class="item.done ? 'todo-urgency-low' : 'todo-urgency-high'">{{ item.done ? '已完成' : '待打卡' }}</span>
+              <span class="todo-urgency" :class="item.done ? 'todo-urgency-low' : item.count ? 'todo-urgency-medium' : 'todo-urgency-high'">{{ item.statusText }}</span>
               <span class="todo-actions">
                 <button
                   class="btn btn-secondary todo-mini-btn"
