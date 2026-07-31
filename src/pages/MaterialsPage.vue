@@ -126,8 +126,11 @@ function deleteMaterial() {
   refreshRandom();
 }
 
-function formatStoredTime(value: unknown) {
-  return String(value || '').replace('T', ' ').slice(0, 16);
+function formatStoredDateTime(value: unknown) {
+  const raw = String(value || '');
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return raw.replace('T', ' ');
+  return `${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${match[4]}:${match[5]}:${match[6] || '00'}`;
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -189,7 +192,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
       <div v-else class="empty-state">先给素材添加标签后，这里会出现随机展示筛选。</div>
       <div class="material-grid material-random-list">
         <article v-for="material in randomMaterials" :key="material.id" class="material-card compact">
-          <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredTime(material.createdAt) }}</span></div>
+          <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredDateTime(material.createdAt) }}</span></div>
           <div class="material-content">{{ material.content || '空素材' }}</div>
           <div v-if="normalizeTags(material.tags).length" class="idea-badge-row"><span v-for="tag in normalizeTags(material.tags)" :key="tag" class="tag-pill">{{ tag }}</span></div>
           <div v-if="material.source" class="material-meta">来源：{{ material.source }}</div>
@@ -207,7 +210,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 
     <div class="material-grid material-list">
       <article v-for="material in filteredMaterials" :key="material.id" class="material-card">
-        <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredTime(material.createdAt) }}</span></div>
+        <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredDateTime(material.createdAt) }}</span></div>
         <div class="material-content">{{ material.content || '空素材' }}</div>
         <div v-if="normalizeTags(material.tags).length" class="idea-badge-row"><span v-for="tag in normalizeTags(material.tags)" :key="tag" class="tag-pill">{{ tag }}</span></div>
         <div v-if="material.source" class="material-meta">来源：{{ material.source }}</div>

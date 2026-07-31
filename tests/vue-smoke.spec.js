@@ -2480,6 +2480,7 @@ test('materials create edit filter and delete preserve the legacy data contract'
     const list = materialsPage.locator('.material-list');
     let contents = await list.locator('.material-content').allTextContents();
     expect(contents.indexOf('较新方法素材')).toBeLessThan(contents.indexOf('较早素材'));
+    await expect(list.locator('.material-card').filter({ hasText: '较新方法素材' })).toContainText('2026年7月26日 08:00:00');
 
     await materialsPage.getByRole('button', { name: '新增素材' }).click();
     const editor = materialsPage.getByRole('dialog', { name: '新增素材' });
