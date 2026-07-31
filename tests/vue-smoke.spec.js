@@ -275,6 +275,7 @@ test('todo dashboard route presets and calendar entries preserve one read-only d
     await page.goto('/#/todos?todo=todo-cross-entry');
     const detail = page.locator('.todo-detail-panel');
     await expect(detail.getByRole('heading', { name: '跨入口待办' })).toBeVisible();
+    await expect(detail.locator('section[aria-labelledby="todo-records-heading"]')).toContainText('暂无关联记录');
     await detail.getByRole('button', { name: '编辑待办' }).click();
     await detail.getByRole('button', { name: '明天', exact: true }).click();
     await expect(detail.getByLabel('计划开始')).toHaveValue(tomorrowDate);
