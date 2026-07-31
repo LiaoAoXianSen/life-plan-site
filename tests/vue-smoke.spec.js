@@ -1020,6 +1020,7 @@ test('fitness history editor saves edits through the legacy workout contract', a
     }, source);
 
     await page.goto('/#/fitness');
+    await page.locator('.fitness-page-header .fitness-header-actions').getByRole('button', { name: '补记训练' }).click();
     let historyForm = page.locator('form.card').filter({ hasText: '补记训练日志' });
     await historyForm.locator('.form-group').filter({ hasText: '训练日期' }).locator('input').fill('2026-07-28');
     await historyForm.locator('.form-group').filter({ hasText: '状态' }).locator('select').selectOption('done');
@@ -1084,6 +1085,7 @@ test('fitness body metrics edit every legacy field through the shared service', 
     }, source);
 
     await page.goto('/#/fitness');
+    await page.locator('.fitness-page-header .fitness-header-actions').getByRole('button', { name: '记录身材' }).click();
     let metricForm = page.locator('form.card').filter({ hasText: '记录身材' });
     await metricForm.locator('.form-group').filter({ hasText: '日期' }).locator('input').fill('2026-07-29');
     await metricForm.locator('.form-group').filter({ hasText: '测量状态' }).locator('select').selectOption('afterMeal');

@@ -585,3 +585,10 @@
 - First assertion only differed by rendered whitespace (`2次打卡`); adjusted the locator to allow optional whitespace without weakening persistence checks.
 - `npm run build` passed; focused Habit analysis/diagnostics/base tests passed 3/3.
 - Read-only sidecar review caught that “连续 N 天” could imply target completion for multi-count/non-daily habits; clarified the field and label to `连续有打卡 N 天` before push.
+
+## 2026-07-31 - Fitness browse-first disclosure shell (in progress)
+
+- Online parity audit confirmed legacy Fitness opens body/workout editing through secondary actions while Vue rendered those forms inline.
+- Wrapped body metrics and workout-log surfaces in native disclosure shells, default closed; existing hero actions and edit-row handlers open/reset the relevant section before scrolling.
+- Updated only locator entry steps in the existing history/body focused tests; persistence assertions remain unchanged.
+- `npm run build` passed; all Fitness focused smoke passed 6/6.

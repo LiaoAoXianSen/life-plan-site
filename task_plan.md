@@ -259,6 +259,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 241. Status: complete - Audit the Vue Habits analysis shell and legacy heatmap/stat helpers for one read-only summary refinement.
 242. Status: complete - Implement the bounded Habits analysis summary and focused diagnostics/base coverage.
 243. Status: in_progress - Run Habits build/check gates, commit, push, and append dual-store memory for the analysis-shell slice.
+244. Status: in_progress - Add Fitness browse-first disclosure shells for body metrics and workout logs while preserving existing form contracts.
+245. Status: pending - Add focused Fitness disclosure-entry coverage and rerun build/check gates.
+246. Status: pending - Commit and push the Fitness disclosure shell, then close the pending Habits push and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

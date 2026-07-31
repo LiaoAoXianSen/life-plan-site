@@ -154,6 +154,15 @@
 - Legacy Dashboard timeline uses a bounded recent range and `buildScheduleItemsForRange()` with records, Todo execution sessions, and checked-habit items, while excluding Todo plan/due items. Vue can reuse `src/utils/schedule.ts` for this contract.
 - Legacy Dashboard active-period cards open record preview for 周/月/年复盘/计划 plus 3年计划/终身愿景 records whose `endDate` is future or absent. Vue should route them to the shared Records editor via `#/records?record=<id>`.
 - The next bounded Vue Dashboard stage will keep all new Dashboard additions read-only and navigation-only so the exact `lifePlanData` string remains unchanged during Dashboard browsing.
+
+## 2026-07-31 Online legacy/Vue shell audit
+
+- `https://life-plan-bs3.pages.dev/` serves the legacy static app; `https://life-plan-site.pages.dev` serves the Vue migration shell.
+- Legacy Fitness starts browse-first: overview/summary/trends and plan/workout/body lists are visible, while create/edit surfaces open through secondary actions or modal-like sections. Vue still renders five large Fitness forms inline on the initial page.
+- Legacy Fitness includes weight-change and weight/waist trend summaries that remain a later read-only parity slice.
+- Legacy Wheel shows a canvas stage even with empty local data; Vue currently has no stage when `wheels` is empty, which is a separate bounded empty-state slice.
+- Legacy Habits analysis goes deeper with a single-habit yearly heatmap, completion/streak statistics, and recent notes; the Vue matrix plus new per-habit read-only summary covers only the current window and leaves yearly depth open.
+- Online audit produced no repository edits or data changes; recommendations were cross-checked against `fitness-ui.js`, `wheel-tool.js`, `app.js`, and current Vue pages/tests.
 - Vue Dashboard now restores the read-only command-center slice: unprocessed ideas, ideas needing conclusion, high-pressure Todos, random Materials, active goals, Tags, Materials, Fitness, Ideas, Todos, and Goals entry points route to migrated pages without writing storage.
 - Vue Dashboard summary semantics now use ratios for today's relevant Todos and due Habits, count active goals, and count records from the current week; this mirrors the legacy ratio-first Dashboard without adding Dashboard-owned persistence.
 - Vue Dashboard recent timeline now uses the shared schedule builder over a bounded 14-day window with records, Todo execution sessions, and checked-habit events, while excluding Todo plan/due-only items for this page.

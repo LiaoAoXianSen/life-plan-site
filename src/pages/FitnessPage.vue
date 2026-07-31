@@ -45,6 +45,8 @@ const freeForm = reactive({ title: '自由训练', exerciseId: '' });
 const formError = ref('');
 const planEditingId = ref('');
 const workoutEditingId = ref('');
+const bodySectionOpen = ref(false);
+const workoutSectionOpen = ref(false);
 const writeBackPlan = ref(false);
 const restTimer = reactive({ remaining: 0, total: 0, exerciseName: '' });
 let restTimerId: ReturnType<typeof window.setInterval> | null = null;
@@ -130,12 +132,14 @@ function openPlanCreate() {
 
 function openWorkoutCreate() {
   resetWorkoutForm();
+  workoutSectionOpen.value = true;
   const el = document.getElementById('fitness-workout-section');
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function openBodySection() {
   resetMetricForm();
+  bodySectionOpen.value = true;
   const el = document.getElementById('fitness-body-section');
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -278,6 +282,7 @@ function saveMetric() {
 
 function editMetric(metric: Record<string, any>) {
   run(() => {
+    bodySectionOpen.value = true;
     Object.assign(metricForm, {
       id: metric.id || '',
       date: metric.date || getTodayStr(),
@@ -386,6 +391,7 @@ function applyPlanToWorkout(planId: string) {
 
 function editWorkout(workout: Record<string, any>) {
   run(() => {
+    workoutSectionOpen.value = true;
     Object.assign(workoutForm, {
       date: workout.date || getTodayStr(),
       status: workout.status || 'done',
@@ -706,8 +712,10 @@ onUnmounted(stopRestTimer);
       </article>
     </div>
 
-    <div class="form-row" id="fitness-body-section">
-      <form class="card" @submit.prevent="saveMetric">
+    <details id="fitness-body-section" class="fitness-form-disclosure" :open="bodySectionOpen">
+      <summary><strong>身材记录</strong><span>记录或查看最近身材数据</span></summary>
+      <div class="form-row">
+        <form class="card" @submit.prevent="saveMetric">
         <div class="section-title-row">
           <div>
             <div class="section-title">身材记录</div>
@@ -728,8 +736,8 @@ onUnmounted(stopRestTimer);
         </div>
         <div class="form-group"><label>备注</label><input v-model="metricForm.note" /></div>
         <button class="btn btn-primary">{{ metricForm.id ? '保存修改' : '记录身材' }}</button>
-      </form>
-      <article class="card">
+        </form>
+        <article class="card">
         <div class="card-title">最近身材</div>
         <div v-if="fitness.metrics.length" class="fitness-metric-list">
           <div v-for="item in fitness.metrics.slice(0, 8)" :key="item.id" class="fitness-metric-row fitness-body-metric-row">
@@ -743,8 +751,9 @@ onUnmounted(stopRestTimer);
           </div>
         </div>
         <div v-else class="empty-state">还没有身材记录。</div>
-      </article>
-    </div>
+        </article>
+      </div>
+    </details>
 
     <div class="form-row" id="fitness-library-section">
       <form class="card" @submit.prevent="saveLibraryItem">
@@ -826,7 +835,9 @@ onUnmounted(stopRestTimer);
       </form>
     </div>
 
-    <form id="fitness-workout-section" class="card" @submit.prevent="saveWorkoutLog">
+    <details id="fitness-workout-section" class="fitness-form-disclosure" :open="workoutSectionOpen">
+      <summary><strong>训练日志</strong><span>补记或编辑已完成训练</span></summary>
+      <form class="card" @submit.prevent="saveWorkoutLog">
       <div class="section-title-row">
         <div>
           <div class="section-title">训练日志</div>
@@ -900,7 +911,8 @@ onUnmounted(stopRestTimer);
         <button class="btn btn-secondary" type="button" @click="addWorkoutExercise">添加动作</button>
         <button class="btn btn-primary">{{ workoutEditingId ? '保存训练日志' : '保存训练日志' }}</button>
       </div>
-    </form>
+      </form>
+    </details>
 
     <article class="card">
       <div class="card-title">训练历史</div>
@@ -964,6 +976,42 @@ onUnmounted(stopRestTimer);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.fitness-form-disclosure {
+  margin-bottom: 16px;
+}
+.fitness-form-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #dfe7e1);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--text, #17211b);
+  cursor: pointer;
+  list-style: none;
+}
+.fitness-form-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.fitness-form-disclosure > summary::after {
+  content: '展开';
+  flex: 0 0 auto;
+  color: var(--muted, #647269);
+  font-size: 12px;
+}
+.fitness-form-disclosure[open] > summary::after {
+  content: '收起';
+}
+.fitness-form-disclosure > summary span {
+  color: var(--muted, #647269);
+  font-size: 12px;
+}
+.fitness-form-disclosure > .form-row,
+.fitness-form-disclosure > form {
+  margin-top: 12px;
 }
 .fitness-section-head {
   display: flex;
