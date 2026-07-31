@@ -563,6 +563,7 @@ test('goals detail route save and delete preserve the legacy contract', async ({
     await dialog.getByRole('slider').fill('70');
     await dialog.getByRole('button', { name: '保存' }).click();
     await expect(page.getByRole('button', { name: /更新后的目标/ })).toContainText('70%');
+    await expect(page.getByRole('button', { name: /更新后的目标/ })).toContainText('(已完成)');
 
     let persisted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     let existing = persisted.goals.find(goal => goal.id === 'goal-existing');
