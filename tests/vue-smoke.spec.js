@@ -763,6 +763,26 @@ test('goals keep legacy insertion order in the browse list', async ({ page }) =>
     await expect(cards.nth(1)).toContainText('后建目标');
 });
 
+test('goals preserve existing out-of-range progress in read-only browse summaries', async ({ page }) => {
+    const source = emptyData({
+        goals: [
+            { id: 'goal-over', name: '超额目标', period: '年度', target: '超过一百', status: '进行中', progress: 120, createDate: '2026-01-01' },
+            { id: 'goal-under', name: '负值目标', period: '长期', target: '旧数据', status: '暂停', progress: -5, createDate: '2026-01-02' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/goals');
+
+    await expect(page.getByRole('button', { name: /超额目标/ })).toContainText('120%');
+    await expect(page.getByRole('button', { name: /负值目标/ })).toContainText('-5%');
+    await expect(page.locator('.summary-card').filter({ hasText: '平均进度' })).toContainText('58%');
+
+    await page.getByRole('button', { name: /超额目标/ }).click();
+    await page.getByRole('dialog', { name: '编辑目标' }).getByRole('button', { name: '取消' }).click();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('goals empty state keeps the legacy copy', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/goals');
