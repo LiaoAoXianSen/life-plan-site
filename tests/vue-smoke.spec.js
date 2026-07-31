@@ -217,6 +217,7 @@ test('todo page keeps the legacy cloud sync panel below the workspace', async ({
     const workspace = page.locator('.todo-workspace');
     const syncPanel = page.locator('.todo-sync-card');
     await expect(syncPanel).toBeVisible();
+    await expect(page.locator('.todo-detail-placeholder')).toHaveCount(0);
     await expect(syncPanel).toContainText('待办独立同步');
     await expect(syncPanel).toContainText('/apps/todo-app/data.json');
     expect(await syncPanel.evaluate(node => node.getBoundingClientRect().top)).toBeGreaterThan(await workspace.evaluate(node => node.getBoundingClientRect().top));

@@ -497,7 +497,6 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
           <p v-if="detailStatus" class="todo-save-status" role="status">{{ detailStatus }}</p>
         </template>
       </aside>
-      <aside v-else class="todo-detail-placeholder"><strong>选择一项待办</strong><span>查看和编辑子任务、执行记录与关联记录。</span></aside>
     </div>
 
     <TodoSyncPanel :sync-config="syncConfig" />
