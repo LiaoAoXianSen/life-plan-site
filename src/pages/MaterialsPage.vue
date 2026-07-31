@@ -172,7 +172,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
         <div class="page-title">素材库</div>
         <p class="page-subtitle">金句、提示词、摘抄和方法，按标签收纳与复习。</p>
       </div>
-      <button class="btn btn-primary" type="button" @click="openMaterial()">新增素材</button>
+      <button class="btn btn-primary" type="button" @click="openMaterial()">+ 新增素材</button>
     </header>
 
     <section class="material-random-panel" aria-labelledby="material-random-title">

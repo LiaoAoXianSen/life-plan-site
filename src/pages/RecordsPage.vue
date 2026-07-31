@@ -159,9 +159,37 @@ const listGroups = computed(() => {
 });
 const calendarRange = computed(() => view.value === 'day' ? [cursor.value, cursor.value] : view.value === 'week' ? (() => { const start = getWeekStart(cursor.value); return [start, addDays(start, 6)] as const; })() : [getWeekStart(getMonthStart(cursor.value)), addDays(getMonthStart(cursor.value), 41)] as const);
 const calendarItems = computed(() => buildRecordViewItems(calendarRange.value[0], calendarRange.value[1], true));
-const viewTitle = computed(() => view.value === 'list' ? '全部记录' : view.value === 'day' ? cursor.value : view.value === 'week' ? `${calendarRange.value[0]} ~ ${calendarRange.value[1]}` : cursor.value.slice(0, 7));
+const viewTitle = computed(() => {
+  if (view.value === 'list') {
+    if (listRange.value === 'all') return '全部历史';
+    return `最近${listRange.value}天`;
+  }
+  if (view.value === 'day') return formatDisplayDate(cursor.value);
+  if (view.value === 'week') return `${formatDisplayDate(calendarRange.value[0])} ~ ${formatDisplayDate(calendarRange.value[1])}`;
+  return formatDisplayMonth(cursor.value);
+});
+
+function formatDisplayDate(value: string) {
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function formatDisplayMonth(value: string) {
+  const date = new Date(`${value.slice(0, 7)}-01T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 7);
+  return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+}
 
 function shift(amount: number) {
+  if (view.value === 'list') {
+    if (listRange.value === 'all') return;
+    const options: Array<'7' | '30' | '90' | 'all'> = ['7', '30', '90', 'all'];
+    const index = options.indexOf(listRange.value);
+    const next = options[Math.max(0, Math.min(options.length - 1, index + amount))];
+    if (next) listRange.value = next;
+    return;
+  }
   cursor.value = view.value === 'month'
     ? (() => { const date = new Date(`${cursor.value.slice(0, 7)}-01T12:00:00`); date.setMonth(date.getMonth() + amount); return date.toISOString().slice(0, 10); })()
     : addDays(cursor.value, view.value === 'week' ? amount * 7 : amount);
@@ -639,7 +667,13 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page active" id="page-records">
-    <header class="page-header"><div class="page-title">所有记录</div><div class="page-actions"><button class="btn btn-secondary" type="button" @click="showTemplateManager = true">模板管理</button><button class="btn btn-primary" type="button" @click="showRecordCreate = true">+ 新建记录</button></div></header>
+    <header class="page-header">
+      <div class="page-title">所有记录</div>
+      <div class="page-actions">
+        <button class="btn btn-secondary" type="button" @click="showTemplateManager = true">📋 模板管理</button>
+        <button class="btn btn-primary" type="button" @click="showRecordCreate = true">+ 新建记录</button>
+      </div>
+    </header>
 
     <RecordCreateModal v-model="showRecordCreate" @open-existing="openExistingFromCreate" />
 
@@ -663,9 +697,9 @@ onBeforeUnmount(() => {
       </select>
       <input v-model="ideaTagFilter" type="search" aria-label="记录灵感标签筛选" placeholder="灵感标签筛选" />
       <select v-if="view === 'list'" v-model="listRange" aria-label="记录日期范围">
-        <option value="7">最近 7 天</option>
-        <option value="30">最近 30 天</option>
-        <option value="90">最近 90 天</option>
+        <option value="7">最近7天</option>
+        <option value="30">最近30天</option>
+        <option value="90">最近90天</option>
         <option value="all">全部历史</option>
       </select>
     </div>
@@ -674,14 +708,12 @@ onBeforeUnmount(() => {
       <div class="segmented">
         <button v-for="item in ['list','day','week','month'] as const" :key="item" :class="{ active: view === item }" type="button" @click="view = item">{{ ({ list: '列表', day: '日视图', week: '周视图', month: '月视图' })[item] }}</button>
       </div>
-      <template v-if="view !== 'list'">
-        <div class="page-actions">
-          <button class="btn btn-secondary" type="button" @click="shift(-1)">上一{{ view === 'month' ? '月' : view === 'week' ? '周' : '天' }}</button>
-          <strong id="record-view-title">{{ viewTitle }}</strong>
-          <button class="btn btn-secondary" type="button" @click="shift(1)">下一{{ view === 'month' ? '月' : view === 'week' ? '周' : '天' }}</button>
-          <button class="btn btn-secondary" type="button" @click="cursor = today()">今天</button>
-        </div>
-      </template>
+      <div class="record-view-nav page-actions">
+        <button class="btn btn-secondary" type="button" aria-label="上一段时间" @click="shift(-1)">‹</button>
+        <strong id="record-view-title">{{ viewTitle }}</strong>
+        <button class="btn btn-secondary" type="button" aria-label="下一段时间" @click="shift(1)">›</button>
+        <button class="btn btn-secondary" type="button" @click="cursor = today()">今天</button>
+      </div>
     </div>
 
     <section v-if="activeRecord" class="card record-editor-panel" aria-labelledby="record-editor-title">
@@ -864,6 +896,24 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .record-editor-panel { margin-bottom: 18px; }
+#page-records .calendar-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+#page-records .record-view-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+#page-records .record-view-nav strong {
+  min-width: 120px;
+  text-align: center;
+}
 #page-records .record-filter-bar { grid-template-columns: minmax(200px, 1.4fr) minmax(145px, .8fr) minmax(120px, .65fr) minmax(155px, .9fr) minmax(150px, .9fr) minmax(120px, .65fr); }
 .record-editor-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
 .record-edit-form { display: grid; gap: 13px; }

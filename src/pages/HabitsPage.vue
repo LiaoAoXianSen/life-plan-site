@@ -12,6 +12,8 @@ const route = useRoute();
 const router = useRouter();
 const formError = ref('');
 const activeTab = ref<'today' | 'backfill' | 'library' | 'wallet' | 'diagnostics' | 'sync'>('today');
+const makeupDate = ref(getTodayStr());
+const matrixDays = ref(30);
 const actionDrafts = reactive<Record<string, { date: string; note: string }>>({});
 const checkinNoteDrafts = reactive<Record<string, string>>({});
 const rewardForm = reactive({ name: '', cost: 10, currency: '金币', stock: 0, note: '' });
@@ -53,6 +55,18 @@ const recentCheckinCount = computed(() => {
   const start = (() => {
     const date = new Date(`${today}T12:00:00`);
     date.setDate(date.getDate() - 6);
+    return getTodayStr(date);
+  })();
+  return lifePlan.data.checkins.filter(item => {
+    const date = String(item.date || '');
+    return date >= start && date <= today;
+  }).length;
+});
+const recentWindowCheckins = computed(() => {
+  const today = getTodayStr();
+  const start = (() => {
+    const date = new Date(`${today}T12:00:00`);
+    date.setDate(date.getDate() - Math.max(1, Number(matrixDays.value) || 30) + 1);
     return getTodayStr(date);
   })();
   return lifePlan.data.checkins.filter(item => {
@@ -118,6 +132,13 @@ function savePointAdjust() {
   })) return;
   showPointAdjust.value = false;
 }
+
+watch(makeupDate, value => {
+  if (!value) return;
+  Object.keys(actionDrafts).forEach(habitId => {
+    actionDrafts[habitId].date = value;
+  });
+});
 
 const weekdayOptions = [
   { value: '1', label: '一' },
@@ -238,7 +259,12 @@ function editHabit(item: {
 }
 
 function draftFor(habitId: string) {
-  if (!actionDrafts[habitId]) actionDrafts[habitId] = { date: getTodayStr(), note: '' };
+  if (!actionDrafts[habitId]) {
+    actionDrafts[habitId] = {
+      date: activeTab.value === 'backfill' ? (makeupDate.value || getTodayStr()) : getTodayStr(),
+      note: '',
+    };
+  }
   return actionDrafts[habitId];
 }
 
@@ -405,17 +431,38 @@ watch(focusedHabitId, value => {
       </article>
     </div>
 
-    <div class="habit-center-tabs" role="tablist" aria-label="习惯中心分区">
-      <button
-        v-for="tab in tabItems"
-        :key="tab.id"
-        type="button"
-        role="tab"
-        class="habit-center-tab"
-        :class="{ active: activeTab === tab.id }"
-        :aria-selected="activeTab === tab.id"
-        @click="openTab(tab.id)"
-      >{{ tab.label }}</button>
+    <div class="habit-center-toolbar">
+      <div class="habit-center-tabs" role="tablist" aria-label="习惯中心分区">
+        <button
+          v-for="tab in tabItems"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          class="habit-center-tab"
+          :class="{ active: activeTab === tab.id }"
+          :aria-selected="activeTab === tab.id"
+          @click="openTab(tab.id)"
+        >{{ tab.label }}</button>
+      </div>
+      <div class="habit-center-toolbar-actions">
+        <input
+          v-show="activeTab === 'backfill'"
+          v-model="makeupDate"
+          type="date"
+          aria-label="补卡日期"
+        >
+        <select
+          v-show="activeTab === 'diagnostics'"
+          v-model.number="matrixDays"
+          class="year-select"
+          aria-label="分析矩阵天数"
+          style="max-width:150px;"
+        >
+          <option :value="14">近14天</option>
+          <option :value="30">近30天</option>
+          <option :value="60">近60天</option>
+        </select>
+      </div>
     </div>
 
     <section v-show="activeTab === 'wallet'" class="card habit-wallet-panel" aria-labelledby="habit-wallet-title">
@@ -465,13 +512,31 @@ watch(focusedHabitId, value => {
     <section v-show="activeTab === 'diagnostics'" class="card habit-diagnostics-panel" aria-labelledby="habit-diagnostics-title">
       <div class="section-title-row">
         <div>
-          <h2 id="habit-diagnostics-title">习惯诊断</h2>
-          <p class="section-hint">只读检查旧版习惯字段、钱包流水、心愿和本地镜像风险；不会修改任何数据。扣分结算会写入 miss/break 流水并重建本地镜像。</p>
+          <h2 id="habit-diagnostics-title">习惯分析</h2>
+          <p class="section-hint">查看近 {{ matrixDays }} 天执行概况与诊断摘要；诊断本身只读，结算扣分会写入 miss/break 流水。</p>
         </div>
         <div class="habit-diagnostics-actions">
           <button class="btn btn-secondary" type="button" @click="settlePenalties">结算昨日扣分</button>
-          <span class="habit-diagnostics-pill">{{ habits.diagnostics.readOnly ? '只读' : '检查' }}</span>
+          <span class="habit-diagnostics-pill">近{{ matrixDays }}天</span>
         </div>
+      </div>
+      <div class="habit-matrix-summary">
+        <article>
+          <span>分析窗口</span>
+          <strong>近 {{ matrixDays }} 天</strong>
+        </article>
+        <article>
+          <span>习惯数</span>
+          <strong>{{ habits.habits.length }}</strong>
+        </article>
+        <article>
+          <span>近窗打卡</span>
+          <strong>{{ recentWindowCheckins }}</strong>
+        </article>
+        <article>
+          <span>诊断状态</span>
+          <strong>{{ habits.diagnostics.readOnly ? '只读' : '检查' }}</strong>
+        </article>
       </div>
       <div class="habit-diagnostics-grid">
         <article><span>权威源</span><strong>{{ habits.diagnostics.authority || 'lifePlanData' }}</strong></article>
@@ -774,7 +839,39 @@ watch(focusedHabitId, value => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin: 0;
+}
+.habit-center-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin: 0 0 14px;
+}
+.habit-center-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.habit-matrix-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.habit-matrix-summary article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8faf8;
+  border: 1px solid rgba(42, 75, 56, 0.1);
+}
+.habit-matrix-summary span {
+  color: var(--faint, #7a8b80);
+  font-size: 12px;
 }
 .habit-center-tab {
   border: 1px solid rgba(33, 110, 78, 0.14);
