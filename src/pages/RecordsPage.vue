@@ -132,7 +132,7 @@ function matchesIdeaFilters(record: DataEntity) {
   return !tagQuery || records.services.records.getIdeaTags(record).some((tag: string) => tag.toLowerCase().includes(tagQuery));
 }
 
-function buildRecordViewItems(startDate: string, endDate: string, includeTodoMilestones = false) {
+function buildRecordViewItems(startDate: string, endDate: string, includeTodoMilestones = false, includeHistoricalHabitCheckins = false) {
   return buildScheduleItems(lifePlan.data, startDate, endDate, {
     keyword: keyword.value,
     typeFilter: typeFilter.value,
@@ -142,13 +142,14 @@ function buildRecordViewItems(startDate: string, endDate: string, includeTodoMil
     includeTodoDue: includeTodoMilestones,
     includeTodoSessions: true,
     recordFilter: matchesIdeaFilters,
+    ...(includeHistoricalHabitCheckins ? { isHabitDueOnDate: () => true } : {}),
   });
 }
 
 const listItems = computed(() => {
   const start = listRange.value === 'all' ? '' : addDays(today(), -Number(listRange.value) + 1);
   const end = listRange.value === 'all' ? '' : today();
-  return buildRecordViewItems(start, end);
+  return buildRecordViewItems(start, end, false, true);
 });
 const listGroups = computed(() => {
   const groups = listItems.value.reduce<Record<string, ScheduleItem[]>>((result, item) => {
