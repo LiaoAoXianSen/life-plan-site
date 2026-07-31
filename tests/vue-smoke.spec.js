@@ -643,6 +643,7 @@ test('search and tag center restore legacy read-only index navigation', async ({
     await expect(page.locator('.search-group-title').filter({ hasText: '素材库' })).toContainText('1');
     await expect(page.locator('.search-group-title').filter({ hasText: '模板' })).toContainText('1');
     await expect(page.locator('.search-group-title').filter({ hasText: '转盘公共项' })).toContainText('1');
+    await expect(page.locator('.search-result-item').filter({ hasText: '共享标签素材内容' })).toContainText('2026年7月28日 08:00:00');
 
     await page.locator('.search-result-item').filter({ hasText: '搜索目标 OKR' }).click();
     await expectHashRoute(page, '/goals', { goal: 'goal-search' });

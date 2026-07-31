@@ -48,6 +48,13 @@ function formatTodoDate(todo: Todo) {
   return '未设置日期';
 }
 
+function formatStoredDateTime(value: unknown) {
+  const raw = String(value || '');
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return raw.replace('T', ' ');
+  return `${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${match[4]}:${match[5]}:${match[6] || '00'}`;
+}
+
 function wheelTagNames(tagIds: unknown) {
   const ids = Array.isArray(tagIds) ? tagIds.map(String) : [];
   return ids.map(id => store.data.wheelTags.find(tag => tag.id === id)?.name).filter(Boolean) as string[];
@@ -92,7 +99,7 @@ const indexItems = computed<SearchItem[]>(() => {
     label: moduleLabels.materials,
     id: String(material.id || ''),
     title: String(material.content || '').slice(0, 42) || '空素材',
-    subtitle: `${material.type || '素材'} · ${String(material.createdAt || '').replace('T', ' ').slice(0, 16)}`,
+    subtitle: `${material.type || '素材'} · ${formatStoredDateTime(material.createdAt)}`,
     body: `${material.content || ''} ${material.source || ''} ${material.note || ''}`,
     tags: normalizeTags(material.tags),
     meta: String(material.source || material.note || ''),
