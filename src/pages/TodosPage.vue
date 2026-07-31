@@ -495,7 +495,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
             <div class="todo-section-heading"><h3 id="todo-sessions-heading">执行记录</h3><span>{{ selectedTodo.sessions.length }} 次</span></div>
             <form class="todo-session-form" @submit.prevent="addSession"><input v-model="sessionForm.date" type="date" aria-label="执行日期" required /><input v-model="sessionForm.startTime" type="time" aria-label="开始时间" required /><input v-model="sessionForm.endTime" type="time" aria-label="结束时间" /><input v-model="sessionForm.note" aria-label="执行备注" placeholder="这次推进了什么" /><button class="btn btn-secondary" type="submit">记录执行</button></form>
             <div v-for="session in sortedSessions" :key="session.id" class="todo-session-row"><div><strong>{{ session.date }} {{ session.startTime }}{{ session.endTime ? ` - ${session.endTime}` : '' }}</strong><span>{{ session.note || '执行了一次' }}</span></div><button class="link-button danger-text" type="button" @click="deleteSession(session.id)">删除</button></div>
-            <p v-if="!sortedSessions.length" class="todo-detail-empty">还没有执行记录。</p>
+            <p v-if="!sortedSessions.length" class="todo-detail-empty">还没有执行记录。做了一段就记一次，时间轴会按这里显示。</p>
           </section>
 
           <section class="todo-detail-section" aria-labelledby="todo-records-heading">

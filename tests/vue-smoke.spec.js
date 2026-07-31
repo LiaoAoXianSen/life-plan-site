@@ -120,6 +120,7 @@ test('todo detail preserves subtasks sessions relationships tombstones and mirro
     const detail = page.locator('.todo-detail-panel');
     await expect(detail).toContainText('关联日记');
     await expect(detail).toContainText('来源灵感');
+    await expect(detail.locator('section[aria-labelledby="todo-sessions-heading"]')).toContainText('还没有执行记录。做了一段就记一次，时间轴会按这里显示。');
     await detail.getByRole('button', { name: '编辑待办' }).click();
     await detail.getByLabel('任务', { exact: true }).fill('更新后的待办');
     await detail.getByLabel('备注').fill('更新后的备注');
