@@ -80,6 +80,10 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
     lastError.value = '';
   }
 
+  function retryLocalSave() {
+    commit('retry-local-save');
+  }
+
   return {
     data,
     isLoaded,
@@ -97,5 +101,6 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
     downloadSnapshot,
     deleteSnapshot,
     restoreSnapshot,
+    retryLocalSave,
   };
 });

@@ -62,17 +62,19 @@ const mainSyncLabel = computed(() => {
 
 const wheelSyncLabel = computed(() => {
   try {
+    const config = JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}') as { webdavUrl?: string };
     const state = JSON.parse(localStorage.getItem('wheelAppSyncState') || '{}') as {
       dirty?: boolean;
       lastSyncAt?: string;
       lastRemoteHash?: string;
     };
-    if (!state.lastRemoteHash && !state.lastSyncAt) return '转盘：未同步';
+    if (!config.webdavUrl) return '转盘：未配置';
     if (state.dirty) return '转盘：有未上传改动';
     if (state.lastSyncAt) return `转盘：${String(state.lastSyncAt).slice(0, 16).replace('T', ' ')}`;
+    if (!state.lastRemoteHash) return '转盘：待检查';
     return '转盘：已同步';
   } catch {
-    return '转盘：未同步';
+    return '转盘：未配置';
   }
 });
 
@@ -112,6 +114,15 @@ async function importBackup(event: Event) {
     window.alert(snapshotNotice.value);
   } finally {
     input.value = '';
+  }
+}
+
+function retryLocalSave() {
+  try {
+    lifePlan.retryLocalSave();
+    snapshotNotice.value = '本地数据已重新保存。';
+  } catch (error) {
+    snapshotNotice.value = error instanceof Error ? error.message : '重试保存失败';
   }
 }
 
@@ -199,6 +210,7 @@ function restoreSnapshot(item: SnapshotItem) {
         <div class="local-save-warning-actions">
           <button class="btn btn-secondary" type="button" @click="exportBackup">立即导出</button>
           <button class="btn btn-secondary" type="button" @click="openSnapshotModal">管理快照</button>
+          <button class="btn btn-primary" type="button" @click="retryLocalSave">重试保存</button>
         </div>
       </div>
     </details>

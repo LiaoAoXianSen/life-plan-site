@@ -73,10 +73,43 @@ const overviewKpis = computed(() => [
 ]);
 
 function jumpToFreeWorkout() {
-  const el = document.getElementById('fitness-free-start');
-  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!fitness.library.length) {
+    run(() => fitness.ensureLibrary());
+  }
   if (!freeForm.exerciseId && fitness.library[0]) freeForm.exerciseId = String(fitness.library[0].id || '');
+  if (!freeForm.title) freeForm.title = '自由训练';
+  if (fitness.library.length) {
+    startFreeWorkout();
+    return;
+  }
+  const el = document.getElementById('fitness-library-section');
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+function openLibrarySection() {
+  if (!fitness.library.length) seedLibrary();
+  const el = document.getElementById('fitness-library-section');
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openPlanCreate() {
+  resetPlanForm();
+  const el = document.getElementById('fitness-plan-section');
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openWorkoutCreate() {
+  resetWorkoutForm();
+  const el = document.getElementById('fitness-workout-section');
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openBodySection() {
+  resetMetricForm();
+  const el = document.getElementById('fitness-body-section');
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 const activeCompleted = computed(() => fitness.activeWorkout ? fitness.services.fitness.countCompletedSets(fitness.activeWorkout) : 0);
 const activeTotal = computed(() => fitness.activeWorkout ? fitness.services.fitness.countTotalSets(fitness.activeWorkout) : 0);
 const activePlan = computed(() => fitness.activeWorkout?.planId ? fitness.services.fitness.findFitnessPlan(fitness.plans, fitness.activeWorkout.planId) : null);
@@ -499,14 +532,14 @@ onUnmounted(stopRestTimer);
 
 <template>
   <section class="page active" id="page-fitness">
-    <header class="page-header">
+    <header class="page-header fitness-page-header">
       <div>
         <div class="page-title">运动健身</div>
-        <p class="page-subtitle">选计划开练，顺手记录身材与训练结果。</p>
+        <p class="page-subtitle">选计划开练，顺手记身材与训练结果。</p>
       </div>
       <div class="fitness-header-actions">
-        <button class="btn btn-secondary" type="button" @click="seedLibrary">动作库</button>
-        <button class="btn btn-secondary" type="button" @click="resetPlanForm">新建计划</button>
+        <button class="btn btn-secondary" type="button" @click="openLibrarySection">动作库</button>
+        <button class="btn btn-secondary" type="button" @click="openPlanCreate">新建计划</button>
         <button class="btn btn-primary" type="button" @click="jumpToFreeWorkout">自由开练</button>
       </div>
     </header>
@@ -529,7 +562,7 @@ onUnmounted(stopRestTimer);
           class="btn btn-primary"
           type="button"
           @click="run(() => fitness.startFromPlan(String(fitness.plans[0].id)))"
-        >继续训练：{{ fitness.plans[0].name }}</button>
+        >按计划开练：{{ fitness.plans[0].name }}</button>
       </div>
       <div class="fitness-kpi-grid">
         <article v-for="item in overviewKpis" :key="item.label" class="fitness-kpi-card">
@@ -587,8 +620,15 @@ onUnmounted(stopRestTimer);
       </article>
     </article>
 
-    <div v-else class="form-row">
+    <div v-else class="form-row" id="fitness-plan-section">
       <form id="fitness-free-start" class="card" @submit.prevent="startFreeWorkout">
+        <div class="fitness-section-head">
+          <div>
+            <div class="section-title">训练计划</div>
+            <div class="fitness-section-sub">开练时直接选计划，不用再分训练日。</div>
+          </div>
+          <button class="btn btn-secondary todo-mini-btn" type="button" @click="openPlanCreate">新建</button>
+        </div>
         <div class="card-title">开始自由训练</div>
         <div v-if="!fitness.library.length" class="empty-state">请先初始化或添加动作库。</div>
         <div v-else class="form-row">
@@ -611,12 +651,13 @@ onUnmounted(stopRestTimer);
       </article>
     </div>
 
-    <div class="form-row">
+    <div class="form-row" id="fitness-body-section">
       <form class="card" @submit.prevent="saveMetric">
         <div class="section-title-row">
           <div>
-            <div class="card-title">{{ metricForm.id ? '编辑身体指标' : '记录身体指标' }}</div>
-            <p class="section-hint">身高、胸围、臀围、臂围等字段与旧版身材记录共用同一套规范化服务。</p>
+            <div class="section-title">身材记录</div>
+            <p class="fitness-section-sub">体重优先，围度可选填。</p>
+            <div class="card-title">{{ metricForm.id ? '编辑身材记录' : '记录身材' }}</div>
           </div>
           <button v-if="metricForm.id" class="btn btn-secondary" type="button" @click="resetMetricForm">取消编辑</button>
         </div>
@@ -631,10 +672,10 @@ onUnmounted(stopRestTimer);
           </div>
         </div>
         <div class="form-group"><label>备注</label><input v-model="metricForm.note" /></div>
-        <button class="btn btn-primary">{{ metricForm.id ? '保存修改' : '保存指标' }}</button>
+        <button class="btn btn-primary">{{ metricForm.id ? '保存修改' : '记录身材' }}</button>
       </form>
       <article class="card">
-        <div class="card-title">最近指标</div>
+        <div class="card-title">最近身材</div>
         <div v-if="fitness.metrics.length" class="fitness-metric-list">
           <div v-for="item in fitness.metrics.slice(0, 8)" :key="item.id" class="fitness-metric-row fitness-body-metric-row">
             <div>
@@ -646,11 +687,11 @@ onUnmounted(stopRestTimer);
             <button class="btn btn-danger" type="button" @click="run(() => fitness.removeMetric(item.id))">删除</button>
           </div>
         </div>
-        <div v-else class="empty-state">还没有身体指标记录。</div>
+        <div v-else class="empty-state">还没有身材记录。</div>
       </article>
     </div>
 
-    <div class="form-row">
+    <div class="form-row" id="fitness-library-section">
       <form class="card" @submit.prevent="saveLibraryItem">
         <div class="section-title-row"><div><h2>动作库</h2><p class="section-hint">初始化会按旧版默认动作创建可编辑副本。</p></div><button class="btn btn-secondary" type="button" @click="seedLibrary">初始化默认动作</button></div>
         <div class="form-row">
@@ -730,13 +771,18 @@ onUnmounted(stopRestTimer);
       </form>
     </div>
 
-    <form class="card" @submit.prevent="saveWorkoutLog">
+    <form id="fitness-workout-section" class="card" @submit.prevent="saveWorkoutLog">
       <div class="section-title-row">
         <div>
+          <div class="section-title">训练日志</div>
+          <div class="fitness-section-sub">进行中的训练会置顶，结束后也能补记。</div>
           <div class="card-title">{{ workoutEditingId ? '编辑训练日志' : '补记训练日志' }}</div>
-          <p class="section-hint">可记录已完成或计划中的训练，动作与组数据仍由旧版健身服务规范化。</p>
         </div>
-        <button v-if="workoutEditingId" class="btn btn-secondary" type="button" @click="resetWorkoutForm">取消编辑</button>
+        <div class="fitness-header-actions">
+          <button class="btn btn-secondary todo-mini-btn" type="button" @click="jumpToFreeWorkout">开练</button>
+          <button class="btn btn-secondary todo-mini-btn" type="button" @click="openWorkoutCreate">补记</button>
+          <button v-if="workoutEditingId" class="btn btn-secondary" type="button" @click="resetWorkoutForm">取消编辑</button>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>训练日期</label><input v-model="workoutForm.date" type="date" required /></div>
@@ -824,6 +870,19 @@ onUnmounted(stopRestTimer);
 }
 .fitness-overview-hero {
   margin-bottom: 16px;
+}
+.fitness-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.fitness-section-sub {
+  margin-top: 4px;
+  color: var(--muted, #647269);
+  font-size: 12px;
+  line-height: 1.4;
 }
 .fitness-kicker {
   color: var(--faint, #7a8b80);

@@ -27,6 +27,20 @@ const typeGroups = [
   { label: '周期规划', types: ['周计划', '月计划', '年度计划', '3年计划'] },
   { label: '长期愿景', types: ['终身愿景'] },
 ];
+const typeIcons: Record<string, string> = {
+  日记: '📔',
+  日计划: '📅',
+  工作记录: '💼',
+  灵感碎片: '💡',
+  周复盘: '🔁',
+  月复盘: '🌙',
+  年复盘: '📊',
+  周计划: '🗓️',
+  月计划: '📌',
+  年度计划: '🎯',
+  '3年计划': '🧭',
+  终身愿景: '🌟',
+};
 const allTypes = typeGroups.flatMap(group => group.types);
 const draft = reactive({
   title: '', content: '', type: '日记', startDate: getTodayStr(), endDate: getTodayStr(),
@@ -274,10 +288,20 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-if="step === 'type'" class="record-create-type-groups">
-          <section v-for="group in typeGroups" :key="group.label" class="record-create-type-group" :aria-labelledby="`record-type-${group.label}`">
+          <section v-for="group in typeGroups" :key="group.label" class="record-create-type-group type-section" :aria-labelledby="`record-type-${group.label}`">
             <h3 :id="`record-type-${group.label}`">{{ group.label }}</h3>
-            <div class="record-create-type-options">
-              <button v-for="type in group.types" :key="type" class="record-create-type-option" type="button" @click="selectType(type)">{{ type }}</button>
+            <div class="type-cards">
+              <button
+                v-for="type in group.types"
+                :key="type"
+                class="type-card record-create-type-option"
+                type="button"
+                :aria-label="type"
+                @click="selectType(type)"
+              >
+                <span class="icon" aria-hidden="true">{{ typeIcons[type] || '📝' }}</span>
+                <span class="name">{{ type }}</span>
+              </button>
             </div>
           </section>
         </div>

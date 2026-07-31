@@ -501,7 +501,7 @@ test('goals detail route save and delete preserve the legacy contract', async ({
     expect(existing.updatedAt).toBeUndefined();
     expect(existing.createdAt).toBeUndefined();
 
-    await page.getByRole('button', { name: '新建目标' }).click();
+    await page.getByRole('button', { name: '+ 新建目标' }).click();
     const createDialog = page.getByRole('dialog', { name: '新建目标' });
     await createDialog.getByLabel('目标', { exact: true }).fill('新增季度目标');
     await createDialog.getByLabel('目标描述').fill('季度描述');
@@ -704,6 +704,8 @@ test('wheel public library batch actions preserve selection and tombstone contra
     }, source);
 
     await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
     const library = page.locator('.library-card');
     await expect(library).toContainText('公共项库');
     await expect(page.locator('.library-row')).toHaveCount(3);
@@ -779,6 +781,8 @@ test('wheel management forms focus editable rows without mutating data', async (
     await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
 
     await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
     const summary = page.locator('.wheel-management-summary');
     await expect(summary).toContainText('1转盘');
     await expect(summary).toContainText('1标签');
@@ -1043,7 +1047,7 @@ test('fitness body metrics edit every legacy field through the shared service', 
     }, source);
 
     await page.goto('/#/fitness');
-    let metricForm = page.locator('form.card').filter({ hasText: '记录身体指标' });
+    let metricForm = page.locator('form.card').filter({ hasText: '记录身材' });
     await metricForm.locator('.form-group').filter({ hasText: '日期' }).locator('input').fill('2026-07-29');
     await metricForm.locator('.form-group').filter({ hasText: '测量状态' }).locator('select').selectOption('afterMeal');
     for (const [label, value] of [
@@ -1061,7 +1065,7 @@ test('fitness body metrics edit every legacy field through the shared service', 
         await metricForm.locator('.form-group').filter({ hasText: label }).locator('input').fill(value);
     }
     await metricForm.locator('.form-group').filter({ hasText: '备注' }).locator('input').fill('全字段记录');
-    await metricForm.getByRole('button', { name: '保存指标' }).click();
+    await metricForm.getByRole('button', { name: '记录身材' }).click();
     await expect(page.locator('.notice.success')).toContainText('身体指标已保存');
     await expect(page.locator('.fitness-body-metric-row')).toContainText('胸围 98.5 cm');
     await expect(page.locator('.fitness-body-metric-row')).toContainText('小腿围 38.2 cm');
@@ -1092,7 +1096,7 @@ test('fitness body metrics edit every legacy field through the shared service', 
     expect(stored.fitnessMirror).toBeNull();
 
     await page.locator('.fitness-body-metric-row').getByRole('button', { name: '编辑' }).click();
-    metricForm = page.locator('form.card').filter({ hasText: '编辑身体指标' });
+    metricForm = page.locator('form.card').filter({ hasText: '编辑身材记录' });
     await expect(metricForm.locator('.form-group').filter({ hasText: '胸围' }).locator('input')).toHaveValue('98.5');
     await expect(metricForm.locator('.form-group').filter({ hasText: '小腿围' }).locator('input')).toHaveValue('38.2');
     await metricForm.locator('.form-group').filter({ hasText: '测量状态' }).locator('select').selectOption('fasted');

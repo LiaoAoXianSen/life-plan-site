@@ -128,7 +128,7 @@ watch(() => route.query.goal, value => {
   <section class="page active" id="page-goals">
     <header class="page-header">
       <div class="page-title">目标管理</div>
-      <button class="btn btn-primary" type="button" @click="openNewGoal()">新建目标</button>
+      <button class="btn btn-primary" type="button" @click="openNewGoal()">+ 新建目标</button>
     </header>
 
     <div class="summary-grid goal-summary-grid">
