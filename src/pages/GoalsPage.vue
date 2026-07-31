@@ -146,7 +146,7 @@ watch(() => route.query.goal, value => {
         <strong class="goal-progress">{{ normalizeProgress(goal) }}%</strong>
       </button>
     </div>
-    <div v-if="!goals.length" class="empty-state">暂无目标，点击右上角新建。</div>
+    <div v-if="!goals.length" class="empty-state">暂无目标，点击右上角新建</div>
 
     <div v-if="editorOpen" class="modal-overlay active" role="presentation">
       <form class="modal modal-sm goal-editor" role="dialog" aria-modal="true" aria-labelledby="goal-editor-title" @submit.prevent="saveGoal">

@@ -614,6 +614,12 @@ test('goals keep legacy insertion order in the browse list', async ({ page }) =>
     await expect(cards.nth(1)).toContainText('后建目标');
 });
 
+test('goals empty state keeps the legacy copy', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/goals');
+    await expect(page.locator('#page-goals .empty-state')).toHaveText('暂无目标，点击右上角新建');
+});
+
 test('search and tag center restore legacy read-only index navigation', async ({ page }) => {
     const source = emptyData({
         records: [
