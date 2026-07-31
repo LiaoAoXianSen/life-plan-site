@@ -74,6 +74,27 @@ const recentWindowCheckins = computed(() => {
     return date >= start && date <= today;
   }).length;
 });
+const matrixDates = computed(() => {
+  const today = getTodayStr();
+  const days = Math.max(1, Number(matrixDays.value) || 30);
+  const dates: string[] = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = new Date(`${today}T12:00:00`);
+    date.setDate(date.getDate() - offset);
+    dates.push(getTodayStr(date));
+  }
+  return dates;
+});
+const matrixRows = computed(() => habits.habits
+  .filter(habit => !habit.archived)
+  .map(habit => ({
+    id: habit.id,
+    name: habit.name || '未命名习惯',
+    cells: matrixDates.value.map(date => ({
+      date,
+      count: habits.getCheckinCount(habit.id, date),
+    })),
+  })));
 const yesterdayPendingCount = computed(() => {
   const yesterday = (() => {
     const date = new Date(`${getTodayStr()}T12:00:00`);
@@ -538,6 +559,42 @@ watch(focusedHabitId, value => {
           <strong>{{ habits.diagnostics.readOnly ? '只读' : '检查' }}</strong>
         </article>
       </div>
+
+      <div class="habit-matrix-block" aria-label="近期执行矩阵">
+        <div class="section-title-row compact">
+          <div>
+            <h3>近期执行矩阵</h3>
+            <p class="section-hint">只读预览近 {{ matrixDays }} 天打卡分布；点选日期仍请到补卡页处理。</p>
+          </div>
+        </div>
+        <div v-if="matrixRows.length" class="habit-matrix">
+          <div
+            class="habit-matrix-grid"
+            :style="{ gridTemplateColumns: `160px repeat(${matrixDates.length}, minmax(28px, 36px))` }"
+          >
+            <div class="habit-matrix-cell name" title="习惯">习惯</div>
+            <div
+              v-for="date in matrixDates"
+              :key="`head-${date}`"
+              class="habit-matrix-cell head"
+              :title="date"
+            >{{ Number(date.slice(8, 10)) }}</div>
+            <template v-for="row in matrixRows" :key="row.id">
+              <div class="habit-matrix-cell name" :title="row.name">{{ row.name }}</div>
+              <div
+                v-for="cell in row.cells"
+                :key="`${row.id}-${cell.date}`"
+                class="habit-matrix-cell"
+                :title="`${row.name} · ${cell.date} · ${cell.count}次`"
+              >
+                <span class="habit-dot" :class="{ done: cell.count > 0 }" />
+              </div>
+            </template>
+          </div>
+        </div>
+        <div v-else class="empty-state">暂无习惯，先新建一个习惯。</div>
+      </div>
+
       <div class="habit-diagnostics-grid">
         <article><span>权威源</span><strong>{{ habits.diagnostics.authority || 'lifePlanData' }}</strong></article>
         <article><span>习惯/打卡</span><strong>{{ Number(diagnosticSummary.habits || 0) }} / {{ Number(diagnosticSummary.checkins || 0) }}</strong></article>
@@ -746,6 +803,16 @@ watch(focusedHabitId, value => {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+.habit-matrix-block {
+  margin: 14px 0 18px;
+}
+.habit-matrix-block .section-title-row.compact {
+  margin-bottom: 10px;
+}
+.habit-matrix-block h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 .habit-center-hero {
   display: flex;
