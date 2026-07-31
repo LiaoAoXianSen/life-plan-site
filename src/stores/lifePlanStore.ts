@@ -49,6 +49,10 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
 
   function importData(raw: unknown) {
     data.value = lifePlanRepository.mergeImport(data.value, raw);
+    notifyMainDataUserCommit();
+    notifyTodoDataUserCommit();
+    notifyWheelDataUserCommit();
+    notifyHabitDataUserCommit();
   }
 
   function exportData() {

@@ -1445,6 +1445,35 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     expect(afterExport.map(snapshot => snapshot.reason)).toContain('手动导出备份');
 });
 
+test('main import schedules the shared auto-sync notification', async ({ page }) => {
+    const local = emptyData({ records: [{ id: 'import-schedule-local', type: '日记', title: '导入前', content: '', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }] });
+    const imported = emptyData({ records: [{ id: 'import-schedule-new', type: '工作记录', title: '导入后', content: '', startDate: '2026-07-29', endDate: '2026-07-29', todoIds: [] }] });
+    await page.addInitScript(({ localData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
+        const realSetTimeout = window.setTimeout.bind(window);
+        window.__mainAutoSyncSchedules = [];
+        window.setTimeout = (callback, delay, ...args) => {
+            if (delay === 20000) {
+                window.__mainAutoSyncSchedules.push(delay);
+                return realSetTimeout(() => undefined, 60000);
+            }
+            return realSetTimeout(callback, delay, ...args);
+        };
+    }, { localData: local });
+    await page.goto('/#/sync');
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByLabel('导入并合并').setInputFiles({
+        name: 'import-auto-sync.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
+    });
+    await expect.poll(() => page.evaluate(() => window.__mainAutoSyncSchedules.length)).toBe(1);
+    const state = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncState')));
+    expect(state.dirty).toBe(true);
+});
+
 test('main import confirmation cancellation keeps data and snapshots unchanged', async ({ page }) => {
     const source = emptyData({
         records: [{ id: 'import-cancel-local', type: '日记', title: '导入前记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
