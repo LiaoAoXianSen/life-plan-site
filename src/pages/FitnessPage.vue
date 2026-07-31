@@ -49,6 +49,7 @@ const bodySectionOpen = ref(false);
 const workoutSectionOpen = ref(false);
 const librarySectionOpen = ref(false);
 const planEditorOpen = ref(false);
+const freeSectionOpen = ref(false);
 const writeBackPlan = ref(false);
 const restTimer = reactive({ remaining: 0, total: 0, exerciseName: '' });
 let restTimerId: ReturnType<typeof window.setInterval> | null = null;
@@ -163,6 +164,8 @@ function openBodySection() {
 
 function browseTo(target: string) {
   if (target === 'fitness-library-section') librarySectionOpen.value = true;
+  if (target === 'fitness-body-section') bodySectionOpen.value = true;
+  if (target === 'fitness-workout-section') workoutSectionOpen.value = true;
   document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -720,22 +723,25 @@ onUnmounted(stopRestTimer);
     </article>
 
     <div v-else class="form-row" id="fitness-plan-section">
-      <form id="fitness-free-start" class="card" @submit.prevent="startFreeWorkout">
-        <div class="fitness-section-head">
-          <div>
-            <div class="section-title">训练计划</div>
-            <div class="fitness-section-sub">开练时直接选计划，不用再分训练日。</div>
+      <details id="fitness-free-start" class="fitness-form-disclosure" :open="freeSectionOpen">
+        <summary><strong>自由训练设置</strong><span>选择动作和名称后开始</span></summary>
+        <form class="card" @submit.prevent="startFreeWorkout">
+          <div class="fitness-section-head">
+            <div>
+              <div class="section-title">训练计划</div>
+              <div class="fitness-section-sub">开练时直接选计划，不用再分训练日。</div>
+            </div>
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="openPlanCreate">新建</button>
           </div>
-          <button class="btn btn-secondary todo-mini-btn" type="button" @click="openPlanCreate">新建</button>
-        </div>
-        <div class="card-title">开始自由训练</div>
-        <div v-if="!fitness.library.length" class="empty-state">请先初始化或添加动作库。</div>
-        <div v-else class="form-row">
-          <div class="form-group"><label>训练名称</label><input v-model="freeForm.title" maxlength="80" /></div>
-          <div class="form-group"><label>第一个动作</label><select v-model="freeForm.exerciseId" required><option disabled value="">选择动作</option><option v-for="item in fitness.library" :key="item.id" :value="item.id">{{ item.name }}</option></select></div>
-        </div>
-        <button class="btn btn-primary" type="submit" :disabled="!fitness.library.length">开始训练</button>
-      </form>
+          <div class="card-title">开始自由训练</div>
+          <div v-if="!fitness.library.length" class="empty-state">请先初始化或添加动作库。</div>
+          <div v-else class="form-row">
+            <div class="form-group"><label>训练名称</label><input v-model="freeForm.title" maxlength="80" /></div>
+            <div class="form-group"><label>第一个动作</label><select v-model="freeForm.exerciseId" required><option disabled value="">选择动作</option><option v-for="item in fitness.library" :key="item.id" :value="item.id">{{ item.name }}</option></select></div>
+          </div>
+          <button class="btn btn-primary" type="submit" :disabled="!fitness.library.length">开始训练</button>
+        </form>
+      </details>
       <article class="card">
         <div class="card-title">开始计划训练</div>
         <div v-if="fitness.plans.length" class="fitness-metric-list">
