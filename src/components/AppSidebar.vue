@@ -12,13 +12,45 @@ type SnapshotItem = {
   createdAt?: string;
   bytes?: number;
   hash?: string;
+  parent?: { version?: number | string; hash?: string } | null;
+  mergedWith?: { label?: string; version?: number | string; hash?: string } | null;
+  source?: string;
+  action?: string;
   data?: unknown;
+};
+
+type SnapshotRecord = {
+  id?: string;
+  isHabitRecord?: boolean;
+  updatedAt?: string;
+  createdAt?: string;
+  startDate?: string;
+  type?: string;
+  title?: string;
+};
+
+type SnapshotSummary = {
+  records: unknown[];
+  todos: unknown[];
+  habits: unknown[];
+  checkins: unknown[];
+  goals: unknown[];
+  materials: unknown[];
+  bodyMetrics: unknown[];
+  fitnessPlans: unknown[];
+  fitnessWorkouts: unknown[];
+  exerciseLibrary: unknown[];
+  latestRecords: SnapshotRecord[];
+  openTodos: number;
+  doneTodos: number;
+  relation: string;
 };
 
 const router = useRouter();
 const lifePlan = useLifePlanStore();
 const showCreateRecord = ref(false);
 const showSnapshots = ref(false);
+const previewSnapshotId = ref<string | null>(null);
 const snapshotNotice = ref('');
 const importInput = ref<HTMLInputElement | null>(null);
 
@@ -43,6 +75,8 @@ const snapshotStats = computed(() => (showSnapshots.value ? lifePlan.getSnapshot
   latestBytes?: number;
   isRisky?: boolean;
 } : { count: 0, totalBytes: 0, latestBytes: 0, isRisky: false }));
+const selectedSnapshot = computed(() => snapshots.value.find(item => String(item.id || '') === previewSnapshotId.value) || null);
+const selectedSnapshotSummary = computed(() => selectedSnapshot.value ? getSnapshotSummary(selectedSnapshot.value) : null);
 
 const mainSyncLabel = computed(() => {
   try {
@@ -92,6 +126,56 @@ function formatStoredDateTime(value = '') {
   return `${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${match[4]}:${match[5]}:${match[6] || '00'}`;
 }
 
+function getSnapshotRelationText(snapshot: SnapshotItem) {
+  const parts: string[] = [];
+  if (snapshot.parent) {
+    const parentVersion = snapshot.parent.version ? `v${snapshot.parent.version}` : '上一版';
+    const parentHash = snapshot.parent.hash ? ` · ${String(snapshot.parent.hash).slice(0, 8)}` : '';
+    parts.push(`上一个版本：${parentVersion}${parentHash}`);
+  } else {
+    parts.push('上一个版本：无');
+  }
+  if (snapshot.mergedWith) {
+    const label = snapshot.mergedWith.label || '未知来源';
+    const hash = snapshot.mergedWith.hash ? ` · ${String(snapshot.mergedWith.hash).slice(0, 8)}` : '';
+    const version = snapshot.mergedWith.version ? ` · v${snapshot.mergedWith.version}` : '';
+    parts.push(`合并对象：${label}${version}${hash}`);
+  }
+  if (snapshot.source) parts.push(`来源：${snapshot.source}${snapshot.action ? `/${snapshot.action}` : ''}`);
+  return parts.join(' ｜ ');
+}
+
+function getSnapshotSummary(snapshot: SnapshotItem): SnapshotSummary {
+  const snapshotData = snapshot.data && typeof snapshot.data === 'object' ? snapshot.data as Record<string, unknown> : {};
+  const collections = {
+    records: Array.isArray(snapshotData.records) ? snapshotData.records : [],
+    todos: Array.isArray(snapshotData.todos) ? snapshotData.todos : [],
+    habits: Array.isArray(snapshotData.habits) ? snapshotData.habits : [],
+    checkins: Array.isArray(snapshotData.checkins) ? snapshotData.checkins : [],
+    goals: Array.isArray(snapshotData.goals) ? snapshotData.goals : [],
+    materials: Array.isArray(snapshotData.materials) ? snapshotData.materials : [],
+    bodyMetrics: Array.isArray(snapshotData.bodyMetrics) ? snapshotData.bodyMetrics : [],
+    fitnessPlans: Array.isArray(snapshotData.fitnessPlans) ? snapshotData.fitnessPlans : [],
+    fitnessWorkouts: Array.isArray(snapshotData.fitnessWorkouts) ? snapshotData.fitnessWorkouts : [],
+    exerciseLibrary: Array.isArray(snapshotData.exerciseLibrary) ? snapshotData.exerciseLibrary : [],
+  };
+  const latestRecords = [...collections.records]
+    .filter(record => !(record as SnapshotRecord).isHabitRecord)
+    .sort((a, b) => {
+      const left = a as SnapshotRecord;
+      const right = b as SnapshotRecord;
+      return String(right.updatedAt || right.createdAt || right.startDate || '').localeCompare(String(left.updatedAt || left.createdAt || left.startDate || ''));
+    })
+    .slice(0, 3) as SnapshotRecord[];
+  return {
+    ...collections,
+    latestRecords,
+    openTodos: collections.todos.filter(todo => !(todo as { done?: boolean }).done).length,
+    doneTodos: collections.todos.filter(todo => Boolean((todo as { done?: boolean }).done)).length,
+    relation: getSnapshotRelationText(snapshot),
+  };
+}
+
 function exportBackup() {
   lifePlan.exportData();
   snapshotNotice.value = '已导出完整备份，并写入本地快照。';
@@ -132,7 +216,13 @@ function retryLocalSave() {
 
 function openSnapshotModal() {
   snapshotNotice.value = '';
+  previewSnapshotId.value = null;
   showSnapshots.value = true;
+}
+
+function toggleSnapshotPreview(item: SnapshotItem) {
+  const id = String(item.id || '');
+  previewSnapshotId.value = previewSnapshotId.value === id ? null : id;
 }
 
 function createSnapshotNow() {
@@ -246,9 +336,37 @@ function restoreSnapshot(item: SnapshotItem) {
                 <p>{{ formatStoredDateTime(item.createdAt) }} · {{ formatBytes(Number(item.bytes || 0)) }}</p>
               </div>
               <div class="page-actions">
+                <button class="btn btn-secondary" type="button" :aria-expanded="previewSnapshotId === String(item.id)" @click="toggleSnapshotPreview(item)">
+                  {{ previewSnapshotId === String(item.id) ? '收起' : '预览' }}
+                </button>
                 <button class="btn btn-secondary" type="button" @click="downloadSnapshot(item)">下载</button>
                 <button class="btn btn-primary" type="button" @click="restoreSnapshot(item)">恢复</button>
                 <button class="btn btn-danger" type="button" @click="deleteSnapshot(item)">删除</button>
+              </div>
+              <div v-if="previewSnapshotId === String(item.id) && selectedSnapshotSummary" class="snapshot-preview" data-testid="snapshot-preview">
+                <div class="snapshot-preview-heading">快照内容预览</div>
+                <div class="snapshot-preview-relation">{{ selectedSnapshotSummary.relation }}</div>
+                <div class="snapshot-preview-stats">
+                  <span>记录 {{ selectedSnapshotSummary.records.length }}</span>
+                  <span>待办 {{ selectedSnapshotSummary.todos.length }}（未完成 {{ selectedSnapshotSummary.openTodos }} / 已完成 {{ selectedSnapshotSummary.doneTodos }}）</span>
+                  <span>习惯 {{ selectedSnapshotSummary.habits.length }}</span>
+                  <span>打卡 {{ selectedSnapshotSummary.checkins.length }}</span>
+                  <span>目标 {{ selectedSnapshotSummary.goals.length }}</span>
+                  <span>素材 {{ selectedSnapshotSummary.materials.length }}</span>
+                  <span>身材 {{ selectedSnapshotSummary.bodyMetrics.length }}</span>
+                  <span>训练计划 {{ selectedSnapshotSummary.fitnessPlans.length }}</span>
+                  <span>训练日志 {{ selectedSnapshotSummary.fitnessWorkouts.length }}</span>
+                  <span>动作库 {{ selectedSnapshotSummary.exerciseLibrary.length }}</span>
+                </div>
+                <div class="snapshot-preview-list">
+                  <strong>最近记录</strong>
+                  <div v-if="selectedSnapshotSummary.latestRecords.length">
+                    <div v-for="record in selectedSnapshotSummary.latestRecords" :key="`${record.id || ''}-${record.updatedAt || record.startDate || ''}`">
+                      {{ record.startDate || '' }} · {{ record.type || '记录' }} · {{ record.title || '无标题' }}
+                    </div>
+                  </div>
+                  <div v-else>暂无记录</div>
+                </div>
               </div>
             </article>
             <div v-if="!snapshots.length" class="empty-state">还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。</div>
@@ -295,6 +413,33 @@ function restoreSnapshot(item: SnapshotItem) {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 12px;
+}
+.snapshot-preview {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.snapshot-preview-heading {
+  font-weight: 700;
+}
+.snapshot-preview-relation,
+.snapshot-preview-list {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.snapshot-preview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.snapshot-preview-stats span {
+  white-space: nowrap;
+}
+.snapshot-preview-list {
+  display: grid;
+  gap: 4px;
 }
 .snapshot-storage-notice {
   margin-top: 8px;

@@ -426,6 +426,55 @@ test('sidebar snapshot list keeps the legacy timestamp format', async ({ page })
     await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('2026年7月28日 08:09:10');
 });
 
+test('sidebar snapshot preview exposes legacy collection summary', async ({ page }) => {
+    const source = emptyData({
+        records: [
+            { id: 'record-old', title: '旧记录', type: '复盘', startDate: '2026-07-28', updatedAt: '2026-07-28T08:00:00' },
+            { id: 'record-latest', title: '最近记录', type: '日记', startDate: '2026-07-30', updatedAt: '2026-07-30T08:00:00' },
+        ],
+        todos: [{ id: 'todo-open', done: false }, { id: 'todo-done', done: true }],
+        habits: [{ id: 'habit-preview' }],
+        checkins: [{ id: 'checkin-1' }, { id: 'checkin-2' }],
+        goals: [{ id: 'goal-preview' }],
+        materials: [{ id: 'material-preview' }],
+        bodyMetrics: [{ id: 'metric-preview' }],
+        fitnessPlans: [{ id: 'plan-preview' }],
+        fitnessWorkouts: [{ id: 'workout-preview' }],
+        exerciseLibrary: [{ id: 'exercise-preview' }],
+    });
+    const original = JSON.stringify(source);
+    const snapshot = {
+        id: 'snapshot-preview', version: 4, reason: '关系测试快照', createdAt: '2026-07-30T08:09:10',
+        bytes: 256, hash: 'snapshot-preview-hash', parent: { version: 3, hash: 'parent-hash-value' },
+        mergedWith: { label: '云端', version: 2, hash: 'merged-hash-value' }, source: 'cloud-pull', action: 'merge-result', data: source,
+    };
+    await page.addInitScript(({ data, item }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSnapshots', JSON.stringify([item]));
+    }, { data: source, item: snapshot });
+    await page.goto('/#/dashboard');
+    const dialog = page.getByRole('dialog', { name: '本地快照' });
+    await page.getByRole('button', { name: /本地快照/ }).click();
+    const row = dialog.locator('.snapshot-item').first();
+    await row.getByRole('button', { name: '预览' }).click();
+    const preview = row.getByTestId('snapshot-preview');
+    await expect(preview).toContainText('上一个版本：v3 · parent-h');
+    await expect(preview).toContainText('合并对象：云端 · v2 · merged-h');
+    await expect(preview).toContainText('来源：cloud-pull/merge-result');
+    await expect(preview).toContainText('记录 2');
+    await expect(preview).toContainText('待办 2（未完成 1 / 已完成 1）');
+    await expect(preview).toContainText('习惯 1');
+    await expect(preview).toContainText('打卡 2');
+    await expect(preview).toContainText('目标 1');
+    await expect(preview).toContainText('素材 1');
+    await expect(preview).toContainText('身材 1');
+    await expect(preview).toContainText('训练计划 1');
+    await expect(preview).toContainText('训练日志 1');
+    await expect(preview).toContainText('动作库 1');
+    await expect(preview).toContainText('2026-07-30 · 日记 · 最近记录');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('sidebar empty snapshot state explains automatic backups', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/dashboard');
