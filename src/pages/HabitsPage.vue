@@ -49,8 +49,9 @@ const todayItems = computed(() => habits.todayHabits.map(habit => ({
   count: habits.getCheckinCount(habit.id),
   target: habits.targetCount(habit),
 })));
+const activeHabitDate = computed(() => activeTab.value === 'backfill' ? (makeupDate.value || getTodayStr()) : getTodayStr());
 const activeHabitItems = computed(() => {
-  const date = activeTab.value === 'backfill' ? (makeupDate.value || getTodayStr()) : getTodayStr();
+  const date = activeHabitDate.value;
   const source = activeTab.value === 'backfill'
     ? habits.habits.filter(habit => habits.isHabitDueOnDate(habit, date))
     : habits.todayHabits;
@@ -303,6 +304,44 @@ const ruleLabels: Record<string, string> = {
   'monthly-count': '每月次数',
   interval: '间隔天数',
 };
+
+function habitRuleText(habit: Record<string, any>) {
+  const rule = String(habit.rule || 'daily');
+  if (rule === 'weekly-count') return `每周${habit.count || 0}次`;
+  if (rule === 'monthly-count') return `每月${habit.count || 0}次`;
+  if (rule === 'interval') return `每${habit.count || 0}天`;
+  return ruleLabels[rule] || '自定义';
+}
+
+function latestCheckinFor(habitId: string, date: string) {
+  const checkins = habits.getCheckins(habitId, date);
+  return checkins[checkins.length - 1] || null;
+}
+
+function checkinTimeText(habitId: string, date: string) {
+  const latest = latestCheckinFor(habitId, date) as Record<string, any> | null;
+  if (!latest) return '未记录';
+  return String(latest.time || latest.checkinAt || latest.createdAt || '').slice(11, 16) || '已记录';
+}
+
+function checkinNoteText(habitId: string, date: string) {
+  const latest = latestCheckinFor(habitId, date) as Record<string, any> | null;
+  return String(latest?.note || '').trim();
+}
+
+function rewardText(habit: Record<string, any>) {
+  const currency = String(habit.rewardCurrency || '金币');
+  const min = Math.max(0, Number(habit.rewardMin ?? habit.rewardPoints ?? 0) || 0);
+  const max = Math.max(min, Number(habit.rewardMax ?? habit.rewardPoints ?? min) || min);
+  if (Boolean(habit.randomReward) && (min > 0 || max > 0)) return `+${min}-${max} ${currency}`;
+  const points = Math.max(0, Number(habit.rewardPoints || 0) || 0);
+  return points > 0 ? `+${points} ${currency}` : '';
+}
+
+function penaltyText(habit: Record<string, any>) {
+  const points = Math.max(0, Number(habit.penaltyPoints || 0) || 0);
+  return points > 0 ? `漏打 -${points}` : '';
+}
 const milestoneDays = [7, 15, 21, 30, 90, 180, 365];
 
 function milestoneDefaults() {
@@ -871,10 +910,17 @@ watch(focusedHabitId, value => {
                 <div class="habit-quick-title">{{ item.habit.name }}</div>
                 <span class="habit-quick-tag">{{ item.habit.tag || '习惯' }}</span>
                 <span class="habit-quick-status" :class="item.count >= item.target ? 'is-done' : item.count ? 'is-active' : 'is-pending'">
-                  {{ item.count >= item.target ? '已完成' : item.count ? '进行中' : '待打卡' }}
+                  {{ item.count >= item.target ? '已达标' : item.count ? `进行中 ${item.count}/${item.target}` : '待开始' }}
                 </span>
               </div>
-              <div class="habit-quick-meta"><span>{{ item.count }}/{{ item.target }} 次</span></div>
+              <div class="habit-quick-meta">
+                <span>{{ habitRuleText(item.habit) }}</span>
+                <span>{{ item.count }}/{{ item.target }} 次</span>
+                <span>{{ checkinTimeText(item.habit.id, activeHabitDate) }}</span>
+                <span v-if="rewardText(item.habit)" class="is-points">{{ rewardText(item.habit) }}</span>
+                <span v-if="penaltyText(item.habit)" class="is-penalty">{{ penaltyText(item.habit) }}</span>
+              </div>
+              <div v-if="checkinNoteText(item.habit.id, activeHabitDate)" class="habit-quick-note-inline">备注：{{ checkinNoteText(item.habit.id, activeHabitDate) }}</div>
             </div>
             <div class="habit-quick-actions compact">
               <button class="habit-quick-btn primary" type="button" :disabled="item.target === 1 && item.count > 0" @click="checkin(item.habit.id)">

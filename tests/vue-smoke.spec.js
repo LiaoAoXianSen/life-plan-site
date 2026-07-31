@@ -1735,6 +1735,29 @@ test('habit backfill list follows the selected date schedule', async ({ page }) 
     await expect(page.locator('.habit-quick-card').filter({ hasText: '仅昨日执行' })).toHaveCount(0);
 });
 
+test('habit action cards expose legacy rule reward timing and note metadata', async ({ page }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData({
+        habits: [{
+            id: 'habit-card-metadata', name: '晨间阅读', rule: 'daily', timesPerDay: 2,
+            rewardPoints: 5, rewardCurrency: '金币', penaltyPoints: 2, startDate: '2026-01-01',
+        }],
+        checkins: [{
+            id: 'checkin-card-metadata', habitId: 'habit-card-metadata', date: today,
+            time: '08:15', checkinAt: `${today}T08:15:00`, createdAt: `${today}T08:15:00`, note: '读完一章',
+        }],
+    }));
+
+    await page.goto('/#/habits');
+    const card = page.locator('.habit-quick-card').filter({ hasText: '晨间阅读' });
+    await expect(card).toContainText('每天');
+    await expect(card).toContainText('进行中 1/2');
+    await expect(card).toContainText('08:15');
+    await expect(card).toContainText('+5 金币');
+    await expect(card).toContainText('漏打 -2');
+    await expect(card).toContainText('备注：读完一章');
+});
+
 test('habit base edit and delete preserve legacy management contracts', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({
