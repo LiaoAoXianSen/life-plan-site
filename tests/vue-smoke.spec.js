@@ -3179,6 +3179,21 @@ test('idea filters deep-link to one Records editor and persist all legacy idea f
     });
 });
 
+test('ideas keep legacy creation and record-time ordering', async ({ page }) => {
+    const source = emptyData({
+        records: [
+            { id: 'idea-old-updated', type: '灵感碎片', title: '旧创建后更新灵感', content: '旧创建时间应决定排序', startDate: '2026-07-01', endDate: '2026-07-01', createdAt: '2026-07-01T08:00:00', updatedAt: '2026-07-30T08:00:00', ideaStatus: '实践中', ideaTags: [], ideaConclusion: '已记录', todoIds: [] },
+            { id: 'idea-new-created', type: '灵感碎片', title: '新创建灵感', content: '新创建时间', startDate: '2026-07-20', endDate: '2026-07-20', createdAt: '2026-07-20T08:00:00', updatedAt: '2026-07-20T08:00:00', ideaStatus: '实践中', ideaTags: [], ideaConclusion: '已记录', todoIds: [] },
+            { id: 'idea-record-time', type: '灵感碎片', title: '记录时间灵感', content: '记录时间参与排序', startDate: '2026-07-25', endDate: '2026-07-25', recordTime: '07:30', createdAt: '2026-07-24T08:00:00', updatedAt: '2026-07-26T08:00:00', ideaStatus: '实践中', ideaTags: [], ideaConclusion: '已记录', todoIds: [] },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/ideas');
+
+    const titles = await page.locator('.idea-card h3').allTextContents();
+    expect(titles).toEqual(['记录时间灵感', '新创建灵感', '旧创建后更新灵感']);
+});
+
 test('idea conversion opens an editable pre-create draft then links only after save', async ({ page }) => {
     const source = emptyData({
         records: [{
