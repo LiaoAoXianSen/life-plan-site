@@ -380,6 +380,27 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     expect(persisted.mirror).toBeNull();
 });
 
+test('dashboard command center restores the legacy fitness card', async ({ page }) => {
+    const today = (() => {
+        const date = new Date();
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    })();
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData({
+        bodyMetrics: [{ id: 'dashboard-metric', date: today, weight: 70, createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` }],
+        fitnessPlans: [{ id: 'dashboard-plan', name: '今日力量计划', status: 'active', exercises: [{ name: '深蹲', sets: [{ weight: 80, reps: 5 }] }] }],
+        fitnessWorkouts: [{ id: 'dashboard-workout', date: today, status: 'done', title: '力量训练', exercises: [], createdAt: `${today}T09:00:00`, updatedAt: `${today}T09:00:00` }],
+    }));
+
+    await page.goto('/#/dashboard');
+    const fitnessCard = page.locator('.command-card-fitness');
+    await expect(fitnessCard).toBeVisible();
+    await expect(fitnessCard).toContainText('运动健身');
+    await expect(fitnessCard).toContainText('70 kg');
+    await expect(fitnessCard).toContainText('今日力量计划');
+    await expect(fitnessCard).toContainText('近30天训练');
+    await expect(fitnessCard.getByRole('button', { name: '按计划开练' })).toBeVisible();
+});
+
 test('dashboard quick writes plan today execute once toggle and rebuild todo mirror', async ({ page }) => {
     const today = (() => {
         const date = new Date();

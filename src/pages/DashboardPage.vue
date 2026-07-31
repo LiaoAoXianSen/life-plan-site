@@ -154,6 +154,21 @@ function quickSessionFromDashboard(todoId: string) {
   }
 }
 
+function startFitnessSuggestion() {
+  const planId = String(fitnessSuggestion.value?.id || '');
+  if (!planId) {
+    void router.push('/fitness');
+    return;
+  }
+  try {
+    fitnessStore.startFromPlan(planId);
+    announce(`已开始：${fitnessSuggestion.value?.name || '训练计划'}`);
+    void router.push('/fitness');
+  } catch (error) {
+    announce(error instanceof Error ? error.message : String(error), 'warning');
+  }
+}
+
 function openHabit(habitId: string) {
   void router.push({ path: '/habits', query: { habit: habitId } });
 }
@@ -229,6 +244,14 @@ const fitnessOverview = computed(() => fitnessStore.services.fitness.buildFitnes
 }) as Record<string, any>);
 const fitnessWorkoutCount = computed(() => Number(fitnessOverview.value.workoutSummary?.doneCount || 0));
 const fitnessStreak = computed(() => Number(fitnessOverview.value.workoutSummary?.streak || 0));
+const fitnessWeightText = computed(() => fitnessStore.services.fitness.formatMetricValue(fitnessOverview.value.latestMetric?.weight, 'kg'));
+const fitnessPlanCount = computed(() => Number(fitnessOverview.value.activePlanCount || 0));
+const fitnessSuggestion = computed(() => fitnessOverview.value.suggestion?.plan || null);
+const fitnessLatestText = computed(() => {
+  const latest = fitnessOverview.value.latestWorkout;
+  if (!latest) return '暂无训练记录';
+  return `${formatDate(latest.date)} · ${fitnessStore.services.fitness.getWorkoutTitle(latest)}`;
+});
 const activeGoals = computed(() => lifePlan.data.goals.filter(goal => goal.status === '进行中'));
 const weekStart = computed(() => {
   const date = new Date(`${today}T12:00:00`);
@@ -335,6 +358,31 @@ const timelineGroups = computed(() => {
           </button>
         </div>
         <div v-else class="empty-state compact-empty">暂时没有超期或高优先级待办</div>
+      </article>
+
+      <article class="command-card command-card-fitness">
+        <div class="command-card-head">
+          <div>
+            <div class="section-title">运动健身</div>
+            <p>把身材变化和训练节奏放到今天的视野里。</p>
+          </div>
+          <button class="btn btn-secondary todo-mini-btn" type="button" @click="startFitnessSuggestion">{{ fitnessSuggestion ? '按计划开练' : '去健身页' }}</button>
+        </div>
+        <div class="command-metric-grid">
+          <button class="command-metric" type="button" @click="router.push('/fitness')"><strong>{{ fitnessWeightText }}</strong><span>当前体重</span></button>
+          <button class="command-metric" type="button" @click="router.push('/fitness')"><strong>{{ fitnessWorkoutCount }}</strong><span>近30天训练</span></button>
+          <button class="command-metric" type="button" @click="router.push('/fitness')"><strong>{{ fitnessStreak }}</strong><span>连续训练天</span></button>
+        </div>
+        <div class="command-list">
+          <button class="command-row" type="button" @click="router.push('/fitness')">
+            <span>{{ fitnessLatestText }}</span>
+            <strong>计划 {{ fitnessPlanCount }}</strong>
+          </button>
+          <button v-if="fitnessSuggestion" class="command-row" type="button" @click="startFitnessSuggestion">
+            <span>今日建议：{{ fitnessSuggestion.name }}</span>
+            <strong>开练</strong>
+          </button>
+        </div>
       </article>
 
       <article class="command-card">
