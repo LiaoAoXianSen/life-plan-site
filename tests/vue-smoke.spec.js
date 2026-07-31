@@ -949,6 +949,30 @@ test('wheel management landing keeps workspace navigation focused', async ({ pag
     await expect(page.locator('#wheel-library-panel')).toBeInViewport();
 });
 
+test('wheel management list filters modes and exposes card actions', async ({ page }) => {
+    const source = emptyData({
+        wheels: [
+            { id: 'wheel-list-normal', name: '普通列表盘', mode: 'normal', items: [{ id: 'list-normal-item', name: '普通项', note: '', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'wheel-list-tag', name: '标签列表盘', mode: 'tag', tagIds: [], items: [], createdAt: '2026-07-29T09:00:00', updatedAt: '2026-07-29T09:00:00' },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    const list = page.locator('.wheel-list-management');
+    await expect(list.locator('.wheel-list-card')).toHaveCount(2);
+    await list.getByRole('button', { name: '标签', exact: true }).click();
+    await expect(list.locator('.wheel-list-card')).toHaveCount(1);
+    await list.getByRole('button', { name: '全部', exact: true }).click();
+    const normalCard = list.locator('.wheel-list-card').filter({ hasText: '普通列表盘' });
+    page.once('dialog', dialog => dialog.accept('重命名后的普通盘'));
+    await normalCard.getByRole('button', { name: '重命名' }).click();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).wheels.find(wheel => wheel.id === 'wheel-list-normal').name)).toBe('重命名后的普通盘');
+    await list.locator('.wheel-list-card').filter({ hasText: '重命名后的普通盘' }).getByRole('button', { name: '打开' }).click();
+    await expect(page.locator('.wheel-stage-title')).toContainText('重命名后的普通盘');
+});
+
 test('wheel empty state keeps a no-write canvas stage and create entry', async ({ page }) => {
     const source = emptyData();
     await page.addInitScript(data => {
