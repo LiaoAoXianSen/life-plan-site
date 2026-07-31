@@ -167,8 +167,7 @@ const calendarRange = computed(() => view.value === 'day' ? [cursor.value, curso
 const calendarItems = computed(() => buildRecordViewItems(calendarRange.value[0], calendarRange.value[1], true));
 const viewTitle = computed(() => {
   if (view.value === 'list') {
-    if (listRange.value === 'all') return '全部历史';
-    return `最近${listRange.value}天`;
+    return listRange.value === 'all' ? '全部历史' : '全部记录';
   }
   if (view.value === 'day') return formatDisplayDate(cursor.value);
   if (view.value === 'week') return `${formatDisplayDate(calendarRange.value[0])} ~ ${formatDisplayDate(calendarRange.value[1])}`;

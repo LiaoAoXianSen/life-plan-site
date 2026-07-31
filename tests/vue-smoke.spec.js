@@ -2384,6 +2384,7 @@ test('records legacy filters and operation events stay read-only', async ({ page
     const storedBefore = await page.evaluate(() => localStorage.getItem('lifePlanData'));
 
     await expect(recordsPage.getByLabel('记录日期范围')).toHaveValue('30');
+    await expect(recordsPage.locator('#record-view-title')).toHaveText('全部记录');
     await expect(results).toContainText('三十天边界记录');
     await expect(results).not.toContainText('历史范围外记录');
     await expect(results).not.toContainText('未来范围外记录');
@@ -2440,6 +2441,7 @@ test('records legacy filters and operation events stay read-only', async ({ page
     await expect(page.locator('.habit-quick-card.is-target')).toContainText('聚合阅读习惯');
     await page.goto('/#/records');
     await recordsPage.getByLabel('记录日期范围').selectOption('all');
+    await expect(recordsPage.locator('#record-view-title')).toHaveText('全部历史');
     await expect(results).toContainText('历史范围外记录');
     await expect(results).toContainText('未来范围外记录');
     await expect(results).toContainText('未设置日期记录');
