@@ -76,6 +76,29 @@ test('todo writes main data and the compatible todo mirror', async ({ page }) =>
     expect(stored.mirror.todos[0].text).toBe('Vue 待办');
 });
 
+test('todo create form exposes legacy date range presets', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/todos');
+    await page.getByRole('button', { name: /新建.*待办/ }).click();
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+    const create = page.locator('#todo-create-panel');
+    await create.getByLabel('任务').fill('带计划日期的 Vue 待办');
+    await create.getByRole('button', { name: '明天', exact: true }).click();
+    await expect(create.getByLabel('计划开始')).toHaveValue(tomorrowDate);
+    await expect(create.getByLabel('计划结束')).toHaveValue(tomorrowDate);
+    await expect(create.getByLabel('截止日期')).toHaveValue(tomorrowDate);
+    await create.getByRole('button', { name: '保存待办' }).click();
+
+    const stored = await page.evaluate(() => ({ data: JSON.parse(localStorage.getItem('lifePlanData')), mirror: JSON.parse(localStorage.getItem('todoAppData')) }));
+    expect(stored.data.todos[0]).toMatchObject({
+        text: '带计划日期的 Vue 待办', planStartDate: tomorrowDate, planEndDate: tomorrowDate, dueDate: tomorrowDate,
+    });
+    expect(stored.mirror.todos[0]).toMatchObject({ planStartDate: tomorrowDate, planEndDate: tomorrowDate, dueDate: tomorrowDate });
+});
+
 test('todo detail preserves subtasks sessions relationships tombstones and mirror contracts', async ({ page }) => {
     const source = emptyData({
         records: [

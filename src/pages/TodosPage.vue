@@ -251,25 +251,35 @@ function addSubTodo() {
   newSubTodo.value = '';
 }
 
-function applyDatePreset(preset: 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'no-date') {
+type TodoDateTarget = Pick<Todo, 'planStartDate' | 'planEndDate' | 'dueDate'>;
+
+function applyDatePresetTo(target: TodoDateTarget, preset: 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'no-date') {
   const today = getTodayStr();
   if (preset === 'no-date') {
-    Object.assign(detailForm, { planStartDate: '', planEndDate: '', dueDate: '' });
+    Object.assign(target, { planStartDate: '', planEndDate: '', dueDate: '' });
     return;
   }
   if (preset === 'today' || preset === 'tomorrow') {
     const date = preset === 'today' ? today : addDays(today, 1);
-    Object.assign(detailForm, { planStartDate: date, planEndDate: date, dueDate: date });
+    Object.assign(target, { planStartDate: date, planEndDate: date, dueDate: date });
     return;
   }
   if (preset === 'this-week') {
     const end = addDays(getWeekStart(today), 6);
-    Object.assign(detailForm, { planStartDate: today, planEndDate: end, dueDate: end });
+    Object.assign(target, { planStartDate: today, planEndDate: end, dueDate: end });
     return;
   }
   const start = addDays(getWeekStart(today), 7);
   const end = addDays(start, 6);
-  Object.assign(detailForm, { planStartDate: start, planEndDate: end, dueDate: end });
+  Object.assign(target, { planStartDate: start, planEndDate: end, dueDate: end });
+}
+
+function applyDatePreset(preset: 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'no-date') {
+  applyDatePresetTo(detailForm, preset);
+}
+
+function applyCreateDatePreset(preset: 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'no-date') {
+  applyDatePresetTo(form, preset);
 }
 
 function toggleSubTodo(index: number, done: boolean) {
@@ -374,8 +384,17 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
       <div class="form-row">
         <div class="form-group"><label for="todo-create-text">任务</label><input id="todo-create-text" v-model="form.text" required placeholder="下一步要推进什么？" /></div>
         <div class="form-group"><label for="todo-create-group">分组</label><input id="todo-create-group" v-model="form.group" /></div>
+        <div class="form-group"><label for="todo-create-plan-start">计划开始</label><input id="todo-create-plan-start" v-model="form.planStartDate" type="date" /></div>
+        <div class="form-group"><label for="todo-create-plan-end">计划结束</label><input id="todo-create-plan-end" v-model="form.planEndDate" type="date" /></div>
         <div class="form-group"><label for="todo-create-date">截止日期</label><input id="todo-create-date" v-model="form.dueDate" type="date" /></div>
         <div class="form-group"><label for="todo-create-urgency">紧急度</label><select id="todo-create-urgency" v-model="form.urgency"><option value="urgent">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></div>
+      </div>
+      <div class="todo-date-presets" aria-label="新建待办日期预设">
+        <button type="button" @click="applyCreateDatePreset('today')">今天</button>
+        <button type="button" @click="applyCreateDatePreset('tomorrow')">明天</button>
+        <button type="button" @click="applyCreateDatePreset('this-week')">本周</button>
+        <button type="button" @click="applyCreateDatePreset('next-week')">下周</button>
+        <button type="button" @click="applyCreateDatePreset('no-date')">无日期</button>
       </div>
       <div class="form-group"><label for="todo-create-note">备注</label><input id="todo-create-note" v-model="form.note" placeholder="可选备注" /></div>
       <div class="todo-create-actions">
