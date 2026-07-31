@@ -433,6 +433,16 @@ test('sidebar empty snapshot state explains automatic backups', async ({ page })
     await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。');
 });
 
+test('sidebar reads the legacy wheel sync state key', async ({ page }) => {
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://dav.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanWheelSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'wheel-hash' }));
+    }, emptyData());
+    await page.goto('/#/dashboard');
+    await expect(page.locator('.sync-status-inline').filter({ hasText: '转盘：' })).toHaveText('转盘：已同步');
+});
+
 test('dashboard quick writes plan today execute once toggle and rebuild todo mirror', async ({ page }) => {
     const today = (() => {
         const date = new Date();
