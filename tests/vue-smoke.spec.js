@@ -425,6 +425,13 @@ test('sidebar snapshot list keeps the legacy timestamp format', async ({ page })
     await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('2026年7月28日 08:09:10');
 });
 
+test('sidebar empty snapshot state explains automatic backups', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /本地快照/ }).click();
+    await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。');
+});
+
 test('dashboard quick writes plan today execute once toggle and rebuild todo mirror', async ({ page }) => {
     const today = (() => {
         const date = new Date();
