@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { formatDate, getTodayStr } from '../services/legacyServices';
+import { getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { HabitRule } from '../stores/habitsStore';
@@ -511,6 +511,13 @@ function openAnalysisCheckin(checkin: { habitId: string; date: string; note?: st
   draft.note = String(checkin.note || '');
 }
 
+function formatAnalysisDateTime(value: string, includeSeconds = false) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}${includeSeconds ? `:${pad(date.getSeconds())}` : ''}`;
+}
+
 function noteDraft(checkin: { id: string; note?: string }) {
   if (!(checkin.id in checkinNoteDrafts)) checkinNoteDrafts[checkin.id] = checkin.note || '';
   return checkinNoteDrafts[checkin.id];
@@ -782,7 +789,7 @@ watch(focusedHabitId, value => {
             <article><strong>{{ annualStats.maxStreak }}</strong><span>最长连续天数</span></article>
             <article><strong>{{ annualStats.monthRate }}%</strong><span>本月完成率</span></article>
             <article><strong>{{ annualStats.yearRate }}%</strong><span>{{ analysisYear }} 年完成率</span></article>
-            <article><strong class="habit-annual-last-operation">{{ annualStats.lastOperation ? `${formatDate(annualStats.lastOperation)} ${annualStats.lastOperation.slice(11, 19)}` : '暂无' }}</strong><span>最后操作时间</span></article>
+            <article><strong class="habit-annual-last-operation">{{ annualStats.lastOperation ? formatAnalysisDateTime(annualStats.lastOperation, true) : '暂无' }}</strong><span>最后操作时间</span></article>
           </div>
           <div class="habit-history-panel" aria-label="最近打卡备注">
             <div class="section-title-row compact">
@@ -794,7 +801,7 @@ watch(focusedHabitId, value => {
             <div v-if="selectedHabitCheckins.length" class="habit-history-list">
               <div v-for="checkin in selectedHabitCheckins" :key="checkin.id" class="habit-history-item" :class="{ 'has-note': String(checkin.note || '').trim() }">
                 <div class="habit-history-main">
-                  <strong>{{ formatDate(checkin.date) }}{{ checkin.timestamp.slice(11, 16) ? ` ${checkin.timestamp.slice(11, 16)}` : '' }}</strong>
+                  <strong>{{ formatAnalysisDateTime(checkin.timestamp) }}</strong>
                   <span>{{ String(checkin.note || '').trim() || '暂无备注' }}</span>
                 </div>
                 <button class="btn btn-secondary habit-history-action" type="button" @click="openAnalysisCheckin(checkin)">{{ String(checkin.note || '').trim() ? '编辑' : '补备注' }}</button>
