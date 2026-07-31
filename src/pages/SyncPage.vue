@@ -30,6 +30,7 @@ const config = reactive(getMainSyncConfig());
 const status = ref('');
 const autoStatus = ref('');
 const busy = ref(false);
+const importCollections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'exerciseLibrary', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
 
 bindMainCloudSync({
   getData: () => store.data,
@@ -82,6 +83,13 @@ function rememberRemoteVersion(remote: RemotePayload | null, state: SyncState) {
 
 function isConditionalWriteConflict(error: unknown) {
   return typeof error === 'object' && error !== null && (error as { status?: number }).status === 412;
+}
+
+function getImportSummary(value: unknown) {
+  const imported = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return importCollections
+    .map(key => `${key}:${Array.isArray(imported[key]) ? imported[key].length : 0}`)
+    .join(' · ');
 }
 
 function createMergeSnapshots(reason: string, remote: RemotePayload, actionPrefix: string) {
@@ -252,7 +260,11 @@ async function importFile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (!file) return;
   try {
-    store.importData(JSON.parse(await file.text()));
+    const imported = JSON.parse(await file.text());
+    const summary = getImportSummary(imported);
+    const confirmed = window.confirm(`导入会安全合并，不会用旧内容静默覆盖当前较新的日记。\n\n如果同一篇日记两边都改过，会保留主版本并创建冲突副本。\n\n备份内容：${summary}\n\n继续导入吗？`);
+    if (!confirmed) return;
+    store.importData(imported);
     status.value = '导入已按合并规则完成，并建立前后快照。';
   } catch (error) {
     status.value = error instanceof Error ? error.message : String(error);

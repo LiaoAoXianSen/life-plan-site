@@ -1355,6 +1355,12 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     }, { localData: local });
 
     await page.goto('/#/sync');
+    page.once('dialog', async dialog => {
+        expect(dialog.type()).toBe('confirm');
+        expect(dialog.message()).toContain('records:2');
+        expect(dialog.message()).toContain('todos:1');
+        await dialog.accept();
+    });
     await page.getByLabel('导入并合并').setInputFiles({
         name: 'import-contract.json',
         mimeType: 'application/json',
@@ -1395,6 +1401,32 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     expect(download.suggestedFilename()).toMatch(/^life-plan-backup-.*\.json$/);
     const afterExport = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
     expect(afterExport.map(snapshot => snapshot.reason)).toContain('手动导出备份');
+});
+
+test('main import confirmation cancellation keeps data and snapshots unchanged', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'import-cancel-local', type: '日记', title: '导入前记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
+    });
+    const imported = emptyData({
+        records: [{ id: 'import-cancel-incoming', type: '日记', title: '不应导入记录', content: '', startDate: '2026-07-29', endDate: '2026-07-29', todoIds: [] }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/sync');
+
+    const [dialog] = await Promise.all([
+        page.waitForEvent('dialog'),
+        page.getByLabel('导入并合并').setInputFiles({
+            name: 'import-cancel.json',
+            mimeType: 'application/json',
+            buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
+        }),
+    ]);
+    expect(dialog.type()).toBe('confirm');
+    expect(dialog.message()).toContain('records:1');
+    await dialog.dismiss();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'))).toBeNull();
 });
 
 test('main manual pull keeps dirty state when the merged result differs from cloud', async ({ page }) => {
