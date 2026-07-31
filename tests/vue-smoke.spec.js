@@ -2058,6 +2058,8 @@ test('habit wishes create and archive preserve reward mirror contract', async ({
     await page.goto('/#/habits');
     await page.locator('.habit-center-tabs').getByRole('tab', { name: '钱包' }).click();
     const wallet = page.locator('.habit-wallet-panel');
+    await expect(wallet.locator('.habit-reward-list')).toContainText('还没有心愿，先添加一个能让你真的想兑换的奖励');
+    await expect(wallet.locator('.habit-ledger-panel')).toContainText('暂无积分流水');
     await wallet.getByLabel('心愿名称').fill('买一本好书');
     await wallet.getByLabel('花费').fill('12');
     await wallet.getByLabel('币种').fill('钻石');
