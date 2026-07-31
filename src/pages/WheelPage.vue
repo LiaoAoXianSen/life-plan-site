@@ -637,17 +637,19 @@ function importJson(event: Event) {
 </template>
 
 <style scoped>
-.wheel-focus-shell{margin-bottom:16px;padding:18px 20px 22px}.wheel-empty-shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.9fr);gap:18px;align-items:center}.wheel-empty-copy{display:grid;gap:12px;justify-items:start}.wheel-canvas-wrap.empty{cursor:default}
+.wheel-focus-shell{margin-bottom:16px;padding:18px 20px 22px}.wheel-empty-shell{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}.wheel-empty-copy{display:grid;gap:12px;justify-items:center;max-width:620px;width:100%;margin:0 auto;text-align:center}.wheel-canvas-wrap.empty{cursor:default}
 .wheel-focus-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
 .wheel-focus-toolbar .wheel-selector{margin:0;min-width:180px}
 .wheel-focus-toolbar .wheel-selector select{min-height:36px}
-.wheel-focus-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.9fr);gap:18px;align-items:center}
-.wheel-focus-copy{display:grid;gap:12px;min-width:0;justify-items:start;text-align:left}
-.wheel-focus-canvas{display:grid;justify-items:center;min-width:0}
+.wheel-focus-stage{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
+.wheel-focus-copy{position:relative;z-index:2;display:grid;gap:10px;min-width:0;width:100%;max-width:620px;margin:0 auto;justify-items:center;text-align:center}
+.wheel-focus-canvas{position:relative;z-index:1;display:grid;justify-items:center;min-width:0;width:100%;padding-top:2px}
 .wheel-mode-badge{display:inline-flex;padding:4px 10px;border-radius:999px;background:#fff4ea;color:#b15c18;font-size:.78rem;font-weight:800}
-.wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;width:min(100%,620px);padding:9px;border:1px solid rgba(42,75,56,.1);border-radius:14px;background:rgba(247,250,248,.9);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.wheel-focus-actions .wheel-spin{flex:1 1 260px}
+.wheel-focus-actions .btn-secondary{min-width:92px}
 .wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
-.wheel-result.focus{align-items:flex-start;text-align:left;min-height:auto;padding:10px 0 0}
+.wheel-result.focus{align-items:center;text-align:center;min-height:auto;padding:4px 0 0}
 .wheel-management-block{margin-top:8px}.wheel-management-landing{margin:0 0 14px;padding:14px 16px;border:1px solid rgba(42,75,56,.12);border-radius:10px;background:#fbfdfb}.wheel-management-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.wheel-management-nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.wheel-management-nav .btn{min-height:34px}.wheel-management-landing .wheel-management-summary{margin-top:12px}
 .wheel-mode-pills{display:flex;flex-wrap:wrap;gap:8px}
 .wheel-mode-pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;border:1px solid transparent;background:#eef4f0;color:#5d7266;font-size:.82rem;font-weight:700;cursor:pointer}
