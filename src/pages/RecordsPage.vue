@@ -157,6 +157,12 @@ const listGroups = computed(() => {
   }, {});
   return Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(date => ({ date, items: sortScheduleItems(groups[date], dayOrder.value) }));
 });
+const hasRecordResultFilter = computed(() => Boolean(keyword.value.trim())
+  || typeFilter.value !== 'all'
+  || hasIdeaOnlyFilter.value);
+const recordEmptyState = computed(() => hasRecordResultFilter.value
+  ? '没有匹配的记录，换个关键词试试'
+  : '暂无记录');
 const calendarRange = computed(() => view.value === 'day' ? [cursor.value, cursor.value] : view.value === 'week' ? (() => { const start = getWeekStart(cursor.value); return [start, addDays(start, 6)] as const; })() : [getWeekStart(getMonthStart(cursor.value)), addDays(getMonthStart(cursor.value), 41)] as const);
 const calendarItems = computed(() => buildRecordViewItems(calendarRange.value[0], calendarRange.value[1], true));
 const viewTitle = computed(() => {
@@ -906,7 +912,7 @@ onBeforeUnmount(() => {
             </article>
           </section>
         </div>
-        <div v-else class="empty-state">暂无匹配记录。</div>
+        <div v-else class="empty-state">{{ recordEmptyState }}</div>
       </template>
       <CalendarViews v-else :mode="view" :cursor="cursor" :items="calendarItems" :order="dayOrder" @select="selectCalendarItem" />
     </div>

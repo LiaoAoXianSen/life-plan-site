@@ -2324,6 +2324,22 @@ test('records day view maintains a fixed-width timed event with a complete hover
     await expect(event).toHaveCSS('width', '160px');
 });
 
+test('records empty state distinguishes no filters from filtered no-match results', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/records');
+    const recordsPage = page.locator('#page-records');
+    const results = page.locator('#all-records');
+
+    await expect(results).toHaveText('暂无记录');
+    await recordsPage.getByLabel('搜索记录').fill('不存在的记录');
+    await expect(results).toHaveText('没有匹配的记录，换个关键词试试');
+    await recordsPage.getByLabel('搜索记录').fill('');
+    await recordsPage.getByLabel('记录类型筛选').selectOption('日记');
+    await expect(results).toHaveText('没有匹配的记录，换个关键词试试');
+    await recordsPage.getByLabel('记录类型筛选').selectOption('all');
+    await expect(results).toHaveText('暂无记录');
+});
+
 test('records legacy filters and operation events stay read-only', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();
