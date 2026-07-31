@@ -43,6 +43,9 @@ const modeWheels = computed(() => {
 const selectedOptions = computed(() => selectedWheel.value ? wheelStore.candidates(selectedWheel.value, stageTag.value?.id || '') : []);
 const availableTags = computed(() => selectedWheel.value?.mode === 'tag' ? wheelStore.candidateTags(selectedWheel.value) : []);
 const currentResult = computed(() => wheelStore.history.find(item => item.id === resultId.value));
+const sortedHistory = computed(() => wheelStore.history
+  .slice()
+  .sort((a, b) => String(b.createdAt || b.updatedAt || '').localeCompare(String(a.createdAt || a.updatedAt || ''))));
 const isTagSecondStage = computed(() => Boolean(selectedWheel.value?.mode === 'tag' && stageTag.value));
 const segmentColors = ['#bcdcc9', '#d7e5f5', '#f4d5b7', '#e3d6f4', '#d1e6db', '#f3dfad'];
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -52,6 +55,7 @@ const displayEntries = computed(() => {
 });
 
 const wheelForm = reactive<{ id: string; name: string; mode: WheelMode; tagIds: string[]; itemsText: string }>({ id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' });
+const wheelCreateItems = ref<Array<{ name: string; weight: number }>>([{ name: '', weight: 1 }]);
 const optionForm = reactive({ id: '', name: '', weight: 1, enabled: true });
 const optionBatchText = ref('');
 const copyLibraryTagFilter = ref('');
@@ -290,13 +294,19 @@ function drawCenter(ctx: CanvasRenderingContext2D, cx: number, cy: number, label
 function say(message: string) { notice.value = message; }
 function handle(action: () => void, success = '') { try { action(); if (success) say(success); } catch (error) { say(error instanceof Error ? error.message : String(error)); } }
 function confirmAction(message: string, action: () => void, success = '') { if (window.confirm(message)) handle(action, success); }
+function formatStoredDateTime(value: unknown) {
+  const raw = String(value || '');
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return raw.replace('T', ' ');
+  return `${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${match[4]}:${match[5]}:${match[6] || '00'}`;
+}
 function clearCurrentResult() {
   resultId.value = '';
   say('已保留这条抽取记录');
 }
 function itemTagIds(item: WheelItem) { return Array.isArray(item.tagIds) ? item.tagIds as string[] : []; }
 function libraryTagNames(item: WheelItem) { return itemTagIds(item).map(id => wheelStore.tags.find(tag => tag.id === id)?.name).filter(Boolean).join('、') || '未分类'; }
-function resetWheelForm() { Object.assign(wheelForm, { id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' }); }
+function resetWheelForm() { Object.assign(wheelForm, { id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' }); wheelCreateItems.value = [{ name: '', weight: 1 }]; }
 function editWheel() {
   const wheel = selectedWheel.value;
   if (!wheel) return;
@@ -304,6 +314,7 @@ function editWheel() {
   activeManagementPanel.value = 'edit';
   menuOpen.value = false;
   Object.assign(wheelForm, { id: wheel.id, name: wheel.name, mode: wheel.mode, tagIds: [...(wheel.tagIds || [])], itemsText: wheel.items.map(item => `${item.name},${item.weight}`).join('\n') });
+  wheelCreateItems.value = wheel.items.map(item => ({ name: item.name, weight: item.weight }));
 }
 function parseItems(text: string) {
   return text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
@@ -315,7 +326,7 @@ function submitWheel() {
   handle(() => {
     if (wheelForm.id) wheelStore.updateWheel(wheelForm.id, { name: wheelForm.name, tagIds: wheelForm.tagIds });
     else {
-      const created = wheelStore.createWheel({ name: wheelForm.name, mode: wheelForm.mode, tagIds: wheelForm.tagIds, items: parseItems(wheelForm.itemsText) });
+      const created = wheelStore.createWheel({ name: wheelForm.name, mode: wheelForm.mode, tagIds: wheelForm.tagIds, items: wheelCreateItems.value.filter(item => item.name.trim()) });
       selectedId.value = created.id;
     }
     resetWheelForm();
@@ -560,6 +571,8 @@ function canvasPointerUp(event: PointerEvent) {
   }
 }
 function toggleTag(list: string[], id: string, checked: boolean) { const next = new Set(list); checked ? next.add(id) : next.delete(id); return [...next]; }
+function addWheelCreateItem() { wheelCreateItems.value.push({ name: '', weight: 1 }); }
+function removeWheelCreateItem(index: number) { if (wheelCreateItems.value.length <= 1) return; wheelCreateItems.value.splice(index, 1); }
 function setModeFilter(mode: WheelMode) {
   modeFilter.value = mode;
   const match = wheelStore.wheels.find(wheel => wheel.mode === mode);
@@ -852,8 +865,8 @@ function importJson(event: Event) {
         </article>
 
         <aside class="wheel-side-stack">
-          <form id="wheel-create-panel" class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式<select v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)"><option value="normal">普通转盘</option><option value="tag">标签转盘（两段抽取）</option></select></label></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><label>选项（每行一项；可用“名称,权重”）<textarea v-model="wheelForm.itemsText" rows="4" placeholder="阅读,2&#10;散步,1" /></label></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
-          <article id="wheel-history-panel" class="card history-card"><div class="card-title-row"><div class="card-title">抽取记录</div><div class="history-head-actions"><button v-if="wheelStore.history.length" type="button" class="link-button" @click="exportCsv">导出 CSV</button><button type="button" class="link-button" @click="exportJson">导出 JSON</button><label class="link-button import-button">恢复 JSON<input type="file" accept=".json,application/json" @change="importJson" /></label><button v-if="wheelStore.history.length" type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div></div><div v-for="entry in wheelStore.history" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ entry.createdAt }}<template v-if="entry.mode === 'tag'"> · 标签 {{ entry.tagName || '-' }}</template></span></div><span class="history-row-actions"><button v-if="!entry.convertedTodoId" type="button" class="link-button" @click="handle(() => wheelStore.convertHistoryToTodo(entry.id), '已转入今日待办')">转入待办</button><span v-else class="history-done">已转待办</span><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></span></div><p v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</p></article>
+          <form id="wheel-create-panel" class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式<select v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)"><option value="normal">普通转盘</option><option value="tag">标签转盘（两段抽取）</option></select></label></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><span class="field-label">选项</span><div class="wheel-create-items"><div v-for="(item, index) in wheelCreateItems" :key="index" class="wheel-create-item-row"><input v-model="item.name" :aria-label="`选项 ${index + 1}`" placeholder="选项名称" /><input v-model.number="item.weight" type="number" min="1" aria-label="选项权重" /><button v-if="wheelCreateItems.length > 1" class="link-button danger-text" type="button" :aria-label="`删除选项 ${index + 1}`" @click="removeWheelCreateItem(index)">删除</button></div><button class="btn btn-secondary" type="button" @click="addWheelCreateItem">添加选项</button></div></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
+          <article id="wheel-history-panel" class="card history-card"><div class="card-title-row"><div class="card-title">抽取记录</div><div class="history-head-actions"><button type="button" class="link-button" @click="exportCsv">导出 CSV</button><button type="button" class="link-button" @click="exportJson">导出 JSON</button><label class="link-button import-button">恢复 JSON<input type="file" accept=".json,application/json" @change="importJson" /></label><button type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div></div><div v-for="entry in sortedHistory" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ formatStoredDateTime(entry.createdAt) }}<template v-if="entry.mode === 'tag'"> · 标签 {{ entry.tagName || '-' }}</template></span></div><span class="history-row-actions"><button v-if="!entry.convertedTodoId" type="button" class="link-button" @click="handle(() => wheelStore.convertHistoryToTodo(entry.id), '已转入今日待办')">转入待办</button><span v-else class="history-done">已转待办</span><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></span></div><p v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</p></article>
         </aside>
       </div>
 

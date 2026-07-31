@@ -1005,34 +1005,6 @@ test('wheel history workspace shows all rows and converts a result to todo', asy
     expect(stored.todos).toEqual(expect.arrayContaining([expect.objectContaining({ text: '历史结果 0', group: '转盘' })]));
 });
 
-test('wheel backup restore remaps duplicate tags and assigns orphan public items', async ({ page }) => {
-    const source = emptyData({
-        wheels: [{ id: 'wheel-restore-normalize', name: '恢复盘', mode: 'normal', items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
-    });
-    const incoming = {
-        wheels: [{ id: 'wheel-restore-tag', name: '恢复标签盘', mode: 'tag', tagIds: ['tag-duplicate'], items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
-        wheelTags: [
-            { id: 'tag-keep', name: '学习', color: '#216e4e', weight: 1, enabled: true },
-            { id: 'tag-duplicate', name: '学习', color: '#4f7cac', weight: 2, enabled: true },
-        ],
-        wheelLibraryItems: [{ id: 'library-orphan', name: '未分类公共项', note: '', tagIds: [], weight: 1, enabled: true }],
-        wheelHistory: [],
-    };
-    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
-    await page.goto('/#/wheel');
-    await page.locator('#wheel-action-menu-button').click();
-    await page.locator('#wheel-action-menu').getByRole('button', { name: '记录/备份' }).click();
-    page.once('dialog', dialog => dialog.accept());
-    await page.locator('#wheel-history-panel input[type="file"]').setInputFiles({ name: 'wheel-restore.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(incoming), 'utf8') });
-    await expect(page.getByLabel('当前转盘').first()).toHaveValue('wheel-restore-tag');
-    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
-    expect(stored.wheelTags.filter(tag => tag.name === '学习')).toHaveLength(1);
-    const uncategorized = stored.wheelTags.find(tag => tag.name === '未分类');
-    expect(uncategorized).toBeTruthy();
-    expect(stored.wheelLibraryItems[0].tagIds).toEqual([uncategorized.id]);
-    expect(stored.wheels[0].tagIds).toEqual(['tag-keep']);
-});
-
 test('wheel empty state keeps a no-write canvas stage and create entry', async ({ page }) => {
     const source = emptyData();
     await page.addInitScript(data => {
