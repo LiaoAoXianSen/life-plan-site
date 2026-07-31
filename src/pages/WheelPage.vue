@@ -392,6 +392,46 @@ function importJson(event: Event) {
         <p class="wheel-subtitle">普通转盘、标签二段抽取、公共项库和抽取历史都在这里。</p>
       </div>
       <div class="wheel-header-actions">
+        <div v-if="!selectedWheel" class="wheel-action-menu-wrap">
+          <button
+            id="wheel-action-menu-button"
+            class="btn btn-secondary wheel-action-menu-button"
+            type="button"
+            :aria-expanded="menuOpen"
+            aria-controls="wheel-action-menu"
+            @click="toggleManageMenu"
+          >管理</button>
+          <div v-show="menuOpen" id="wheel-action-menu" class="wheel-action-menu">
+            <button type="button" @click="openManagement('list')">转盘列表</button>
+            <button type="button" @click="openManagement('create')">新建转盘</button>
+            <button type="button" @click="openManagement('edit')">修改当前盘</button>
+            <button type="button" @click="openManagement('library')">公共项库</button>
+            <button type="button" @click="openManagement('tags')">标签管理</button>
+            <button type="button" @click="openManagement('history')">记录/备份</button>
+          </div>
+        </div>
+        <button
+          v-if="showManagement"
+          class="btn btn-secondary"
+          type="button"
+          @click="collapseManagement"
+        >收起管理</button>
+      </div>
+    </header>
+
+    <p v-if="notice" class="wheel-notice" role="status">{{ notice }}</p>
+
+    <section v-if="selectedWheel" class="wheel-stage wheel-focus-shell" aria-label="转盘主舞台">
+      <div class="wheel-mode-bar wheel-focus-toolbar">
+        <div class="wheel-mode-pills segmented" role="tablist" aria-label="转盘模式">
+          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'normal' || (modeFilter === 'all' && selectedWheel.mode !== 'tag') }" @click="setModeFilter('normal')">普通转盘</button>
+          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'tag' || (modeFilter === 'all' && selectedWheel.mode === 'tag') }" @click="setModeFilter('tag')">标签转盘</button>
+        </div>
+        <label class="form-group wheel-selector compact">
+          <select id="wheel-selector" v-model="selectedId" :disabled="!modeWheels.length" aria-label="当前转盘">
+            <option v-for="wheel in modeWheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }}{{ wheel.mode === 'tag' ? ' · 标签' : '' }}</option>
+          </select>
+        </label>
         <div class="wheel-action-menu-wrap">
           <button
             id="wheel-action-menu-button"
@@ -410,50 +450,33 @@ function importJson(event: Event) {
             <button type="button" @click="openManagement('history')">记录/备份</button>
           </div>
         </div>
-        <button
-          v-if="showManagement"
-          class="btn btn-secondary"
-          type="button"
-          @click="collapseManagement"
-        >收起管理</button>
-      </div>
-    </header>
-
-    <p v-if="notice" class="wheel-notice" role="status">{{ notice }}</p>
-
-    <section v-if="selectedWheel" class="card wheel-focus-shell" aria-label="转盘主舞台">
-      <div class="wheel-focus-toolbar">
-        <div class="wheel-mode-pills segmented" role="tablist" aria-label="转盘模式">
-          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'normal' || (modeFilter === 'all' && selectedWheel.mode !== 'tag') }" @click="setModeFilter('normal')">普通转盘</button>
-          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'tag' || (modeFilter === 'all' && selectedWheel.mode === 'tag') }" @click="setModeFilter('tag')">标签转盘</button>
-        </div>
-        <label class="form-group wheel-selector compact">
-          <select v-model="selectedId" :disabled="!modeWheels.length" aria-label="当前转盘">
-            <option v-for="wheel in modeWheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }}{{ wheel.mode === 'tag' ? ' · 标签' : '' }}</option>
-          </select>
-        </label>
       </div>
 
       <div class="wheel-focus-stage">
-        <div class="wheel-focus-copy">
-          <div class="wheel-mode-badge">{{ selectedWheelModeLabel }}</div>
-          <h2 class="wheel-mode-title">{{ selectedWheelHeadline }}</h2>
-          <p class="wheel-subtitle">
+        <div class="wheel-focus-copy wheel-stage-summary">
+          <div class="wheel-stage-card hero compact" :class="{ active: Boolean(stageTag) }">
+            <div class="wheel-stage-card-top">
+              <span class="wheel-mode-badge wheel-stage-badge">{{ selectedWheelModeLabel }}</span>
+              <span v-if="stageTag" class="wheel-stage-badge muted">标签已锁定</span>
+            </div>
+            <h2 class="wheel-mode-title wheel-stage-title">{{ stageTag ? `已锁定：${stageTag.name}` : selectedWheelHeadline }}</h2>
+            <p class="wheel-subtitle wheel-stage-copy">
             <template v-if="selectedWheel.mode === 'tag' && !stageTag">先抽一个标签，再抽该标签下的公共项；也可以单独点某个标签直接转。</template>
-            <template v-else-if="stageTag">已锁定标签「{{ stageTag.name }}」，下一转抽取具体内容。</template>
-            <template v-else>准备开始，点击下方大按钮或转盘本身。</template>
-          </p>
-          <div v-if="selectedWheel.mode === 'tag' && availableTags.length" class="direct-tags hero-tags">
+              <template v-else-if="stageTag">{{ selectedWheelHeadline }} · 再转一次抽具体内容。</template>
+              <template v-else>先转出一个明确答案。</template>
+            </p>
+          <div v-if="selectedWheel.mode === 'tag' && availableTags.length" class="direct-tags hero-tags wheel-stage-quick-tags">
             <button
               v-for="tag in availableTags"
               :key="tag.id"
               type="button"
-              class="tag-chip"
+              class="tag-chip wheel-stage-quick-tag"
               :style="{ '--tag-color': tag.color }"
               @click="directTag(tag)"
-            >{{ tag.name }} · {{ wheelStore.candidates(selectedWheel, tag.id).length }} 项</button>
+            ><span>{{ tag.name }}</span><span>{{ wheelStore.candidates(selectedWheel, tag.id).length }} 项</span></button>
           </div>
-          <div class="wheel-focus-actions">
+          </div>
+          <div class="wheel-focus-actions wheel-actions">
             <button class="btn btn-primary wheel-spin large" type="button" :disabled="spinning || !displayEntries.length" @click="nextSpin">
               {{ spinning ? '转动中…' : isTagSecondStage ? '继续抽具体内容' : selectedWheel.mode === 'tag' ? '先抽一个标签' : '开始抽取' }}
             </button>
@@ -474,17 +497,32 @@ function importJson(event: Event) {
           </div>
           <div class="wheel-result focus" aria-live="polite">
             <template v-if="currentResult">
-              <strong>{{ currentResult!.resultName }}</strong>
-              <span>{{ currentResult!.mode === 'tag' ? `标签：${currentResult!.tagName || '-'}` : '普通转盘结果' }}</span>
-              <button class="btn btn-primary" :disabled="Boolean(currentResult!.convertedTodoId)" @click="handle(() => wheelStore.convertHistoryToTodo(currentResult!.id), '已转入今日待办')">{{ currentResult!.convertedTodoId ? '已转入待办' : '转入待办' }}</button>
+              <div class="wheel-result-card">
+                <div class="wheel-result-meta">
+                  <span class="wheel-result-meta-item">{{ selectedWheel.name || '当前转盘' }}</span>
+                  <span class="wheel-result-meta-item">{{ currentResult!.mode === 'tag' ? `标签 · ${currentResult!.tagName || '-'}` : '普通模式' }}</span>
+                </div>
+                <div class="wheel-result-kicker">{{ currentResult!.mode === 'tag' ? '最终结果' : '这次抽中了' }}</div>
+                <div class="wheel-result-title"><strong>{{ currentResult!.resultName }}</strong></div>
+                <div class="wheel-result-note">如果这个答案正好对味，就直接把它转成待办，省掉继续纠结的那一步。</div>
+                <div class="wheel-result-actions">
+                  <button class="btn btn-primary" :disabled="Boolean(currentResult!.convertedTodoId)" @click="handle(() => wheelStore.convertHistoryToTodo(currentResult!.id), '已转入今日待办')">{{ currentResult!.convertedTodoId ? '已转入待办' : '转入待办' }}</button>
+                </div>
+              </div>
             </template>
             <template v-else-if="stageTag">
-              <strong>已锁定：{{ stageTag.name }}</strong>
-              <span>再转一次，从该标签的公共项里抽取。</span>
+              <div class="wheel-result-card pending compact">
+                <span class="wheel-result-kicker">第二段</span>
+                <strong class="wheel-result-title">再转一次</strong>
+                <span class="wheel-result-note">{{ displayEntries.length }} 个候选 · 已锁定：{{ stageTag.name }}</span>
+              </div>
             </template>
             <template v-else>
-              <strong>准备开始</strong>
-              <span>{{ displayEntries.length }} 个候选</span>
+              <div class="wheel-result-card pending compact">
+                <span class="wheel-result-kicker">准备开始</span>
+                <strong class="wheel-result-title">转一转</strong>
+                <span class="wheel-result-note">{{ displayEntries.length }} 个候选</span>
+              </div>
             </template>
           </div>
         </div>
@@ -512,7 +550,7 @@ function importJson(event: Event) {
       </div>
     </section>
 
-    <section v-else class="card wheel-focus-shell wheel-empty-shell" aria-label="转盘主舞台">
+    <section v-else class="wheel-stage wheel-focus-shell wheel-empty-shell" aria-label="转盘主舞台">
       <div class="wheel-empty-copy">
         <div class="wheel-mode-badge">空白转盘</div>
         <h2 class="wheel-mode-title">还没有转盘</h2>
@@ -637,29 +675,29 @@ function importJson(event: Event) {
 </template>
 
 <style scoped>
-.wheel-focus-shell{margin-bottom:16px;padding:18px 20px 22px}.wheel-empty-shell{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}.wheel-empty-copy{display:grid;gap:12px;justify-items:center;max-width:620px;width:100%;margin:0 auto;text-align:center}.wheel-canvas-wrap.empty{cursor:default}
-.wheel-focus-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
-.wheel-focus-toolbar .wheel-selector{margin:0;min-width:180px}
-.wheel-focus-toolbar .wheel-selector select{min-height:36px}
+.wheel-focus-shell{max-width:860px;margin:0 auto 16px;padding:24px;border-radius:28px}.wheel-empty-shell{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}.wheel-empty-copy{display:grid;gap:12px;justify-items:center;max-width:620px;width:100%;margin:0 auto;text-align:center}.wheel-canvas-wrap.empty{cursor:default}
+.wheel-focus-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1.2fr) auto;align-items:center;gap:14px;width:100%;margin-bottom:12px}
+.wheel-focus-toolbar .wheel-selector{margin:0;min-width:0;width:100%}
+.wheel-focus-toolbar .wheel-selector select{min-height:42px;width:100%}
 .wheel-focus-stage{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
-.wheel-focus-copy{position:relative;z-index:2;display:grid;gap:10px;min-width:0;width:100%;max-width:620px;margin:0 auto;justify-items:center;text-align:center}
+.wheel-focus-copy{position:relative;z-index:2;display:grid;gap:10px;min-width:0;width:100%;max-width:860px;margin:0 auto;justify-items:center;text-align:center}
 .wheel-focus-canvas{position:relative;z-index:1;display:grid;justify-items:center;min-width:0;width:100%;padding-top:2px}
-.wheel-mode-badge{display:inline-flex;padding:4px 10px;border-radius:999px;background:#fff4ea;color:#b15c18;font-size:.78rem;font-weight:800}
-.wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;width:min(100%,620px);padding:9px;border:1px solid rgba(42,75,56,.1);border-radius:14px;background:rgba(247,250,248,.9);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.wheel-mode-badge{display:inline-flex;align-items:center;min-height:26px;padding:3px 10px;border-radius:999px;background:#fef1ed;color:#d85c38;font-size:11px;font-weight:900;letter-spacing:.04em}
+.wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;width:100%;max-width:520px;padding:10px;border:1px solid rgba(223,231,239,.96);border-radius:22px;background:rgba(245,247,251,.94);box-shadow:inset 0 1px 0 rgba(255,255,255,.92)}
 .wheel-focus-actions .wheel-spin{flex:1 1 260px}
 .wheel-focus-actions .btn-secondary{min-width:92px}
 .wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
 .wheel-result.focus{align-items:center;text-align:center;min-height:auto;padding:4px 0 0}
 .wheel-management-block{margin-top:8px}.wheel-management-landing{margin:0 0 14px;padding:14px 16px;border:1px solid rgba(42,75,56,.12);border-radius:10px;background:#fbfdfb}.wheel-management-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.wheel-management-nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.wheel-management-nav .btn{min-height:34px}.wheel-management-landing .wheel-management-summary{margin-top:12px}
 .wheel-mode-pills{display:flex;flex-wrap:wrap;gap:8px}
-.wheel-mode-pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;border:1px solid transparent;background:#eef4f0;color:#5d7266;font-size:.82rem;font-weight:700;cursor:pointer}
-.wheel-mode-pills.segmented{padding:3px;border-radius:999px;background:#eef4f0;gap:4px}
-.wheel-mode-pills.segmented .wheel-mode-pill{background:transparent}
-.wheel-mode-pill.active{background:#216e4e;color:#fff}
-.wheel-action-menu-button{min-height:36px}
-.wheel-mode-title{margin:0;font-size:1.7rem;color:#1f4633}
-.hero-tags{justify-content:flex-start;margin-top:0}
-.wheel-action-menu-wrap{position:relative}.wheel-action-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:8;display:grid;min-width:160px;padding:6px;border:1px solid rgba(42,75,56,.14);border-radius:10px;background:#fff;box-shadow:0 10px 24px rgba(25,61,42,.14)}.wheel-action-menu button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:8px;color:#285940;cursor:pointer;font:inherit}.wheel-action-menu button:hover{background:#edf6ef}.wheel-header-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
+.wheel-mode-pill{display:inline-flex;align-items:center;padding:10px 14px;border-radius:14px;border:0;background:transparent;color:#6a756f;font-size:13px;font-weight:850;cursor:pointer}
+.wheel-mode-pills.segmented{padding:6px;border:1px solid rgba(219,225,233,.9);border-radius:20px;background:rgba(245,247,251,.94);box-shadow:inset 0 1px 0 rgba(255,255,255,.92);gap:0}
+.wheel-mode-pills.segmented .wheel-mode-pill{background:transparent;min-height:42px}
+.wheel-mode-pill.active{background:#fff;color:var(--text);box-shadow:0 12px 24px rgba(35,60,45,.1)}
+.wheel-action-menu-button{min-height:42px;padding:10px 16px;border-radius:16px;font-weight:900}
+.wheel-mode-title{margin:0;color:var(--text);font-size:clamp(22px,3.4vw,34px);font-weight:900;line-height:1.24}
+.hero-tags{justify-content:center;margin-top:0}
+.wheel-action-menu-wrap{position:relative;justify-self:end;z-index:30}.wheel-action-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:40;display:grid;width:178px;padding:8px;border:1px solid rgba(222,229,238,.96);border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 18px 42px rgba(35,60,45,.16)}.wheel-action-menu button{width:100%;min-height:36px;padding:8px 10px;border:0;background:transparent;text-align:left;border-radius:12px;color:var(--text);cursor:pointer;font:inherit;font-size:13px;font-weight:850}.wheel-action-menu button:hover{background:#f6f8fb;color:#c64d2d}.wheel-header-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
 .wheel-management-block[data-management-panel="list"] #wheel-create-panel,
 .wheel-management-block[data-management-panel="list"] #wheel-history-panel,
 .wheel-management-block[data-management-panel="list"] .wheel-management-grid .management-card,
