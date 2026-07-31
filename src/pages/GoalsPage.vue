@@ -27,9 +27,7 @@ const formError = ref('');
 const nameInput = ref<HTMLInputElement | null>(null);
 const form = reactive({ name: '', period: '', target: '', status: '进行中', progress: 0 });
 
-const goals = computed(() => (store.data.goals as GoalEntity[])
-  .slice()
-  .sort((a, b) => Number(b.progress || 0) - Number(a.progress || 0)));
+const goals = computed(() => (store.data.goals as GoalEntity[]).slice());
 const activeGoals = computed(() => goals.value.filter(goal => goal.status === '进行中'));
 
 function normalizeProgress(goal: Partial<GoalEntity>) {

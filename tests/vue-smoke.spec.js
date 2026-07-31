@@ -573,6 +573,21 @@ test('goals detail route save and delete preserve the legacy contract', async ({
     expect(mirror.todos).toEqual([]);
 });
 
+test('goals keep legacy insertion order in the browse list', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData({
+        goals: [
+            { id: 'goal-first', name: '先建目标', period: '长期', target: '先出现', status: '进行中', progress: 10, createDate: '2026-01-01' },
+            { id: 'goal-second', name: '后建目标', period: '年度', target: '后出现', status: '进行中', progress: 90, createDate: '2026-01-02' },
+        ],
+    }));
+
+    await page.goto('/#/goals');
+    const cards = page.locator('.goal-card');
+    await expect(cards).toHaveCount(2);
+    await expect(cards.nth(0)).toContainText('先建目标');
+    await expect(cards.nth(1)).toContainText('后建目标');
+});
+
 test('search and tag center restore legacy read-only index navigation', async ({ page }) => {
     const source = emptyData({
         records: [
