@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getTodayStr } from '../services/legacyServices';
+import { formatDate, getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { HabitRule } from '../stores/habitsStore';
+
+type AnalysisCheckin = {
+  id?: string;
+  habitId: string;
+  date: string;
+  note?: string;
+  time?: string;
+  checkinAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 const habits = useHabitsStore();
 const lifePlan = useLifePlanStore();
@@ -144,10 +155,11 @@ const annualHeatmapCells = computed(() => {
 const annualHeatmapColumns = computed(() => Math.max(1, Math.ceil(annualHeatmapCells.value.length / 7)));
 const annualStats = computed(() => {
   const habit = selectedAnalysisHabit.value;
-  if (!habit) return { totalDays: 0, currentStreak: 0, maxStreak: 0, yearDays: 0, yearRate: 0 };
-  const allDates = new Set(lifePlan.data.checkins
+  if (!habit) return { totalDays: 0, currentStreak: 0, maxStreak: 0, monthRate: 0, yearRate: 0, lastOperation: '' };
+  const checkins = (lifePlan.data.checkins as unknown as AnalysisCheckin[])
     .filter(item => item.habitId === habit.id && item.date)
-    .map(item => String(item.date)));
+    .map(item => ({ ...item, date: String(item.date) }));
+  const allDates = new Set(checkins.map(item => item.date));
   const sortedDates = [...allDates].sort();
   let maxStreak = 0;
   let streak = 0;
@@ -165,14 +177,38 @@ const annualStats = computed(() => {
   const year = Number(analysisYear.value);
   const yearDates = annualHeatmapCells.value.filter(item => !item.outside && item.count > 0).length;
   const yearDays = Math.round((new Date(year, 11, 31).getTime() - new Date(year, 0, 1).getTime()) / 86400000) + 1;
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthDates = new Set(checkins.filter(item => item.date.startsWith(monthKey)).map(item => item.date));
+  const monthDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const lastOperation = [...checkins]
+    .map(item => String(item.checkinAt || item.createdAt || item.updatedAt || `${item.date}T${item.time || '00:00:00'}`))
+    .sort()
+    .pop() || String(habit.updatedAt || '');
   return {
     totalDays: allDates.size,
     currentStreak,
     maxStreak,
     yearDays,
+    monthRate: monthDays ? Math.round(monthDates.size / monthDays * 100) : 0,
     yearRate: yearDays ? Math.round(yearDates / yearDays * 100) : 0,
+    lastOperation,
   };
 });
+const selectedHabitCheckins = computed(() => {
+  const habit = selectedAnalysisHabit.value;
+  if (!habit) return [];
+  return (lifePlan.data.checkins as unknown as AnalysisCheckin[])
+    .filter(item => item.habitId === habit.id && item.date)
+    .map(item => ({
+      ...item,
+      date: String(item.date),
+      timestamp: String(item.checkinAt || item.createdAt || item.updatedAt || `${item.date}T${item.time || '00:00:00'}`),
+    }))
+    .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
+    .slice(0, 30);
+});
+const selectedHabitNoteCount = computed(() => selectedHabitCheckins.value.filter(item => String(item.note || '').trim()).length);
 const yesterdayPendingCount = computed(() => {
   const yesterday = (() => {
     const date = new Date(`${getTodayStr()}T12:00:00`);
@@ -467,6 +503,14 @@ function checkinsForDraft(habitId: string) {
   return habits.getCheckins(habitId, draft.date);
 }
 
+function openAnalysisCheckin(checkin: { habitId: string; date: string; note?: string }) {
+  activeTab.value = 'backfill';
+  makeupDate.value = checkin.date;
+  const draft = draftFor(checkin.habitId);
+  draft.date = checkin.date;
+  draft.note = String(checkin.note || '');
+}
+
 function noteDraft(checkin: { id: string; note?: string }) {
   if (!(checkin.id in checkinNoteDrafts)) checkinNoteDrafts[checkin.id] = checkin.note || '';
   return checkinNoteDrafts[checkin.id];
@@ -736,7 +780,27 @@ watch(focusedHabitId, value => {
             <article><strong>{{ annualStats.totalDays }}</strong><span>累计打卡天数</span></article>
             <article><strong>{{ annualStats.currentStreak }}</strong><span>当前连续天数</span></article>
             <article><strong>{{ annualStats.maxStreak }}</strong><span>最长连续天数</span></article>
+            <article><strong>{{ annualStats.monthRate }}%</strong><span>本月完成率</span></article>
             <article><strong>{{ annualStats.yearRate }}%</strong><span>{{ analysisYear }} 年完成率</span></article>
+            <article><strong class="habit-annual-last-operation">{{ annualStats.lastOperation ? `${formatDate(annualStats.lastOperation)} ${annualStats.lastOperation.slice(11, 19)}` : '暂无' }}</strong><span>最后操作时间</span></article>
+          </div>
+          <div class="habit-history-panel" aria-label="最近打卡备注">
+            <div class="section-title-row compact">
+              <div>
+                <h3>最近打卡备注</h3>
+                <p class="section-hint">{{ selectedAnalysisHabit.name || '未命名习惯' }} · {{ selectedHabitCheckins.length }} 次打卡 · {{ selectedHabitNoteCount }} 条备注</p>
+              </div>
+            </div>
+            <div v-if="selectedHabitCheckins.length" class="habit-history-list">
+              <div v-for="checkin in selectedHabitCheckins" :key="checkin.id" class="habit-history-item" :class="{ 'has-note': String(checkin.note || '').trim() }">
+                <div class="habit-history-main">
+                  <strong>{{ formatDate(checkin.date) }}{{ checkin.timestamp.slice(11, 16) ? ` ${checkin.timestamp.slice(11, 16)}` : '' }}</strong>
+                  <span>{{ String(checkin.note || '').trim() || '暂无备注' }}</span>
+                </div>
+                <button class="btn btn-secondary habit-history-action" type="button" @click="openAnalysisCheckin(checkin)">{{ String(checkin.note || '').trim() ? '编辑' : '补备注' }}</button>
+              </div>
+            </div>
+            <div v-else class="empty-state">这条习惯还没有打卡记录。</div>
           </div>
         </template>
         <div v-else class="empty-state">暂无可分析的习惯。</div>
@@ -1210,7 +1274,7 @@ watch(focusedHabitId, value => {
 .habit-annual-legend i.level-4 { background: #16633d; }
 .habit-annual-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 .habit-annual-stats article {
@@ -1227,6 +1291,60 @@ watch(focusedHabitId, value => {
 }
 .habit-annual-stats span {
   color: var(--muted, #647269);
+  font-size: 12px;
+}
+.habit-annual-last-operation {
+  font-size: 13px !important;
+  line-height: 1.35;
+}
+.habit-history-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 14px;
+  border: 1px solid rgba(42, 75, 56, .11);
+  border-radius: 10px;
+  background: #fbfdfb;
+}
+.habit-history-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.habit-history-list {
+  display: grid;
+  max-height: 360px;
+  overflow: auto;
+  border-top: 1px solid rgba(42, 75, 56, .1);
+}
+.habit-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(42, 75, 56, .1);
+}
+.habit-history-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.habit-history-main strong {
+  color: var(--text, #17211b);
+  font-size: 13px;
+}
+.habit-history-main span {
+  color: var(--muted, #647269);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.habit-history-item.has-note .habit-history-main span {
+  color: #285940;
+}
+.habit-history-action {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 5px 10px;
   font-size: 12px;
 }
 .habit-center-tab {
@@ -1438,9 +1556,17 @@ watch(focusedHabitId, value => {
   color: #b84949;
 }
 .habit-diagnostics-panel {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
+.habit-diagnostics-panel > .section-title-row { order: 1; }
+.habit-diagnostics-panel > .habit-annual-analysis { order: 2; }
+.habit-diagnostics-panel > .habit-matrix-summary { order: 3; }
+.habit-diagnostics-panel > .habit-matrix-block { order: 4; }
+.habit-diagnostics-panel > .habit-analysis-summary { order: 5; }
+.habit-diagnostics-panel > .habit-diagnostics-grid { order: 6; }
+.habit-diagnostics-panel > .habit-diagnostics-issues { order: 7; }
 .habit-diagnostics-pill {
   padding: 5px 9px;
   border: 1px solid rgba(42, 75, 56, .14);

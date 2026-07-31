@@ -1807,6 +1807,10 @@ test('habit annual analysis renders a read-only selected habit heatmap', async (
     await expect(annual).toContainText('年度阅读');
     expect(await annual.locator('.habit-annual-cell').count()).toBeGreaterThan(300);
     await expect(annual.locator('.habit-annual-stats')).toContainText('当前连续天数');
+    await expect(annual.locator('.habit-annual-stats')).toContainText('本月完成率');
+    await expect(annual.locator('.habit-history-panel')).toContainText('最近打卡备注');
+    await expect(annual.locator('.habit-history-item')).toHaveCount(2);
+    expect(await annual.evaluate(node => node.getBoundingClientRect().top)).toBeLessThan(await page.locator('.habit-matrix-block').evaluate(node => node.getBoundingClientRect().top));
     await annual.getByLabel('选择分析习惯').selectOption('habit-annual-b');
     await expect(annual).toContainText('年度拉伸');
     const unchanged = await page.evaluate(() => ({
