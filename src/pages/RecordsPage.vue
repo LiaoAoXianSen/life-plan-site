@@ -754,7 +754,7 @@ onBeforeUnmount(() => {
         <form class="record-edit-form" @submit.prevent="saveEditor">
           <div class="form-row">
             <label class="form-group"><span>标题</span><input v-model="editForm.title" required /></label>
-            <label class="form-group"><span>类型</span><input v-model="editForm.type" /></label>
+            <label class="form-group"><span>类型</span><select v-model="editForm.type"><option v-for="type in typeOptions" :key="type" :value="type">{{ type }}</option><option v-if="editForm.type && !typeOptions.includes(editForm.type)" :value="editForm.type">{{ editForm.type }}（旧类型）</option></select></label>
             <label class="form-group"><span>开始日期</span><input v-model="editForm.startDate" type="date" /></label>
             <label class="form-group"><span>结束日期</span><input v-model="editForm.endDate" type="date" /></label>
             <label class="form-group"><span>开始时间</span><input v-model="editForm.recordTime" type="time" /></label>
