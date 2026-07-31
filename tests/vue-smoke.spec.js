@@ -1209,6 +1209,34 @@ test('fitness overview renders service-backed body metric trends without writes'
     expect(unchanged.mirror).toBeNull();
 });
 
+test('fitness hero follows the legacy service recommendation and free fallback', async ({ page }) => {
+    const source = emptyData({
+        fitnessPlans: [
+            { id: 'fitness-archived-empty', name: '归档空计划', status: 'archived', exercises: [] },
+            { id: 'fitness-active-plan', name: '今日力量计划', status: 'active', exercises: [{ name: '深蹲', sets: [{ weight: 80, reps: 5 }] }] },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-hero-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    const hero = page.locator('.fitness-overview-hero');
+    await expect(hero).toContainText('今天还没开练，可以直接按计划开始');
+    await expect(hero.getByRole('button', { name: '按计划开练：今日力量计划' })).toBeVisible();
+    await expect(hero).not.toContainText('归档空计划');
+
+    await page.evaluate(() => localStorage.setItem('lifePlanData', JSON.stringify({
+        ...JSON.parse(localStorage.getItem('lifePlanData') || '{}'),
+        fitnessPlans: [],
+    })));
+    const fallbackPage = await page.context().newPage();
+    await fallbackPage.goto('/#/fitness');
+    await expect(fallbackPage.locator('.fitness-overview-hero').getByRole('button', { name: '自由开练' })).toBeVisible();
+    await fallbackPage.close();
+});
+
 test('fitness plans support multiple exercises and explicit plan writeback', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [

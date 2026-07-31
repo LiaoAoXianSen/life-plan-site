@@ -52,13 +52,15 @@ const restTimer = reactive({ remaining: 0, total: 0, exerciseName: '' });
 let restTimerId: ReturnType<typeof window.setInterval> | null = null;
 
 const doneHistory = computed(() => fitness.workouts.filter(item => item.status === 'done' || item.status === 'skipped'));
+const fitnessOverview = computed(() => fitness.services.fitness.buildFitnessOverview({
+  bodyMetrics: fitness.metrics,
+  fitnessPlans: fitness.plans,
+  fitnessWorkouts: fitness.workouts,
+}));
 const recentWorkoutCount = computed(() => {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 30);
-  const key = getTodayStr(cutoff);
-  return doneHistory.value.filter(item => String(item.date || item.createdAt || '').slice(0, 10) >= key).length;
+  return fitnessOverview.value.workoutSummary.doneCount;
 });
-const activePlanCount = computed(() => fitness.plans.filter(plan => String(plan.status || 'active') === 'active').length);
+const activePlanCount = computed(() => fitnessOverview.value.activePlanCount);
 const latestMetric = computed(() => fitness.metrics[0] || null);
 const latestWeight = computed(() => {
   const metric = latestMetric.value as Record<string, any> | null;
@@ -108,6 +110,12 @@ const browseItems = computed(() => [
     target: 'fitness-library-section',
   },
 ]);
+const overviewTitle = computed(() => {
+  const summary = fitnessOverview.value.workoutSummary;
+  if (summary.todayCount) return `今天已有 ${summary.todayCount} 条训练记录`;
+  if (fitnessOverview.value.suggestion) return '今天还没开练，可以直接按计划开始';
+  return '还没有训练安排，先建计划或自由开练';
+});
 
 function jumpToFreeWorkout() {
   if (!fitness.library.length) {
@@ -601,15 +609,25 @@ onUnmounted(stopRestTimer);
       <div class="section-title-row">
         <div>
           <div class="fitness-kicker">今日状态</div>
-          <h2>{{ fitness.plans[0] ? `最近计划：${fitness.plans[0].name}` : '今天还没开始训练' }}</h2>
+          <h2>{{ overviewTitle }}</h2>
           <p class="section-hint">先从计划开练，或直接自由开练；身体指标和历史训练都在下方。</p>
+          <div class="fitness-overview-meta">
+            <span class="fitness-meta-pill">近 30 天 {{ fitnessOverview.workoutSummary.doneCount }} 次</span>
+            <span class="fitness-meta-pill">连续 {{ fitnessOverview.workoutSummary.streak }} 天</span>
+            <span class="fitness-meta-pill">计划 {{ fitnessOverview.activePlanCount }}</span>
+            <span class="fitness-meta-pill">体重 {{ fitness.services.fitness.formatMetricValue(fitnessOverview.latestMetric?.weight, 'kg') }}</span>
+          </div>
+          <div v-if="fitnessOverview.latestWorkout" class="fitness-overview-note">
+            最近：{{ fitnessOverview.latestWorkout.date }} · {{ fitness.services.fitness.getWorkoutTitle(fitnessOverview.latestWorkout) }}
+          </div>
         </div>
         <button
-          v-if="fitness.plans[0]"
+          v-if="fitnessOverview.suggestion"
           class="btn btn-primary"
           type="button"
-          @click="run(() => fitness.startFromPlan(String(fitness.plans[0].id)))"
-        >按计划开练：{{ fitness.plans[0].name }}</button>
+          @click="run(() => fitness.startFromPlan(String(fitnessOverview.suggestion.plan.id)))"
+        >按计划开练：{{ fitnessOverview.suggestion.plan.name }}</button>
+        <button v-else class="btn btn-primary" type="button" @click="jumpToFreeWorkout">自由开练</button>
       </div>
       <div class="fitness-kpi-grid">
         <article v-for="item in overviewKpis" :key="item.label" class="fitness-kpi-card">
