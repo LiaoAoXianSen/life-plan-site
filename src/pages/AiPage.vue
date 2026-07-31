@@ -7,7 +7,9 @@ import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
 
-type AiMode = 'chatCapture' | 'todayPlan' | 'backlogTriage' | 'ideaNext' | 'todoBreakdown';
+type AiMode = 'chatCapture' | 'todayPlan' | 'backlogTriage' | 'ideaNext' | 'todoBreakdown' | 'diaryReview';
+type DiaryAiSectionKey = 'oneLine' | 'review' | 'tomorrow' | 'improve' | 'thinking' | 'smallJoy';
+type DiaryAiSectionDraft = { key: DiaryAiSectionKey; label: string; value: string; selected: boolean };
 type AiDraftItem = {
   text: string;
   note: string;
@@ -33,8 +35,10 @@ const mode = ref<AiMode>('chatCapture');
 const input = ref('');
 const selectedIdeaId = ref('');
 const selectedTodoId = ref('');
+const selectedDiaryId = ref('');
 const result = ref<any>(null);
 const drafts = ref<AiDraftItem[]>([]);
+const diarySections = ref<DiaryAiSectionDraft[]>([]);
 const running = ref(false);
 const error = ref('');
 const status = ref('');
@@ -76,6 +80,12 @@ const modeMeta: Record<AiMode, { title: string; subtitle: string; placeholder: s
     placeholder: '例如：按准备、执行、收尾拆；每一步必须能直接开始。',
     action: '生成子任务',
   },
+  diaryReview: {
+    title: 'AI 日记分析',
+    subtitle: '从一篇日记里提炼复盘、明日重点和可确认的行动建议。',
+    placeholder: '例如：复盘要直白一点；明日重点只保留一件最关键的事。',
+    action: '生成日记分析',
+  },
 };
 
 const ideaOptions = computed(() => store.data.records
@@ -89,8 +99,14 @@ const todoOptions = computed(() => store.data.todos
   .slice()
   .sort(todos.services.todos.compareTodosForFocus));
 
+const diaryOptions = computed(() => store.data.records
+  .filter(record => record.type === '日记' && String(record.content || '').trim())
+  .slice()
+  .sort((left, right) => String(right.updatedAt || right.startDate || '').localeCompare(String(left.updatedAt || left.startDate || ''))));
+
 const selectedIdea = computed(() => store.data.records.find(record => record.id === selectedIdeaId.value && record.type === '灵感碎片') ?? null);
 const selectedTodo = computed(() => store.data.todos.find(todo => todo.id === selectedTodoId.value) ?? null);
+const selectedDiary = computed(() => diaryOptions.value.find(record => record.id === selectedDiaryId.value) ?? diaryOptions.value[0] ?? null);
 const selectedDrafts = computed(() => drafts.value.filter(item => item.selected && item.text.trim()));
 const today = computed(() => getTodayStr());
 
@@ -180,6 +196,20 @@ const context = computed(() => ({
     planEndDate: selectedTodo.value.planEndDate,
     subTodos: selectedTodo.value.subTodos,
   } : null,
+  selectedDiary: selectedDiary.value ? {
+    id: selectedDiary.value.id,
+    type: selectedDiary.value.type,
+    title: selectedDiary.value.title,
+    startDate: selectedDiary.value.startDate,
+    endDate: selectedDiary.value.endDate,
+    recordTime: selectedDiary.value.recordTime,
+    content: selectedDiary.value.content,
+    templateId: selectedDiary.value.templateId,
+    fields: (() => {
+      const template = records.services.records.getBuiltInTemplate('builtin-diary-daily-review');
+      return template ? records.services.records.parseTemplateContent(template, selectedDiary.value.content || '') : {};
+    })(),
+  } : null,
 }));
 
 function saveConfig() {
@@ -197,6 +227,7 @@ function resetResult() {
   captureDraft.workText = '';
   captureDraft.planText = '';
   captureDraft.ideaText = '';
+  diarySections.value = [];
 }
 
 function setMode(next: AiMode) {
@@ -205,6 +236,7 @@ function setMode(next: AiMode) {
   const query: Record<string, string> = { mode: next };
   if (next === 'ideaNext' && selectedIdeaId.value) query.idea = selectedIdeaId.value;
   if (next === 'todoBreakdown' && selectedTodoId.value) query.todo = selectedTodoId.value;
+  if (next === 'diaryReview' && selectedDiaryId.value) query.diary = selectedDiaryId.value;
   void router.replace({ path: '/ai', query });
 }
 
@@ -231,6 +263,16 @@ function updateCaptureDraft(raw: any) {
   captureDraft.ideaText = String(capture.ideaText || '').trim();
 }
 
+function updateDiaryDraft(raw: any) {
+  const sectionMeta: Array<[DiaryAiSectionKey, string]> = [
+    ['review', '复盘'], ['tomorrow', '明日重点'], ['oneLine', '今日一句话'],
+    ['improve', '待改进'], ['thinking', '思考'], ['smallJoy', '小确幸'],
+  ];
+  diarySections.value = sectionMeta
+    .filter(([key]) => String(raw?.diary?.[key] || '').trim())
+    .map(([key, label]) => ({ key, label, value: String(raw.diary[key] || ''), selected: key === 'review' || key === 'tomorrow' }));
+}
+
 async function run() {
   running.value = true;
   error.value = '';
@@ -240,6 +282,7 @@ async function run() {
   try {
     if (mode.value === 'ideaNext' && !selectedIdea.value) throw new Error('请先选择一条灵感');
     if (mode.value === 'todoBreakdown' && !selectedTodo.value) throw new Error('请先选择一个待办');
+    if (mode.value === 'diaryReview' && !selectedDiary.value) throw new Error('请先选择一篇有内容的日记');
     const payload = {
       mode: mode.value,
       userInput: input.value,
@@ -252,6 +295,7 @@ async function run() {
     result.value = raw;
     drafts.value = toDrafts(raw?.items || []);
     if (mode.value === 'chatCapture') updateCaptureDraft(raw);
+    if (mode.value === 'diaryReview') updateDiaryDraft(raw);
     const hasCapture = Object.values(captureDraft).some(value => value.trim());
     status.value = drafts.value.length || hasCapture ? '已生成建议，确认后再写入' : '没有可用建议';
   } catch (err) {
@@ -375,6 +419,49 @@ function applyTodoBreakdown() {
   error.value = '';
 }
 
+function applyDiarySections() {
+  if (!selectedDiary.value) {
+    error.value = '请先选择一篇有内容的日记';
+    return;
+  }
+  const selected = diarySections.value.filter(section => section.selected && section.value.trim());
+  if (!selected.length) {
+    error.value = '请至少选择一个有内容的日记字段';
+    return;
+  }
+  const template = records.services.records.getBuiltInTemplate('builtin-diary-daily-review');
+  const existing = template ? records.services.records.parseTemplateContent(template, selectedDiary.value.content || '') : {};
+  const overwriteLabels = selected.filter(section => String(existing[section.key] || '').trim()).map(section => section.label);
+  if (overwriteLabels.length && !window.confirm(`这些字段已有内容：${overwriteLabels.join('、')}。确定用 AI 草稿覆盖吗？`)) return;
+  const applied = records.applyDiaryAiSections(String(selectedDiary.value.id), Object.fromEntries(selected.map(section => [section.key, section.value])));
+  if (!applied) {
+    error.value = '日记字段写入失败';
+    return;
+  }
+  status.value = `已写入：${selected.map(section => section.label).join('、')}`;
+  error.value = '';
+}
+
+function applyDiaryTodos() {
+  if (!selectedDiary.value) {
+    error.value = '请先选择一篇有内容的日记';
+    return;
+  }
+  const selected = selectedDrafts.value;
+  if (!selected.length) {
+    error.value = '请至少选择一条保留标题的待办';
+    return;
+  }
+  const createdIds = records.createDiaryAiTodos(String(selectedDiary.value.id), selected.map(item => ({
+    ...item,
+    text: item.text.trim(),
+    urgency: (['urgent', 'high', 'medium', 'low'].includes(item.urgency) ? item.urgency : 'medium') as 'urgent' | 'high' | 'medium' | 'low',
+    subTodos: item.subTodos.map(sub => ({ text: sub.text, done: Boolean(sub.done) })),
+  })));
+  status.value = `已创建待办 ${createdIds.length} 项`;
+  error.value = '';
+}
+
 function applySelected() {
   if (mode.value === 'ideaNext') {
     applyIdeaDrafts();
@@ -382,6 +469,10 @@ function applySelected() {
   }
   if (mode.value === 'todoBreakdown') {
     applyTodoBreakdown();
+    return;
+  }
+  if (mode.value === 'diaryReview') {
+    applyDiaryTodos();
     return;
   }
   if (mode.value === 'todayPlan' || mode.value === 'backlogTriage') {
@@ -393,7 +484,7 @@ function applySelected() {
 
 watch(() => route.query.mode, value => {
   const next = String(Array.isArray(value) ? value[0] : value || 'chatCapture');
-  if (next === 'ideaNext' || next === 'todoBreakdown' || next === 'chatCapture' || next === 'todayPlan' || next === 'backlogTriage') {
+    if (next === 'ideaNext' || next === 'todoBreakdown' || next === 'diaryReview' || next === 'chatCapture' || next === 'todayPlan' || next === 'backlogTriage') {
     mode.value = next;
   }
 }, { immediate: true });
@@ -406,6 +497,11 @@ watch(() => route.query.idea, value => {
 watch(() => route.query.todo, value => {
   const id = String(Array.isArray(value) ? value[0] : value || '');
   if (id) selectedTodoId.value = id;
+}, { immediate: true });
+
+watch(() => route.query.diary, value => {
+  const id = String(Array.isArray(value) ? value[0] : value || '');
+  if (id) selectedDiaryId.value = id;
 }, { immediate: true });
 </script>
 
@@ -437,6 +533,7 @@ watch(() => route.query.todo, value => {
         <button type="button" :class="{ active: mode === 'backlogTriage' }" @click="setMode('backlogTriage')">待办整理</button>
         <button type="button" :class="{ active: mode === 'ideaNext' }" @click="setMode('ideaNext')">灵感下一步</button>
         <button type="button" :class="{ active: mode === 'todoBreakdown' }" @click="setMode('todoBreakdown')">待办拆解</button>
+        <button type="button" :class="{ active: mode === 'diaryReview' }" @click="setMode('diaryReview')">日记分析</button>
       </div>
       <p class="todo-page-summary">{{ modeMeta[mode].subtitle }}</p>
 
@@ -453,6 +550,14 @@ watch(() => route.query.todo, value => {
         <select id="ai-todo-select" v-model="selectedTodoId">
           <option value="">选择一个待办</option>
           <option v-for="todo in todoOptions" :key="todo.id" :value="todo.id">{{ todo.text }}</option>
+        </select>
+      </div>
+
+      <div v-if="mode === 'diaryReview'" class="form-group">
+        <label for="ai-diary-select">选择日记</label>
+        <select id="ai-diary-select" v-model="selectedDiaryId">
+          <option value="">选择一篇有内容的日记</option>
+          <option v-for="diary in diaryOptions" :key="String(diary.id)" :value="String(diary.id)">{{ diary.title || diary.startDate || '未命名日记' }}</option>
         </select>
       </div>
 
@@ -498,6 +603,13 @@ watch(() => route.query.todo, value => {
           <textarea id="ai-capture-draft-ideaText" v-model="captureDraft.ideaText" rows="4" />
         </section>
       </div>
+      <div v-if="mode === 'diaryReview' && diarySections.length" class="ai-capture-section-list">
+        <section v-for="section in diarySections" :key="section.key" class="ai-capture-section">
+          <label class="todo-check-row"><input v-model="section.selected" type="checkbox" :aria-label="`选择${section.label}`" /><span>{{ section.label }}</span></label>
+          <textarea v-model="section.value" :aria-label="`AI ${section.label}草稿`" rows="4" />
+        </section>
+        <button class="btn btn-secondary" type="button" @click="applyDiarySections">写入所选日记字段</button>
+      </div>
       <div class="ai-result-list">
         <div v-for="(item, index) in drafts" :key="`${index}-${item.text}`" class="ai-result-item">
           <label class="todo-check-row">
@@ -523,6 +635,8 @@ watch(() => route.query.todo, value => {
               ? '转成关联待办'
               : mode === 'todoBreakdown'
                 ? '写入子任务'
+                : mode === 'diaryReview'
+                  ? '创建所选待办'
                 : mode === 'todayPlan'
                   ? '加入今日待办'
                   : mode === 'backlogTriage'

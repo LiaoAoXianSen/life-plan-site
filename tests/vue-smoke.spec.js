@@ -3267,6 +3267,49 @@ test('AI ideaNext keeps drafts read-only until confirmed writeback', async ({ pa
     expect(stored.mirror.todos.map(item => item.id)).toContain(todo.id);
 });
 
+test('AI diaryReview keeps diary drafts read-only until confirmed writeback', async ({ page }) => {
+    const source = emptyData({
+        records: [{
+            id: 'diary-ai-page', type: '日记', title: '独立 AI 日记', content: '今天完成了迁移检查。明天整理同步边界。',
+            startDate: '2026-07-30', endDate: '2026-07-30', todoIds: [], templateId: '', updatedAt: '2026-07-30T21:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
+    }, source);
+
+    await page.goto('/#/ai?mode=diaryReview&diary=diary-ai-page');
+    const aiPage = page.locator('#page-ai');
+    await expect(aiPage.locator('.ai-mode-tabs button.active')).toHaveText('日记分析');
+    await expect(aiPage.getByLabel('选择日记')).toHaveValue('diary-ai-page');
+    await aiPage.getByLabel('AI 日记分析').fill('复盘要简短，保留明日动作。');
+    await aiPage.getByRole('button', { name: '生成日记分析' }).click();
+    await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
+    await expect(aiPage.getByLabel('AI 复盘草稿')).toBeVisible();
+    await expect(aiPage.getByLabel('AI 明日重点草稿')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('todoAppData'))).toBeNull();
+
+    await aiPage.getByLabel('AI 复盘草稿').fill('确认后的独立日记复盘。');
+    await aiPage.getByRole('button', { name: '写入所选日记字段' }).click();
+    await expect(aiPage.getByText('已写入：复盘、明日重点')).toBeVisible();
+    await aiPage.getByRole('button', { name: '创建所选待办' }).click();
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    const diary = stored.data.records.find(item => item.id === 'diary-ai-page');
+    expect(diary.content).toContain('# 复盘\n确认后的独立日记复盘。');
+    expect(diary.content).toContain('# 明日重点');
+    expect(stored.data.todos).toEqual(expect.arrayContaining([
+        expect.objectContaining({ sourceType: 'diary-ai', sourceRecordId: 'diary-ai-page' }),
+    ]));
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+});
+
 test('AI todayPlan keeps drafts read-only until confirmed writeback with sourceType ai', async ({ page }) => {
     const today = (() => {
         const date = new Date();
