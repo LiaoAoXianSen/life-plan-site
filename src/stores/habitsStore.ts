@@ -363,6 +363,22 @@ export const useHabitsStore = defineStore('habits', () => {
       return (rank[a.severity || 'info'] ?? 3) - (rank[b.severity || 'info'] ?? 3);
     })
     .slice(0, 4));
+  const dualWriteReadiness = computed(() => {
+    const buildReadiness = habitServices.habit.buildHabitDualWriteReadiness;
+    if (typeof buildReadiness === 'function') {
+      return buildReadiness(lifePlan.data, diagnostics.value) as Record<string, any>;
+    }
+    return {
+      status: 'prepared',
+      statusLabel: '诊断服务不可用',
+      summary: {},
+      blockers: [],
+      writePaths: [],
+      nextActions: [],
+      readOnly: true,
+      remoteUploadEnabled: false,
+    };
+  });
   const balances = computed(() => lifePlan.data.habitPointLedger.reduce<Record<string, number>>((summary, entry) => {
     const currency = normalizeCurrency(entry.currency);
     summary[currency] = (summary[currency] || 0) + (Number(entry.amount) || 0);
@@ -1127,6 +1143,7 @@ export const useHabitsStore = defineStore('habits', () => {
     latestLedger,
     diagnostics,
     diagnosticIssues,
+    dualWriteReadiness,
     balances,
     lastError,
     lastAction,

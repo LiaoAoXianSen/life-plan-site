@@ -90,6 +90,11 @@ const walletEarnedText = computed(() => summarizeWalletLedger(entry => Number(en
 const walletRedeemedText = computed(() => summarizeWalletLedger(entry => Number(entry.amount || 0) < 0 && entry.type === 'redeem', true));
 const diagnosticSummary = computed(() => habits.diagnostics.summary || {});
 const diagnosticIssues = computed(() => habits.diagnosticIssues.slice(0, 3));
+const dualWriteReadiness = computed(() => habits.dualWriteReadiness || {});
+const dualWriteSummary = computed(() => dualWriteReadiness.value.summary || {});
+const dualWriteBlockers = computed(() => Array.isArray(dualWriteReadiness.value.blockers) ? dualWriteReadiness.value.blockers : []);
+const dualWritePaths = computed(() => Array.isArray(dualWriteReadiness.value.writePaths) ? dualWriteReadiness.value.writePaths : []);
+const dualWriteNextActions = computed(() => Array.isArray(dualWriteReadiness.value.nextActions) ? dualWriteReadiness.value.nextActions : []);
 const doneTodayCount = computed(() => todayItems.value.filter(item => item.count >= item.target).length);
 const recentCheckinCount = computed(() => {
   const today = getTodayStr();
@@ -915,6 +920,41 @@ watch(focusedHabitId, value => {
         </article>
         <div v-if="!diagnosticIssues.length" class="empty-state">当前没有发现重复 ID、孤儿引用、异常金额或未来打卡。</div>
       </div>
+      <details class="habit-diagnostics-details">
+        <summary>迁移 / 诊断详情</summary>
+        <div class="habit-diagnostics-detail-shell">
+          <div class="habit-diagnostics-grid habit-readiness-grid">
+            <article><span>权威源</span><strong>{{ dualWriteReadiness.authority || 'lifePlanData legacy habit fields' }}</strong></article>
+            <article><span>双写状态</span><strong>{{ dualWriteReadiness.statusLabel || dualWriteReadiness.status || '未检查' }}</strong></article>
+            <article><span>已接入写路径</span><strong>{{ Number(dualWriteSummary.writePathEnabled || 0) }} / {{ Number(dualWriteSummary.writePathTotal || 0) }}</strong></article>
+            <article><span>远端上传</span><strong>{{ dualWriteReadiness.remoteUploadEnabled ? '关闭失败' : '关闭' }}</strong></article>
+          </div>
+          <div v-if="dualWriteBlockers.length" class="habit-readiness-blockers">
+            <article v-for="blocker in dualWriteBlockers" :key="blocker.id || blocker.label" class="habit-diagnostics-issue is-warning">
+              <strong>{{ blocker.label || blocker.id }}</strong>
+              <span>{{ blocker.hint || '需要继续复核。' }}<template v-if="blocker.count">（{{ blocker.count }} 项）</template></span>
+            </article>
+          </div>
+          <div v-if="dualWritePaths.length" class="habit-readiness-paths">
+            <div class="section-title-row compact">
+              <div>
+                <h3>本地双写路径</h3>
+                <p class="section-hint">只读显示写路径接入情况；镜像仍由现有 service 重建，不上传云端。</p>
+              </div>
+            </div>
+            <div class="habit-readiness-path-list">
+              <div v-for="path in dualWritePaths" :key="path.id" class="habit-readiness-path">
+                <strong>{{ path.label || path.id }}</strong>
+                <span>{{ path.dualWrite === 'enabled' ? '已接入' : '待接入' }} · {{ path.note || '沿用旧字段' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="dualWriteNextActions.length" class="habit-readiness-next-actions">
+            <strong>下一步</strong>
+            <span v-for="item in dualWriteNextActions" :key="item">{{ item }}</span>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section v-show="activeTab === 'today' || activeTab === 'backfill'" class="card" aria-labelledby="today-habits-title">
@@ -1704,6 +1744,64 @@ watch(focusedHabitId, value => {
 .habit-diagnostics-panel > .habit-analysis-summary { order: 5; }
 .habit-diagnostics-panel > .habit-diagnostics-grid { order: 6; }
 .habit-diagnostics-panel > .habit-diagnostics-issues { order: 7; }
+.habit-diagnostics-panel > .habit-diagnostics-details { order: 8; }
+.habit-diagnostics-details {
+  border-top: 1px solid rgba(42, 75, 56, .11);
+  padding-top: 12px;
+}
+.habit-diagnostics-details > summary {
+  cursor: pointer;
+  color: var(--muted, #647269);
+  font-size: 12px;
+  font-weight: 850;
+}
+.habit-diagnostics-detail-shell {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.habit-readiness-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.habit-readiness-blockers,
+.habit-readiness-path-list,
+.habit-readiness-next-actions {
+  display: grid;
+  gap: 8px;
+}
+.habit-readiness-paths {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(42, 75, 56, .11);
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+.habit-readiness-path {
+  display: grid;
+  grid-template-columns: minmax(150px, .45fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 0;
+  border-top: 1px solid rgba(42, 75, 56, .08);
+}
+.habit-readiness-path:first-child { border-top: 0; }
+.habit-readiness-path strong,
+.habit-readiness-path span,
+.habit-readiness-next-actions span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.habit-readiness-path span,
+.habit-readiness-next-actions span {
+  color: var(--muted, #647269);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.habit-readiness-next-actions {
+  padding: 12px;
+  border-left: 3px solid rgba(33, 110, 78, .28);
+  background: #f7fbf8;
+}
 .habit-diagnostics-pill {
   padding: 5px 9px;
   border: 1px solid rgba(42, 75, 56, .14);
@@ -1910,6 +2008,7 @@ watch(focusedHabitId, value => {
   .habit-reward-form,
   .habit-wallet-layout,
   .habit-diagnostics-grid,
+  .habit-readiness-grid,
   .habit-analysis-summary-grid,
   .habit-annual-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1941,6 +2040,7 @@ watch(focusedHabitId, value => {
   .habit-reward-form,
   .habit-wallet-layout,
   .habit-diagnostics-grid,
+  .habit-readiness-grid,
   .habit-analysis-summary-grid,
   .habit-annual-stats,
   .habit-reward-card {
@@ -1955,5 +2055,6 @@ watch(focusedHabitId, value => {
   .habit-management-table {
     overflow-x: auto;
   }
+  .habit-readiness-path { grid-template-columns: minmax(0, 1fr); gap: 3px; }
 }
 </style>

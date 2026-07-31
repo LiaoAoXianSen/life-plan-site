@@ -2084,6 +2084,12 @@ test('habit diagnostics stays read-only and surfaces legacy issues', async ({ pa
     await expect(diagnostics).toContainText('重复习惯 ID');
     await expect(diagnostics).toContainText('孤儿打卡记录');
     await expect(diagnostics).toContainText('流水金额异常');
+    const readiness = diagnostics.locator('.habit-diagnostics-details');
+    await readiness.locator('summary').click();
+    await expect(readiness).toContainText('双写状态');
+    await expect(readiness).toContainText('被高风险数据阻塞');
+    await expect(readiness).toContainText('11 / 11');
+    await expect(readiness).toContainText('本地双写路径');
     const unchanged = await page.evaluate(() => ({
         sameData: window.__habitBefore === localStorage.getItem('lifePlanData'),
         mirror: localStorage.getItem('habitAppData'),
