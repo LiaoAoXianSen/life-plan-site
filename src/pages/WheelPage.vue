@@ -478,6 +478,12 @@ function applyLibraryAiSuggestion(index: number, selected: boolean) {
   if (selected) next.add(suggestion.tagId); else next.delete(suggestion.tagId);
   libraryForm.tagIds = [...next];
 }
+function toggleLibraryTag(tagId: string, checked: boolean) {
+  libraryForm.tagIds = toggleTag(libraryForm.tagIds, tagId, checked);
+  libraryAiSuggestions.value.forEach((suggestion) => {
+    if (suggestion.tagId === tagId) suggestion.selected = checked;
+  });
+}
 async function suggestLibraryTags() {
   if (libraryAiRunning.value) return;
   const itemText = libraryForm.name.trim();
@@ -1023,7 +1029,7 @@ function importJson(event: Event) {
           <label class="field-label field-small"><span>权重</span><input v-model.number="libraryForm.weight" type="number" min="1" /></label>
           <label class="check-label"><input v-model="libraryForm.enabled" type="checkbox" />启用</label>
           <button class="btn btn-secondary" type="button" :disabled="libraryAiRunning" @click="suggestLibraryTags">{{ libraryAiRunning ? '推荐中…' : 'AI 推荐标签' }}</button>
-          <div class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="libraryForm.tagIds.includes(tag.id)" @change="libraryForm.tagIds = toggleTag(libraryForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label></div>
+          <div class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="libraryForm.tagIds.includes(tag.id)" @change="toggleLibraryTag(tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label></div>
           <div v-if="libraryAiStatus || libraryAiSuggestions.length" class="library-ai-suggestions" role="status">
             <span class="hint">{{ libraryAiStatus }}</span>
             <label v-for="(suggestion, index) in libraryAiSuggestions" :key="suggestion.tagId" class="library-ai-suggestion"><input type="checkbox" :checked="suggestion.selected" @change="applyLibraryAiSuggestion(index, ($event.target as HTMLInputElement).checked)" /><span>{{ suggestion.name }}</span><small v-if="suggestion.reason">{{ suggestion.reason }}</small></label>
