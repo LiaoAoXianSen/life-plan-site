@@ -57,6 +57,7 @@ const copyLibraryTagFilter = ref('');
 const copyLibraryId = ref('');
 const tagForm = reactive({ id: '', name: '', color: '#216e4e', weight: 1, enabled: true });
 const libraryForm = reactive({ id: '', name: '', tagIds: [] as string[], weight: 1, enabled: true });
+const libraryBatchText = ref('');
 const libraryTagFilter = ref('');
 const selectedLibraryIds = ref<string[]>([]);
 const batchLibraryTagIds = ref<string[]>([]);
@@ -394,6 +395,18 @@ function editLibrary(item: WheelItem) {
   Object.assign(libraryForm, { id: item.id, name: item.name, tagIds: [...(Array.isArray(item.tagIds) ? item.tagIds as string[] : [])], weight: item.weight, enabled: item.enabled });
 }
 function submitLibrary() { handle(() => { wheelStore.saveLibraryItem(libraryForm); resetLibraryForm(); }, libraryForm.id ? '已更新公共项' : '已添加公共项'); }
+function submitBatchLibrary() {
+  const items = parseItems(libraryBatchText.value);
+  if (!items.length) return say('请先输入至少一个公共项');
+  handle(() => {
+    const result = wheelStore.batchAddLibraryItems(items, batchLibraryTagIds.value);
+    libraryBatchText.value = '';
+    say(result.skipped ? `已添加 ${result.added} 个公共项，跳过 ${result.skipped} 个重复或空行` : `已添加 ${result.added} 个公共项`);
+  });
+}
+function toggleLibraryEnabled(item: WheelItem) {
+  handle(() => wheelStore.toggleLibraryEnabled(item.id), item.enabled === false ? '已启用公共项' : '已停用公共项');
+}
 function setAllVisibleLibrarySelection(checked: boolean) {
   const next = new Set(selectedLibraryIds.value);
   filteredLibraryItems.value.forEach(item => checked ? next.add(item.id) : next.delete(item.id));
@@ -862,6 +875,12 @@ function importJson(event: Event) {
           <div class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="libraryForm.tagIds.includes(tag.id)" @change="libraryForm.tagIds = toggleTag(libraryForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label></div>
           <div class="inline-actions"><button class="btn btn-primary">{{ libraryForm.id ? '保存公共项' : '添加公共项' }}</button><button v-if="libraryForm.id" type="button" class="btn btn-secondary" @click="resetLibraryForm">取消</button></div>
         </form>
+        <details class="wheel-batch-tools library-batch-tools">
+          <summary>批量导入公共项</summary>
+          <textarea v-model="libraryBatchText" rows="4" placeholder="每行一个公共项，也可写成：周末晨跑,2" />
+          <div class="batch-tag-checks" role="group" aria-label="批量导入标签"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="batchLibraryTagIds.includes(tag.id)" @change="batchLibraryTagIds = toggleTag(batchLibraryTagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label></div>
+          <button class="btn btn-secondary" type="button" @click="submitBatchLibrary">导入公共项</button>
+        </details>
         <div class="library-batch-bar">
           <label class="select-all-row"><input type="checkbox" :checked="allVisibleLibrarySelected" :disabled="!filteredLibraryItems.length" @change="setAllVisibleLibrarySelection(($event.target as HTMLInputElement).checked)" />{{ librarySelectionSummary }}</label>
           <button type="button" class="link-button" :disabled="!selectedLibraryIds.length" @click="clearLibrarySelection">清空选择</button>
@@ -879,7 +898,7 @@ function importJson(event: Event) {
         <div v-for="item in filteredLibraryItems" :key="item.id" class="entity-row library-row" :class="{ selected: selectedLibrarySet.has(item.id) }">
           <label class="library-select"><input v-model="selectedLibraryIds" type="checkbox" :value="item.id" :aria-label="`选择公共项 ${item.name}`" /></label>
           <span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }} · {{ libraryTagNames(item) }}</em></span>
-          <span><button class="link-button" @click="editLibrary(item)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除公共项“${item.name}”吗？`, () => wheelStore.deleteLibraryItem(item.id), '已删除公共项')">删除</button></span>
+          <span><button class="link-button" @click="editLibrary(item)">编辑</button><button class="link-button" @click="toggleLibraryEnabled(item)">{{ item.enabled ? '停用' : '启用' }}</button><button class="link-button danger-text" @click="confirmAction(`删除公共项“${item.name}”吗？`, () => wheelStore.deleteLibraryItem(item.id), '已删除公共项')">删除</button></span>
         </div>
         <p v-if="!filteredLibraryItems.length" class="empty-state">当前筛选下没有公共项。</p>
       </article>
@@ -904,6 +923,7 @@ function importJson(event: Event) {
 .wheel-batch-tools{display:grid;gap:8px;margin:12px 0;padding:10px 12px;border:1px solid rgba(223,231,239,.9);border-radius:12px;background:#fafbfd}.wheel-batch-tools summary{cursor:pointer;font-weight:850;color:#53625a}.wheel-batch-tools textarea{width:100%;resize:vertical;min-height:76px}
 .wheel-copy-row{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(180px,1.3fr) auto;gap:8px;align-items:center}.wheel-copy-row select{min-height:38px;min-width:0}
 .tag-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+.library-batch-tools{margin-top:12px}
 .wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
 .wheel-result.focus{align-items:center;text-align:center;min-height:auto;padding:4px 0 0}
 .wheel-management-block{margin-top:8px}.wheel-management-landing{margin:0 0 14px;padding:14px 16px;border:1px solid rgba(42,75,56,.12);border-radius:10px;background:#fbfdfb}.wheel-management-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.wheel-management-nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.wheel-management-nav .btn{min-height:34px}.wheel-management-landing .wheel-management-summary{margin-top:12px}

@@ -912,6 +912,30 @@ test('wheel tag management previews, directly spins, and toggles tag state', asy
     expect(stored.wheelTags.find(tag => tag.id === 'tag-actions').enabled).toBe(false);
 });
 
+test('wheel library batch import uses selected tags and row toggle persists', async ({ page }) => {
+    const source = emptyData({
+        wheelTags: [{ id: 'tag-library-batch', name: '工作', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+        wheelLibraryItems: [{ id: 'library-existing-batch', name: '已有公共项', note: '', tagIds: ['tag-library-batch'], weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
+    const batch = page.locator('.library-batch-tools');
+    await batch.locator('summary').click();
+    await batch.getByRole('checkbox', { name: '工作' }).check();
+    await batch.locator('textarea').fill('新公共项,2\n已有公共项');
+    await batch.getByRole('button', { name: '导入公共项' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('已添加 1 个公共项，跳过 1 个');
+    const existingRow = page.locator('.library-row').filter({ hasText: '已有公共项' });
+    await existingRow.getByRole('button', { name: '停用' }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: '新公共项', weight: 2, tagIds: ['tag-library-batch'], enabled: true }),
+        expect.objectContaining({ name: '已有公共项', enabled: false }),
+    ]));
+});
+
 test('wheel management landing keeps workspace navigation focused', async ({ page }) => {
     await page.goto('/#/wheel');
     await page.locator('#wheel-action-menu-button').click();

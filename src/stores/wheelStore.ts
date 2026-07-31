@@ -165,6 +165,28 @@ export const useWheelStore = defineStore('wheel', () => {
   function toggleTagEnabled(id: string) { mutate('toggle-wheel-tag', () => { const tag = tags.value.find(item => item.id === id); if (!tag) return; tag.enabled = tag.enabled === false; tag.updatedAt = getNowLocal(); }); }
   function deleteTag(id: string) { mutate('delete-wheel-tag', () => { const tag = tags.value.find(item => item.id === id); if (!tag) return; const orphaned = libraryItems.value.filter(item => safeArray(item.tagIds).map(String).includes(id) && safeArray(item.tagIds).length === 1); if (orphaned.length) throw new Error(`仍有 ${orphaned.length} 个公共项只属于该标签，请先调整它们的标签`); tombstone('wheelTags', id, { name: tag.name }); lifePlan.data.wheelTags = lifePlan.data.wheelTags.filter(item => String(item.id) !== id); libraryItems.value.forEach(item => { item.tagIds = safeArray(item.tagIds).map(String).filter(tagId => tagId !== id); }); wheels.value.filter(wheel => wheel.mode === 'tag').forEach(wheel => { wheel.tagIds = safeArray(wheel.tagIds).map(String).filter(tagId => tagId !== id); wheel.updatedAt = getNowLocal(); }); }); }
   function saveLibraryItem(input: { id?: string; name: string; tagIds: string[]; weight?: number; enabled?: boolean }) { mutate(input.id ? 'update-wheel-library-item' : 'create-wheel-library-item', () => { const name = String(input.name || '').trim(); const tagIds = validTagIds(input.tagIds); if (!name) throw new Error('请输入公共项名称'); if (!tagIds.length) throw new Error('公共项至少需要选择一个标签'); if (libraryItems.value.some(item => item.id !== input.id && nameKey(item.name) === nameKey(name))) throw new Error('公共项里已有同名内容'); const stamp = getNowLocal(); const existing = libraryItems.value.find(item => item.id === input.id); if (existing) Object.assign(existing, { name, tagIds, weight: weight(input.weight), enabled: input.enabled !== false, updatedAt: stamp }); else lifePlan.data.wheelLibraryItems.push({ id: genId(), name, note: '', tagIds, weight: weight(input.weight), enabled: input.enabled !== false, createdAt: stamp, updatedAt: stamp }); }); }
+  function batchAddLibraryItems(inputs: Array<{ name: string; weight?: unknown }>, tagIds: string[]) {
+    let added = 0;
+    let skipped = 0;
+    const validTags = validTagIds(tagIds);
+    if (!validTags.length) throw new Error('请先选择至少一个标签');
+    mutate('batch-create-wheel-library-items', () => {
+      const seen = new Set(libraryItems.value.map(item => nameKey(item.name)));
+      const stamp = getNowLocal();
+      inputs.forEach(input => {
+        const name = String(input.name || '').trim();
+        if (!name || seen.has(nameKey(name))) {
+          if (name) skipped += 1;
+          return;
+        }
+        seen.add(nameKey(name));
+        lifePlan.data.wheelLibraryItems.push({ id: genId(), name, note: '', tagIds: validTags, weight: weight(input.weight), enabled: true, createdAt: stamp, updatedAt: stamp });
+        added += 1;
+      });
+    });
+    return { added, skipped };
+  }
+  function toggleLibraryEnabled(id: string) { mutate('toggle-wheel-library-item', () => { const item = libraryItems.value.find(entry => entry.id === id); if (!item) return; item.enabled = item.enabled === false; item.updatedAt = getNowLocal(); }); }
   function deleteLibraryItem(id: string) { mutate('delete-wheel-library-item', () => { const item = libraryItems.value.find(entry => entry.id === id); if (!item) return; tombstone('wheelLibraryItems', id, { name: item.name }); lifePlan.data.wheelLibraryItems = lifePlan.data.wheelLibraryItems.filter(entry => String(entry.id) !== id); }); }
   function batchSetLibraryEnabled(ids: string[], enabled: boolean) {
     const selected = new Set(ids.map(String));
@@ -258,5 +280,5 @@ export const useWheelStore = defineStore('wheel', () => {
   }
   function exportHistoryCsv() { const header = ['时间', '转盘', '模式', '标签', '结果', '备注', '是否已转待办']; const rows = history.value.map(item => [item.createdAt, item.wheelName, item.mode === 'tag' ? '标签转盘' : '普通转盘', item.tagName || '', item.resultName, item.note, item.convertedTodoId ? '是' : '否']); download(`大转盘抽取记录_${fileStamp()}.csv`, `\uFEFF${[header, ...rows].map(row => row.map(csvCell).join(',')).join('\n')}`, 'text/csv;charset=utf-8'); }
 
-  return { wheels, tags, libraryItems, history, candidates, candidateTags, weightedPick, createWheel, updateWheel, deleteWheel, saveOption, batchAddOptions, copyLibraryItemToWheel, deleteOption, saveTag, toggleTagEnabled, deleteTag, saveLibraryItem, deleteLibraryItem, batchSetLibraryEnabled, batchUpdateLibraryTags, batchDeleteLibraryItems, recordSpin, deleteHistory, clearHistory, convertHistoryToTodo, backupSnapshot, exportBackup, restoreBackup, exportHistoryCsv };
+  return { wheels, tags, libraryItems, history, candidates, candidateTags, weightedPick, createWheel, updateWheel, deleteWheel, saveOption, batchAddOptions, copyLibraryItemToWheel, deleteOption, saveTag, toggleTagEnabled, deleteTag, saveLibraryItem, batchAddLibraryItems, toggleLibraryEnabled, deleteLibraryItem, batchSetLibraryEnabled, batchUpdateLibraryTags, batchDeleteLibraryItems, recordSpin, deleteHistory, clearHistory, convertHistoryToTodo, backupSnapshot, exportBackup, restoreBackup, exportHistoryCsv };
 });
