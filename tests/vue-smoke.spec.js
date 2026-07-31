@@ -2864,6 +2864,19 @@ test('materials deep links filters and random review remain read-only', async ({
     expect(persisted.mirror).toBeNull();
 });
 
+test('search does not match a todo only through its localized module label', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-label-only', '整理周报', { note: '汇总本周工作', group: '工作' })],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/search?q=待办');
+    await expect(page.locator('.search-result-item')).toHaveCount(0);
+    await expect(page.locator('.empty-state')).toHaveText('没有找到匹配内容');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('record editor persists linked and exclusive todos through the main data contract', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     await page.addInitScript(({ data, date }) => localStorage.setItem('lifePlanData', JSON.stringify({
