@@ -51,20 +51,32 @@ export const useWheelStore = defineStore('wheel', () => {
     const data = lifePlan.data;
     const stamp = getNowLocal();
     const remap = new Map<string, string>();
-    const seenTags = new Set<string>();
+    const seenTags = new Map<string, string>();
     data.wheelTags = safeArray(data.wheelTags).map((raw, index) => {
       const tag = raw as Record<string, unknown>; const name = String(tag.name || '未命名标签').trim() || '未命名标签';
       const id = String(tag.id || genId()); const key = nameKey(name);
-      if (seenTags.has(key)) { remap.set(id, ''); return null; }
-      seenTags.add(key); remap.set(id, id);
+      if (seenTags.has(key)) { remap.set(id, seenTags.get(key) || ''); return null; }
+      seenTags.set(key, id); remap.set(id, id);
       const createdAt = String(tag.createdAt || stamp);
       return { ...tag, id, name, color: color(tag.color, palette[index % palette.length]), weight: weight(tag.weight), enabled: tag.enabled !== false, createdAt, updatedAt: String(tag.updatedAt || createdAt) };
     }).filter(Boolean) as typeof data.wheelTags;
     const valid = new Set(data.wheelTags.map(tag => String(tag.id)));
-    const normalizeTagIds = (input: unknown) => Array.from(new Set(safeArray(input).map(id => remap.get(String(id)) ?? String(id)).filter(id => id && valid.has(id))));
+    const ensureUncategorizedTagId = () => {
+      const existing = data.wheelTags.find(tag => nameKey(tag.name) === nameKey('未分类'));
+      if (existing) return String(existing.id);
+      const created = { id: genId(), name: '未分类', color: '#8a8f98', weight: 1, enabled: true, createdAt: stamp, updatedAt: stamp };
+      data.wheelTags.push(created);
+      valid.add(created.id);
+      return created.id;
+    };
+    const normalizeTagIds = (input: unknown, fallbackToUncategorized = false) => {
+      const normalized = Array.from(new Set(safeArray(input).map(id => remap.get(String(id)) ?? String(id)).filter(id => id && valid.has(id))));
+      if (!normalized.length && fallbackToUncategorized) normalized.push(ensureUncategorizedTagId());
+      return normalized;
+    };
     data.wheelLibraryItems = safeArray(data.wheelLibraryItems).map((raw, index) => {
       const item = raw as Record<string, unknown>; const createdAt = String(item.createdAt || stamp);
-      return { ...item, id: String(item.id || genId()), name: String(item.name || '未命名公共项').trim() || '未命名公共项', note: typeof item.note === 'string' ? item.note : '', tagIds: normalizeTagIds(item.tagIds), weight: weight(item.weight), enabled: item.enabled !== false, createdAt, updatedAt: String(item.updatedAt || createdAt), _index: index };
+      return { ...item, id: String(item.id || genId()), name: String(item.name || '未命名公共项').trim() || '未命名公共项', note: typeof item.note === 'string' ? item.note : '', tagIds: normalizeTagIds(item.tagIds, true), weight: weight(item.weight), enabled: item.enabled !== false, createdAt, updatedAt: String(item.updatedAt || createdAt), _index: index };
     }).filter((item, index, all) => all.findIndex(candidate => nameKey(candidate.name) === nameKey(item.name)) === index).map(({ _index, ...item }) => item) as typeof data.wheelLibraryItems;
     data.wheels = safeArray(data.wheels).map(raw => {
       const wheel = raw as Record<string, unknown>; const mode: WheelMode = wheel.mode === 'tag' ? 'tag' : 'normal'; const createdAt = String(wheel.createdAt || stamp);
