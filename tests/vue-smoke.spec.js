@@ -486,6 +486,24 @@ test('sidebar empty snapshot state explains automatic backups', async ({ page })
     await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。');
 });
 
+test('records history keeps non-rule-day habit check-ins while calendar stays rule-aware', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [{ id: 'habit-history', name: '历史补记习惯', tag: '复盘', rule: 'weekly-fixed', weekdays: [], timesPerDay: 1, startDate: '2026-01-01' }],
+        checkins: [{ id: 'checkin-history', habitId: 'habit-history', date: today, time: '08:00', checkinAt: `${today}T08:00:00`, note: '非规则日也保留' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/records');
+
+    await expect(page.locator('#all-records')).toContainText('历史补记习惯');
+    await expect(page.locator('#all-records')).toContainText('非规则日也保留');
+
+    await page.getByRole('button', { name: '日视图' }).click();
+    await expect(page.locator('#all-records')).not.toContainText('历史补记习惯');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('sidebar reads the legacy wheel sync state key', async ({ page }) => {
     await page.addInitScript(data => {
         localStorage.setItem('lifePlanData', JSON.stringify(data));
