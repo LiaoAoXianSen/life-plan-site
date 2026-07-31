@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
 import RecordCreateModal from '../components/RecordCreateModal.vue';
 import { buildScheduleItems, addDays, getMonthStart, getWeekStart, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
-import { formatDate, getTodayStr } from '../services/legacyServices';
+import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import type { DataEntity, Todo } from '../types/lifePlan';
@@ -887,7 +887,7 @@ onBeforeUnmount(() => {
       <template v-if="view === 'list'">
         <div v-if="listGroups.length">
           <section v-for="group in listGroups" :key="group.date" class="timeline-group">
-            <div class="timeline-date">{{ formatDate(group.date) || '未设置日期' }}</div>
+            <div class="timeline-date">{{ formatDisplayDate(group.date) || '未设置日期' }}</div>
             <article v-for="item in group.items" :key="item.key" class="record-row">
               <div class="record-time">{{ item.timeLabel }}</div>
               <div class="timeline-item" :style="{ '--event-bg': item.tone.bg, '--event-border': item.tone.border, '--event-ink': item.tone.ink }">

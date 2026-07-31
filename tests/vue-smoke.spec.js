@@ -2376,6 +2376,7 @@ test('records legacy filters and operation events stay read-only', async ({ page
     expect(typeValues).toEqual(['all', '日记', '日计划', '工作记录', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景', '待办', '习惯']);
 
     const todayGroup = results.locator('.timeline-group').filter({ hasText: '早间记录' });
+    await expect(todayGroup.locator('.timeline-date')).toHaveText(/^\d{4}年\d{1,2}月\d{1,2}日$/);
     let titles = await todayGroup.locator('.item-title').allTextContents();
     expect(titles.indexOf('较晚创建的全天记录')).toBeLessThan(titles.indexOf('今日全天记录'));
     expect(titles.indexOf('晚间记录')).toBeLessThan(titles.indexOf('早间记录'));
