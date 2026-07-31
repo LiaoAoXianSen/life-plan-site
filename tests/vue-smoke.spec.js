@@ -2592,6 +2592,25 @@ test('record built-in structured template preserves legacy markdown and template
     expect(record.content).toBe(expectedFields.map(([label, value]) => `# ${label}\n${value}`).join('\n\n') + '\n');
 });
 
+test('records header template manager opens without an active record', async ({ page }) => {
+    const source = emptyData({
+        templates: [{ id: 'template-header', name: '页头复盘模板', type: '日记', content: '## 复盘\n' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: /模板管理/ }).click();
+
+    const manager = page.getByRole('dialog', { name: '模板管理' });
+    await expect(manager).toBeVisible();
+    await expect(manager).toContainText('页头复盘模板');
+    await expect(manager.getByRole('button', { name: '删除模板 页头复盘模板' })).toBeVisible();
+    await manager.getByRole('button', { name: '关闭模板管理' }).click();
+    await expect(manager).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('custom record templates clone todos and delete with a template tombstone', async ({ page }) => {
     const date = '2026-07-27';
     const source = emptyData({

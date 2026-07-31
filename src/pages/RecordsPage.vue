@@ -360,6 +360,7 @@ function closeEditor(flush = true) {
   window.clearTimeout(recordAutoSaveTimer);
   editorDirty.value = false;
   activeRecordId.value = '';
+  showTemplateManager.value = false;
   editorNotice.value = '';
   resetDiaryAiState();
   if (route.query.record) updateRecordQuery();
@@ -677,6 +678,24 @@ onBeforeUnmount(() => {
 
     <RecordCreateModal v-model="showRecordCreate" @open-existing="openExistingFromCreate" />
 
+    <div v-if="showTemplateManager && !activeRecord" class="modal-overlay active" role="presentation" @click.self="showTemplateManager = false">
+      <section class="modal modal-sm record-template-modal" role="dialog" aria-modal="true" aria-labelledby="record-template-modal-title">
+        <div class="modal-header">
+          <div class="modal-title" id="record-template-modal-title">模板管理</div>
+          <button class="close-btn" type="button" aria-label="关闭模板管理" @click="showTemplateManager = false">×</button>
+        </div>
+        <div class="record-template-manager" aria-label="自定义模板管理">
+          <div v-if="lifePlan.data.templates.length" class="record-template-list">
+            <div v-for="template in lifePlan.data.templates" :key="String(template.id)" class="record-template-row">
+              <span><strong>{{ template.name }}</strong><small>{{ template.type }}</small></span>
+              <button class="link-button danger-text" type="button" :aria-label="`删除模板 ${template.name}`" @click="deleteTemplate(String(template.id))">删除</button>
+            </div>
+          </div>
+          <p v-else class="empty-state">暂无自定义模板。</p>
+        </div>
+      </section>
+    </div>
+
     <div class="filter-bar record-filter-bar">
       <input v-model="keyword" type="search" aria-label="搜索记录" placeholder="搜索标题、内容、类型" />
       <select v-model="typeFilter" aria-label="记录类型筛选">
@@ -921,6 +940,7 @@ onBeforeUnmount(() => {
 .record-template-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .record-template-manager,
 .record-template-editor { border-block: 1px solid rgba(42, 75, 56, .13); padding-block: 12px; }
+.record-template-modal .record-template-manager { border-block: 0; padding-block: 0; }
 .record-template-list { display: grid; }
 .record-template-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(42, 75, 56, .09); }
 .record-template-row:last-child { border-bottom: 0; }
