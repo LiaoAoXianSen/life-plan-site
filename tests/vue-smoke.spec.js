@@ -837,6 +837,28 @@ test('wheel management forms focus editable rows without mutating data', async (
     expect(persisted.mirror).toBeNull();
 });
 
+test('wheel normal option batch import skips duplicate names and preserves weights', async ({ page }) => {
+    const source = emptyData({
+        wheels: [{ id: 'wheel-batch', name: '批量导入盘', mode: 'normal', items: [{ id: 'option-existing', name: '已有选项', note: '', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    await page.locator('.wheel-stage-card').getByRole('button', { name: '编辑当前' }).click();
+    const tools = page.locator('.wheel-batch-tools');
+    await tools.locator('summary').click();
+    await tools.locator('textarea').fill('晨跑,2\n已有选项\n拉伸');
+    await tools.getByRole('button', { name: '导入到当前转盘' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('已添加 2 个选项，跳过 1 个');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheels[0].items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: '晨跑', weight: 2 }),
+        expect.objectContaining({ name: '拉伸', weight: 1 }),
+    ]));
+    expect(stored.wheels[0].items.filter(item => item.name === '已有选项')).toHaveLength(1);
+});
+
 test('wheel management landing keeps workspace navigation focused', async ({ page }) => {
     await page.goto('/#/wheel');
     await page.locator('#wheel-action-menu-button').click();

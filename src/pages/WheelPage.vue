@@ -52,6 +52,7 @@ const displayEntries = computed(() => {
 
 const wheelForm = reactive<{ id: string; name: string; mode: WheelMode; tagIds: string[]; itemsText: string }>({ id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' });
 const optionForm = reactive({ id: '', name: '', weight: 1, enabled: true });
+const optionBatchText = ref('');
 const tagForm = reactive({ id: '', name: '', color: '#216e4e', weight: 1, enabled: true });
 const libraryForm = reactive({ id: '', name: '', tagIds: [] as string[], weight: 1, enabled: true });
 const libraryTagFilter = ref('');
@@ -312,6 +313,17 @@ function removeWheel() { const wheel = selectedWheel.value; if (wheel && window.
 function resetOptionForm() { Object.assign(optionForm, { id: '', name: '', weight: 1, enabled: true }); }
 function editOption(item: WheelItem) { Object.assign(optionForm, { id: item.id, name: item.name, weight: item.weight, enabled: item.enabled }); }
 function submitOption() { const wheel = selectedWheel.value; if (!wheel) return; handle(() => { wheelStore.saveOption(wheel.id, optionForm); resetOptionForm(); }, optionForm.id ? '已更新选项' : '已添加选项'); }
+function submitBatchOptions() {
+  const wheel = selectedWheel.value;
+  if (!wheel) return;
+  const items = parseItems(optionBatchText.value);
+  if (!items.length) return say('请先输入至少一个选项');
+  handle(() => {
+    const result = wheelStore.batchAddOptions(wheel.id, items);
+    optionBatchText.value = '';
+    say(result.skipped ? `已添加 ${result.added} 个选项，跳过 ${result.skipped} 个重复或空行` : `已添加 ${result.added} 个选项`);
+  });
+}
 function resetTagForm() { Object.assign(tagForm, { id: '', name: '', color: '#216e4e', weight: 1, enabled: true }); }
 function editTag(tag: WheelTag) {
   showManagement.value = true;
@@ -747,6 +759,11 @@ function importJson(event: Event) {
           <div class="inline-actions"><button class="btn btn-primary">{{ optionForm.id ? '保存' : '添加' }}</button><button v-if="optionForm.id" type="button" class="btn btn-secondary" @click="resetOptionForm">取消</button></div>
         </form>
         <p v-else class="hint">标签转盘从公共项按标签抽取，不维护私有选项。</p>
+        <details v-if="selectedWheel?.mode === 'normal'" class="wheel-batch-tools">
+          <summary>批量导入选项</summary>
+          <textarea v-model="optionBatchText" rows="4" placeholder="每行一个选项，也可写成：散步,2" />
+          <button class="btn btn-secondary" type="button" @click="submitBatchOptions">导入到当前转盘</button>
+        </details>
         <div v-for="item in selectedWheel?.mode === 'normal' ? selectedWheel.items : []" :key="item.id" class="entity-row"><span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }}</em></span><span><button class="link-button" @click="editOption(item)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除选项“${item.name}”吗？`, () => wheelStore.deleteOption(selectedWheel!.id, item.id), '已删除选项')">删除</button></span></div>
       </article>
       <article id="wheel-tags-panel" class="card management-card">
@@ -817,6 +834,7 @@ function importJson(event: Event) {
 .wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;width:100%;max-width:520px;padding:10px;border:1px solid rgba(223,231,239,.96);border-radius:22px;background:rgba(245,247,251,.94);box-shadow:inset 0 1px 0 rgba(255,255,255,.92)}
 .wheel-focus-actions .wheel-spin{flex:1 1 260px}
 .wheel-focus-actions .btn-secondary{min-width:92px}
+.wheel-batch-tools{display:grid;gap:8px;margin:12px 0;padding:10px 12px;border:1px solid rgba(223,231,239,.9);border-radius:12px;background:#fafbfd}.wheel-batch-tools summary{cursor:pointer;font-weight:850;color:#53625a}.wheel-batch-tools textarea{width:100%;resize:vertical;min-height:76px}
 .wheel-spin.large{min-width:220px;min-height:48px;font-size:1rem}
 .wheel-result.focus{align-items:center;text-align:center;min-height:auto;padding:4px 0 0}
 .wheel-management-block{margin-top:8px}.wheel-management-landing{margin:0 0 14px;padding:14px 16px;border:1px solid rgba(42,75,56,.12);border-radius:10px;background:#fbfdfb}.wheel-management-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.wheel-management-nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.wheel-management-nav .btn{min-height:34px}.wheel-management-landing .wheel-management-summary{margin-top:12px}

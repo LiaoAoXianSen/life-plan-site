@@ -121,6 +121,28 @@ export const useWheelStore = defineStore('wheel', () => {
   function updateWheel(id: string, input: { name?: string; tagIds?: string[] }) { mutate('update-wheel', () => { const wheel = byId(id); if (!wheel) return; if (input.name !== undefined && String(input.name).trim()) wheel.name = String(input.name).trim(); if (wheel.mode === 'tag' && input.tagIds) { const next = validTagIds(input.tagIds); if (!next.length) throw new Error('标签转盘至少需要选择一个标签'); wheel.tagIds = next; } wheel.updatedAt = getNowLocal(); }); }
   function deleteWheel(id: string) { mutate('delete-wheel', () => { const wheel = byId(id); if (!wheel) return; tombstone('wheels', id, { name: wheel.name }); wheel.items.forEach(item => tombstone('wheelItems', item.id, { wheelId: id, name: item.name })); lifePlan.data.wheels = lifePlan.data.wheels.filter(item => String(item.id) !== id); }); }
   function saveOption(wheelId: string, input: { id?: string; name: string; weight: number; enabled?: boolean }) { mutate(input.id ? 'update-wheel-item' : 'create-wheel-item', () => { const wheel = byId(wheelId); if (!wheel || wheel.mode === 'tag') throw new Error('标签转盘没有私有选项'); const name = String(input.name || '').trim(); if (!name) throw new Error('请输入选项名称'); if (wheel.items.some(item => item.id !== input.id && nameKey(item.name) === nameKey(name))) throw new Error('当前转盘已有同名选项'); const stamp = getNowLocal(); const existing = wheel.items.find(item => item.id === input.id); if (existing) Object.assign(existing, { name, weight: weight(input.weight), enabled: input.enabled !== false, updatedAt: stamp }); else wheel.items.push({ id: genId(), name, note: '', weight: weight(input.weight), enabled: input.enabled !== false, createdAt: stamp, updatedAt: stamp }); wheel.updatedAt = stamp; }); }
+  function batchAddOptions(wheelId: string, inputs: Array<{ name: string; weight?: unknown }>) {
+    let added = 0;
+    let skipped = 0;
+    mutate('batch-create-wheel-items', () => {
+      const wheel = byId(wheelId);
+      if (!wheel || wheel.mode === 'tag') throw new Error('标签转盘没有私有选项');
+      const seen = new Set(wheel.items.map(item => nameKey(item.name)));
+      const stamp = getNowLocal();
+      inputs.forEach(input => {
+        const name = String(input.name || '').trim();
+        if (!name || seen.has(nameKey(name))) {
+          if (name) skipped += 1;
+          return;
+        }
+        seen.add(nameKey(name));
+        wheel.items.push({ id: genId(), name, note: '', weight: weight(input.weight), enabled: true, createdAt: stamp, updatedAt: stamp });
+        added += 1;
+      });
+      if (added) wheel.updatedAt = stamp;
+    });
+    return { added, skipped };
+  }
   function deleteOption(wheelId: string, itemId: string) { mutate('delete-wheel-item', () => { const wheel = byId(wheelId); const item = wheel?.items.find(entry => entry.id === itemId); if (!wheel || !item) return; tombstone('wheelItems', itemId, { wheelId, name: item.name }); wheel.items = wheel.items.filter(entry => entry.id !== itemId); wheel.updatedAt = getNowLocal(); }); }
 
   function saveTag(input: { id?: string; name: string; color?: string; weight?: number; enabled?: boolean }) { mutate(input.id ? 'update-wheel-tag' : 'create-wheel-tag', () => { const name = String(input.name || '').trim(); if (!name) throw new Error('请输入标签名称'); if (tags.value.some(tag => tag.id !== input.id && nameKey(tag.name) === nameKey(name))) throw new Error('已有同名标签'); const stamp = getNowLocal(); const existing = tags.value.find(tag => tag.id === input.id); if (existing) Object.assign(existing, { name, color: color(input.color, existing.color), weight: weight(input.weight), enabled: input.enabled !== false, updatedAt: stamp }); else lifePlan.data.wheelTags.push({ id: genId(), name, color: color(input.color, palette[tags.value.length % palette.length]), weight: weight(input.weight), enabled: input.enabled !== false, createdAt: stamp, updatedAt: stamp }); }); }
@@ -219,5 +241,5 @@ export const useWheelStore = defineStore('wheel', () => {
   }
   function exportHistoryCsv() { const header = ['时间', '转盘', '模式', '标签', '结果', '备注', '是否已转待办']; const rows = history.value.map(item => [item.createdAt, item.wheelName, item.mode === 'tag' ? '标签转盘' : '普通转盘', item.tagName || '', item.resultName, item.note, item.convertedTodoId ? '是' : '否']); download(`大转盘抽取记录_${fileStamp()}.csv`, `\uFEFF${[header, ...rows].map(row => row.map(csvCell).join(',')).join('\n')}`, 'text/csv;charset=utf-8'); }
 
-  return { wheels, tags, libraryItems, history, candidates, candidateTags, weightedPick, createWheel, updateWheel, deleteWheel, saveOption, deleteOption, saveTag, deleteTag, saveLibraryItem, deleteLibraryItem, batchSetLibraryEnabled, batchUpdateLibraryTags, batchDeleteLibraryItems, recordSpin, deleteHistory, clearHistory, convertHistoryToTodo, backupSnapshot, exportBackup, restoreBackup, exportHistoryCsv };
+  return { wheels, tags, libraryItems, history, candidates, candidateTags, weightedPick, createWheel, updateWheel, deleteWheel, saveOption, batchAddOptions, deleteOption, saveTag, deleteTag, saveLibraryItem, deleteLibraryItem, batchSetLibraryEnabled, batchUpdateLibraryTags, batchDeleteLibraryItems, recordSpin, deleteHistory, clearHistory, convertHistoryToTodo, backupSnapshot, exportBackup, restoreBackup, exportHistoryCsv };
 });
