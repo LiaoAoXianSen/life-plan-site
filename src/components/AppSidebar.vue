@@ -50,11 +50,12 @@ const mainSyncLabel = computed(() => {
     const state = JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}') as {
       dirty?: boolean;
       lastSyncAt?: string;
+      lastRemoteHash?: string;
     };
     if (!config.webdavUrl) return '同步：未配置';
     if (state.dirty) return '同步：有未上传改动';
-    if (state.lastSyncAt) return `同步：${String(state.lastSyncAt).slice(0, 16).replace('T', ' ')}`;
-    return '同步：已配置';
+    if (state.lastSyncAt || state.lastRemoteHash) return '同步：已同步';
+    return '同步：待检查';
   } catch {
     return '同步：未配置';
   }
