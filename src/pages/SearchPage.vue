@@ -159,7 +159,10 @@ function search() {
 <template>
   <section class="page active" id="page-search">
     <header class="page-header">
-      <div class="page-title">全局搜索</div>
+      <div>
+        <div class="page-title">全局搜索</div>
+        <p class="page-subtitle">跨记录、待办、目标、素材、模板和转盘公共项搜索。</p>
+      </div>
     </header>
     <form class="global-search-panel search-panel" @submit.prevent="search">
       <input v-model="query" type="search" aria-label="全局搜索关键词" placeholder="搜索记录、待办、目标、素材、模板与转盘项" />
