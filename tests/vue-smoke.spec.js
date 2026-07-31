@@ -3426,6 +3426,32 @@ test('AI todayPlan keeps drafts read-only until confirmed writeback with sourceT
     ]));
 });
 
+test('AI remote failure falls back to local drafts before confirmation', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-ai-fallback', '远程失败后仍要推进的待办', { group: '迁移' })],
+    });
+    const original = JSON.stringify(source);
+    let remoteRequests = 0;
+    await page.route('https://ai-fallback.example.test/**', async route => {
+        remoteRequests += 1;
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'temporary outage' }) });
+    });
+    await page.addInitScript(({ data }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: true, endpointUrl: 'https://ai-fallback.example.test/v1', model: 'fallback-model', apiKey: 'fallback-key' }));
+    }, { data: source });
+    await page.goto('/#/ai?mode=todayPlan');
+    const aiPage = page.locator('#page-ai');
+    await aiPage.getByRole('button', { name: '生成今日计划' }).click();
+
+    await expect.poll(() => remoteRequests).toBe(1);
+    await expect(aiPage.getByRole('status')).toContainText('已改用本地规则生成建议');
+    await expect(aiPage).toContainText('今日计划建议');
+    await expect(aiPage.locator('.ai-result-item input[id^="ai-draft-text-"]').first()).toHaveValue('推进：远程失败后仍要推进的待办');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('todoAppData'))).toBeNull();
+});
+
 test('AI chatCapture keeps multi-destination drafts read-only until confirmed writeback', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();
