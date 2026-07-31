@@ -134,7 +134,7 @@ const indexItems = computed<SearchItem[]>(() => {
 });
 
 function matches(item: SearchItem, keyword: string) {
-  const haystack = [item.module, item.label, item.title, item.subtitle, item.body, item.meta, ...item.tags]
+  const haystack = [item.module, item.title, item.subtitle, item.body, item.meta, ...item.tags]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
