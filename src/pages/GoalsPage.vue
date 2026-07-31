@@ -31,7 +31,7 @@ const goals = computed(() => (store.data.goals as GoalEntity[]).slice());
 const activeGoals = computed(() => goals.value.filter(goal => goal.status === '进行中'));
 
 function normalizeProgress(goal: Partial<GoalEntity>) {
-  if (typeof goal.progress === 'number' && Number.isFinite(goal.progress)) return Math.max(0, Math.min(100, goal.progress));
+  if (typeof goal.progress === 'number' && Number.isFinite(goal.progress)) return goal.progress;
   return goal.status === '已完成' ? 100 : 0;
 }
 
