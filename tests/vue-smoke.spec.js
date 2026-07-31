@@ -1672,6 +1672,40 @@ test('habit note backfill edit and undo keep local mirror and ledger contracts',
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('habit backfill list follows the selected date schedule', async ({ page }) => {
+    const dateAt = amount => {
+        const date = new Date();
+        date.setDate(date.getDate() + amount);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const today = dateAt(0);
+    const yesterday = dateAt(-1);
+    const yesterdayWeekday = String(new Date(`${yesterday}T12:00:00`).getDay());
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData({
+        habits: [{
+            id: 'habit-backfill-schedule',
+            name: '仅昨日执行',
+            rule: 'weekly-fixed',
+            weekdays: [yesterdayWeekday],
+            timesPerDay: 1,
+            startDate: dateAt(-30),
+        }],
+    }));
+
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '补卡' }).click();
+    const backfillDate = page.getByLabel('补卡日期');
+    await expect(page.locator('.habit-quick-card').filter({ hasText: '仅昨日执行' })).toHaveCount(0);
+
+    await backfillDate.fill(yesterday);
+    const card = page.locator('.habit-quick-card').filter({ hasText: '仅昨日执行' });
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText('0/1 次');
+
+    await backfillDate.fill(today);
+    await expect(page.locator('.habit-quick-card').filter({ hasText: '仅昨日执行' })).toHaveCount(0);
+});
+
 test('habit base edit and delete preserve legacy management contracts', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({

@@ -49,6 +49,18 @@ const todayItems = computed(() => habits.todayHabits.map(habit => ({
   count: habits.getCheckinCount(habit.id),
   target: habits.targetCount(habit),
 })));
+const activeHabitItems = computed(() => {
+  const date = activeTab.value === 'backfill' ? (makeupDate.value || getTodayStr()) : getTodayStr();
+  const source = activeTab.value === 'backfill'
+    ? habits.habits.filter(habit => habits.isHabitDueOnDate(habit, date))
+    : habits.todayHabits;
+  return source.map(habit => ({
+    habit,
+    count: habits.getCheckinCount(habit.id, date),
+    target: habits.targetCount(habit),
+  }));
+});
+const backfillDateIsFuture = computed(() => activeTab.value === 'backfill' && makeupDate.value > getTodayStr());
 const rewardItems = computed(() => [...habits.rewards].sort((a, b) => {
   const archiveRank = Number(Boolean(a.archived)) - Number(Boolean(b.archived));
   if (archiveRank) return archiveRank;
@@ -850,8 +862,9 @@ watch(focusedHabitId, value => {
           <p class="section-hint">{{ activeTab === 'backfill' ? '选择日期后可备注打卡、补卡或撤销最近一次。' : '保留原来的快速打卡、备注、再记一次、撤销和减少次数。' }}</p>
         </div>
       </div>
-      <div class="habit-quick-list">
-        <article v-for="item in todayItems" :key="item.habit.id" class="habit-quick-card compact" :class="{ done: item.count > 0, multi: item.target > 1, 'is-target': focusedHabitId === item.habit.id }" :aria-current="focusedHabitId === item.habit.id ? 'true' : undefined">
+      <div v-if="backfillDateIsFuture" class="empty-state">不能补未来日期，换一个日期看看。</div>
+      <div v-else class="habit-quick-list">
+        <article v-for="item in activeHabitItems" :key="item.habit.id" class="habit-quick-card compact" :class="{ done: item.count > 0, multi: item.target > 1, 'is-target': focusedHabitId === item.habit.id }" :aria-current="focusedHabitId === item.habit.id ? 'true' : undefined">
           <div class="habit-quick-head">
             <div class="habit-quick-main">
               <div class="habit-quick-title-row">
@@ -888,7 +901,7 @@ watch(focusedHabitId, value => {
             </div>
           </div>
         </article>
-        <div v-if="!todayItems.length" class="empty-state">今日没有按规则待完成的习惯。</div>
+        <div v-if="!activeHabitItems.length" class="empty-state">{{ activeTab === 'backfill' ? '这一天没有按规则应完成的习惯。' : '今日没有按规则待完成的习惯。' }}</div>
       </div>
     </section>
 

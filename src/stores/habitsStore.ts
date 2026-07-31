@@ -1133,6 +1133,7 @@ export const useHabitsStore = defineStore('habits', () => {
     getCheckins,
     getCheckinCount,
     targetCount,
+    isHabitDueOnDate: isDueOnDate,
     create,
     updateHabit,
     setHabitArchived,
