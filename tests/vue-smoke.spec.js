@@ -2706,6 +2706,13 @@ test('records header template manager opens without an active record', async ({ 
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('records empty template manager explains built-in templates', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: /模板管理/ }).click();
+    await expect(page.getByRole('dialog', { name: '模板管理' })).toContainText('暂无自定义模板。内置模板会直接出现在对应记录类型的模板下拉里。');
+});
+
 test('custom record templates clone todos and delete with a template tombstone', async ({ page }) => {
     const date = '2026-07-27';
     const source = emptyData({

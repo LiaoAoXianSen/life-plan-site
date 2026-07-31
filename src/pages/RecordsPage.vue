@@ -696,7 +696,7 @@ onBeforeUnmount(() => {
               <button class="link-button danger-text" type="button" :aria-label="`删除模板 ${template.name}`" @click="deleteTemplate(String(template.id))">删除</button>
             </div>
           </div>
-          <p v-else class="empty-state">暂无自定义模板。</p>
+          <p v-else class="empty-state">暂无自定义模板。内置模板会直接出现在对应记录类型的模板下拉里。</p>
         </div>
       </section>
     </div>
@@ -774,7 +774,7 @@ onBeforeUnmount(() => {
                 <button class="link-button danger-text" type="button" :aria-label="`删除模板 ${template.name}`" @click="deleteTemplate(String(template.id))">删除</button>
               </div>
             </div>
-            <p v-else class="empty-state">暂无自定义模板。</p>
+            <p v-else class="empty-state">暂无自定义模板。内置模板会直接出现在对应记录类型的模板下拉里。</p>
           </section>
           <section v-if="activeBuiltInTemplate" ref="templateEditorRef" class="record-template-editor" :aria-label="`${activeBuiltInTemplate.name}结构化字段`">
             <div class="record-template-editor-head">
