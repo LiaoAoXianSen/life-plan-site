@@ -675,6 +675,10 @@ test('wheel canvas click drag and tag stage preserve interaction contracts', asy
     expect(stored.data.wheelHistory[0]).toMatchObject({ wheelId: 'wheel-normal', resultId: 'normal-read', resultName: '深度阅读' });
     expect(stored.syncState.dirty).toBe(true);
 
+    await page.locator('.wheel-result').getByRole('button', { name: '只保留记录' }).click();
+    await expect(page.locator('.wheel-result')).not.toContainText('深度阅读');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).wheelHistory.length)).toBe(1);
+
     const box = await canvasWrap.boundingBox();
     expect(box).toBeTruthy();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

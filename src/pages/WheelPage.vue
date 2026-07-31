@@ -277,6 +277,10 @@ function drawCenter(ctx: CanvasRenderingContext2D, cx: number, cy: number, label
 function say(message: string) { notice.value = message; }
 function handle(action: () => void, success = '') { try { action(); if (success) say(success); } catch (error) { say(error instanceof Error ? error.message : String(error)); } }
 function confirmAction(message: string, action: () => void, success = '') { if (window.confirm(message)) handle(action, success); }
+function clearCurrentResult() {
+  resultId.value = '';
+  say('已保留这条抽取记录');
+}
 function itemTagIds(item: WheelItem) { return Array.isArray(item.tagIds) ? item.tagIds as string[] : []; }
 function libraryTagNames(item: WheelItem) { return itemTagIds(item).map(id => wheelStore.tags.find(tag => tag.id === id)?.name).filter(Boolean).join('、') || '未分类'; }
 function resetWheelForm() { Object.assign(wheelForm, { id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' }); }
@@ -632,6 +636,7 @@ function importJson(event: Event) {
                 <div class="wheel-result-note">如果这个答案正好对味，就直接把它转成待办，省掉继续纠结的那一步。</div>
                 <div class="wheel-result-actions">
                   <button class="btn btn-primary" :disabled="Boolean(currentResult!.convertedTodoId)" @click="handle(() => wheelStore.convertHistoryToTodo(currentResult!.id), '已转入今日待办')">{{ currentResult!.convertedTodoId ? '已转入待办' : '转入待办' }}</button>
+                  <button class="btn btn-secondary" type="button" @click="clearCurrentResult">只保留记录</button>
                 </div>
               </div>
             </template>
