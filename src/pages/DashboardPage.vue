@@ -22,6 +22,7 @@ const todosStore = useTodosStore();
 const habitsStore = useHabitsStore();
 const fitnessStore = useFitnessStore();
 const today = getTodayStr();
+const todayLabel = formatLongDate(today);
 const showCreateRecord = ref(false);
 const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
 const floatingMode = ref<FloatingMode>('random');
@@ -72,6 +73,12 @@ function activeRecordTodos(record: DataEntity) {
 
 function formatDate(value: unknown) {
   return String(value || '').replace(/-/g, '/');
+}
+
+function formatLongDate(value: string) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value || '无';
+  return `${match[1]}年${Number(match[2])}月${Number(match[3])}日`;
 }
 
 function openTodo(todoId: string) {
@@ -308,7 +315,7 @@ const timelineGroups = computed(() => {
     <div class="dashboard-hero">
       <div class="hero-panel">
         <div>
-          <div class="hero-date">{{ today }}</div>
+          <div class="hero-date">{{ todayLabel }}</div>
           <h1 class="hero-title">{{ nextTodo ? `今天先处理：${nextTodo.text}` : '今天先把最重要的事推进一点' }}</h1>
           <div class="hero-meta">
             <span>待办 {{ todayTodoDone }}/{{ todayRelevantTodos.length }}</span>
@@ -421,7 +428,7 @@ const timelineGroups = computed(() => {
     </section>
 
     <div class="card dashboard-today-overview">
-      <div class="card-title">今日概览 · {{ today }}</div>
+      <div class="card-title">今日概览 · {{ todayLabel }}</div>
       <div class="today-grid dashboard-main-grid">
         <section class="dashboard-today-todos" aria-label="今日待办">
           <div class="section-title">今日待办</div>

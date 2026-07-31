@@ -337,6 +337,7 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
 
     await page.goto('/#/dashboard');
+    await expect(page.locator('.hero-date')).toHaveText(/^\d{4}年\d{1,2}月\d{1,2}日$/);
     await expect(page.locator('.summary-card').filter({ hasText: '今日待办' })).toContainText('1/4');
     await expect(page.locator('.hero-meta')).toContainText('近30天训练 0');
     await expect(page.locator('.hero-meta')).toContainText('连续训练 0 天');
