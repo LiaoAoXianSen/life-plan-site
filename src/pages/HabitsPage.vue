@@ -725,7 +725,7 @@ watch(focusedHabitId, value => {
               <button class="btn btn-secondary" type="button" @click="archiveReward(reward.id, !reward.archived)">{{ reward.archived ? '恢复心愿' : '归档心愿' }}</button>
             </div>
           </article>
-          <div v-if="!rewardItems.length" class="empty-state">还没有心愿。</div>
+          <div v-if="!rewardItems.length" class="empty-state">还没有心愿，先添加一个能让你真的想兑换的奖励</div>
         </div>
         <div class="habit-ledger-panel">
           <h3>近期流水</h3>
@@ -733,7 +733,7 @@ watch(focusedHabitId, value => {
             <span>{{ entry.note || entry.type || '积分调整' }}</span>
             <strong>{{ Number(entry.amount || 0) > 0 ? '+' : '' }}{{ Number(entry.amount || 0) }} {{ entry.currency || '金币' }}</strong>
           </div>
-          <div v-if="!habits.latestLedger.length" class="empty-state">暂无积分流水。</div>
+          <div v-if="!habits.latestLedger.length" class="empty-state">暂无积分流水</div>
         </div>
       </div>
     </section>
