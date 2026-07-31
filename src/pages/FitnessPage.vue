@@ -71,6 +71,36 @@ const overviewKpis = computed(() => [
   { label: '进行中计划', value: String(activePlanCount.value), hint: `全部计划 ${fitness.plans.length}` },
   { label: '动作库', value: String(fitness.library.length), hint: '可用于自由训练' },
 ]);
+const browseItems = computed(() => [
+  {
+    key: 'plans',
+    label: '训练计划',
+    value: `${fitness.plans.length} 个`,
+    detail: fitness.plans[0]?.name ? `最近：${fitness.plans[0].name}` : '还没有训练计划',
+    target: 'fitness-plan-section',
+  },
+  {
+    key: 'workouts',
+    label: '训练历史',
+    value: `${doneHistory.value.length} 条`,
+    detail: doneHistory.value[0] ? `${doneHistory.value[0].date || '未标日期'} · ${doneHistory.value[0].title || '自由训练'}` : '完成训练后会显示在这里',
+    target: 'fitness-workout-section',
+  },
+  {
+    key: 'body',
+    label: '身材记录',
+    value: `${fitness.metrics.length} 条`,
+    detail: latestWeight.value === '—' ? '还没有身材记录' : `最新体重 ${latestWeight.value}`,
+    target: 'fitness-body-section',
+  },
+  {
+    key: 'library',
+    label: '动作库',
+    value: `${fitness.library.length} 个`,
+    detail: fitness.library[0]?.name ? `示例：${fitness.library[0].name}` : '初始化默认动作开始',
+    target: 'fitness-library-section',
+  },
+]);
 
 function jumpToFreeWorkout() {
   if (!fitness.library.length) {
@@ -108,6 +138,10 @@ function openBodySection() {
   resetMetricForm();
   const el = document.getElementById('fitness-body-section');
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function browseTo(target: string) {
+  document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 const activeCompleted = computed(() => fitness.activeWorkout ? fitness.services.fitness.countCompletedSets(fitness.activeWorkout) : 0);
@@ -573,6 +607,25 @@ onUnmounted(stopRestTimer);
       </div>
     </section>
 
+    <section v-if="!fitness.activeWorkout" class="fitness-browse-index" aria-label="健身内容浏览">
+      <div class="fitness-section-head">
+        <div>
+          <div class="section-title">快速浏览</div>
+          <p class="fitness-section-sub">先看已有内容，再决定今天要记录什么。</p>
+        </div>
+      </div>
+      <div class="fitness-browse-grid">
+        <article v-for="item in browseItems" :key="item.key" class="fitness-browse-item">
+          <div class="fitness-browse-copy">
+            <span class="fitness-browse-label">{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <span class="fitness-browse-detail">{{ item.detail }}</span>
+          </div>
+          <button class="btn btn-secondary todo-mini-btn" type="button" @click="browseTo(item.target)">查看</button>
+        </article>
+      </div>
+    </section>
+
     <article v-if="fitness.activeWorkout" class="card">
       <div class="section-title-row">
         <div>
@@ -871,6 +924,45 @@ onUnmounted(stopRestTimer);
 .fitness-overview-hero {
   margin-bottom: 16px;
 }
+.fitness-browse-index {
+  margin-bottom: 20px;
+}
+.fitness-browse-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.fitness-browse-item {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #dfe7e1);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+}
+.fitness-browse-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.fitness-browse-label,
+.fitness-browse-detail {
+  color: var(--muted, #647269);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.fitness-browse-copy strong {
+  color: var(--text, #17211b);
+  font-size: 18px;
+}
+.fitness-browse-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .fitness-section-head {
   display: flex;
   justify-content: space-between;
@@ -920,12 +1012,18 @@ onUnmounted(stopRestTimer);
   .fitness-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .fitness-browse-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 560px) {
   .fitness-header-actions {
     width: 100%;
   }
   .fitness-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .fitness-browse-grid {
     grid-template-columns: 1fr;
   }
 }

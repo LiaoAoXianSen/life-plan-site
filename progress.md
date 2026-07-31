@@ -549,3 +549,12 @@
 - Verification passed: `npx vue-tsc -b --pretty false`; focused `npx playwright test tests/vue-smoke.spec.js -g "AI chatCapture"` 1/1; `npm run build`; focused `npx playwright test tests/vue-smoke.spec.js -g "AI|diary AI"` 17/17; full `./scripts/check.ps1` 57/57; `git diff --check` with LF/CRLF warnings only.
 - Responsive verification passed at 1440x1000 and 390x1000 with zero horizontal overflow for document, `.vue-main`, `#page-ai`, `.ai-capture-section-list`, `.ai-result-list`, and `.ai-result-item`; screenshots are under `test-results/ai-chat-capture-1440.png` and `test-results/ai-chat-capture-390.png`.
 - Did not run `scripts/package-clean.ps1` because Vue artifact packaging must not use the legacy static runtime packaging script; `dist/` production build is the artifact verification for this slice.
+
+## 2026-07-31 - Fitness browse index shell (in progress)
+
+- Started the next bounded UI/IA slice on `migration/vue-app-v1` after confirming the tree only contains the user's untracked `previews/` directory.
+- Prior two local commits are still ahead of origin; the first push retry failed with a GitHub connection reset and will be retried after this slice.
+- Scope is intentionally read-only: add a compact browse index under the existing Fitness overview hero with plan, recent workout, body metric, and exercise-library summaries plus scroll-to-section actions; keep all existing forms and service/data contracts unchanged.
+- Added `browseItems` and `browseTo()` in `src/pages/FitnessPage.vue`, rendering four compact browse items below the overview hero and preserving all existing form visibility and selectors.
+- Added focused Playwright coverage in `tests/vue-smoke.spec.js` for the four summaries and action-to-library scroll behavior.
+- `npm run build` passed; Fitness focused smoke passed 5/5; `git diff --check` passed with only LF/CRLF working-copy warnings.

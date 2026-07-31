@@ -246,6 +246,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 228. Status: complete - Update tests for Habit tab navigation and Records 日视图 labels; full Vue smoke 78/78; commit and push.
 229. Status: complete - Second UI/IA pass from user side-by-side screenshots: Ideas/Tags/Todos/Habit/Wheel/sidebar layout order and density.
 230. Status: complete - Full smoke 78/78 after visual parity fixes; commit and push.
+231. Status: complete - Add a compact Fitness browse index beneath the overview hero with read-only summaries and section jump actions.
+232. Status: complete - Add focused Fitness browse-index smoke coverage without changing persistence contracts.
+233. Status: in_progress - Commit, push, and append dual-store memory for the verified Fitness browse-index shell.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

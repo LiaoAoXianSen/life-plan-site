@@ -873,6 +873,20 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     expect(afterExport.map(snapshot => snapshot.reason)).toContain('手动导出备份');
 });
 
+test('fitness browse index exposes read-only section summaries and jump actions', async ({ page }) => {
+    await page.goto('/#/fitness');
+
+    const browse = page.locator('.fitness-browse-index');
+    await expect(browse).toBeVisible();
+    await expect(browse.locator('.fitness-browse-item')).toHaveCount(4);
+    await expect(browse).toContainText('训练计划');
+    await expect(browse).toContainText('训练历史');
+    await expect(browse).toContainText('身材记录');
+    await expect(browse).toContainText('动作库');
+    await browse.getByRole('button', { name: '查看' }).nth(3).click();
+    await expect(page.locator('#fitness-library-section')).toBeInViewport();
+});
+
 test('fitness plans support multiple exercises and explicit plan writeback', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [
