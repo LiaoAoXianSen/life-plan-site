@@ -2744,7 +2744,7 @@ test('materials create edit filter and delete preserve the legacy data contract'
 
     await list.getByRole('button', { name: '编辑素材 真正的素材正文' }).click();
     const editDialog = materialsPage.getByRole('dialog', { name: '编辑素材' });
-    await expectHashRoute(page, '/materials', { material: created.id });
+    await expectHashRoute(page, '/materials');
     await expect(editDialog.getByLabel('内容')).toHaveValue('真正的素材正文');
     await editDialog.getByLabel('类型').selectOption('观点');
     await editDialog.getByLabel('内容').fill('更新后的观点正文');
@@ -2776,6 +2776,23 @@ test('materials create edit filter and delete preserve the legacy data contract'
         expect.objectContaining({ collection: 'materials', id: created.id, reason: 'manual-delete' }),
     ]));
     expect(stored.materials.find(item => item.id === 'material-old').content).toBe('较早素材');
+});
+
+test('materials direct editor open and close keep URL unchanged', async ({ page }) => {
+    const source = emptyData({
+        materials: [{ id: 'material-direct-editor', type: '摘抄', content: '直接编辑素材', tags: ['阅读'], source: '旧书', note: '只读检查' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/materials');
+    const materialsPage = page.locator('#page-materials');
+    await materialsPage.getByRole('button', { name: '编辑素材 直接编辑素材' }).click();
+    await expectHashRoute(page, '/materials');
+    const editor = materialsPage.getByRole('dialog', { name: '编辑素材' });
+    await expect(editor.getByLabel('内容')).toHaveValue('直接编辑素材');
+    await editor.getByRole('button', { name: '关闭素材编辑' }).click();
+    await expectHashRoute(page, '/materials');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
 test('materials deep links filters and random review remain read-only', async ({ page }) => {
