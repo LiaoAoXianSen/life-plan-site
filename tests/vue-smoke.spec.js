@@ -1397,6 +1397,42 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     expect(afterExport.map(snapshot => snapshot.reason)).toContain('手动导出备份');
 });
 
+test('main manual pull keeps dirty state when the merged result differs from cloud', async ({ page }) => {
+    const localData = emptyData({
+        records: [{ id: 'local-pull-record', type: '日记', title: '本机独有记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [] }],
+    });
+    const remoteData = emptyData({
+        records: [{ id: 'remote-pull-record', type: '日记', title: '云端独有记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
+    });
+    await page.addInitScript(({ data }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: true, lastRemoteHash: 'old-remote', lastSyncAt: 'previous-sync' }));
+    }, { data: localData });
+    await page.route('https://sync.example.test/life-plan.json', async route => {
+        if (route.request().method() !== 'GET') return route.fulfill({ status: 405, body: 'method not allowed' });
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            headers: { ETag: '"pull-remote"' },
+            body: JSON.stringify(remoteData),
+        });
+    });
+
+    await page.goto('/#/sync');
+    await page.getByRole('button', { name: '下载并合并' }).click();
+    await expect(page.locator('.sync-status')).toContainText('已按原 mergeCloudData 规则合并云端数据');
+
+    const result = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        state: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(result.data.records.map(item => item.id)).toEqual(expect.arrayContaining(['local-pull-record', 'remote-pull-record']));
+    expect(result.state.dirty).toBe(true);
+    expect(result.state.lastSyncAt).toBe('previous-sync');
+    expect(result.state.lastRemoteHash).not.toBe('old-remote');
+});
+
 test('fitness browse index exposes read-only section summaries and jump actions', async ({ page }) => {
     await page.goto('/#/fitness');
 
