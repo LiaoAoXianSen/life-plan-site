@@ -2905,11 +2905,18 @@ test('AI todayPlan keeps drafts read-only until confirmed writeback with sourceT
 });
 
 test('AI chatCapture keeps multi-destination drafts read-only until confirmed writeback', async ({ page }) => {
+    const dateAt = amount => {
+        const date = new Date();
+        date.setDate(date.getDate() + amount);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const today = dateAt(0);
+    const yesterday = dateAt(-1);
     const source = emptyData({
         records: [{
             id: 'today-plan-existing', type: '日计划', title: '已有今日计划', content: '旧计划正文',
-            startDate: '2026-07-30', endDate: '2026-07-30', recordTime: '', recordEndTime: '', todoIds: [],
-            templateId: '', updatedAt: '2026-07-30T08:00:00',
+            startDate: today, endDate: today, recordTime: '', recordEndTime: '', todoIds: [],
+            templateId: '', updatedAt: `${today}T08:00:00`,
         }],
     });
     const original = JSON.stringify(source);
@@ -2931,9 +2938,9 @@ test('AI chatCapture keeps multi-destination drafts read-only until confirmed wr
 
     await page.locator('#ai-draft-text-0').fill('检查 AI 对话整理首屏');
     await page.locator('#ai-draft-note-0').fill('确认后创建的待办备注');
-    await page.locator('#ai-draft-due-0').fill('2026-07-31');
-    await page.locator('#ai-draft-plan-start-0').fill('2026-07-30');
-    await page.locator('#ai-draft-plan-end-0').fill('2026-07-31');
+    await page.locator('#ai-draft-due-0').fill(today);
+    await page.locator('#ai-draft-plan-start-0').fill(yesterday);
+    await page.locator('#ai-draft-plan-end-0').fill(today);
     await page.locator('#ai-draft-group-0').fill('迁移');
     await page.locator('#ai-capture-draft-workText').fill('编辑后的工作记录：chatCapture 多落点写回完成。');
     await page.locator('#ai-capture-draft-planText').fill('编辑后的日计划：先检查 AI 页面写回。');
@@ -2951,9 +2958,9 @@ test('AI chatCapture keeps multi-destination drafts read-only until confirmed wr
     expect(captureTodo).toMatchObject({
         text: '检查 AI 对话整理首屏',
         note: '确认后创建的待办备注',
-        dueDate: '2026-07-31',
-        planStartDate: '2026-07-30',
-        planEndDate: '2026-07-31',
+        dueDate: today,
+        planStartDate: yesterday,
+        planEndDate: today,
         group: '迁移',
     });
     expect(stored.mirror.authority).toBe('lifePlanData.todos');
