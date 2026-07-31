@@ -1033,6 +1033,25 @@ test('wheel backup restore remaps duplicate tags and assigns orphan public items
     expect(stored.wheels[0].tagIds).toEqual(['tag-keep']);
 });
 
+test('wheel create editor adds weighted rows without textarea parsing', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/wheel');
+    await page.locator('.wheel-empty-shell').getByRole('button', { name: '新建转盘' }).click();
+    const form = page.locator('#wheel-create-panel');
+    await form.getByLabel('名称').fill('动态选项盘');
+    await form.getByLabel('选项 1').fill('阅读');
+    await form.getByLabel('选项权重').fill('2');
+    await form.getByRole('button', { name: '添加选项' }).click();
+    await form.getByRole('textbox', { name: '选项 2' }).fill('散步');
+    await form.getByRole('button', { name: '创建转盘' }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheels[0]).toMatchObject({ name: '动态选项盘', mode: 'normal' });
+    expect(stored.wheels[0].items).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: '阅读', weight: 2 }),
+        expect.objectContaining({ name: '散步', weight: 1 }),
+    ]));
+});
+
 test('wheel empty state keeps a no-write canvas stage and create entry', async ({ page }) => {
     const source = emptyData();
     await page.addInitScript(data => {
