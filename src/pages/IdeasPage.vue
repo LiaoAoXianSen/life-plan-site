@@ -26,7 +26,9 @@ const ideas = computed(() => records.services.records.filterIdeas(records.ideas,
     const clean = search.trim().toLowerCase();
     return !clean || tags.some(item => item.toLowerCase().includes(clean));
   },
-  getRecordSortValue: (item: Record<string, unknown>) => String(item.updatedAt || item.createdAt || ''),
+  getRecordSortValue: (item: Record<string, unknown>) => item.startDate && item.recordTime
+    ? `${String(item.startDate)}T${String(item.recordTime)}:00`
+    : String(item.createdAt || item.updatedAt || `${item.startDate || item.endDate || '0000-00-00'}T00:00:00`),
 }));
 
 const kpiItems = computed<KpiItem[]>(() => {
