@@ -15,6 +15,13 @@ const activeTab = ref<'today' | 'backfill' | 'library' | 'wallet' | 'diagnostics
 const actionDrafts = reactive<Record<string, { date: string; note: string }>>({});
 const checkinNoteDrafts = reactive<Record<string, string>>({});
 const rewardForm = reactive({ name: '', cost: 10, currency: '金币', stock: 0, note: '' });
+const showPointAdjust = ref(false);
+const pointAdjustForm = reactive({
+  direction: 'add' as 'add' | 'subtract',
+  amount: 1,
+  currency: '金币',
+  note: '',
+});
 const focusedHabitId = computed(() => String(route.query.habit || ''));
 const todayItems = computed(() => habits.todayHabits.map(habit => ({
   habit,
@@ -85,6 +92,25 @@ function openCreateHabit() {
 function openCreateWish() {
   activeTab.value = 'wallet';
 }
+
+function openPointAdjust() {
+  pointAdjustForm.direction = 'add';
+  pointAdjustForm.amount = 1;
+  pointAdjustForm.currency = Object.keys(habits.balances)[0] || '金币';
+  pointAdjustForm.note = '';
+  showPointAdjust.value = true;
+}
+
+function savePointAdjust() {
+  if (!habits.adjustPoints({
+    direction: pointAdjustForm.direction,
+    amount: pointAdjustForm.amount,
+    currency: pointAdjustForm.currency,
+    note: pointAdjustForm.note,
+  })) return;
+  showPointAdjust.value = false;
+}
+
 const weekdayOptions = [
   { value: '1', label: '一' },
   { value: '2', label: '二' },
@@ -341,6 +367,7 @@ watch(focusedHabitId, value => {
       </div>
       <div class="habit-header-actions">
         <button class="btn btn-secondary" type="button" @click="openTab('wallet')">币种管理</button>
+        <button class="btn btn-secondary" type="button" @click="openPointAdjust">调整积分</button>
         <button class="btn btn-secondary" type="button" @click="openCreateWish">新增心愿</button>
         <button class="btn btn-primary" type="button" @click="openCreateHabit">+ 新建习惯</button>
       </div>
@@ -352,7 +379,11 @@ watch(focusedHabitId, value => {
         <h2>今天先执行，历史在补卡页处理，规则和钱包集中管理。</h2>
         <p>日常在「今日 / 补卡 / 习惯库 / 钱包」完成；需要和手机对齐时，到「云同步」或全局云同步页手动操作。</p>
       </div>
-      <button class="btn btn-secondary" type="button" @click="openTab('sync')">云同步指引</button>
+      <div class="habit-center-sync-note">
+        <strong>云同步</strong>
+        <span>独立文件 `/apps/habit-app/data.json` · 手动合并与受保护上传 · 不自动后台同步。</span>
+        <button class="btn btn-secondary" type="button" @click="openTab('sync')">打开云同步</button>
+      </div>
     </article>
 
     <div v-if="habits.lastAction" class="notice success" role="status">{{ habits.lastAction }}</div>
@@ -582,6 +613,40 @@ watch(focusedHabitId, value => {
         <article><strong>远端操作</strong><span>预览 / 应用 / 受保护上传 / 首次创建 / 条件自动同步</span></article>
       </div>
     </section>
+
+    <div v-if="showPointAdjust" class="modal-overlay active" role="presentation" @click.self="showPointAdjust = false">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="habit-point-adjust-title">
+        <div class="modal-header">
+          <div id="habit-point-adjust-title" class="modal-title">调整积分</div>
+          <button class="close-btn" type="button" aria-label="关闭调整积分" @click="showPointAdjust = false">×</button>
+        </div>
+        <form class="habit-point-adjust-form" @submit.prevent="savePointAdjust">
+          <label class="form-field">
+            <span>类型</span>
+            <select v-model="pointAdjustForm.direction">
+              <option value="add">增加</option>
+              <option value="subtract">扣除</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>数量</span>
+            <input v-model.number="pointAdjustForm.amount" type="number" min="1" required />
+          </label>
+          <label class="form-field">
+            <span>币种</span>
+            <input v-model="pointAdjustForm.currency" maxlength="24" required />
+          </label>
+          <label class="form-field">
+            <span>备注</span>
+            <input v-model="pointAdjustForm.note" maxlength="80" placeholder="可选，例如：手动校准" />
+          </label>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">保存调整</button>
+            <button class="btn btn-secondary" type="button" @click="showPointAdjust = false">取消</button>
+          </div>
+        </form>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -597,6 +662,30 @@ watch(focusedHabitId, value => {
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
+}
+.habit-center-sync-note {
+  display: grid;
+  gap: 8px;
+  min-width: min(280px, 100%);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+.habit-center-sync-note strong {
+  font-size: 13px;
+}
+.habit-center-sync-note span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.habit-point-adjust-form {
+  display: grid;
+  gap: 12px;
+  padding: 4px 2px 8px;
+}
+.habit-center-hero {
   margin-bottom: 14px;
 }
 .habit-kicker {

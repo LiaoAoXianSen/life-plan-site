@@ -55,5 +55,47 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
     lifePlanRepository.exportData(data.value);
   }
 
-  return { data, isLoaded, lastError, openTodos, load, commit, mutate, replace, importData, exportData };
+  function listSnapshots() {
+    return lifePlanRepository.listSnapshots();
+  }
+
+  function getSnapshotStats() {
+    return lifePlanRepository.getSnapshotStats();
+  }
+
+  function createManualSnapshot(reason = '手动快照') {
+    return lifePlanRepository.createManualSnapshot(reason, data.value);
+  }
+
+  function downloadSnapshot(snapshot: { id?: string; createdAt?: string; data?: LifePlanData; reason?: string }) {
+    lifePlanRepository.downloadSnapshot(snapshot);
+  }
+
+  function deleteSnapshot(snapshotId: string) {
+    return lifePlanRepository.deleteSnapshot(snapshotId);
+  }
+
+  function restoreSnapshot(snapshotId: string) {
+    data.value = lifePlanRepository.restoreSnapshot(snapshotId, data.value);
+    lastError.value = '';
+  }
+
+  return {
+    data,
+    isLoaded,
+    lastError,
+    openTodos,
+    load,
+    commit,
+    mutate,
+    replace,
+    importData,
+    exportData,
+    listSnapshots,
+    getSnapshotStats,
+    createManualSnapshot,
+    downloadSnapshot,
+    deleteSnapshot,
+    restoreSnapshot,
+  };
 });

@@ -100,6 +100,41 @@ export class LifePlanRepository {
     this.services.snapshots.downloadJsonFile(`life-plan-backup-${stamp}.json`, data);
   }
 
+  listSnapshots() {
+    return this.services.snapshots.getAll();
+  }
+
+  getSnapshotStats() {
+    return this.services.snapshots.getStorageStats();
+  }
+
+  createManualSnapshot(reason = '手动快照', data: LifePlanData) {
+    return this.createSnapshot(reason, data, { action: 'manual-snapshot' });
+  }
+
+  downloadSnapshot(snapshot: { id?: string; createdAt?: string; data?: LifePlanData; reason?: string }) {
+    const stamp = String(snapshot.createdAt || new Date().toISOString()).replace(/[:.]/g, '-');
+    this.services.snapshots.downloadJsonFile(`人生规划快照_${stamp}.json`, snapshot.data || {});
+  }
+
+  deleteSnapshot(snapshotId: string) {
+    const next = this.listSnapshots().filter((item: { id?: string }) => item.id !== snapshotId);
+    this.services.snapshots.saveAll(next);
+    return next;
+  }
+
+  restoreSnapshot(snapshotId: string, current: LifePlanData): LifePlanData {
+    const target = this.listSnapshots().find((item: { id?: string }) => item.id === snapshotId);
+    if (!target?.data) throw new Error('快照不存在或已损坏');
+    this.createSnapshot('恢复前自动快照', current, {
+      action: 'before-restore',
+      parentSnapshotId: target.id,
+      parentVersion: target.version,
+      parentHash: target.hash,
+    });
+    return this.commit(normalizePersistedData(target.data, this.services), 'restore-snapshot');
+  }
+
   getTodoSourceHash(data: LifePlanData) {
     return this.services.sync.getDataHash({ todos: data.todos, deletedItems: data.deletedItems.filter(item => item.collection === 'todos') });
   }

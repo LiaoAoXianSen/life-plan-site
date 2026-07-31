@@ -294,7 +294,7 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
 
     await page.goto('/#/dashboard');
     await expect(page.locator('.summary-card').filter({ hasText: '今日待办' })).toContainText('1/4');
-    await expect(page.locator('.summary-card').filter({ hasText: '今日习惯' })).toContainText('1/1');
+    await expect(page.locator('.summary-card').filter({ hasText: '习惯完成' })).toContainText('1/1');
     await expect(page.locator('.summary-card').filter({ hasText: '进行目标' })).toContainText('1');
     const commandMetrics = page.locator('.command-metric');
     await expect(commandMetrics.filter({ hasText: '未处理灵感' })).toContainText('1');
@@ -355,12 +355,12 @@ test('dashboard quick writes plan today execute once toggle and rebuild todo mir
     }, source);
 
     await page.goto('/#/dashboard');
-    const floating = page.locator('.card').filter({ hasText: '无截止待办池' }).locator('.todo-item').filter({ hasText: '浮动待办可今天做' });
+    const floating = page.locator('.dashboard-floating-todos .todo-item').filter({ hasText: '浮动待办可今天做' });
     await expect(floating).toHaveCount(1);
     await floating.getByRole('button', { name: '今天做', exact: true }).click();
     await expect(page.locator('.notice.success')).toContainText('已将「浮动待办可今天做」加入今日计划');
-    await expect(page.locator('.card').filter({ hasText: '无截止待办池' }).locator('.todo-item').filter({ hasText: '浮动待办可今天做' })).toHaveCount(0);
-    await expect(page.locator('.card').filter({ hasText: '今日待办' }).locator('.todo-item').filter({ hasText: '浮动待办可今天做' })).toHaveCount(1);
+    await expect(page.locator('.dashboard-floating-todos .todo-item').filter({ hasText: '浮动待办可今天做' })).toHaveCount(0);
+    await expect(page.locator('.dashboard-today-todos .todo-item').filter({ hasText: '浮动待办可今天做' })).toHaveCount(1);
 
     let stored = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
@@ -375,7 +375,7 @@ test('dashboard quick writes plan today execute once toggle and rebuild todo mir
     expect(stored.mirror.authority).toBe('lifePlanData.todos');
     expect(stored.mirror.todos).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'todo-float', planStartDate: today, planEndDate: today })]));
 
-    const dueRow = page.locator('.card').filter({ hasText: '今日待办' }).locator('.todo-item').filter({ hasText: '今日截止待办' });
+    const dueRow = page.locator('.dashboard-today-todos .todo-item').filter({ hasText: '今日截止待办' });
     await dueRow.getByRole('button', { name: '执行一次', exact: true }).click();
     await expect(page.locator('.notice.success')).toContainText('已为「今日截止待办」记录一次执行');
     stored = await page.evaluate(() => ({
@@ -397,7 +397,7 @@ test('dashboard quick writes plan today execute once toggle and rebuild todo mir
 
     await dueRow.getByRole('checkbox', { name: '完成 今日截止待办' }).click();
     await expect(page.locator('.notice.success')).toContainText('已标记完成「今日截止待办」');
-    await expect(page.locator('.card').filter({ hasText: '今日待办' }).locator('.todo-item').filter({ hasText: '今日截止待办' })).toHaveCount(0);
+    await expect(page.locator('.dashboard-today-todos .todo-item').filter({ hasText: '今日截止待办' })).toHaveCount(0);
     stored = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
         mirror: JSON.parse(localStorage.getItem('todoAppData')),
@@ -436,13 +436,13 @@ test('dashboard habit quick check-in writes checkin and rebuilds habit mirror', 
     }, source);
 
     await page.goto('/#/dashboard');
-    const habitCard = page.locator('.card').filter({ hasText: '今日习惯' });
+    const habitCard = page.locator('.dashboard-today-habits');
     const row = habitCard.locator('.todo-item').filter({ hasText: '首页打卡习惯' });
     await expect(row).toHaveCount(1);
-    await expect(page.locator('.summary-card').filter({ hasText: '今日习惯' })).toContainText('0/1');
+    await expect(page.locator('.summary-card').filter({ hasText: '习惯完成' })).toContainText('0/1');
     await row.getByRole('button', { name: '打卡', exact: true }).click();
     await expect(page.locator('.notice.success')).toContainText('已为「首页打卡习惯」打卡');
-    await expect(page.locator('.summary-card').filter({ hasText: '今日习惯' })).toContainText('1/1');
+    await expect(page.locator('.summary-card').filter({ hasText: '习惯完成' })).toContainText('1/1');
     await expect(row.getByRole('button', { name: '打卡', exact: true })).toBeDisabled();
 
     let stored = await page.evaluate(() => ({

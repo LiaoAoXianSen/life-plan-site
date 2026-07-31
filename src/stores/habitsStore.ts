@@ -908,6 +908,46 @@ export const useHabitsStore = defineStore('habits', () => {
     }
   }
 
+  function adjustPoints(input: {
+    direction: 'add' | 'subtract';
+    amount: number;
+    currency?: string;
+    note?: string;
+  }): boolean {
+    const amount = Math.max(1, Math.floor(Number(input.amount) || 0));
+    if (!amount) {
+      lastError.value = '积分数量至少为 1。';
+      return false;
+    }
+    const signed = input.direction === 'subtract' ? -amount : amount;
+    const currency = normalizeCurrency(input.currency || DEFAULT_CURRENCY);
+    const note = String(input.note || '').trim()
+      || (input.direction === 'add' ? `手动增加${currency}` : `手动扣除${currency}`);
+    try {
+      lifePlan.mutate('vue-adjust-habit-points', data => {
+        const targetCurrency = ensureHabitCurrency(data, currency);
+        addLedgerEntry(data, {
+          amount: signed,
+          currency: targetCurrency,
+          type: 'adjust',
+          habitId: '',
+          sourceId: '',
+          date: getTodayStr(),
+          note,
+        });
+      });
+      rebuildLocalMirror('adjust-points');
+      lastAction.value = signed > 0
+        ? `已增加 ${amount} ${currency}`
+        : `已扣除 ${amount} ${currency}`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
   function redeemReward(rewardId: string): boolean {
     const reward = rewards.value.find(item => item.id === rewardId);
     if (!reward) {
@@ -1099,6 +1139,7 @@ export const useHabitsStore = defineStore('habits', () => {
     deleteHabit,
     createReward,
     setRewardArchived,
+    adjustPoints,
     redeemReward,
     getRewardStockLeft,
     canRedeemReward,

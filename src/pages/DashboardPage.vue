@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import RecordCreateModal from '../components/RecordCreateModal.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -11,6 +12,7 @@ import type { DataEntity, Todo } from '../types/lifePlan';
 import { addDays, buildScheduleItems, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
 
 type MaterialEntity = DataEntity & { id?: string; content?: string; type?: string; source?: string; note?: string };
+type FloatingMode = 'random' | 'newest' | 'oldest';
 
 const router = useRouter();
 const lifePlan = useLifePlanStore();
@@ -18,6 +20,10 @@ const recordsStore = useRecordsStore();
 const todosStore = useTodosStore();
 const habitsStore = useHabitsStore();
 const today = getTodayStr();
+const showCreateRecord = ref(false);
+const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
+const floatingMode = ref<FloatingMode>('random');
+const timelineRangeDays = ref(30);
 const periodTypes = ['周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
 const urgencyLabels: Record<Todo['urgency'], string> = { urgent: '紧急', high: '高', medium: '中', low: '低' };
 
@@ -82,6 +88,26 @@ function openScheduleItem(item: ScheduleItem) {
 
 function openMaterial(materialId: string) {
   void router.push({ path: '/materials', query: { material: materialId } });
+}
+
+function openCreateRecord() {
+  showCreateRecord.value = true;
+}
+
+function createRecordOfType(type: string) {
+  createModal.value?.openWithType(type);
+}
+
+function openExistingFromCreate(recordId: string) {
+  openRecord(recordId);
+}
+
+function openAi(mode: string) {
+  void router.push({ path: '/ai', query: { mode } });
+}
+
+function setFloatingMode(mode: FloatingMode) {
+  floatingMode.value = mode;
 }
 
 const notice = ref('');
@@ -161,10 +187,26 @@ const todayTodos = computed(() => todayRelevantTodos.value
   .filter(todo => !todo.done)
   .sort(todosStore.services.todos.compareTodosForFocus)
   .slice(0, 8));
-const floatingTodos = computed(() => lifePlan.data.todos
-  .filter(todo => !todo.done && !todo.dueDate && !todo.planStartDate && !todo.planEndDate)
-  .sort(todosStore.services.todos.compareTodosForFocus)
-  .slice(0, 5));
+const floatingTodoPool = computed(() => lifePlan.data.todos
+  .filter(todo => !todo.done && !todo.dueDate && !todo.planStartDate && !todo.planEndDate));
+const floatingTodos = computed(() => {
+  const pool = [...floatingTodoPool.value];
+  if (floatingMode.value === 'newest') {
+    return pool
+      .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))
+      .slice(0, 5);
+  }
+  if (floatingMode.value === 'oldest') {
+    return pool
+      .sort((a, b) => String(a.updatedAt || a.createdAt || '').localeCompare(String(b.updatedAt || b.createdAt || '')))
+      .slice(0, 5);
+  }
+  for (let index = 0; index < Math.min(5, pool.length); index += 1) {
+    const swapIndex = index + Math.floor(Math.random() * (pool.length - index));
+    [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
+  }
+  return pool.slice(0, 5);
+});
 const dueHabits = computed(() => habitsStore.todayHabits);
 const todayHabitItems = computed(() => dueHabits.value.map(habit => {
   const count = habitsStore.getCheckinCount(habit.id, today);
@@ -201,7 +243,8 @@ const activePeriods = computed(() => lifePlan.data.records
   .filter(record => periodTypes.includes(entityString(record, 'type')) && (!entityString(record, 'endDate') || entityString(record, 'endDate') >= today))
   .sort((a, b) => (entityString(a, 'endDate') || '9999-12-31').localeCompare(entityString(b, 'endDate') || '9999-12-31')));
 const timelineGroups = computed(() => {
-  const startDate = addDays(today, -13);
+  const days = Math.max(7, Number(timelineRangeDays.value) || 30);
+  const startDate = addDays(today, -(days - 1));
   const items = buildScheduleItems(lifePlan.data, startDate, today, {
     includeRecords: true,
     includeTodos: true,
@@ -225,7 +268,7 @@ const timelineGroups = computed(() => {
   <section class="page active" id="page-dashboard">
     <header class="page-header">
       <div class="page-title">首页仪表盘</div>
-      <button class="btn btn-primary" type="button" @click="router.push('/todos')">+ 新建待办</button>
+      <button class="btn btn-primary" type="button" @click="openCreateRecord">+ 新建记录</button>
     </header>
 
     <div v-if="notice" class="notice" :class="noticeVariant" role="status">{{ notice }}</div>
@@ -243,15 +286,18 @@ const timelineGroups = computed(() => {
           </div>
         </div>
         <div class="quick-create">
+          <button class="btn" type="button" @click="createRecordOfType('日计划')">新建日计划</button>
+          <button class="btn" type="button" @click="createRecordOfType('日记')">写日记</button>
+          <button class="btn" type="button" @click="createRecordOfType('工作记录')">记工作</button>
+          <button class="btn" type="button" @click="createRecordOfType('灵感碎片')">记灵感</button>
           <button class="btn" type="button" @click="router.push('/todos')">加待办</button>
-          <button class="btn" type="button" @click="router.push('/records')">查看记录</button>
-          <button class="btn" type="button" @click="router.push('/materials')">素材库</button>
-          <button class="btn" type="button" @click="router.push('/fitness')">健身</button>
+          <button class="btn" type="button" @click="openAi('todayPlan')">AI 今日计划</button>
+          <button class="btn" type="button" @click="openAi('chatCapture')">AI 对话整理</button>
         </div>
       </div>
       <div class="summary-grid">
         <div class="summary-card"><strong class="summary-value">{{ todayTodoDone }}/{{ todayRelevantTodos.length }}</strong><span class="summary-label">今日待办</span></div>
-        <div class="summary-card"><strong class="summary-value">{{ doneHabitCount }}/{{ dueHabits.length }}</strong><span class="summary-label">今日习惯</span></div>
+        <div class="summary-card"><strong class="summary-value">{{ doneHabitCount }}/{{ dueHabits.length }}</strong><span class="summary-label">习惯完成</span></div>
         <div class="summary-card"><strong class="summary-value">{{ activeGoals.length }}</strong><span class="summary-label">进行目标</span></div>
         <div class="summary-card"><strong class="summary-value">{{ weekRecords }}</strong><span class="summary-label">本周记录</span></div>
       </div>
@@ -315,106 +361,117 @@ const timelineGroups = computed(() => {
       </article>
     </section>
 
-    <div class="today-grid dashboard-main-grid">
-      <article class="card">
-        <h2 class="card-title">今日待办</h2>
-        <ul v-if="todayTodos.length" class="todo-list">
-          <li v-for="todo in todayTodos" :key="todo.id" class="todo-item">
-            <input
-              class="todo-check"
-              type="checkbox"
-              :checked="todo.done"
-              :aria-label="`完成 ${todo.text}`"
-              @change="toggleTodo(todo.id)"
-            >
-            <button class="todo-text todo-dashboard-link" type="button" :aria-label="todo.text" @click="openTodo(todo.id)">
-              {{ todo.text }}<small>{{ getTodayTodoReason(todo) }}</small>
-            </button>
-            <span class="todo-urgency" :class="`todo-urgency-${todo.urgency}`">{{ urgencyLabels[todo.urgency] }}</span>
-            <span class="todo-actions">
-              <button class="btn btn-secondary todo-mini-btn" type="button" @click="quickSessionFromDashboard(todo.id)">执行一次</button>
-            </span>
-          </li>
-        </ul>
-        <div v-else class="empty-state">今日暂无待办</div>
-      </article>
+    <div class="card dashboard-today-overview">
+      <div class="card-title">今日概览 · {{ today }}</div>
+      <div class="today-grid dashboard-main-grid">
+        <section class="dashboard-today-todos" aria-label="今日待办">
+          <div class="section-title">今日待办</div>
+          <ul v-if="todayTodos.length" class="todo-list">
+            <li v-for="todo in todayTodos" :key="todo.id" class="todo-item">
+              <input
+                class="todo-check"
+                type="checkbox"
+                :checked="todo.done"
+                :aria-label="`完成 ${todo.text}`"
+                @change="toggleTodo(todo.id)"
+              >
+              <button class="todo-text todo-dashboard-link" type="button" :aria-label="todo.text" @click="openTodo(todo.id)">
+                {{ todo.text }}<small>{{ getTodayTodoReason(todo) }}</small>
+              </button>
+              <span class="todo-urgency" :class="`todo-urgency-${todo.urgency}`">{{ urgencyLabels[todo.urgency] }}</span>
+              <span class="todo-actions">
+                <button class="btn btn-secondary todo-mini-btn" type="button" @click="quickSessionFromDashboard(todo.id)">执行一次</button>
+              </span>
+            </li>
+          </ul>
+          <div v-else class="empty-state">今日暂无待办</div>
+        </section>
 
-      <article class="card">
-        <h2 class="card-title">无截止待办池</h2>
-        <ul v-if="floatingTodos.length" class="todo-list">
-          <li v-for="todo in floatingTodos" :key="todo.id" class="todo-item">
-            <input
-              class="todo-check"
-              type="checkbox"
-              :checked="todo.done"
-              :aria-label="`完成 ${todo.text}`"
-              @change="toggleTodo(todo.id)"
-            >
-            <button class="todo-text todo-dashboard-link" type="button" :aria-label="todo.text" @click="openTodo(todo.id)">
-              {{ todo.text }}<small>无截止 · 可转入今天</small>
-            </button>
-            <span class="todo-urgency" :class="`todo-urgency-${todo.urgency}`">{{ urgencyLabels[todo.urgency] }}</span>
-            <span class="todo-actions">
-              <button class="btn btn-secondary todo-mini-btn" type="button" @click="planTodayFromDashboard(todo.id)">今天做</button>
-              <button class="btn btn-secondary todo-mini-btn" type="button" @click="quickSessionFromDashboard(todo.id)">执行一次</button>
-            </span>
-          </li>
-        </ul>
-        <div v-else class="empty-state">暂无无截止待办</div>
-      </article>
-
-      <article class="card">
-        <div class="section-title-row timeline-title-row">
-          <h2 class="card-title">今日习惯</h2>
-          <button class="btn btn-secondary todo-mini-btn" type="button" @click="router.push('/habits')">习惯页</button>
-        </div>
-        <ul v-if="todayHabitItems.length" class="todo-list dashboard-habit-list">
-          <li v-for="item in todayHabitItems" :key="item.habit.id" class="todo-item dashboard-habit-item">
-            <button class="todo-text todo-dashboard-link" type="button" :aria-label="item.habit.name" @click="openHabit(item.habit.id)">
-              {{ item.habit.name }}
-              <small>{{ item.count }}/{{ item.target }} · {{ item.habit.tag || '习惯' }}</small>
-            </button>
-            <span class="todo-urgency" :class="item.done ? 'todo-urgency-low' : 'todo-urgency-high'">{{ item.done ? '已完成' : '待打卡' }}</span>
-            <span class="todo-actions">
-              <button
-                class="btn btn-secondary todo-mini-btn"
-                type="button"
-                :disabled="!item.canCheckin"
-                @click="quickHabitCheckin(item.habit.id)"
-              >打卡</button>
-              <button
-                class="btn btn-secondary todo-mini-btn"
-                type="button"
-                :disabled="item.count <= 0"
-                @click="undoHabitCheckin(item.habit.id)"
-              >撤销</button>
-            </span>
-          </li>
-        </ul>
-        <div v-else class="empty-state">今日暂无习惯</div>
-      </article>
-
-      <article class="card">
-        <h2 class="card-title">进行中的周期记录</h2>
-        <div v-if="activePeriods.length">
-          <button v-for="record in activePeriods" :key="String(record.id)" class="period-item" type="button" @click="openRecord(String(record.id))">
-            <div class="period-info">
-              <h4><span class="item-type">{{ record.type }}</span>{{ record.title || '无标题' }}</h4>
-              <p>{{ formatDate(record.startDate) }} ~ {{ formatDate(record.endDate) }} · 待办 {{ activeRecordTodos(record).done }}/{{ activeRecordTodos(record).total }}</p>
+        <section class="dashboard-floating-todos" aria-label="无截止待办池">
+          <div class="section-title-row">
+            <div class="section-title">无截止待办池</div>
+            <div class="todo-pool-toolbar">
+              <button class="btn btn-secondary todo-pool-mode" type="button" :class="{ active: floatingMode === 'random' }" @click="setFloatingMode('random')">随机</button>
+              <button class="btn btn-secondary todo-pool-mode" type="button" :class="{ active: floatingMode === 'newest' }" @click="setFloatingMode('newest')">最新</button>
+              <button class="btn btn-secondary todo-pool-mode" type="button" :class="{ active: floatingMode === 'oldest' }" @click="setFloatingMode('oldest')">最老</button>
             </div>
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: `${activeRecordTodos(record).total ? Math.round(activeRecordTodos(record).done / activeRecordTodos(record).total * 100) : 0}%` }" />
-            </div>
-          </button>
-        </div>
-        <div v-else class="empty-state">暂无进行中的周期记录</div>
-      </article>
+          </div>
+          <ul v-if="floatingTodos.length" class="todo-list">
+            <li v-for="todo in floatingTodos" :key="todo.id" class="todo-item">
+              <input
+                class="todo-check"
+                type="checkbox"
+                :checked="todo.done"
+                :aria-label="`完成 ${todo.text}`"
+                @change="toggleTodo(todo.id)"
+              >
+              <button class="todo-text todo-dashboard-link" type="button" :aria-label="todo.text" @click="openTodo(todo.id)">
+                {{ todo.text }}<small>无截止 · 可转入今天</small>
+              </button>
+              <span class="todo-urgency" :class="`todo-urgency-${todo.urgency}`">{{ urgencyLabels[todo.urgency] }}</span>
+              <span class="todo-actions">
+                <button class="btn btn-secondary todo-mini-btn" type="button" @click="planTodayFromDashboard(todo.id)">今天做</button>
+                <button class="btn btn-secondary todo-mini-btn" type="button" @click="quickSessionFromDashboard(todo.id)">执行一次</button>
+              </span>
+            </li>
+          </ul>
+          <div v-else class="empty-state">暂无无截止待办</div>
+        </section>
+
+        <section class="dashboard-today-habits" aria-label="今日习惯">
+          <div class="section-title">今日习惯快捷打卡</div>
+          <ul v-if="todayHabitItems.length" class="todo-list dashboard-habit-list">
+            <li v-for="item in todayHabitItems" :key="item.habit.id" class="todo-item dashboard-habit-item">
+              <button class="todo-text todo-dashboard-link" type="button" :aria-label="item.habit.name" @click="openHabit(item.habit.id)">
+                {{ item.habit.name }}
+                <small>{{ item.count }}/{{ item.target }} · {{ item.habit.tag || '习惯' }}</small>
+              </button>
+              <span class="todo-urgency" :class="item.done ? 'todo-urgency-low' : 'todo-urgency-high'">{{ item.done ? '已完成' : '待打卡' }}</span>
+              <span class="todo-actions">
+                <button
+                  class="btn btn-secondary todo-mini-btn"
+                  type="button"
+                  :disabled="!item.canCheckin"
+                  @click="quickHabitCheckin(item.habit.id)"
+                >打卡</button>
+                <button
+                  class="btn btn-secondary todo-mini-btn"
+                  type="button"
+                  :disabled="item.count <= 0"
+                  @click="undoHabitCheckin(item.habit.id)"
+                >撤销</button>
+              </span>
+            </li>
+          </ul>
+          <div v-else class="empty-state">今日暂无习惯</div>
+        </section>
+      </div>
     </div>
+
+    <article class="card">
+      <h2 class="card-title">进行中的周期记录</h2>
+      <div v-if="activePeriods.length">
+        <button v-for="record in activePeriods" :key="String(record.id)" class="period-item" type="button" @click="openRecord(String(record.id))">
+          <div class="period-info">
+            <h4><span class="item-type">{{ record.type }}</span>{{ record.title || '无标题' }}</h4>
+            <p>{{ formatDate(record.startDate) }} ~ {{ formatDate(record.endDate) }} · 待办 {{ activeRecordTodos(record).done }}/{{ activeRecordTodos(record).total }}</p>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: `${activeRecordTodos(record).total ? Math.round(activeRecordTodos(record).done / activeRecordTodos(record).total * 100) : 0}%` }" />
+          </div>
+        </button>
+      </div>
+      <div v-else class="empty-state">暂无进行中的周期记录</div>
+    </article>
 
     <article class="card dashboard-timeline">
       <div class="section-title-row timeline-title-row">
-        <h2 class="card-title">最近时间轴</h2>
-        <button class="btn btn-secondary todo-mini-btn" type="button" @click="router.push('/records')">全部记录</button>
+        <h2 class="card-title">近期记录时间轴</h2>
+        <select v-model.number="timelineRangeDays" class="compact-select" aria-label="时间轴范围">
+          <option :value="7">最近7天</option>
+          <option :value="30">最近30天</option>
+          <option :value="90">最近90天</option>
+        </select>
       </div>
       <div v-if="timelineGroups.length">
         <section v-for="group in timelineGroups" :key="group.date" class="timeline-group">
@@ -435,6 +492,8 @@ const timelineGroups = computed(() => {
       </div>
       <div v-else class="empty-state">当前范围暂无记录，换个范围或新建第一条吧</div>
     </article>
+
+    <RecordCreateModal ref="createModal" v-model="showCreateRecord" @open-existing="openExistingFromCreate" />
   </section>
 </template>
 

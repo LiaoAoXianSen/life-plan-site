@@ -234,10 +234,26 @@ function handleStartDateChange() {
   if (draft.type === '日记' && (!draft.title.trim() || isDiaryDateTitle(draft.title))) draft.title = formatDiaryTitle(draft.startDate);
 }
 
+const pendingType = ref('');
+
 watch(draft, scheduleAutoSave, { deep: true, flush: 'sync' });
 watch(() => props.modelValue, open => {
-  if (open) resetDraft();
+  if (open) {
+    resetDraft();
+    if (pendingType.value) {
+      const type = pendingType.value;
+      pendingType.value = '';
+      selectType(type);
+    }
+  }
 });
+
+function openWithType(type: string) {
+  pendingType.value = type;
+  emit('update:modelValue', true);
+}
+
+defineExpose({ openWithType, selectType });
 
 onMounted(() => window.addEventListener('keydown', handleKeydown));
 
