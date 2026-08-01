@@ -3072,6 +3072,25 @@ test('habit action cards order and display legacy time-only checkins', async ({ 
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('habit weekly fixed wording matches legacy cards and editor', async ({ page }) => {
+    const today = localDate();
+    const weekday = String(new Date(`${today}T12:00:00`).getDay());
+    const source = emptyData({
+        habits: [{
+            id: 'habit-weekly-fixed-copy', name: '固定日习惯', rule: 'weekly-fixed', weekdays: [weekday], timesPerDay: 1, startDate: '2026-01-01',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/habits');
+    const card = page.locator('.habit-quick-card').filter({ hasText: '固定日习惯' });
+    await expect(card).toContainText('固定周几');
+    await expect(card).not.toContainText('每周固定');
+    await expect(page.locator('.habit-editor-form select').first().locator('option[value="weekly-fixed"]')).toHaveText('固定周几');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('habit base edit and delete preserve legacy management contracts', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({

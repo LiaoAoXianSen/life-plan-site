@@ -344,7 +344,7 @@ const weekdayOptions = [
 ];
 const ruleLabels: Record<string, string> = {
   daily: '每天',
-  'weekly-fixed': '每周固定',
+  'weekly-fixed': '固定周几',
   'weekly-count': '每周次数',
   'monthly-count': '每月次数',
   interval: '间隔天数',
@@ -1058,7 +1058,7 @@ watch(focusedHabitId, value => {
       <form class="habit-editor-form" @submit.prevent="saveHabit">
         <label class="form-field"><span>习惯名称</span><input v-model="habitForm.name" required maxlength="80" placeholder="例如：晨间阅读" /></label>
         <label class="form-field"><span>分组标签</span><input v-model="habitForm.tag" maxlength="40" placeholder="例如：学习" /></label>
-        <label class="form-field"><span>规则</span><select v-model="habitForm.rule"><option value="daily">每天</option><option value="weekly-fixed">每周固定</option><option value="weekly-count">每周次数</option><option value="monthly-count">每月次数</option><option value="interval">间隔天数</option></select></label>
+        <label class="form-field"><span>规则</span><select v-model="habitForm.rule"><option value="daily">每天</option><option value="weekly-fixed">固定周几</option><option value="weekly-count">每周次数</option><option value="monthly-count">每月次数</option><option value="interval">间隔天数</option></select></label>
         <label class="form-field"><span>每天次数</span><input v-model.number="habitForm.timesPerDay" type="number" min="1" max="99" /></label>
         <label v-if="['weekly-count', 'monthly-count', 'interval'].includes(habitForm.rule)" class="form-field"><span>{{ habitForm.rule === 'interval' ? '间隔天数' : '目标次数' }}</span><input v-model.number="habitForm.count" type="number" min="1" max="99" /></label>
         <label class="form-field"><span>总目标次数</span><input v-model.number="habitForm.goalCount" type="number" min="0" max="99999" /></label>
