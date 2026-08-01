@@ -264,12 +264,12 @@ const floatingTodos = computed(() => {
   const pool = [...floatingTodoPool.value];
   if (floatingMode.value === 'newest') {
     return pool
-      .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))
+      .sort((a, b) => String(b.createdAt || b.updatedAt || b.id || '').localeCompare(String(a.createdAt || a.updatedAt || a.id || '')))
       .slice(0, 5);
   }
   if (floatingMode.value === 'oldest') {
     return pool
-      .sort((a, b) => String(a.updatedAt || a.createdAt || '').localeCompare(String(b.updatedAt || b.createdAt || '')))
+      .sort((a, b) => String(a.createdAt || a.updatedAt || a.id || '').localeCompare(String(b.createdAt || b.updatedAt || b.id || '')))
       .slice(0, 5);
   }
   for (let index = 0; index < Math.min(5, pool.length); index += 1) {
