@@ -276,6 +276,7 @@ const yesterdayPendingCount = computed(() => {
   return habits.habits.filter(habit => {
     if (habit.archived) return false;
     if (habit.startDate && habit.startDate > yesterday) return false;
+    if (!habits.isHabitDueOnDate(habit, yesterday)) return false;
     return habits.getCheckinCount(habit.id, yesterday) < habits.targetCount(habit);
   }).length;
 });

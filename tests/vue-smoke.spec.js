@@ -3091,6 +3091,27 @@ test('habit weekly fixed wording matches legacy cards and editor', async ({ page
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('habit yesterday pending KPI follows the legacy schedule', async ({ page }) => {
+    const today = localDate();
+    const yesterdayDate = new Date(`${today}T12:00:00`);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = localDate(yesterdayDate);
+    const yesterdayWeekday = yesterdayDate.getDay();
+    const source = emptyData({
+        habits: [
+            { id: 'habit-yesterday-daily', name: '昨日每日习惯', rule: 'daily', timesPerDay: 1, startDate: '2026-01-01' },
+            { id: 'habit-yesterday-not-due', name: '昨日不排期习惯', rule: 'weekly-fixed', weekdays: [String((yesterdayWeekday + 1) % 7)], timesPerDay: 1, startDate: '2026-01-01' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/habits');
+    const kpi = page.locator('.habit-kpi-card').filter({ hasText: '昨日待处理' });
+    await expect(kpi).toContainText('1');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('habit base edit and delete preserve legacy management contracts', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({
