@@ -580,6 +580,54 @@ test('sidebar import confirmation exposes normalized legacy collection summary',
     expect(stored.records.some(record => record.id === 'sidebar-import-record')).toBe(true);
 });
 
+test('sidebar import honors the legacy before-snapshot confirmation branch', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'sidebar-import-failure-local', type: '日记', title: '导入前记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28' }],
+    });
+    const imported = emptyData({
+        records: [{ id: 'sidebar-import-failure-incoming', type: '工作记录', title: '继续导入记录', content: '', startDate: '2026-07-29', endDate: '2026-07-29' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        const realSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function blockedSnapshotWrite(key, value) {
+            if (key === 'lifePlanSnapshots') throw new Error('snapshot write blocked');
+            return realSetItem.call(this, key, value);
+        };
+    }, source);
+    await page.goto('/#/dashboard');
+
+    let continueImport = false;
+    const confirmations = [];
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') {
+            confirmations.push(dialog.message());
+            if (dialog.message().includes('导入前快照创建失败')) {
+                if (continueImport) await dialog.accept();
+                else await dialog.dismiss();
+            } else {
+                await dialog.accept();
+            }
+            return;
+        }
+        await dialog.accept();
+    });
+
+    const upload = () => page.locator('input[type="file"]').setInputFiles({
+        name: 'sidebar-import-snapshot-failure.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
+    });
+    await upload();
+    await expect.poll(() => confirmations.filter(message => message.includes('导入前快照创建失败')).length).toBe(1);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    continueImport = true;
+    await upload();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.some(record => record.id === 'sidebar-import-failure-incoming'))).toBe(true);
+});
+
 test('records history keeps non-rule-day habit check-ins while calendar stays rule-aware', async ({ page }) => {
     const today = localDate();
     const source = emptyData({

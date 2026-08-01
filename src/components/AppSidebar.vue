@@ -247,7 +247,9 @@ async function importBackup(event: Event) {
       `将按安全合并导入，不会静默覆盖较新内容；两边都改过时会保留主版本并生成冲突副本。\n\n备份内容：${summary}\n\n确认继续？`,
     );
     if (!confirmed) return;
-    lifePlan.importData(raw);
+    lifePlan.importData(raw, {
+      onBeforeSnapshotFailure: () => window.confirm('导入前快照创建失败。继续导入会缺少回滚点，确定继续吗？'),
+    });
     snapshotNotice.value = '导入已按合并规则完成，并建立前后快照。';
   } catch (error) {
     snapshotNotice.value = error instanceof Error ? error.message : '文件格式错误，导入失败';
