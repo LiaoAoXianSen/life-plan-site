@@ -144,6 +144,21 @@ function saveConfig() {
     : '配置已保存；主数据自动同步已关闭。';
 }
 
+async function testConnection() {
+  busy.value = true;
+  autoStatus.value = '正在测试连接...';
+  try {
+    const health = await sync.healthCheck(config, normalizeRemotePath());
+    autoStatus.value = health === null
+      ? '连接成功，云端目录还不存在，首次上传会自动创建'
+      : '连接成功';
+  } catch (error) {
+    autoStatus.value = error instanceof Error ? error.message : '连接失败';
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function runAutoNow() {
   busy.value = true;
   status.value = '';
@@ -288,6 +303,7 @@ async function importFile(event: Event) {
         <div class="form-group"><label for="sync-auto"><input id="sync-auto" v-model="config.autoSync" type="checkbox" /> 启用主数据自动同步</label></div>
       </div>
       <div class="page-actions">
+        <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="testConnection">测试连接</button>
         <button class="btn btn-secondary" type="button" @click="saveConfig">保存配置</button>
         <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="runAutoNow">立即自动同步一次</button>
       </div>

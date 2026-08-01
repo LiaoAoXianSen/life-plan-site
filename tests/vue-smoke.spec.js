@@ -2145,6 +2145,31 @@ test('sync config preserves the legacy AppSyncKit provider flag', async ({ page 
     expect(stored.useAppSyncKitProvider).toBe(true);
 });
 
+test('sync main config restores the legacy read-only connection test', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'sync-health-record', type: '工作记录', title: '连接测试保留记录', content: '', startDate: '2026-08-01', endDate: '2026-08-01', todoIds: [] }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(({ data, raw }) => {
+        localStorage.setItem('lifePlanData', raw);
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync-health.example.test/dav', remotePath: '/life-plan.json', autoSync: false }));
+    }, { data: source, raw: original });
+    const methods = [];
+    await page.route('https://sync-health.example.test/**', async route => {
+        methods.push(route.request().method());
+        await route.fulfill({ status: 404, body: 'not found' });
+    });
+
+    await page.goto('/#/sync');
+    const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
+    await configCard.getByRole('button', { name: '测试连接' }).click();
+
+    await expect(configCard.locator('.sync-status')).toContainText('连接成功，云端目录还不存在，首次上传会自动创建');
+    expect(methods).toEqual(['PROPFIND']);
+    expect(methods).not.toContain('PUT');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('main manual pull keeps dirty state when the merged result differs from cloud', async ({ page }) => {
     const localData = emptyData({
         records: [{ id: 'local-pull-record', type: '日记', title: '本机独有记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [] }],
