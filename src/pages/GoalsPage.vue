@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { createLegacyServices, genId, getTodayStr } from '../services/legacyServices';
@@ -76,6 +76,13 @@ function closeGoal(syncRoute = true) {
   resetForm();
   if (syncRoute && route.query.goal) syncGoalRoute('');
 }
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && editorOpen.value) closeGoal();
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
 
 function saveGoal() {
   const name = form.name.trim();

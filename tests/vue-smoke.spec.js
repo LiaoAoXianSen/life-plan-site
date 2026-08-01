@@ -1003,6 +1003,27 @@ test('goals detail route save and delete preserve the legacy contract', async ({
     expect(mirror.todos).toEqual([]);
 });
 
+test('goals editor closes with Escape without persisting draft', async ({ page }) => {
+    const source = emptyData({
+        goals: [{ id: 'goal-escape', name: '保留目标', period: '年度', target: '保留描述', status: '进行中', progress: 45, createDate: '2026-01-01' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/goals?goal=goal-escape');
+    const dialog = page.getByRole('dialog', { name: '编辑目标' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('目标', { exact: true }).fill('未保存草稿');
+    await dialog.getByLabel('目标描述').fill('不应持久化');
+    await dialog.getByRole('slider').fill('90');
+
+    await page.keyboard.press('Escape');
+
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(/\/#\/goals$/);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('goals keep legacy insertion order in the browse list', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData({
         goals: [
