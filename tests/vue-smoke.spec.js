@@ -1899,6 +1899,23 @@ test('fitness plans support multiple exercises and explicit plan writeback', asy
     ]));
 });
 
+test('fitness history shows every normalized workout status', async ({ page }) => {
+    const source = emptyData({
+        fitnessWorkouts: [
+            { id: 'workout-progress-history', date: '2026-07-29', status: 'inProgress', title: '进行中训练', exercises: [], createdAt: '2026-07-29T10:00:00', updatedAt: '2026-07-29T10:00:00' },
+            { id: 'workout-done-history', date: '2026-07-28', status: 'done', title: '完成训练', exercises: [], createdAt: '2026-07-28T10:00:00', updatedAt: '2026-07-28T10:00:00' },
+            { id: 'workout-skipped-history', date: '2026-07-27', status: 'skipped', title: '跳过训练', exercises: [], createdAt: '2026-07-27T10:00:00', updatedAt: '2026-07-27T10:00:00' },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/fitness');
+    const history = page.locator('article.card').filter({ hasText: '训练历史' });
+    const rows = history.locator('.fitness-metric-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows).toContainText(['进行中训练', '完成训练', '跳过训练']);
+});
+
 test('fitness history editor saves edits through the legacy workout contract', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [

@@ -54,7 +54,7 @@ const writeBackPlan = ref(false);
 const restTimer = reactive({ remaining: 0, total: 0, exerciseName: '' });
 let restTimerId: ReturnType<typeof window.setInterval> | null = null;
 
-const doneHistory = computed(() => fitness.workouts.filter(item => item.status === 'done' || item.status === 'skipped'));
+const workoutHistory = computed(() => fitness.workouts);
 const fitnessOverview = computed(() => fitness.services.fitness.buildFitnessOverview({
   bodyMetrics: fitness.metrics,
   fitnessPlans: fitness.plans,
@@ -106,8 +106,8 @@ const browseItems = computed(() => [
   {
     key: 'workouts',
     label: '训练历史',
-    value: `${doneHistory.value.length} 条`,
-    detail: doneHistory.value[0] ? `${doneHistory.value[0].date || '未标日期'} · ${doneHistory.value[0].title || '自由训练'}` : '完成训练后会显示在这里',
+    value: `${workoutHistory.value.length} 条`,
+    detail: workoutHistory.value[0] ? `${workoutHistory.value[0].date || '未标日期'} · ${workoutHistory.value[0].title || '自由训练'}` : '完成训练后会显示在这里',
     target: 'fitness-workout-section',
   },
   {
@@ -1031,8 +1031,8 @@ onUnmounted(stopRestTimer);
 
     <article class="card">
       <div class="card-title">训练历史</div>
-      <div v-if="doneHistory.length" class="fitness-metric-list">
-        <div v-for="workout in doneHistory" :key="workout.id" class="fitness-metric-row">
+      <div v-if="workoutHistory.length" class="fitness-metric-list">
+        <div v-for="workout in workoutHistory" :key="workout.id" class="fitness-metric-row">
           <div><strong>{{ workout.date }} · {{ workout.title || '自由训练' }}</strong><span>{{ workoutStatusLabel(workout.status) }} · {{ fitness.services.fitness.countCompletedSets(workout) }}/{{ fitness.services.fitness.countTotalSets(workout) }} 组<span v-if="workout.durationMin"> · {{ workout.durationMin }} 分钟</span></span></div>
           <button class="btn btn-secondary" type="button" @click="editWorkout(workout)">编辑</button>
           <button class="btn btn-danger" type="button" @click="run(() => fitness.removeWorkout(workout.id))">删除</button>
