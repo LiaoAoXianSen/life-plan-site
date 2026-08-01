@@ -852,6 +852,7 @@ onUnmounted(stopRestTimer);
             <span v-if="suggestionHint(setSuggestion(exercise, setIndex))" class="fitness-set-suggestion vue-fitness-set-suggestion">{{ suggestionHint(setSuggestion(exercise, setIndex)) }}</span>
           </div>
         </div>
+        <button class="btn btn-secondary todo-mini-btn" type="button" @click="run(() => fitness.addActiveSet(exerciseIndex))">+ 加一组</button>
       </article>
     </article>
 

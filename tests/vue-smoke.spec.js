@@ -3079,6 +3079,39 @@ test('fitness body metrics edit every legacy field through the shared service', 
     ]));
 });
 
+test('fitness live workout can append a copied incomplete set', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        fitnessWorkouts: [{
+            id: 'fitness-workout-add-set', date: today, status: 'inProgress', title: '追加组训练', planId: '', planName: '',
+            exercises: [{
+                id: 'fitness-exercise-add-set', name: '卧推', targetSets: 1, targetReps: '8', targetWeight: 50,
+                sets: [{ id: 'fitness-set-add-source', weight: 50, reps: 8, done: true }],
+            }],
+            createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+        }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-add-set-before' }));
+    }, source);
+    await page.goto('/#/fitness');
+
+    const activeExercise = page.locator('#page-fitness > article.card').first().locator(':scope > article.card').filter({ hasText: '卧推' });
+    await expect(activeExercise.locator('.fitness-live-row')).toHaveCount(1);
+    await activeExercise.getByRole('button', { name: '+ 加一组', exact: true }).click();
+    await expect(activeExercise.locator('.fitness-live-row')).toHaveCount(2);
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.fitnessWorkouts).toHaveLength(1);
+    expect(stored.data.fitnessWorkouts[0]).toEqual(expect.objectContaining({ id: 'fitness-workout-add-set', status: 'inProgress' }));
+    expect(stored.data.fitnessWorkouts[0].exercises[0].sets).toHaveLength(2);
+    expect(stored.data.fitnessWorkouts[0].exercises[0].sets[1]).toEqual(expect.objectContaining({ weight: 50, reps: 8, done: false }));
+    expect(stored.syncState.dirty).toBe(true);
+});
+
 test('fitness live workout suggestions and rest timer stay service backed', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [

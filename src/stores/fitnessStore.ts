@@ -176,6 +176,34 @@ export const useFitnessStore = defineStore('fitness', () => {
     return { workout: result.workout as FitnessEntity, restSec: completed.restSec as number };
   }
 
+  function addActiveSet(exerciseIndex: number) {
+    const current = activeWorkout.value;
+    if (!current) return fail('当前没有进行中的训练');
+    const exercise = current.exercises?.[exerciseIndex];
+    if (!exercise) return fail('找不到对应动作');
+    const last = Array.isArray(exercise.sets) ? exercise.sets[exercise.sets.length - 1] : null;
+    const workout = services.fitness.normalizeFitnessWorkout({
+      ...current,
+      exercises: current.exercises.map((item: Record<string, any>, index: number) => index === exerciseIndex
+        ? {
+          ...item,
+          sets: [...(Array.isArray(item.sets) ? item.sets : []), services.fitness.normalizeWorkoutSet({
+            weight: last?.weight,
+            reps: last?.reps,
+            done: false,
+          })],
+        }
+        : item),
+    });
+    const result = services.fitness.upsertFitnessWorkout(lifePlan.data.fitnessWorkouts, workout, current.id);
+    if (!result.ok) return fail(result.message);
+    lifePlan.mutate('add-live-workout-set', data => {
+      data.fitnessWorkouts = result.workouts;
+    });
+    succeed('已添加一组');
+    return result.workout as FitnessEntity;
+  }
+
   function finishWorkout(options: { updatePlanFromWorkout?: boolean } = {}) {
     const current = activeWorkout.value;
     if (!current) return fail('当前没有进行中的训练');
@@ -209,7 +237,7 @@ export const useFitnessStore = defineStore('fitness', () => {
   return {
     metrics, plans, workouts, library, activeWorkout, lastError, lastAction,
     normalize, saveMetric, removeMetric, ensureLibrary, saveLibraryItem, removeLibraryItem,
-    savePlan, removePlan, startFromPlan, startFreeWorkout, saveWorkout, completeSet, finishWorkout, removeWorkout,
+    savePlan, removePlan, startFromPlan, startFreeWorkout, saveWorkout, completeSet, addActiveSet, finishWorkout, removeWorkout,
     services,
   };
 });
