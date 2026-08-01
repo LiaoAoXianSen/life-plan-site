@@ -1764,7 +1764,7 @@ test('main import summary normalizes legacy shadow records before confirmation',
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(local));
 });
 
-test('main import stops when the before-import snapshot cannot be saved', async ({ page }) => {
+test('main import cancels when the before-import snapshot cannot be saved', async ({ page }) => {
     const source = emptyData({
         records: [{ id: 'import-snapshot-failure-local', type: '日记', title: '导入前记录', content: '保留原文', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
     });
@@ -1785,7 +1785,8 @@ test('main import stops when the before-import snapshot cannot be saved', async 
     const dialogs = [];
     page.on('dialog', async dialog => {
         dialogs.push({ type: dialog.type(), message: dialog.message() });
-        await dialog.accept();
+        if (dialogs.length === 1) await dialog.accept();
+        else await dialog.dismiss();
     });
     await page.getByLabel('导入并合并').setInputFiles({
         name: 'import-before-snapshot-failure.json',
@@ -1796,8 +1797,47 @@ test('main import stops when the before-import snapshot cannot be saved', async 
     await expect(page.locator('.sync-status.active')).toContainText('导入前快照创建失败');
     expect(dialogs).toEqual([
         expect.objectContaining({ type: 'confirm' }),
+        expect.objectContaining({ type: 'confirm', message: expect.stringContaining('导入前快照创建失败') }),
     ]);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'))).toBeNull();
+});
+
+test('main import can continue after confirming a missing before-import snapshot', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'import-snapshot-continue-local', type: '日记', title: '导入前记录', content: '保留原文', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
+    });
+    const imported = emptyData({
+        records: [{ id: 'import-snapshot-continue-incoming', type: '工作记录', title: '继续导入记录', content: '应写入', startDate: '2026-07-29', endDate: '2026-07-29', todoIds: [] }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        const realSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function blockedSnapshotWrite(key, value) {
+            if (key === 'lifePlanSnapshots') throw new Error('snapshot write blocked');
+            return realSetItem.call(this, key, value);
+        };
+    }, source);
+
+    await page.goto('/#/sync');
+    const dialogs = [];
+    page.on('dialog', async dialog => {
+        dialogs.push({ type: dialog.type(), message: dialog.message() });
+        await dialog.accept();
+    });
+    await page.getByLabel('导入并合并').setInputFiles({
+        name: 'import-before-snapshot-continue.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
+    });
+
+    await expect(page.locator('.sync-status.active')).toContainText('导入已按合并规则完成');
+    expect(dialogs).toEqual([
+        expect.objectContaining({ type: 'confirm' }),
+        expect.objectContaining({ type: 'confirm', message: expect.stringContaining('导入前快照创建失败') }),
+    ]);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.some(record => record.id === 'import-snapshot-continue-incoming')).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'))).toBeNull();
 });
 

@@ -264,7 +264,9 @@ async function importFile(event: Event) {
     const summary = getImportSummary(imported);
     const confirmed = window.confirm(`导入会安全合并，不会用旧内容静默覆盖当前较新的日记。\n\n如果同一篇日记两边都改过，会保留主版本并创建冲突副本。\n\n备份内容：${summary}\n\n继续导入吗？`);
     if (!confirmed) return;
-    store.importData(imported);
+    store.importData(imported, {
+      onBeforeSnapshotFailure: () => window.confirm('导入前快照创建失败。继续导入会缺少回滚点，确定继续吗？'),
+    });
     status.value = '导入已按合并规则完成，并建立前后快照。';
   } catch (error) {
     status.value = error instanceof Error ? error.message : String(error);

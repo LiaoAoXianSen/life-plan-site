@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import { lifePlanRepository } from '../services/lifePlanRepository';
+import { lifePlanRepository, type ImportOptions } from '../services/lifePlanRepository';
 import { notifyHabitDataUserCommit } from '../services/habitCloudSync';
 import { notifyMainDataUserCommit } from '../services/mainCloudSync';
 import { notifyTodoDataUserCommit } from '../services/todoCloudSync';
@@ -47,8 +47,8 @@ export const useLifePlanStore = defineStore('lifePlan', () => {
     commit(reason, source);
   }
 
-  function importData(raw: unknown) {
-    data.value = lifePlanRepository.mergeImport(data.value, raw);
+  function importData(raw: unknown, options: ImportOptions = {}) {
+    data.value = lifePlanRepository.mergeImport(data.value, raw, options);
     notifyMainDataUserCommit();
     notifyTodoDataUserCommit();
     notifyWheelDataUserCommit();

@@ -2,6 +2,7 @@ import { createLegacyServices, genId, getNowLocal } from './legacyServices';
 import { normalizeTopLevelData, type LifePlanData } from '../types/lifePlan';
 
 export type CommitSource = 'user' | 'sync';
+export type ImportOptions = { onBeforeSnapshotFailure?: () => boolean };
 
 const mainDataKey = 'lifePlanData';
 const syncStateKey = 'lifePlanSyncState';
@@ -102,10 +103,10 @@ export class LifePlanRepository {
     return this.services.snapshots.createSnapshot(reason, data, { source: 'vue-migration', ...meta });
   }
 
-  mergeImport(data: LifePlanData, imported: unknown): LifePlanData {
+  mergeImport(data: LifePlanData, imported: unknown, options: ImportOptions = {}): LifePlanData {
     const incoming = normalizePersistedData(imported, this.services);
     const beforeSnapshot = this.createSnapshot('导入前自动备份', data, { action: 'before-import' });
-    if (!beforeSnapshot) throw new Error('导入前快照创建失败，导入已取消');
+    if (!beforeSnapshot && !options.onBeforeSnapshotFailure?.()) throw new Error('导入前快照创建失败，导入已取消');
     const merged = normalizePersistedData(this.services.sync.mergeCloudData(data, incoming), this.services);
     this.createSnapshot('导入合并结果', merged, { action: 'merge-result', mergedWith: { label: '导入文件' } });
     return this.commit(merged, 'import-merge');
