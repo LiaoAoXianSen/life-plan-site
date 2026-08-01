@@ -41,6 +41,8 @@
         let isRecordDirty = false;
         let pendingHabitNoteContext = null;
         let currentMaterialId = null;
+        let currentMaterialDetailId = null;
+        let selectedMaterialTags = [];
         let selectedMaterialRandomTags = [];
         let currentWheelId = null;
         let currentWheelMode = 'normal';
@@ -502,6 +504,16 @@
             const clean = String(query || '').trim().toLowerCase();
             if (!clean) return true;
             return normalizeTagList(tags).some(tag => tag.toLowerCase().includes(clean));
+        }
+
+        function normalizePreviewText(value = '') {
+            return String(value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function truncateTextPreview(value = '', maxLength = 80) {
+            const clean = normalizePreviewText(value);
+            if (clean.length <= maxLength) return clean;
+            return `${clean.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
         }
 
         function getIdeaStatus(record) {
@@ -1232,8 +1244,9 @@
             target.materials.forEach(material => {
                 if (!material.id) material.id = genId();
                 if (!MATERIAL_TYPES.includes(material.type)) material.type = '摘抄';
+                if (typeof material.title !== 'string') material.title = '';
                 if (typeof material.content !== 'string') material.content = '';
-                if (!Array.isArray(material.tags)) material.tags = normalizeTagList(material.tags);
+                material.tags = normalizeTagList(material.tags);
                 if (typeof material.source !== 'string') material.source = '';
                 if (typeof material.note !== 'string') material.note = '';
                 if (!material.createdAt) material.createdAt = getLocalDateTimeStr();
@@ -6839,7 +6852,18 @@
             document.getElementById('summary-habits').textContent = `${doneHabits}/${dueHabits.length}`;
             document.getElementById('summary-goals').textContent = activeGoals;
             document.getElementById('summary-records').textContent = weekRecords;
-            document.getElementById('hero-title').textContent = nextTodo ? `今天先处理：${nextTodo.text}` : '今天先把最重要的事推进一点';
+            const heroTitle = document.getElementById('hero-title');
+            heroTitle.textContent = nextTodo ? `今天先处理：${nextTodo.text}` : '今天先把最重要的事推进一点';
+            heroTitle.classList.toggle('has-todo', !!nextTodo);
+            heroTitle.setAttribute('tabindex', nextTodo ? '0' : '-1');
+            heroTitle.setAttribute('aria-label', nextTodo ? '打开首要待办详情' : '今日重点提示');
+            heroTitle.onclick = nextTodo ? () => openTodoDetail(nextTodo.id) : null;
+            heroTitle.onkeydown = nextTodo ? event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openTodoDetail(nextTodo.id);
+                }
+            } : null;
             document.getElementById('hero-meta').innerHTML = [
                 `待办 ${todayTodoDone}/${todayTodos.length}`,
                 `习惯 ${doneHabits}/${dueHabits.length}`,
@@ -7039,7 +7063,7 @@
                     ${todayTodos.map(t => `
                         <li class="todo-item">
                             <input type="checkbox" onchange="toggleTodo(${escapeJsArg(t.id)}); renderDashboard();">
-                            <span class="todo-text" onclick="openTodoDetail(${escapeJsArg(t.id)})">
+                            <span class="todo-text todo-preview-text" onclick="openTodoDetail(${escapeJsArg(t.id)})">
                                 ${escapeHtml(t.text)}
                                 <small>${escapeHtml(getTodayTodoReason(t))}</small>
                             </span>
@@ -7094,7 +7118,7 @@
                     ${picked.map(t => `
                         <li class="todo-item">
                             <input type="checkbox" onchange="toggleTodo(${escapeJsArg(t.id)}); renderDashboard();">
-                            <span class="todo-text" onclick="openTodoDetail(${escapeJsArg(t.id)})">
+                            <span class="todo-text todo-preview-text" onclick="openTodoDetail(${escapeJsArg(t.id)})">
                                 ${escapeHtml(t.text)}
                                 <small>无截止 · 可转入今天</small>
                             </span>
@@ -8439,9 +8463,9 @@
                             <button onclick="jumpToWheelTag(${escapeJsArg(wheelTag?.id || '')})"><strong>${item.wheelItems.length}</strong><span>转盘项</span></button>
                         </div>
                         <div class="tag-center-preview">
-                            ${item.ideas[0] ? `<span>灵感：${escapeHtml(item.ideas[0].title || '未命名灵感')}</span>` : ''}
-                            ${item.materials[0] ? `<span>素材：${escapeHtml((item.materials[0].content || '').slice(0, 34))}</span>` : ''}
-                            ${item.wheelItems[0] ? `<span>转盘：${escapeHtml(item.wheelItems[0].name || '未命名公共项')}</span>` : ''}
+                            ${item.ideas[0] ? `<span>灵感：${escapeHtml(truncateTextPreview(item.ideas[0].title || '未命名灵感', 48))}</span>` : ''}
+                            ${item.materials[0] ? `<span>素材：${escapeHtml(truncateTextPreview(getMaterialTitle(item.materials[0]), 48))}</span>` : ''}
+                            ${item.wheelItems[0] ? `<span>转盘：${escapeHtml(truncateTextPreview(item.wheelItems[0].name || '未命名公共项', 48))}</span>` : ''}
                         </div>
                     </article>
                 `;
@@ -8449,8 +8473,24 @@
         }
 
         // ================== 素材库 ==================
-        function getAllMaterialTags() {
-            return Array.from(new Set(data.materials.flatMap(material => normalizeTagList(material.tags)))).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        function getAllMaterialTags(extraTags = []) {
+            return Array.from(new Set([
+                ...data.materials.flatMap(material => normalizeTagList(material.tags)),
+                ...normalizeTagList(extraTags)
+            ])).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        }
+
+        function getMaterialTitle(material) {
+            const title = normalizePreviewText(material?.title || '');
+            if (title) return title;
+            return truncateTextPreview(material?.content || '', 42) || '空素材';
+        }
+
+        function isMaterialCardLong(material) {
+            return getMaterialTitle(material).length > 46
+                || normalizePreviewText(material?.content).length > 110
+                || normalizePreviewText(material?.source).length > 54
+                || normalizePreviewText(material?.note).length > 72;
         }
 
         function getFilteredMaterials() {
@@ -8462,7 +8502,7 @@
                 .filter(material => hasMatchingTag(material.tags, tagFilter))
                 .filter(material => {
                     if (!keyword) return true;
-                    return [material.type, material.content, material.source, material.note, ...normalizeTagList(material.tags)]
+                    return [material.title, material.type, material.content, material.source, material.note, ...normalizeTagList(material.tags)]
                         .filter(Boolean)
                         .join(' ')
                         .toLowerCase()
@@ -8473,23 +8513,36 @@
 
         function renderMaterialCard(material, compact = false) {
             const tags = normalizeTagList(material.tags);
+            const isLong = isMaterialCardLong(material);
             return `
-                <article class="material-card ${compact ? 'compact' : ''}">
+                <article class="material-card ${compact ? 'compact' : ''}" data-material-id="${escapeHtml(material.id)}">
                     <div class="material-card-head">
                         <span class="material-type">${escapeHtml(material.type || '素材')}</span>
                         <span>${escapeHtml(formatStoredDateTime(material.createdAt || ''))}</span>
                     </div>
-                    <div class="material-content">${escapeHtml(material.content || '空素材')}</div>
+                    <h3 class="material-title">${escapeHtml(getMaterialTitle(material))}</h3>
+                    <div class="material-card-copy">
+                        <div class="material-content">${escapeHtml(material.content || '空素材')}</div>
+                        ${material.source ? `<div class="material-meta material-source">来源：${escapeHtml(material.source)}</div>` : ''}
+                        ${material.note ? `<div class="material-meta material-note">备注：${escapeHtml(material.note)}</div>` : ''}
+                    </div>
                     ${tags.length ? `<div class="idea-badge-row">${tags.map(tag => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join('')}</div>` : ''}
-                    ${material.source ? `<div class="material-meta">来源：${escapeHtml(material.source)}</div>` : ''}
-                    ${material.note ? `<div class="material-meta">备注：${escapeHtml(material.note)}</div>` : ''}
-                    ${compact ? '' : `
-                        <div class="idea-card-actions">
-                            <button class="btn btn-secondary todo-mini-btn" onclick="openMaterialModal(${escapeJsArg(material.id)})">编辑</button>
-                        </div>
-                    `}
+                    <div class="idea-card-actions material-card-actions">
+                        ${isLong ? `<button class="mini-link material-expand-btn" type="button" aria-expanded="false" onclick="toggleMaterialCard(event, this)">展开内容</button>` : ''}
+                        <button class="btn btn-secondary todo-mini-btn" onclick="openMaterialDetail(${escapeJsArg(material.id)})">查看详情</button>
+                        ${compact ? '' : `<button class="btn btn-secondary todo-mini-btn" onclick="openMaterialModal(${escapeJsArg(material.id)})">编辑</button>`}
+                    </div>
                 </article>
             `;
+        }
+
+        function toggleMaterialCard(event, button) {
+            event?.stopPropagation();
+            const card = button?.closest('.material-card');
+            if (!card) return;
+            const expanded = card.classList.toggle('is-expanded');
+            button.textContent = expanded ? '收起内容' : '展开内容';
+            button.setAttribute('aria-expanded', String(expanded));
         }
 
         function renderMaterialTagPicker() {
@@ -8507,6 +8560,41 @@
                     <span>${escapeHtml(tag)}</span>
                 </label>
             `).join('');
+        }
+
+        function renderMaterialEditorTags() {
+            const container = document.getElementById('material-existing-tags');
+            if (!container) return;
+            const tags = getAllMaterialTags(selectedMaterialTags);
+            container.innerHTML = tags.length
+                ? tags.map(tag => `
+                    <label class="tag-check material-tag-option">
+                        <input type="checkbox" ${selectedMaterialTags.includes(tag) ? 'checked' : ''} onchange="toggleMaterialEditorTag(${escapeJsArg(tag)}, this.checked)">
+                        <span>${escapeHtml(tag)}</span>
+                    </label>
+                `).join('')
+                : '<div class="material-tag-empty">还没有标签，可在下方现场创建。</div>';
+        }
+
+        function toggleMaterialEditorTag(tag, checked) {
+            const set = new Set(selectedMaterialTags);
+            if (checked) set.add(tag);
+            else set.delete(tag);
+            selectedMaterialTags = Array.from(set);
+            renderMaterialEditorTags();
+        }
+
+        function addMaterialEditorTag() {
+            const input = document.getElementById('material-new-tag');
+            const tags = normalizeTagList(input?.value || '');
+            if (!tags.length) {
+                input?.focus();
+                return;
+            }
+            selectedMaterialTags = normalizeTagList([...selectedMaterialTags, ...tags]);
+            if (input) input.value = '';
+            renderMaterialEditorTags();
+            input?.focus();
         }
 
         function getRandomMaterials() {
@@ -8549,31 +8637,62 @@
             renderMaterialRandom();
         }
 
+        function openMaterialDetail(materialId) {
+            const material = data.materials.find(item => item.id === materialId);
+            if (!material) return;
+            currentMaterialDetailId = material.id;
+            const tags = normalizeTagList(material.tags);
+            document.getElementById('material-detail-title').textContent = getMaterialTitle(material);
+            document.getElementById('material-detail-body').innerHTML = `
+                <div class="material-detail-meta">
+                    <span class="material-type">${escapeHtml(material.type || '素材')}</span>
+                    <span>${escapeHtml(formatStoredDateTime(material.createdAt || ''))}</span>
+                </div>
+                <div class="material-detail-content">${escapeHtml(material.content || '空素材').replace(/\n/g, '<br>')}</div>
+                ${tags.length ? `<div class="idea-badge-row">${tags.map(tag => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join('')}</div>` : ''}
+                ${material.source ? `<section class="material-detail-section"><strong>来源</strong><p>${escapeHtml(material.source)}</p></section>` : ''}
+                ${material.note ? `<section class="material-detail-section"><strong>备注</strong><p>${escapeHtml(material.note).replace(/\n/g, '<br>')}</p></section>` : ''}
+            `;
+            document.getElementById('material-detail-modal').classList.add('active');
+        }
+
+        function closeMaterialDetail() {
+            document.getElementById('material-detail-modal').classList.remove('active');
+            currentMaterialDetailId = null;
+        }
+
+        function editMaterialFromDetail() {
+            const materialId = currentMaterialDetailId;
+            closeMaterialDetail();
+            if (materialId) openMaterialModal(materialId);
+        }
+
         function openMaterialModal(materialId = '') {
             currentMaterialId = materialId || null;
             const material = currentMaterialId ? data.materials.find(item => item.id === currentMaterialId) : null;
+            selectedMaterialTags = normalizeTagList(material?.tags || []);
             document.getElementById('material-modal-title').textContent = material ? '编辑素材' : '新增素材';
+            document.getElementById('material-title').value = material ? getMaterialTitle(material) : '';
             document.getElementById('material-type').value = material?.type || '摘抄';
             document.getElementById('material-content').value = material?.content || '';
-            document.getElementById('material-tags').value = tagsToInput(material?.tags || []);
+            document.getElementById('material-tags').value = '';
+            document.getElementById('material-new-tag').value = '';
             document.getElementById('material-source').value = material?.source || '';
             document.getElementById('material-note').value = material?.note || '';
             document.getElementById('delete-material-btn').style.display = material ? '' : 'none';
+            renderMaterialEditorTags();
             document.getElementById('material-modal').classList.add('active');
-            document.getElementById('material-content').focus();
+            document.getElementById('material-title').focus();
         }
 
         function closeMaterialModal() {
             document.getElementById('material-modal').classList.remove('active');
             currentMaterialId = null;
-            const contentEl = document.getElementById('material-content');
-            const tagsEl = document.getElementById('material-tags');
-            const sourceEl = document.getElementById('material-source');
-            const noteEl = document.getElementById('material-note');
-            if (contentEl) contentEl.value = '';
-            if (tagsEl) tagsEl.value = '';
-            if (sourceEl) sourceEl.value = '';
-            if (noteEl) noteEl.value = '';
+            selectedMaterialTags = [];
+            ['material-title', 'material-content', 'material-tags', 'material-new-tag', 'material-source', 'material-note'].forEach(id => {
+                const input = document.getElementById(id);
+                if (input) input.value = '';
+            });
         }
 
         function saveMaterial() {
@@ -8583,10 +8702,14 @@
                 return;
             }
             const now = getLocalDateTimeStr();
+            const titleInput = document.getElementById('material-title').value.trim();
+            const pendingTags = normalizeTagList(document.getElementById('material-tags').value || '');
+            const pendingNewTags = normalizeTagList(document.getElementById('material-new-tag').value || '');
             const materialData = {
+                title: titleInput || truncateTextPreview(content, 42),
                 type: document.getElementById('material-type').value || '摘抄',
                 content,
-                tags: normalizeTagList(document.getElementById('material-tags').value || ''),
+                tags: normalizeTagList([...selectedMaterialTags, ...pendingTags, ...pendingNewTags]),
                 source: document.getElementById('material-source').value.trim(),
                 note: document.getElementById('material-note').value.trim(),
                 updatedAt: now
@@ -8622,6 +8745,7 @@
             renderGlobalSearch();
         }
 
+
         // ================== 全局搜索 ==================
         const SEARCH_MODULE_LABELS = {
             records: '记录',
@@ -8640,7 +8764,7 @@
                 body: record.content || '',
                 tags: record.type === '灵感碎片' ? getIdeaTags(record) : [],
                 meta: [getIdeaStatus(record), record.ideaNextAction, record.ideaConclusion].filter(Boolean).join(' '),
-                open: `openRecordPreview('${record.id}')`
+                open: `openRecordPreview(${escapeJsArg(record.id)})`
             }));
             const todoItems = data.todos.map(todo => ({
                 module: 'todos',
@@ -8649,7 +8773,7 @@
                 body: [getTodoPlanLabel(todo), ...(todo.subTodos || []).map(item => item.text), ...(todo.sessions || []).map(item => item.note)].join(' '),
                 tags: [todo.group || '其他'],
                 meta: todo.urgency || '',
-                open: `openTodoDetail('${todo.id}')`
+                open: `openTodoDetail(${escapeJsArg(todo.id)})`
             }));
             const goalItems = data.goals.map(goal => ({
                 module: 'goals',
@@ -8658,16 +8782,16 @@
                 body: `${goal.target || ''} ${goal.progress || 0}%`,
                 tags: [goal.status, goal.period].filter(Boolean),
                 meta: goal.target || '',
-                open: `openGoalDetail('${goal.id}')`
+                open: `openGoalDetail(${escapeJsArg(goal.id)})`
             }));
             const materialItems = data.materials.map(material => ({
                 module: 'materials',
-                title: material.content.slice(0, 42) || '空素材',
+                title: getMaterialTitle(material),
                 subtitle: `${material.type || '素材'} · ${formatStoredDateTime(material.createdAt || '')}`,
                 body: `${material.content || ''} ${material.source || ''} ${material.note || ''}`,
                 tags: normalizeTagList(material.tags),
                 meta: material.source || material.note || '',
-                open: `openMaterialModal('${material.id}')`
+                open: `openMaterialDetail(${escapeJsArg(material.id)})`
             }));
             const templateItems = data.templates.map(template => ({
                 module: 'templates',
@@ -8915,8 +9039,10 @@
                         <td><input type="checkbox" ${t.done ? 'checked' : ''} 
                             onchange="toggleTodo(${escapeJsArg(t.id)}); renderTodoTable();"></td>
                         <td class="todo-title-cell ${t.done ? 'is-done' : ''}" onclick="openTodoDetail(${escapeJsArg(t.id)})">
-                            ${escapeHtml(t.text)}
-                            ${t.subTodos && t.subTodos.length > 0 ? `<span style="color:#999; font-size:12px;">(${t.subTodos.filter(s=>s.done).length}/${t.subTodos.length})</span>` : ''}
+                            <div class="todo-title-copy">
+                                ${escapeHtml(t.text)}
+                                ${t.subTodos && t.subTodos.length > 0 ? `<span style="color:#999; font-size:12px;">(${t.subTodos.filter(s=>s.done).length}/${t.subTodos.length})</span>` : ''}
+                            </div>
                             <div class="todo-title-meta">${escapeHtml(getTodoPlanLabel(t))} · 执行 ${sessionCount} 次</div>
                         </td>
                         <td><span class="${dueClass}">${escapeHtml(formatTodoDueDate(t))}</span></td>
@@ -11823,6 +11949,7 @@
                 'template-modal': closeTemplateManage,
                 'todo-detail-modal': closeTodoDetail,
                 'snapshot-modal': closeSnapshotModal,
+                'material-detail-modal': closeMaterialDetail,
                 'material-modal': closeMaterialModal,
                 'body-metric-modal': typeof closeBodyMetricModal === 'function' ? closeBodyMetricModal : null,
                 'fitness-plan-modal': typeof closeFitnessPlanModal === 'function' ? closeFitnessPlanModal : null,

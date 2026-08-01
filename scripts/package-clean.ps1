@@ -31,6 +31,10 @@ $runtimeFiles = @(
     'wheel-tool.css'
 )
 
+$runtimeDirectories = @(
+    'styles'
+)
+
 $items = foreach ($file in $runtimeFiles) {
     $path = Join-Path $root $file
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -41,6 +45,15 @@ $items = foreach ($file in $runtimeFiles) {
     New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
     Copy-Item -LiteralPath $path -Destination $target -Force
     Get-Item -LiteralPath $target
+}
+
+foreach ($directory in $runtimeDirectories) {
+    $path = Join-Path $root $directory
+    if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+        throw "Runtime directory missing: $directory"
+    }
+    $target = Join-Path $stageRoot $directory
+    Copy-Item -LiteralPath $path -Destination $target -Recurse -Force
 }
 
 try {
@@ -69,7 +82,7 @@ $zipItem = Get-Item -LiteralPath $zip
     FullName = $zipItem.FullName
     Length = $zipItem.Length
     KeepCount = $KeepCount
-    IncludedFiles = ($runtimeFiles -join ', ')
+    IncludedFiles = (($runtimeFiles + $runtimeDirectories) -join ', ')
     RemovedOldPackages = $removedPackages.Count
     RemovedPackages = ($removedPackages.Name -join ', ')
 } | Format-List
