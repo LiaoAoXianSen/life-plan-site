@@ -727,7 +727,7 @@ test('dashboard habit quick check-in writes checkin and rebuilds habit mirror', 
     await row.getByRole('button', { name: '打卡', exact: true }).click();
     await expect(page.locator('.notice.success')).toContainText('已为「首页打卡习惯」打卡');
     await expect(page.locator('.summary-card').filter({ hasText: '习惯完成' })).toContainText('1/1');
-    await expect(row.getByRole('button', { name: '打卡', exact: true })).toBeDisabled();
+    await expect(row.getByRole('button', { name: '备注', exact: true })).toBeVisible();
 
     let stored = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
@@ -782,6 +782,40 @@ test('dashboard today habit metadata mirrors legacy action card', async ({ page 
     await expect(row).toContainText('漏打 -2');
     await expect(row).toContainText('备注：读完一章');
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('dashboard habit actions expose legacy note and decrease branches', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [
+            { id: 'habit-dashboard-single-note', name: '单次备注习惯', rule: 'daily', timesPerDay: 1, startDate: today },
+            { id: 'habit-dashboard-multi-note', name: '多次备注习惯', rule: 'daily', timesPerDay: 2, startDate: today },
+        ],
+        checkins: [{ id: 'checkin-dashboard-single-note', habitId: 'habit-dashboard-single-note', date: today, time: '08:00', note: '旧备注', checkinAt: `${today}T08:00:00` }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+    const single = page.locator('.dashboard-today-habits .todo-item').filter({ hasText: '单次备注习惯' });
+    const multi = page.locator('.dashboard-today-habits .todo-item').filter({ hasText: '多次备注习惯' });
+    await expect(single.getByRole('button', { name: '备注', exact: true })).toBeVisible();
+    await expect(single.getByRole('button', { name: '撤销', exact: true })).toBeVisible();
+    await expect(multi.getByRole('button', { name: '打卡', exact: true })).toBeVisible();
+    await expect(multi.getByRole('button', { name: '备注', exact: true })).toBeVisible();
+    await expect(multi.getByRole('button', { name: '-1', exact: true })).toHaveCount(0);
+
+    page.once('dialog', dialog => {
+        expect(dialog.type()).toBe('prompt');
+        expect(dialog.defaultValue()).toBe('');
+        dialog.accept('第一次备注');
+    });
+    await multi.getByRole('button', { name: '备注', exact: true }).click();
+    await expect(multi).toContainText('备注：第一次备注');
+    await expect(multi.getByRole('button', { name: '-1', exact: true })).toBeVisible();
+
+    await multi.getByRole('button', { name: '-1', exact: true }).click();
+    await expect(multi).toContainText('0/2');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.checkins.filter(item => item.habitId === 'habit-dashboard-multi-note')).toHaveLength(0);
 });
 
 test('dashboard weekly fixed habit metadata keeps legacy rule wording', async ({ page }) => {

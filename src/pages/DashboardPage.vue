@@ -242,6 +242,31 @@ function quickHabitCheckin(habitId: string) {
   announce(habitsStore.lastAction || '已打卡');
 }
 
+function quickHabitCheckinWithNote(habitId: string) {
+  const note = window.prompt('打卡备注', '');
+  if (note === null) return;
+  if (!habitsStore.quickCheckin(habitId, note)) {
+    announce(habitsStore.lastError || '打卡失败', 'warning');
+    return;
+  }
+  announce(habitsStore.lastAction || '已打卡');
+}
+
+function editLatestHabitNote(habitId: string) {
+  const latest = habitsStore.getCheckins(habitId, today).slice(-1)[0];
+  if (!latest) {
+    quickHabitCheckinWithNote(habitId);
+    return;
+  }
+  const note = window.prompt('编辑打卡备注', String(latest.note || ''));
+  if (note === null) return;
+  if (!habitsStore.editCheckinNote(latest.id, note)) {
+    announce(habitsStore.lastError || '备注保存失败', 'warning');
+    return;
+  }
+  announce(habitsStore.lastAction || '打卡备注已保存');
+}
+
 function undoHabitCheckin(habitId: string) {
   if (!habitsStore.undoLatestCheckin(habitId)) {
     announce(habitsStore.lastError || '撤销失败', 'warning');
@@ -573,15 +598,21 @@ const timelineGroups = computed(() => {
                 <button
                   class="btn btn-secondary todo-mini-btn"
                   type="button"
-                  :disabled="!item.canCheckin"
-                  @click="quickHabitCheckin(item.habit.id)"
-                >打卡</button>
+                  :disabled="item.target === 1 && item.count > 0 ? false : !item.canCheckin"
+                  @click="item.target === 1 && item.count > 0 ? editLatestHabitNote(item.habit.id) : quickHabitCheckin(item.habit.id)"
+                >{{ item.target === 1 && item.count > 0 ? '备注' : '打卡' }}</button>
                 <button
                   class="btn btn-secondary todo-mini-btn"
                   type="button"
-                  :disabled="item.count <= 0"
+                  :disabled="item.target > 1 ? false : item.count <= 0"
+                  @click="item.target > 1 ? (item.count > 0 ? editLatestHabitNote(item.habit.id) : quickHabitCheckinWithNote(item.habit.id)) : undoHabitCheckin(item.habit.id)"
+                >{{ item.target > 1 ? '备注' : '撤销' }}</button>
+                <button
+                  v-if="item.target > 1 && item.count > 0"
+                  class="btn btn-secondary todo-mini-btn"
+                  type="button"
                   @click="undoHabitCheckin(item.habit.id)"
-                >撤销</button>
+                >-1</button>
               </span>
             </li>
           </ul>
