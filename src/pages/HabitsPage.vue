@@ -261,7 +261,7 @@ const selectedHabitCheckins = computed(() => {
     .map(item => ({
       ...item,
       date: String(item.date),
-      timestamp: String(item.checkinAt || item.createdAt || item.updatedAt || `${item.date}T${item.time || '00:00:00'}`),
+      timestamp: String(item.checkinAt || (item.time ? `${item.date}T${item.time}:00` : item.createdAt || item.updatedAt || `${item.date}T00:00:00`)),
     }))
     .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
     .slice(0, 30);
@@ -625,6 +625,25 @@ function formatAnalysisDateTime(value: string, includeSeconds = false) {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}${includeSeconds ? `:${pad(date.getSeconds())}` : ''}`;
 }
 
+function formatAnalysisDate(value: string): string {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return String(value || '');
+  return `${Number(match[1])}年${Number(match[2])}月${Number(match[3])}日`;
+}
+
+function checkinHistoryClock(checkin: AnalysisCheckin): string {
+  if (/^\d{2}:\d{2}$/.test(String(checkin.time || ''))) return String(checkin.time);
+  const raw = String(checkin.checkinAt || checkin.createdAt || checkin.updatedAt || '');
+  const match = raw.match(/T?(\d{2}):(\d{2})(?::(\d{2}))?/);
+  return match ? `${match[1]}:${match[2]}` : '';
+}
+
+function checkinNoteSummary(note = '', maxLength = 72): string {
+  const clean = String(note || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  return clean.length > maxLength ? `${clean.slice(0, maxLength - 1)}…` : clean;
+}
+
 function noteDraft(checkin: { id: string; note?: string }) {
   if (!(checkin.id in checkinNoteDrafts)) checkinNoteDrafts[checkin.id] = checkin.note || '';
   return checkinNoteDrafts[checkin.id];
@@ -929,13 +948,13 @@ watch(focusedHabitId, value => {
             <div v-if="selectedHabitCheckins.length" class="habit-history-list">
               <div v-for="checkin in selectedHabitCheckins" :key="checkin.id" class="habit-history-item" :class="{ 'has-note': String(checkin.note || '').trim() }">
                 <div class="habit-history-main">
-                  <strong>{{ formatAnalysisDateTime(checkin.timestamp) }}</strong>
-                  <span>{{ String(checkin.note || '').trim() || '暂无备注' }}</span>
+                  <strong>{{ formatAnalysisDate(checkin.date) }}{{ checkinHistoryClock(checkin) ? ` ${checkinHistoryClock(checkin)}` : '' }}</strong>
+                  <span>{{ checkinNoteSummary(checkin.note) || '暂无备注' }}</span>
                 </div>
                 <button class="btn btn-secondary habit-history-action" type="button" @click="openAnalysisCheckin(checkin)">{{ String(checkin.note || '').trim() ? '编辑' : '补备注' }}</button>
               </div>
             </div>
-            <div v-else class="empty-state">这条习惯还没有打卡记录。</div>
+            <div v-else class="empty-state">这条习惯还没有打卡记录</div>
           </div>
         </template>
         <div v-else class="empty-state">暂无可分析的习惯。</div>

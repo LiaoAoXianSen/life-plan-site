@@ -4245,6 +4245,73 @@ test('habit annual analysis renders a read-only selected habit heatmap', async (
     expect(unchanged.mirror).toBeNull();
 });
 
+test('habit annual checkin history keeps legacy clock source and note truncation', async ({ page }) => {
+    const dateAt = amount => {
+        const date = new Date();
+        date.setHours(12, 0, 0, 0);
+        date.setDate(date.getDate() + amount);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    const today = dateAt(0);
+    const yesterday = dateAt(-1);
+    const longNote = '这是用于验证历史面板备注截断行为的长文本内容，前面这部分会被完整保留在预览里，用来确保整条备注远超七十二个字符的上限，多余部分折叠。截断标志后面的这段内容不应该出现在预览里。';
+    const source = emptyData({
+        habits: [
+            { id: 'habit-history-clock', name: '历史时钟习惯', rule: 'daily', timesPerDay: '1', startDate: dateAt(-30) },
+        ],
+        checkins: [
+            { id: 'checkin-history-time', habitId: 'habit-history-clock', date: yesterday, time: '07:45', checkinAt: `${yesterday}T18:20:00`, note: '时钟取 time 字段' },
+            { id: 'checkin-history-long', habitId: 'habit-history-clock', date: today, time: '08:00', checkinAt: `${today}T08:00:00`, note: longNote },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        window.__habitBefore = localStorage.getItem('lifePlanData');
+    }, source);
+
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '分析' }).click();
+    const annual = page.locator('.habit-annual-analysis');
+    await expect(annual).toBeVisible();
+    const panel = annual.locator('.habit-history-panel');
+    const clockItem = panel.locator('.habit-history-item').filter({ hasText: '时钟取 time 字段' });
+    await expect(clockItem).toContainText('07:45');
+    await expect(clockItem).not.toContainText('18:20');
+    const longItem = panel.locator('.habit-history-item').filter({ hasText: '长文本' });
+    await expect(longItem).toContainText('…');
+    await expect(longItem).not.toContainText('不应该出现在预览里');
+    const unchanged = await page.evaluate(() => ({
+        sameData: window.__habitBefore === localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData'),
+    }));
+    expect(unchanged.sameData).toBe(true);
+    expect(unchanged.mirror).toBeNull();
+});
+
+test('habit annual empty checkin history keeps the legacy wording without a trailing period', async ({ page }) => {
+    const source = emptyData({
+        habits: [{ id: 'habit-history-empty', name: '无记录习惯', rule: 'daily', timesPerDay: '1', startDate: '2026-01-01' }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        window.__habitBefore = localStorage.getItem('lifePlanData');
+    }, source);
+
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '分析' }).click();
+    const annual = page.locator('.habit-annual-analysis');
+    const panel = annual.locator('.habit-history-panel');
+    await expect(panel).toContainText('最近打卡备注');
+    await expect(panel).toContainText('这条习惯还没有打卡记录');
+    expect(await panel.locator('.empty-state').textContent()).toBe('这条习惯还没有打卡记录');
+    const unchanged = await page.evaluate(() => ({
+        sameData: window.__habitBefore === localStorage.getItem('lifePlanData'),
+        mirror: localStorage.getItem('habitAppData'),
+    }));
+    expect(unchanged.sameData).toBe(true);
+    expect(unchanged.mirror).toBeNull();
+});
+
 test('habit penalty settle writes miss ledger once and keeps local mirror upload disabled', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();
