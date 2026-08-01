@@ -123,8 +123,8 @@ export const useFitnessStore = defineStore('fitness', () => {
     return result.workout as FitnessEntity;
   }
 
-  function startFreeWorkout(exerciseId: string, title = '自由训练') {
-    if (activeWorkout.value) return fail('已有进行中的训练，请先结束该训练。');
+  function startFreeWorkout(exerciseId: string, title = '自由训练', allowWhileActive = false) {
+    if (activeWorkout.value && !allowWhileActive) return fail('已有进行中的训练，请先结束该训练。');
     const item = services.fitness.findExerciseLibraryItem(lifePlan.data.exerciseLibrary, exerciseId);
     if (!item) return fail('请先从动作库选择一个动作');
     const draft = services.fitness.createFitnessWorkoutDraft({

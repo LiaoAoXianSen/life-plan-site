@@ -427,6 +427,12 @@ function savePlan() {
 }
 
 function startFreeWorkout() {
+  if (fitness.activeWorkout) {
+    const title = fitness.services.fitness.getWorkoutTitle(fitness.activeWorkout);
+    if (!window.confirm(`已有进行中的训练「${title}」。要先继续它，还是新开一场？\n确定=新开，取消=继续旧的`)) return;
+    run(() => fitness.startFreeWorkout(freeForm.exerciseId, freeForm.title, true));
+    return;
+  }
   run(() => fitness.startFreeWorkout(freeForm.exerciseId, freeForm.title));
 }
 
