@@ -7,6 +7,7 @@ import { buildScheduleItems, addDays, getMonthStart, getWeekStart, sortScheduleI
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
+import { useTodosStore } from '../stores/todosStore';
 import type { DataEntity, Todo } from '../types/lifePlan';
 
 type RecordEntity = DataEntity & {
@@ -50,6 +51,7 @@ type DiaryAiTodoDraft = {
 
 const lifePlan = useLifePlanStore();
 const records = useRecordsStore();
+const todos = useTodosStore();
 const route = useRoute();
 const router = useRouter();
 const today = () => getTodayStr();
@@ -521,6 +523,10 @@ function unlinkTodo(todo: Todo) {
   editorNotice.value = todo.isExclusive ? '已删除专属待办' : '已取消关联';
 }
 
+function toggleLinkedTodo(todo: Todo) {
+  todos.toggle(todo.id);
+}
+
 function removeRecord(id: string) {
   records.remove('records', id);
   if (activeRecordId.value === id) closeEditor(false);
@@ -966,6 +972,7 @@ onBeforeUnmount(() => {
             <div v-if="linkedTodos.length" class="linked-todo-list">
               <div v-for="todo in linkedTodos" :key="todo.id" class="record-preview-todo-item" :class="{ done: todo.done }">
                 <span class="record-preview-dot"></span>
+                <input class="record-linked-todo-check" type="checkbox" :checked="todo.done" :aria-label="`完成 ${todo.text}`" @change="toggleLinkedTodo(todo)" />
                 <span>{{ todo.text }}</span>
                 <em>{{ todo.isExclusive ? '专属' : '通用' }}</em>
                 <button class="link-button danger-text" type="button" @click="unlinkTodo(todo)">{{ todo.isExclusive ? '删除' : '取消关联' }}</button>

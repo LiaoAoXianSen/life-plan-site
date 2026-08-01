@@ -881,7 +881,9 @@ test('dashboard habit actions expose legacy note and decrease branches', async (
         ],
         checkins: [{ id: 'checkin-dashboard-single-note', habitId: 'habit-dashboard-single-note', date: today, time: '08:00', note: '旧备注', checkinAt: `${today}T08:00:00` }],
     });
-    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+    }, source);
     await page.goto('/#/dashboard');
     const single = page.locator('.dashboard-today-habits .todo-item').filter({ hasText: '单次备注习惯' });
     const multi = page.locator('.dashboard-today-habits .todo-item').filter({ hasText: '多次备注习惯' });
@@ -3715,6 +3717,33 @@ test('record editor persists linked and exclusive todos through the main data co
     expect(record.todoIds).toContain(exclusive.id);
     expect(stored.mirror.authority).toBe('lifePlanData.todos');
     expect(stored.mirror.todos.map(item => item.id)).toEqual(expect.arrayContaining(['todo-1', exclusive.id]));
+});
+
+test('record linked todo checkbox toggles the authoritative todo without changing the link', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'record-toggle-linked', type: '日记', title: '可勾选关联记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: ['todo-toggle-linked'] }],
+        todos: [{ id: 'todo-toggle-linked', text: '关联完成项', note: '', done: false, dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他', subTodos: [], sessions: [], completedAt: '', sourceType: 'manual', sourceRecordId: '', sourceMatchKey: '关联完成项' }],
+    });
+    const originalTodoIds = source.records[0].todoIds;
+    await page.addInitScript(data => {
+        if (!localStorage.getItem('lifePlanData')) localStorage.setItem('lifePlanData', JSON.stringify(data));
+    }, source);
+    await page.goto('/#/records?record=record-toggle-linked');
+    const editor = page.locator('.record-editor-panel');
+    const checkbox = editor.getByRole('checkbox', { name: '完成 关联完成项' });
+    await checkbox.check();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).todos.find(todo => todo.id === 'todo-toggle-linked').done)).toBe(true);
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('todoAppData')),
+    }));
+    expect(stored.data.records.find(record => record.id === 'record-toggle-linked').todoIds).toEqual(originalTodoIds);
+    expect(stored.mirror.authority).toBe('lifePlanData.todos');
+    expect(stored.mirror.todos.find(todo => todo.id === 'todo-toggle-linked').done).toBe(true);
+
+    await page.reload();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).todos.find(todo => todo.id === 'todo-toggle-linked').done)).toBe(true);
+    await expect(editor.getByRole('checkbox', { name: '完成 关联完成项' })).toBeChecked();
 });
 
 test('record built-in structured template preserves legacy markdown and template id', async ({ page }) => {
