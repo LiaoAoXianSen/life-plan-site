@@ -113,9 +113,9 @@ export class LifePlanRepository {
   }
 
   exportData(data: LifePlanData) {
-    this.createSnapshot('手动导出备份', data, { action: 'export' });
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    this.services.snapshots.downloadJsonFile(`life-plan-backup-${stamp}.json`, data);
+    this.createSnapshot('手动导出备份', data, { source: 'local', action: '' });
+    const stamp = this.services.snapshots.getTimestampForFile();
+    this.services.snapshots.downloadJsonFile(`人生规划备份_${stamp}.json`, data);
   }
 
   listSnapshots() {

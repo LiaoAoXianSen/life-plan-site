@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('fs/promises');
 
 function emptyData(overrides = {}) {
     return {
@@ -1763,9 +1764,32 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('main').getByRole('button', { name: '导出备份' }).click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/^life-plan-backup-.*\.json$/);
+    expect(download.suggestedFilename()).toMatch(/^人生规划备份_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.json$/);
     const afterExport = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
     expect(afterExport.map(snapshot => snapshot.reason)).toContain('手动导出备份');
+});
+
+test('main export preserves data and legacy snapshot metadata', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'export-metadata-record', type: '日记', title: '导出记录', content: '正文', startDate: '2026-07-28', endDate: '2026-07-28' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/sync');
+    const beforeExport = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('main').getByRole('button', { name: '导出备份' }).click();
+    const download = await downloadPromise;
+    const exported = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
+    const state = await page.evaluate(() => ({
+        data: localStorage.getItem('lifePlanData'),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'),
+    }));
+    const snapshot = state.snapshots[0];
+    const exportedHash = await page.evaluate(data => window.LifePlanSyncService.create().getDataHash(data), exported);
+    expect(state.data).toBe(beforeExport);
+    expect(snapshot).toMatchObject({ reason: '手动导出备份', source: 'local', action: '' });
+    expect(snapshot.hash).toBe(exportedHash);
+    expect(snapshot.hash).toBeTruthy();
 });
 
 test('main import schedules the shared auto-sync notification', async ({ page }) => {
