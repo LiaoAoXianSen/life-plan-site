@@ -2549,6 +2549,45 @@ test('fitness hero follows the legacy service recommendation and free fallback',
     await fallbackPage.close();
 });
 
+test('fitness plan start keeps the legacy active workout confirmation branch', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        fitnessPlans: [{
+            id: 'fitness-plan-new-session', name: '新计划训练', status: 'active', goal: 'strength',
+            exercises: [{ id: 'fitness-plan-new-exercise', name: '硬拉', targetSets: 1, targetReps: '5', targetWeight: 80, sets: [{ id: 'fitness-plan-new-set', weight: 80, reps: 5 }] }],
+        }],
+        fitnessWorkouts: [{
+            id: 'fitness-workout-existing-active', date: today, status: 'inProgress', title: '旧训练', planId: '', planName: '',
+            exercises: [{ id: 'fitness-existing-exercise', name: '深蹲', targetSets: 1, targetReps: '5', targetWeight: 60, sets: [{ id: 'fitness-existing-set', weight: 60, reps: 5, done: false }] }],
+            createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/fitness');
+
+    await expect(page.getByText('正在训练：旧训练')).toBeVisible();
+    const planSelect = page.getByLabel('新开计划训练');
+    await planSelect.selectOption('fitness-plan-new-session');
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toBe('已有进行中的训练「旧训练」。要先继续它，还是新开一场？\n确定=新开，取消=继续旧的');
+        await dialog.dismiss();
+    });
+    await page.getByRole('button', { name: '新开计划训练', exact: true }).click();
+    await expect(page.getByText('正在训练：旧训练')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: '新开计划训练', exact: true }).click();
+    await expect(page.getByText('正在训练：新计划训练')).toBeVisible();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts).toHaveLength(2);
+    expect(stored.fitnessWorkouts).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'fitness-workout-existing-active', title: '旧训练', status: 'inProgress' }),
+        expect.objectContaining({ title: '新计划训练', status: 'inProgress', planId: 'fitness-plan-new-session' }),
+    ]));
+});
+
 test('fitness plans support multiple exercises and explicit plan writeback', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [

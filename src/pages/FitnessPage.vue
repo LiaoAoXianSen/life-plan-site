@@ -42,6 +42,7 @@ const libraryForm = reactive({ name: '', muscle: 'other', defaultSets: 3, defaul
 const planForm = reactive({ name: '', goal: 'general', status: 'active', notes: '', exercises: [] as PlanExerciseDraft[] });
 const workoutForm = reactive({ date: getTodayStr(), status: 'done', title: '', planId: '', durationMin: '', notes: '', exercises: [] as WorkoutExerciseDraft[] });
 const freeForm = reactive({ title: '自由训练', exerciseId: '' });
+const activePlanStartId = ref('');
 const formError = ref('');
 const libraryEditingId = ref('');
 const planEditingId = ref('');
@@ -132,6 +133,17 @@ const overviewTitle = computed(() => {
   if (fitnessOverview.value.suggestion) return '今天还没开练，可以直接按计划开始';
   return '还没有训练安排，先建计划或自由开练';
 });
+
+function startPlanFromFitness(planId: string) {
+  const active = fitness.activeWorkout;
+  if (active) {
+    const title = fitness.services.fitness.getWorkoutTitle(active);
+    if (!window.confirm(`已有进行中的训练「${title}」。要先继续它，还是新开一场？\n确定=新开，取消=继续旧的`)) return;
+    run(() => fitness.startFromPlan(planId, true));
+    return;
+  }
+  run(() => fitness.startFromPlan(planId));
+}
 
 function jumpToFreeWorkout() {
   if (!fitness.library.length) {
@@ -722,7 +734,7 @@ onUnmounted(stopRestTimer);
             v-if="fitnessOverview.suggestion"
             class="btn btn-primary"
             type="button"
-            @click="run(() => fitness.startFromPlan(String(fitnessOverview.suggestion.plan.id)))"
+            @click="startPlanFromFitness(String(fitnessOverview.suggestion.plan.id))"
           >按计划开练：{{ fitnessOverview.suggestion.plan.name }}</button>
           <button v-else class="btn btn-primary" type="button" @click="jumpToFreeWorkout">自由开练</button>
           <div class="fitness-overview-secondary">
@@ -793,7 +805,14 @@ onUnmounted(stopRestTimer);
             本场重量/次数变化，结束时回写到计划「{{ activePlan?.name }}」
           </label>
         </div>
-        <button class="btn btn-primary" type="button" @click="finishActiveWorkout">结束训练</button>
+        <div class="fitness-header-actions">
+          <select v-model="activePlanStartId" aria-label="新开计划训练">
+            <option value="">选择其他计划</option>
+            <option v-for="plan in fitness.plans" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
+          </select>
+          <button class="btn btn-secondary" type="button" :disabled="!activePlanStartId" @click="startPlanFromFitness(activePlanStartId)">新开计划训练</button>
+          <button class="btn btn-primary" type="button" @click="finishActiveWorkout">结束训练</button>
+        </div>
       </div>
       <div v-if="restTimer.total || restTimer.remaining" class="fitness-rest-timer vue-fitness-rest-timer" role="timer" aria-live="polite">
         <div class="fitness-rest-timer-main">
@@ -875,7 +894,7 @@ onUnmounted(stopRestTimer);
               <div v-if="plan.notes" class="fitness-metric-note">{{ plan.notes }}</div>
             </div>
             <div class="fitness-plan-browse-actions">
-              <button class="btn btn-primary" type="button" @click="run(() => fitness.startFromPlan(plan.id))">按计划开练</button>
+              <button class="btn btn-primary" type="button" @click="startPlanFromFitness(plan.id)">按计划开练</button>
               <button class="btn btn-secondary" type="button" @click="editPlan(plan)">{{ planEditingId === plan.id ? '正在编辑' : '编辑' }}</button>
               <button class="btn btn-danger" type="button" @click="removePlanWithConfirmation(plan.id)">删除</button>
             </div>

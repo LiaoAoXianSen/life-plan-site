@@ -109,8 +109,8 @@ export const useFitnessStore = defineStore('fitness', () => {
     succeed('训练计划已删除；既有训练历史会保留');
   }
 
-  function startFromPlan(planId: string) {
-    if (activeWorkout.value) return fail('已有进行中的训练，请先结束该训练。');
+  function startFromPlan(planId: string, allowWhileActive = false) {
+    if (activeWorkout.value && !allowWhileActive) return fail('已有进行中的训练，请先结束该训练。');
     const plan = services.fitness.findFitnessPlan(lifePlan.data.fitnessPlans, planId);
     if (!plan) return fail('找不到训练计划');
     const liveWorkout = services.fitness.startLiveWorkout(services.fitness.createWorkoutFromPlan(plan));
