@@ -481,6 +481,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
 
           <section class="todo-detail-section" aria-labelledby="todo-edit-subtasks">
             <h3 id="todo-edit-subtasks">子任务</h3>
+            <p v-if="!detailForm.subTodos.length" class="todo-detail-empty">暂无子任务，可以在下方添加。</p>
             <div v-for="(subTodo, index) in detailForm.subTodos" :key="`${index}-${subTodo.text}`" class="todo-detail-row">
               <input v-model="subTodo.done" type="checkbox" :aria-label="`完成子任务 ${subTodo.text}`" />
               <input v-model="subTodo.text" :aria-label="`子任务 ${index + 1}`" />

@@ -183,6 +183,20 @@ test('todo detail preserves subtasks sessions relationships tombstones and mirro
     ]));
 });
 
+test('todo editor keeps the legacy empty subtask guidance', async ({ page }) => {
+    const source = emptyData({ todos: [todoFixture('todo-empty-subtasks', '无子任务待办')] });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/todos?todo=todo-empty-subtasks');
+
+    const detail = page.locator('.todo-detail-panel');
+    await detail.getByRole('button', { name: '编辑待办' }).click();
+    const subtasks = detail.locator('section[aria-labelledby="todo-edit-subtasks"]');
+    await expect(subtasks).toContainText('暂无子任务，可以在下方添加。');
+    await expect(subtasks.getByLabel('新子任务')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('todo legacy filters and linked record navigation open a read-only preview', async ({ page }) => {
     const todo = (id, text, overrides = {}) => ({
         id, text, note: '', done: false, dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他',
