@@ -66,6 +66,10 @@ export class LifePlanRepository {
     }
   }
 
+  normalizeImportPreview(raw: unknown): LifePlanData {
+    return normalizePersistedData(raw, this.services);
+  }
+
   commit(sourceData: LifePlanData, reason: string, source: CommitSource = 'user'): LifePlanData {
     const next = normalizePersistedData(clone(sourceData), this.services);
     const previous = localStorage.getItem(mainDataKey);

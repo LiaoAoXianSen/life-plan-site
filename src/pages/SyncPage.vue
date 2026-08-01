@@ -260,7 +260,7 @@ async function importFile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (!file) return;
   try {
-    const imported = JSON.parse(await file.text());
+    const imported = lifePlanRepository.normalizeImportPreview(JSON.parse(await file.text()));
     const summary = getImportSummary(imported);
     const confirmed = window.confirm(`导入会安全合并，不会用旧内容静默覆盖当前较新的日记。\n\n如果同一篇日记两边都改过，会保留主版本并创建冲突副本。\n\n备份内容：${summary}\n\n继续导入吗？`);
     if (!confirmed) return;

@@ -1657,6 +1657,28 @@ test('main import confirmation cancellation keeps data and snapshots unchanged',
     expect(await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'))).toBeNull();
 });
 
+test('main import summary normalizes legacy shadow records before confirmation', async ({ page }) => {
+    const local = emptyData({
+        records: [{ id: 'import-summary-local', type: '日记', title: '本机记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28' }],
+    });
+    const imported = emptyData({
+        records: [{ id: 'import-summary-shadow', type: '习惯打卡', title: '不应进入主记录', isHabitRecord: true, content: '', startDate: '2026-07-27', endDate: '2026-07-27' }],
+    });
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), local);
+    await page.goto('/#/sync');
+    page.once('dialog', async dialog => {
+        expect(dialog.type()).toBe('confirm');
+        expect(dialog.message()).toContain('records:0');
+        await dialog.dismiss();
+    });
+    await page.getByLabel('导入并合并').setInputFiles({
+        name: 'import-normalized-summary.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
+    });
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(local));
+});
+
 test('main import stops when the before-import snapshot cannot be saved', async ({ page }) => {
     const source = emptyData({
         records: [{ id: 'import-snapshot-failure-local', type: '日记', title: '导入前记录', content: '保留原文', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
