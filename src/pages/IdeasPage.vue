@@ -165,10 +165,6 @@ watch(() => route.query.status, value => {
         <div class="idea-card-preview" :title="String(idea.content || '').replace(/\s+/g, ' ').trim()">
           {{ truncatePreview(idea.content) }}
         </div>
-        <div v-if="idea.ideaNextAction || idea.ideaConclusion" class="idea-card-meta">
-          <span v-if="idea.ideaNextAction">下一步：{{ idea.ideaNextAction }}</span>
-          <span v-if="idea.ideaConclusion">结论：{{ idea.ideaConclusion }}</span>
-        </div>
         <div class="idea-card-actions">
           <button class="btn btn-secondary" type="button" @click="openView(idea)">查看</button>
           <button class="btn btn-secondary" type="button" @click="convert(idea)">{{ getLinkedTodo(idea) ? '打开待办' : '转成待办' }}</button>
