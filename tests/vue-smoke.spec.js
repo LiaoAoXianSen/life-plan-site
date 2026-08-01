@@ -906,6 +906,55 @@ test('dashboard today habit metadata mirrors legacy action card', async ({ page 
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('dashboard today habit metadata stays complete and read-only for every due habit', async ({ page }) => {
+    const today = localDate();
+    const longNote = '这是一个超过二十二字的习惯备注用于验证legacy截断行为';
+    const source = emptyData({
+        habits: [
+            { id: 'habit-dashboard-pending', name: '待开始习惯', timesPerDay: 1, startDate: today },
+            { id: 'habit-dashboard-active', name: '进行中习惯', tag: '健康', rule: 'daily', timesPerDay: 2, rewardPoints: 5, rewardCurrency: '金币', penaltyPoints: 2, startDate: today },
+            { id: 'habit-dashboard-done', name: '已达标习惯', tag: '完成', rule: 'daily', timesPerDay: 1, startDate: today },
+            ...Array.from({ length: 6 }, (_, index) => ({ id: `habit-dashboard-extra-${index}`, name: `额外习惯${index + 1}`, rule: 'daily', timesPerDay: 1, startDate: today })),
+        ],
+        checkins: [{ id: 'checkin-dashboard-active', habitId: 'habit-dashboard-active', date: today, time: '08:15', checkinAt: `${today}T08:15:00`, note: longNote }, { id: 'checkin-dashboard-done', habitId: 'habit-dashboard-done', date: today, time: '09:00', checkinAt: `${today}T09:00:00` }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+
+    const habitCard = page.locator('.dashboard-today-habits');
+    await expect(habitCard.locator('.todo-item')).toHaveCount(9);
+    await expect(page.locator('.hero-meta')).toContainText('习惯 2/9');
+    await expect(page.locator('.summary-card').filter({ hasText: '习惯完成' })).toContainText('2/9');
+
+    const pending = habitCard.locator('.todo-item').filter({ hasText: '待开始习惯' });
+    const active = habitCard.locator('.todo-item').filter({ hasText: '进行中习惯' });
+    const done = habitCard.locator('.todo-item').filter({ hasText: '已达标习惯' });
+    await expect(pending.locator('.habit-quick-status')).toHaveClass(/habit-quick-status.*is-pending/);
+    await expect(pending.locator('.habit-quick-status')).toHaveText('待开始');
+    await expect(active.locator('.habit-quick-status')).toHaveClass(/habit-quick-status.*is-active/);
+    await expect(active.locator('.habit-quick-status')).toHaveText('进行中 1/2');
+    await expect(done.locator('.habit-quick-status')).toHaveClass(/habit-quick-status.*is-done/);
+    await expect(done.locator('.habit-quick-status')).toHaveText('今日达标');
+    await expect(active).toContainText('每天');
+    await expect(active.locator('.habit-quick-meta')).toContainText('1/2');
+    await expect(active.locator('.habit-quick-meta')).not.toContainText('1/2 次');
+    await expect(active.locator('.habit-quick-meta')).toContainText('08:15');
+    await expect(pending.locator('.habit-quick-meta')).toContainText('未记录');
+    await expect(active.locator('.habit-quick-meta')).toContainText('+5 金币');
+    await expect(active.locator('.habit-quick-meta')).toContainText('漏打 -2');
+    await expect(active.locator('.habit-quick-note-inline')).toContainText(`备注：${longNote.slice(0, 21)}…`);
+    await expect(active.locator('.habit-quick-tag')).toHaveText('健康');
+    await expect(pending.locator('.habit-quick-tag')).toHaveText('习惯');
+    await expect(active).toHaveClass(/habit-quick-card/);
+    await expect(active).toHaveClass(/compact/);
+    await expect(active).toHaveClass(/multi/);
+    await expect(done).toHaveClass(/habit-quick-card/);
+    await expect(done).toHaveClass(/compact/);
+    await expect(done).toHaveClass(/done/);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('dashboard today habit metadata chooses the legacy latest timed checkin', async ({ page }) => {
     const today = localDate();
     const source = emptyData({

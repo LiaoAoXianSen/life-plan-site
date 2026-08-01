@@ -70,7 +70,7 @@ const habitRuleLabels: Record<string, string> = {
 };
 
 function habitRuleText(habit: Record<string, any>) {
-  const rule = String(habit.rule || 'daily');
+  const rule = String(habit.rule || '');
   if (rule === 'weekly-count') return `每周${habit.count || 0}次`;
   if (rule === 'monthly-count') return `每月${habit.count || 0}次`;
   if (rule === 'interval') return `每${habit.count || 0}天`;
@@ -89,13 +89,13 @@ function habitCheckinTimeText(habitId: string) {
   const latest = latestHabitCheckin(habitId) as Record<string, any> | null;
   if (!latest) return '未记录';
   if (/^\d{2}:\d{2}$/.test(String(latest.time || ''))) return latest.time;
-  return String(latest.checkinAt || latest.createdAt || latest.updatedAt || '').slice(11, 16) || '已记录';
+  return String(latest.checkinAt || latest.createdAt || latest.updatedAt || '').slice(11, 16) || '未记录';
 }
 
 function habitCheckinNoteText(habitId: string) {
   const latest = latestHabitCheckin(habitId) as Record<string, any> | null;
   const clean = String(latest?.note || '').replace(/\s+/g, ' ').trim();
-  return clean.length > 34 ? `${clean.slice(0, 33)}…` : clean;
+  return clean.length > 22 ? `${clean.slice(0, 21)}…` : clean;
 }
 
 function habitRewardText(habit: Record<string, any>) {
@@ -324,15 +324,15 @@ const todayHabitItems = computed(() => dueHabits.value.map(habit => {
     target,
     done: count >= target,
     canCheckin: !(target === 1 && count > 0),
-    statusText: count === 0 ? '待开始' : count >= target ? '已达标' : `进行中 ${count}/${target}`,
+    statusText: count === 0 ? '待开始' : count >= target ? '今日达标' : `进行中 ${count}/${target}`,
     ruleText: habitRuleText(habit),
     checkinTimeText: habitCheckinTimeText(habit.id),
     rewardText: habitRewardText(habit),
     penaltyText: habitPenaltyText(habit),
     noteText: habitCheckinNoteText(habit.id),
   };
-}).slice(0, 8));
-const doneHabitCount = computed(() => todayHabitItems.value.filter(item => item.count > 0).length);
+}));
+const doneHabitCount = computed(() => dueHabits.value.filter(habit => habitsStore.getCheckinCount(habit.id, today) > 0).length);
 const fitnessOverview = computed(() => fitnessStore.services.fitness.buildFitnessOverview({
   bodyMetrics: fitnessStore.metrics,
   fitnessPlans: fitnessStore.plans,
@@ -584,20 +584,22 @@ const timelineGroups = computed(() => {
         <section class="dashboard-today-habits" aria-label="今日习惯">
           <div class="section-title">今日习惯快捷打卡</div>
           <ul v-if="todayHabitItems.length" class="todo-list dashboard-habit-list">
-            <li v-for="item in todayHabitItems" :key="item.habit.id" class="todo-item dashboard-habit-item">
+            <li v-for="item in todayHabitItems" :key="item.habit.id" class="todo-item dashboard-habit-item habit-quick-card compact" :class="{ done: item.count > 0, multi: item.target > 1 }">
               <button class="todo-text todo-dashboard-link" type="button" :aria-label="item.habit.name" @click="openHabit(item.habit.id)">
-                {{ item.habit.name }}
-                <small>{{ item.count }}/{{ item.target }} · {{ item.habit.tag || '习惯' }}</small>
+                <span class="habit-quick-title-row">
+                  <span class="habit-quick-title">{{ item.habit.name }}</span>
+                  <span class="habit-quick-tag">{{ item.habit.tag || '习惯' }}</span>
+                </span>
                 <span class="habit-quick-meta">
                   <span>{{ item.ruleText }}</span>
-                  <span>{{ item.count }}/{{ item.target }} 次</span>
+                  <span>{{ item.count }}/{{ item.target }}</span>
                   <span>{{ item.checkinTimeText }}</span>
                   <span v-if="item.rewardText" class="is-points">{{ item.rewardText }}</span>
                   <span v-if="item.penaltyText" class="is-penalty">{{ item.penaltyText }}</span>
                 </span>
                 <span v-if="item.noteText" class="habit-quick-note-inline">备注：{{ item.noteText }}</span>
               </button>
-              <span class="todo-urgency" :class="item.done ? 'todo-urgency-low' : item.count ? 'todo-urgency-medium' : 'todo-urgency-high'">{{ item.statusText }}</span>
+              <span class="habit-quick-status" :class="item.count === 0 ? 'is-pending' : item.done ? 'is-done' : 'is-active'">{{ item.statusText }}</span>
               <span class="todo-actions">
                 <button
                   class="btn btn-secondary todo-mini-btn"
