@@ -54,7 +54,7 @@ const groupOptions = computed(() => {
 const filteredTodos = computed(() => todosStore.todos
   .filter(todo => (!startDate.value && !endDate.value) || todosStore.services.todos.isTodoInDateRange(todo, startDate.value, endDate.value))
   .filter(todo => status.value === 'all' || (status.value === 'done' ? todo.done : !todo.done))
-  .filter(todo => urgency.value === 'all' || todo.urgency === urgency.value)
+  .filter(todo => urgency.value === 'all' || (todo.urgency || 'medium') === urgency.value)
   .filter(todo => group.value === 'all' || todo.group === group.value)
   .filter(todo => mode.value === 'all' || (mode.value === 'exclusive' ? !!todo.isExclusive : !todo.isExclusive))
   .slice().sort(todosStore.services.todos.compareTodosForFocus));
