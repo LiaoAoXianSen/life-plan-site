@@ -1178,6 +1178,30 @@ test('search record results open a read-only preview before editing', async ({ p
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('search todo fields mirror the legacy index contract', async ({ page }) => {
+    const source = emptyData({
+        todos: [
+            todoFixture('todo-search-note-only', '普通待办', { note: '备注专属词' }),
+            todoFixture('todo-search-plan-summary', '计划摘要待办', { planStartDate: '2026-07-30', planEndDate: '2026-08-02' }),
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/search?q=备注专属词&scope=todos');
+    await expect(page.locator('.search-result-item')).toHaveCount(0);
+    await expect(page.locator('.empty-state')).toContainText('没有找到匹配内容');
+
+    await page.goto('/#/search?q=2026-08-02&scope=todos');
+    await expect(page.locator('.search-result-item')).toHaveCount(0);
+
+    await page.goto('/#/search?q=8月2日&scope=todos');
+    await expect(page.locator('.search-result-item')).toHaveCount(1);
+    await expect(page.locator('.search-result-item')).toContainText('计划摘要待办');
+    await expect(page.locator('.search-result-item')).toContainText('无截止');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('wheel canvas click drag and tag stage preserve interaction contracts', async ({ page }) => {
     const source = emptyData({
         wheels: [

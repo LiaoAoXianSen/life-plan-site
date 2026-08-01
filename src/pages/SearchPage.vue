@@ -2,8 +2,9 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 
+import { createLegacyServices } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
-import type { DataEntity, Todo } from '../types/lifePlan';
+import type { DataEntity } from '../types/lifePlan';
 
 type SearchItem = {
   module: string;
@@ -28,6 +29,7 @@ const moduleLabels: Record<string, string> = {
 const store = useLifePlanStore();
 const route = useRoute();
 const router = useRouter();
+const todoServices = createLegacyServices().todos;
 const query = ref(String(route.query.q || ''));
 const scope = ref(String(route.query.scope || 'all'));
 
@@ -40,12 +42,6 @@ function formatRecordRange(record: DataEntity) {
   const start = String(record.startDate || '');
   const end = String(record.endDate || start || '');
   return start && end && start !== end ? `${start} ~ ${end}` : start || end || '未设置日期';
-}
-
-function formatTodoDate(todo: Todo) {
-  if (todo.dueDate) return `截止 ${todo.dueDate}`;
-  if (todo.planStartDate || todo.planEndDate) return `计划 ${todo.planStartDate || '-'} ~ ${todo.planEndDate || '-'}`;
-  return '未设置日期';
 }
 
 function formatStoredDateTime(value: unknown) {
@@ -77,8 +73,8 @@ const indexItems = computed<SearchItem[]>(() => {
     label: moduleLabels.todos,
     id: String(todo.id || ''),
     title: todo.text || '未命名待办',
-    subtitle: `${todo.group || '其他'} · ${todo.done ? '已完成' : '未完成'} · ${formatTodoDate(todo)}`,
-    body: [todo.note, todo.planStartDate, todo.planEndDate, ...(todo.subTodos || []).map(item => item.text), ...(todo.sessions || []).map(item => item.note)].filter(Boolean).join(' '),
+    subtitle: `${todo.group || '其他'} · ${todo.done ? '已完成' : '未完成'} · ${todoServices.formatTodoDueDate(todo)}`,
+    body: [todoServices.getTodoPlanLabel(todo), ...(todo.subTodos || []).map(item => item.text), ...(todo.sessions || []).map(item => item.note)].join(' '),
     tags: [todo.group || '其他'],
     meta: todo.urgency || '',
     target: { path: '/todos', query: { todo: todo.id } },
