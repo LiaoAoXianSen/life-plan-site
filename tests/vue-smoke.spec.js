@@ -1977,7 +1977,8 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
     });
-    await expect(page.locator('.sync-status')).toContainText('导入已按合并规则完成');
+    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
+    await expect(manualCard.locator('.sync-status')).toContainText('导入已按合并规则完成');
 
     const state = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
@@ -2144,7 +2145,8 @@ test('main import cancels when the before-import snapshot cannot be saved', asyn
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
     });
 
-    await expect(page.locator('.sync-status.active')).toContainText('导入前快照创建失败');
+    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
+    await expect(manualCard.locator('.sync-status.active')).toContainText('导入前快照创建失败');
     expect(dialogs).toEqual([
         expect.objectContaining({ type: 'confirm' }),
         expect.objectContaining({ type: 'confirm', message: expect.stringContaining('导入前快照创建失败') }),
@@ -2181,7 +2183,8 @@ test('main import can continue after confirming a missing before-import snapshot
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
     });
 
-    await expect(page.locator('.sync-status.active')).toContainText('导入已按合并规则完成');
+    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
+    await expect(manualCard.locator('.sync-status.active')).toContainText('导入已按合并规则完成');
     expect(dialogs).toEqual([
         expect.objectContaining({ type: 'confirm' }),
         expect.objectContaining({ type: 'confirm', message: expect.stringContaining('导入前快照创建失败') }),
@@ -2240,6 +2243,61 @@ test('sync main config restores the legacy read-only connection test', async ({ 
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('sync page shows unconfigured hint without touching webdav or data', async ({ page }) => {
+    const source = emptyData({ records: [{ id: 'sync-hint-record', type: '日记', title: '提示记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28' }] });
+    const original = JSON.stringify(source);
+    const requests = [];
+    page.on('request', request => {
+        if (/dav\.|webdav|sync\./.test(request.url())) requests.push(request.url());
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/sync');
+
+    const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
+    await expect(configCard.locator('.sync-status')).toContainText('未配置云同步');
+    expect(requests).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('sync page shows loaded config hint and backfills inputs without requests', async ({ page }) => {
+    const source = emptyData({ records: [{ id: 'sync-hint-configured', type: '日记', title: '已配置记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28' }] });
+    const original = JSON.stringify(source);
+    const requests = [];
+    page.on('request', request => {
+        if (/dav\.|webdav|sync\./.test(request.url())) requests.push(request.url());
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://dav.example.test/life-plan.json', remotePath: '/custom/life.json', autoSync: false }));
+    }, source);
+    await page.goto('/#/sync');
+
+    const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
+    await expect(configCard.locator('.sync-status')).toContainText('已加载云同步配置');
+    await expect(page.getByLabel('同步地址')).toHaveValue('https://dav.example.test/life-plan.json');
+    await expect(page.getByLabel('远端路径')).toHaveValue('/custom/life.json');
+    expect(requests).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('sync page saving a config refreshes the config card hint', async ({ page }) => {
+    const source = emptyData({ records: [{ id: 'sync-hint-save', type: '日记', title: '保存记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28' }] });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/sync');
+
+    const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
+    await expect(configCard.locator('.sync-status')).toContainText('未配置云同步');
+    await page.getByLabel('同步地址').fill('https://dav-save.example.test/life-plan.json');
+    await page.getByRole('button', { name: '保存配置', exact: true }).click();
+    await expect(configCard.locator('.sync-status')).toContainText('已加载云同步配置');
+    await expect(page.locator('.sync-status').filter({ hasText: '配置已保存' })).toBeVisible();
+
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}'));
+    expect(saved.webdavUrl).toBe('https://dav-save.example.test/life-plan.json');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('main manual pull keeps dirty state when the merged result differs from cloud', async ({ page }) => {
     const localData = emptyData({
         records: [{ id: 'local-pull-record', type: '日记', title: '本机独有记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [] }],
@@ -2264,7 +2322,8 @@ test('main manual pull keeps dirty state when the merged result differs from clo
 
     await page.goto('/#/sync');
     await page.getByRole('button', { name: '下载并合并' }).click();
-    await expect(page.locator('.sync-status')).toContainText('已按原 mergeCloudData 规则合并云端数据');
+    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
+    await expect(manualCard.locator('.sync-status')).toContainText('已按原 mergeCloudData 规则合并云端数据');
 
     const result = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
@@ -7369,7 +7428,8 @@ test('main sync upload uses If-Match and merges after a 412 conflict', async ({ 
 
     await page.goto('/#/sync');
     await page.getByRole('button', { name: '上传主数据' }).click();
-    await expect(page.locator('.sync-status')).toContainText('云端版本变化');
+    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
+    await expect(manualCard.locator('.sync-status')).toContainText('云端版本变化');
 
     const result = await page.evaluate(() => ({
         requests: window.__syncRequests,

@@ -28,7 +28,10 @@ const store = useLifePlanStore();
 const sync = createLegacyServices().sync;
 const config = reactive(getMainSyncConfig());
 const status = ref('');
-const autoStatus = ref('');
+function configStatusHint() {
+  return config.webdavUrl ? '已加载云同步配置' : '未配置云同步';
+}
+const autoStatus = ref(configStatusHint());
 const busy = ref(false);
 const importCollections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'exerciseLibrary', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
 
@@ -139,6 +142,7 @@ function saveConfig() {
   startTodoAutoSyncEngine();
   startWheelAutoSyncEngine();
   startHabitAutoSyncEngine();
+  autoStatus.value = configStatusHint();
   status.value = config.autoSync
     ? '配置已保存；主数据自动同步与页面恢复同步已启用。'
     : '配置已保存；主数据自动同步已关闭。';
