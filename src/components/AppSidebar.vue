@@ -377,7 +377,8 @@ function restoreSnapshot(item: SnapshotItem) {
             <article v-for="item in snapshots" :key="String(item.id)" class="snapshot-item card">
               <div>
                 <strong>v{{ item.version || '-' }} · {{ item.reason || '本地快照' }}</strong>
-                <p>{{ formatStoredDateTime(item.createdAt) }} · {{ formatBytes(Number(item.bytes || 0)) }}</p>
+                <p>{{ formatStoredDateTime(item.createdAt) }} · {{ formatBytes(Number(item.bytes || 0)) }} · {{ item.hash || '' }}</p>
+                <p class="snapshot-preview-relation">{{ getSnapshotRelationText(item) }}</p>
               </div>
               <div class="page-actions">
                 <button class="btn btn-secondary" type="button" :aria-expanded="previewSnapshotId === String(item.id)" @click="toggleSnapshotPreview(item)">
@@ -388,7 +389,8 @@ function restoreSnapshot(item: SnapshotItem) {
                 <button class="btn btn-danger" type="button" @click="deleteSnapshot(item)">删除</button>
               </div>
               <div v-if="previewSnapshotId === String(item.id) && selectedSnapshotSummary" class="snapshot-preview" data-testid="snapshot-preview">
-                <div class="snapshot-preview-heading">快照内容预览</div>
+                <div class="snapshot-preview-heading">v{{ selectedSnapshot?.version || '-' }} · {{ selectedSnapshot?.reason || '本地快照' }}</div>
+                <div class="snapshot-preview-meta">{{ formatStoredDateTime(selectedSnapshot?.createdAt) }} · {{ formatBytes(Number(selectedSnapshot?.bytes || 0)) }} · {{ selectedSnapshot?.hash || '' }}</div>
                 <div class="snapshot-preview-relation">{{ selectedSnapshotSummary.relation }}</div>
                 <div class="snapshot-preview-stats">
                   <span>记录 {{ selectedSnapshotSummary.records.length }}</span>

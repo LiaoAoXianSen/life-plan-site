@@ -515,8 +515,14 @@ test('sidebar snapshot preview exposes legacy collection summary', async ({ page
     const dialog = page.getByRole('dialog', { name: '本地快照' });
     await page.getByRole('button', { name: /本地快照/ }).click();
     const row = dialog.locator('.snapshot-item').first();
+    await expect(row).toContainText('snapshot-preview-hash');
+    await expect(row).toContainText('上一个版本：v3 · parent-h');
     await row.getByRole('button', { name: '预览' }).click();
     const preview = row.getByTestId('snapshot-preview');
+    await expect(preview).toContainText('v4 · 关系测试快照');
+    await expect(preview).toContainText('2026年7月30日 08:09:10');
+    await expect(preview).toContainText('256 B');
+    await expect(preview).toContainText('snapshot-preview-hash');
     await expect(preview).toContainText('上一个版本：v3 · parent-h');
     await expect(preview).toContainText('合并对象：云端 · v2 · merged-h');
     await expect(preview).toContainText('来源：cloud-pull/merge-result');
