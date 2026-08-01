@@ -43,6 +43,7 @@ const planForm = reactive({ name: '', goal: 'general', status: 'active', notes: 
 const workoutForm = reactive({ date: getTodayStr(), status: 'done', title: '', planId: '', durationMin: '', notes: '', exercises: [] as WorkoutExerciseDraft[] });
 const freeForm = reactive({ title: '自由训练', exerciseId: '' });
 const formError = ref('');
+const libraryEditingId = ref('');
 const planEditingId = ref('');
 const workoutEditingId = ref('');
 const bodySectionOpen = ref(false);
@@ -223,6 +224,25 @@ function seedLibrary() {
   });
 }
 
+function resetLibraryForm() {
+  libraryEditingId.value = '';
+  Object.assign(libraryForm, { name: '', muscle: 'other', defaultSets: 3, defaultReps: '8-12', defaultWeight: '', restSec: 90, note: '' });
+}
+
+function editLibraryItem(item: Record<string, any>) {
+  libraryEditingId.value = String(item.id || '');
+  Object.assign(libraryForm, {
+    name: item.name || '',
+    muscle: item.muscle || 'other',
+    defaultSets: item.defaultSets ?? 3,
+    defaultReps: item.defaultReps || '8-12',
+    defaultWeight: item.defaultWeight ?? '',
+    restSec: item.restSec ?? 90,
+    note: item.note || '',
+  });
+  librarySectionOpen.value = true;
+}
+
 function createPlanSet(template: Record<string, unknown> = {}): PlanSetDraft {
   return fitness.services.fitness.normalizePlanSet(template) as PlanSetDraft;
 }
@@ -347,8 +367,8 @@ function metricChips(metric: Record<string, any>) {
 
 function saveLibraryItem() {
   run(() => {
-    const item = fitness.saveLibraryItem({ ...libraryForm, defaultWeight: libraryForm.defaultWeight || undefined });
-    Object.assign(libraryForm, { name: '', muscle: 'other', defaultSets: 3, defaultReps: '8-12', defaultWeight: '', restSec: 90, note: '' });
+    const item = fitness.saveLibraryItem({ ...libraryForm, defaultWeight: libraryForm.defaultWeight || undefined }, libraryEditingId.value);
+    resetLibraryForm();
     if (!item) return;
     freeForm.exerciseId = item.id;
     if (planForm.exercises.length && !planForm.exercises[0].name) applyLibraryToPlanExercise(0, item.id);
@@ -901,9 +921,12 @@ onUnmounted(stopRestTimer);
             <div class="form-group"><label>组间休息 秒</label><input v-model.number="libraryForm.restSec" type="number" min="0" /></div>
           </div>
           <div class="form-group"><label>备注</label><input v-model="libraryForm.note" /></div>
-          <button class="btn btn-primary">添加动作</button>
+          <div class="form-actions">
+            <button class="btn btn-primary">{{ libraryEditingId ? '保存修改' : '添加动作' }}</button>
+            <button v-if="libraryEditingId" class="btn btn-secondary" type="button" @click="resetLibraryForm">取消编辑</button>
+          </div>
           <div v-if="fitness.library.length" class="fitness-metric-list">
-            <div v-for="item in fitness.library" :key="item.id" class="fitness-metric-row"><strong>{{ item.name }}</strong><span>{{ fitness.services.fitness.getMuscleLabel(item.muscle) }} · {{ item.defaultSets }} 组 × {{ item.defaultReps }}</span><button class="btn btn-danger" type="button" @click="run(() => fitness.removeLibraryItem(item.id))">删除</button></div>
+            <div v-for="item in fitness.library" :key="item.id" class="fitness-metric-row"><strong>{{ item.name }}</strong><span>{{ fitness.services.fitness.getMuscleLabel(item.muscle) }} · {{ item.defaultSets }} 组 × {{ item.defaultReps }}</span><button class="btn btn-secondary" type="button" @click="editLibraryItem(item)">{{ libraryEditingId === item.id ? '正在编辑' : '编辑' }}</button><button class="btn btn-danger" type="button" @click="run(() => fitness.removeLibraryItem(item.id))">删除</button></div>
           </div>
         </form>
       </details>

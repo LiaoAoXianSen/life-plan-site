@@ -2256,6 +2256,42 @@ test('fitness browse plan rows expose legacy exercise summaries', async ({ page 
     await expect(row.getByRole('button', { name: '编辑' })).toBeVisible();
 });
 
+test('fitness exercise library exposes legacy edit entry and preserves identity', async ({ page }) => {
+    const source = emptyData({
+        exerciseLibrary: [{
+            id: 'fitness-library-edit', name: '旧动作', muscle: 'legs', defaultSets: 4, defaultReps: '6-8', defaultWeight: 40, restSec: 120, note: '旧备注',
+            createdAt: '2026-07-01T08:00:00', updatedAt: '2026-07-01T08:00:00',
+        }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/fitness');
+
+    await page.getByRole('button', { name: '动作库', exact: true }).click();
+    const section = page.locator('#fitness-library-section');
+    const row = section.locator('.fitness-metric-row').filter({ hasText: '旧动作' });
+    await row.getByRole('button', { name: '编辑', exact: true }).click();
+    const form = section.locator('form.card').first();
+    await expect(form.locator('.form-group').filter({ hasText: '动作名称' }).locator('input')).toHaveValue('旧动作');
+    await expect(form.locator('.form-group').filter({ hasText: '默认重量' }).locator('input')).toHaveValue('40');
+    await expect(form.locator('.form-group').filter({ hasText: '组间休息' }).locator('input')).toHaveValue('120');
+    await form.locator('.form-group').filter({ hasText: '动作名称' }).locator('input').fill('新动作');
+    await form.locator('.form-group').filter({ hasText: '默认重量' }).locator('input').fill('55');
+    await form.locator(':scope > .form-group').filter({ hasText: '备注' }).locator('input').fill('新备注');
+    await form.getByRole('button', { name: '保存修改', exact: true }).click();
+    await expect(page.locator('.notice.success')).toContainText('动作已更新');
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.exerciseLibrary).toHaveLength(1);
+    expect(stored.data.exerciseLibrary[0]).toMatchObject({
+        id: 'fitness-library-edit', name: '新动作', defaultWeight: 55, restSec: 120, note: '新备注', createdAt: '2026-07-01T08:00:00',
+    });
+    expect(stored.data.deletedItems).toEqual([]);
+    expect(stored.syncState.dirty).toBe(true);
+});
+
 test('fitness plan browse content opens the legacy editor entry point', async ({ page }) => {
     const source = emptyData({
         fitnessPlans: [{ id: 'fitness-browse-edit', name: '可点击计划', status: 'active', goal: 'strength', notes: '计划备注', exercises: [{ name: '深蹲', targetSets: 3, targetReps: '5', sets: [] }] }],
