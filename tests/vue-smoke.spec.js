@@ -2292,6 +2292,24 @@ test('fitness exercise library exposes legacy edit entry and preserves identity'
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('fitness exercise library summaries expose legacy weight and rest metadata', async ({ page }) => {
+    const source = emptyData({
+        exerciseLibrary: [{
+            id: 'fitness-library-summary', name: '摘要动作', muscle: 'back', defaultSets: 3, defaultReps: '10', defaultWeight: 42.5, restSec: 75,
+            createdAt: '2026-07-01T08:00:00', updatedAt: '2026-07-01T08:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+
+    await page.getByRole('button', { name: '动作库', exact: true }).click();
+    const row = page.locator('#fitness-library-section .fitness-metric-row').filter({ hasText: '摘要动作' });
+    await expect(row).toContainText('重量 42.5kg');
+    await expect(row).toContainText('休息 75s');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('fitness plan browse content opens the legacy editor entry point', async ({ page }) => {
     const source = emptyData({
         fitnessPlans: [{ id: 'fitness-browse-edit', name: '可点击计划', status: 'active', goal: 'strength', notes: '计划备注', exercises: [{ name: '深蹲', targetSets: 3, targetReps: '5', sets: [] }] }],

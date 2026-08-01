@@ -926,7 +926,7 @@ onUnmounted(stopRestTimer);
             <button v-if="libraryEditingId" class="btn btn-secondary" type="button" @click="resetLibraryForm">取消编辑</button>
           </div>
           <div v-if="fitness.library.length" class="fitness-metric-list">
-            <div v-for="item in fitness.library" :key="item.id" class="fitness-metric-row"><strong>{{ item.name }}</strong><span>{{ fitness.services.fitness.getMuscleLabel(item.muscle) }} · {{ item.defaultSets }} 组 × {{ item.defaultReps }}</span><button class="btn btn-secondary" type="button" @click="editLibraryItem(item)">{{ libraryEditingId === item.id ? '正在编辑' : '编辑' }}</button><button class="btn btn-danger" type="button" @click="run(() => fitness.removeLibraryItem(item.id))">删除</button></div>
+            <div v-for="item in fitness.library" :key="item.id" class="fitness-metric-row"><strong>{{ item.name }}</strong><span>{{ fitness.services.fitness.getMuscleLabel(item.muscle) }} · {{ item.defaultSets }} 组 × {{ item.defaultReps }}<template v-if="item.defaultWeight != null"> · 重量 {{ item.defaultWeight }}kg</template> · 休息 {{ item.restSec || 0 }}s</span><button class="btn btn-secondary" type="button" @click="editLibraryItem(item)">{{ libraryEditingId === item.id ? '正在编辑' : '编辑' }}</button><button class="btn btn-danger" type="button" @click="run(() => fitness.removeLibraryItem(item.id))">删除</button></div>
           </div>
         </form>
       </details>
