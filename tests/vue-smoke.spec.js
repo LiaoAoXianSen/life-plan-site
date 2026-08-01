@@ -3560,6 +3560,8 @@ test('records list and editor expose a frozen legacy-style read-only preview', a
     const preview = page.getByRole('dialog', { name: '记录预览' });
     await expect(preview).toContainText('预览记录');
     await expect(preview).toContainText('原始内容');
+    const [year, month, day] = today.split('-');
+    await expect(preview).toContainText(`更新于 ${year}年${Number(month)}月${Number(day)}日 08:00:00`);
     await expect(page.locator('.record-editor-panel')).toHaveCount(0);
     await preview.getByRole('button', { name: '编辑', exact: true }).click();
 

@@ -397,6 +397,13 @@ function buildPreviewRecordFromEditor(): RecordEntity {
   });
 }
 
+function formatStoredDateTime(value: unknown) {
+  const raw = String(value || '');
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return raw.replace('T', ' ');
+  return `${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${match[4]}:${match[5]}:${match[6] || '00'}`;
+}
+
 function openRecordPreview(record: DataEntity, fromEditor = false) {
   const item = record as RecordEntity;
   if (!item.id) return;
@@ -781,6 +788,7 @@ onBeforeUnmount(() => {
               <span>{{ records.services.records.getRecordDateRangeLabel(previewDraft) }}</span>
               <span>时间 {{ previewDraft.recordTime || '全天' }}<template v-if="previewDraft.recordEndTime"> - {{ previewDraft.recordEndTime }}</template></span>
               <span>待办 {{ previewLinkedTodos.filter(todo => todo.done).length }}/{{ previewLinkedTodos.length }}</span>
+              <span v-if="previewDraft.updatedAt || previewDraft.createdAt">更新于 {{ formatStoredDateTime(previewDraft.updatedAt || previewDraft.createdAt) }}</span>
               <span v-if="previewFromEditor">当前预览，尚未保存</span>
             </div>
           </div>
