@@ -3020,6 +3020,38 @@ test('records day view maintains a fixed-width timed event with a complete hover
     await expect(event).toHaveCSS('width', '160px');
 });
 
+test('records list and editor expose a frozen legacy-style read-only preview', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        records: [{
+            id: 'record-preview-mode', type: '日记', title: '预览记录', content: '原始内容',
+            startDate: today, endDate: today, todoIds: [], createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records');
+
+    const row = page.locator('.record-row').filter({ hasText: '预览记录' });
+    await row.locator('.record-open-button').click();
+    const preview = page.getByRole('dialog', { name: '记录预览' });
+    await expect(preview).toContainText('预览记录');
+    await expect(preview).toContainText('原始内容');
+    await expect(page.locator('.record-editor-panel')).toHaveCount(0);
+    await preview.getByRole('button', { name: '编辑', exact: true }).click();
+
+    const editor = page.locator('.record-editor-panel');
+    await editor.getByLabel('标题').fill('尚未保存标题');
+    await editor.getByRole('button', { name: '预览', exact: true }).click();
+    await expect(preview).toContainText('尚未保存标题');
+    await expect(preview).toContainText('当前预览，尚未保存');
+    await expect(preview.getByRole('button', { name: '返回继续编辑' })).toBeVisible();
+    await expect(preview.getByLabel('标题')).toHaveCount(0);
+    await preview.getByRole('button', { name: '返回继续编辑' }).click();
+    await expect(editor.getByLabel('标题')).toHaveValue('尚未保存标题');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('records empty state distinguishes no filters from filtered no-match results', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/records');
@@ -3370,6 +3402,7 @@ test('record editor persists linked and exclusive todos through the main data co
     })), { data: emptyData(), date: today });
     await page.goto('/#/records');
     await page.getByRole('button', { name: /旧记录/ }).click();
+    await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     const editor = page.locator('.record-editor-panel');
     await editor.getByLabel('标题').fill('更新后的记录');
     await editor.getByLabel('内容').fill('# 小结\n更新后的内容');
@@ -4011,12 +4044,13 @@ test('record editor autosaves after three seconds and flushes before close switc
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/records');
     await page.getByRole('button', { name: /自动保存记录/ }).first().click();
+    await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     const editor = page.locator('.record-editor-panel');
     await editor.getByLabel('内容').fill('三秒后保存的内容');
     await expect(editor.getByRole('status')).toHaveText('有未保存修改');
-    await page.getByRole('button', { name: /自动保存记录/ }).first().click();
     await expect(editor.getByLabel('内容')).toHaveValue('三秒后保存的内容');
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.find(item => item.id === 'record-autosave').content)).toBe('旧内容');
+    await page.waitForTimeout(3200);
     await expect(editor.getByRole('status')).toContainText('已自动保存于', { timeout: 5000 });
     let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.records.find(item => item.id === 'record-autosave')).toMatchObject({ content: '三秒后保存的内容' });
@@ -4028,8 +4062,10 @@ test('record editor autosaves after three seconds and flushes before close switc
     expect(stored.records.find(item => item.id === 'record-autosave').title).toBe('关闭前刷新记录');
 
     await page.getByRole('button', { name: /关闭前刷新记录/ }).first().click();
+    await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     await editor.getByLabel('内容').fill('切换记录前刷新');
     await page.getByRole('button', { name: /切换目标记录/ }).first().click();
+    await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.records.find(item => item.id === 'record-autosave').content).toBe('切换记录前刷新');
 

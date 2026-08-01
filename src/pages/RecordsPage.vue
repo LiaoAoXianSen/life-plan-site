@@ -98,6 +98,8 @@ const diaryAiResult = ref<DiaryAiResult | null>(null);
 const diaryAiSections = ref<DiaryAiSectionDraft[]>([]);
 const diaryAiTodos = ref<DiaryAiTodoDraft[]>([]);
 let diaryAiRequestToken = 0;
+const previewDraft = ref<RecordEntity | null>(null);
+const previewFromEditor = ref(false);
 
 const typeOptions = ['日记', '日计划', '工作记录', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
 const activeRecord = computed(() => lifePlan.data.records.find(record => record.id === activeRecordId.value) as RecordEntity | undefined);
@@ -119,6 +121,15 @@ const activeBuiltInTemplate = computed(() => editForm.templateId
   ? records.services.records.getBuiltInTemplate(editForm.templateId)
   : null);
 const previewSections = computed(() => records.services.records.parseRecordContentSections(editForm.content || ''));
+const previewDraftSections = computed(() => records.services.records.parseRecordContentSections(previewDraft.value?.content || ''));
+const previewLinkedTodos = computed(() => previewDraft.value
+  ? lifePlan.data.todos.filter(todo => recordTodoIds(previewDraft.value!).includes(todo.id))
+  : []);
+const previewIdeaTodoText = computed(() => {
+  const draft = previewDraft.value;
+  if (!draft?.ideaTodoId) return '未关联';
+  return previewLinkedTodos.value.find(todo => todo.id === draft.ideaTodoId)?.text || '未关联';
+});
 const hasIdeaOnlyFilter = computed(() => ideaStatusFilter.value !== 'all' || Boolean(ideaTagFilter.value.trim()));
 
 function matchesIdeaFilters(record: DataEntity) {
@@ -204,7 +215,7 @@ function shift(amount: number) {
 function selectCalendarItem(item: ScheduleItem) {
   if (item.sourceType === 'record') {
     const record = lifePlan.data.records.find(candidate => candidate.id === item.id);
-    if (record) openEditor(record);
+    if (record) openRecordPreview(record);
     return;
   }
   if (item.sourceType.startsWith('todo-')) {
@@ -352,6 +363,64 @@ function openEditor(record: DataEntity, updateRoute = true) {
   editorDirty.value = false;
   editorNotice.value = '';
   if (updateRoute && route.query.record !== item.id) updateRecordQuery(item.id);
+}
+
+function clonePreviewRecord(record: RecordEntity): RecordEntity {
+  return {
+    ...record,
+    todoIds: recordTodoIds(record),
+    ideaTags: records.services.records.getIdeaTags(record),
+  };
+}
+
+function buildPreviewRecordFromEditor(): RecordEntity {
+  const current = activeRecord.value || {};
+  return clonePreviewRecord({
+    ...current,
+    id: editForm.id,
+    title: editForm.title,
+    content: editForm.content,
+    type: editForm.type,
+    startDate: editForm.startDate,
+    endDate: editForm.endDate,
+    recordTime: editForm.recordTime,
+    recordEndTime: editForm.recordEndTime,
+    templateId: editForm.templateId,
+    todoIds: [...editForm.todoIds],
+    ideaStatus: editForm.ideaStatus,
+    ideaTags: records.services.records.getIdeaTags({ ideaTags: editForm.ideaTagsInput }),
+    ideaNextAction: editForm.ideaNextAction,
+    ideaTodoId: editForm.ideaTodoId,
+    ideaConclusion: editForm.ideaConclusion,
+  });
+}
+
+function openRecordPreview(record: DataEntity, fromEditor = false) {
+  const item = record as RecordEntity;
+  if (!item.id) return;
+  if (!fromEditor && activeRecordId.value && activeRecordId.value !== item.id) {
+    flushPendingEditorSave();
+    closeEditor(false);
+  }
+  if (fromEditor) window.clearTimeout(recordAutoSaveTimer);
+  previewDraft.value = fromEditor ? buildPreviewRecordFromEditor() : clonePreviewRecord(item);
+  previewFromEditor.value = fromEditor;
+}
+
+function previewCurrentRecord() {
+  if (!activeRecord.value) return;
+  openRecordPreview(activeRecord.value, true);
+}
+
+function closeRecordPreview() {
+  previewDraft.value = null;
+  previewFromEditor.value = false;
+}
+
+function editPreviewRecord() {
+  const record = previewDraft.value;
+  closeRecordPreview();
+  if (record) openEditor(record);
 }
 
 function openExistingFromCreate(recordId: string) {
@@ -684,6 +753,56 @@ onBeforeUnmount(() => {
 
     <RecordCreateModal v-model="showRecordCreate" @open-existing="openExistingFromCreate" />
 
+    <div v-if="previewDraft" class="modal-overlay active" role="presentation" @click.self="closeRecordPreview">
+      <section class="modal record-preview-modal" role="dialog" aria-modal="true" aria-labelledby="record-preview-modal-title">
+        <div class="modal-header">
+          <div class="modal-title" id="record-preview-modal-title">记录预览</div>
+          <button class="close-btn" type="button" aria-label="关闭记录预览" @click="closeRecordPreview">×</button>
+        </div>
+        <div class="record-preview-dialog-body">
+          <div class="record-preview-top">
+            <span class="item-type">{{ previewDraft.type || '记录' }}</span>
+            <div class="record-preview-title">{{ previewDraft.title || '未命名记录' }}</div>
+            <div class="record-preview-meta">
+              <span>{{ records.services.records.getRecordDateRangeLabel(previewDraft) }}</span>
+              <span>时间 {{ previewDraft.recordTime || '全天' }}<template v-if="previewDraft.recordEndTime"> - {{ previewDraft.recordEndTime }}</template></span>
+              <span>待办 {{ previewLinkedTodos.filter(todo => todo.done).length }}/{{ previewLinkedTodos.length }}</span>
+              <span v-if="previewFromEditor">当前预览，尚未保存</span>
+            </div>
+          </div>
+          <div class="record-preview-content">
+            <div class="record-preview-heading">内容</div>
+            <div v-if="previewDraftSections.length">
+              <section v-for="section in previewDraftSections" :key="section.title" class="record-preview-section">
+                <h4>{{ section.title }}</h4>
+                <div class="record-preview-text">{{ section.body.join('\n').trim() || '暂未填写' }}</div>
+              </section>
+            </div>
+            <div v-else class="record-preview-empty">还没有内容</div>
+          </div>
+          <div v-if="previewDraft.type === '灵感碎片'" class="record-preview-content">
+            <div class="record-preview-heading">灵感推进</div>
+            <div class="record-idea-badges"><span>{{ previewDraft.ideaStatus || '待整理' }}</span><span v-for="tag in records.services.records.getIdeaTags(previewDraft)" :key="tag">{{ tag }}</span></div>
+            <div class="record-idea-preview-grid">
+              <div><strong>下一步</strong><span>{{ previewDraft.ideaNextAction || '未设置' }}</span></div>
+              <div><strong>关联待办</strong><span>{{ previewIdeaTodoText }}</span></div>
+              <div><strong>结果结论</strong><span>{{ previewDraft.ideaConclusion || '还没有结论' }}</span></div>
+            </div>
+          </div>
+          <div v-if="previewLinkedTodos.length" class="record-preview-todos">
+            <div class="record-preview-heading">关联待办</div>
+            <div v-for="todo in previewLinkedTodos" :key="todo.id" class="record-preview-todo-item" :class="{ done: todo.done }">
+              <span class="record-preview-dot"></span><span>{{ todo.text || '未命名待办' }}</span>
+            </div>
+          </div>
+          <div class="record-preview-actions">
+            <button v-if="previewFromEditor" class="btn btn-secondary" type="button" @click="closeRecordPreview">返回继续编辑</button>
+            <button v-else class="btn btn-secondary" type="button" @click="editPreviewRecord">编辑</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div v-if="showTemplateManager && !activeRecord" class="modal-overlay active" role="presentation" @click.self="showTemplateManager = false">
       <section class="modal modal-sm record-template-modal" role="dialog" aria-modal="true" aria-labelledby="record-template-modal-title">
         <div class="modal-header">
@@ -747,7 +866,7 @@ onBeforeUnmount(() => {
           <h2 id="record-editor-title">编辑记录</h2>
           <p class="section-hint">保存会写入原有 records 字段；关联待办会同步重建 todoAppData 镜像。</p>
         </div>
-        <button class="btn btn-secondary" type="button" @click="closeEditor()">关闭</button>
+        <div class="page-actions"><button class="btn btn-secondary" type="button" @click="previewCurrentRecord">预览</button><button class="btn btn-secondary" type="button" @click="closeEditor()">关闭</button></div>
       </div>
       <p v-if="editorNotice" class="notice success" role="status">{{ editorNotice }}</p>
       <div class="record-editor-grid">
@@ -921,6 +1040,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .record-editor-panel { margin-bottom: 18px; }
+.record-preview-modal { max-width: 720px; }
+.record-preview-dialog-body { display: grid; gap: 14px; }
 #page-records .calendar-toolbar {
   display: flex;
   flex-wrap: wrap;
