@@ -492,6 +492,12 @@ function editWorkout(workout: Record<string, any>) {
   });
 }
 
+function deleteWorkout(id: string) {
+  if (!window.confirm('确定删除这条训练日志吗？')) return;
+  run(() => fitness.removeWorkout(id));
+  if (workoutEditingId.value === id) resetWorkoutForm();
+}
+
 function applyLibraryToPlanExercise(index: number, exerciseId: string) {
   const item = fitness.library.find(entry => entry.id === exerciseId);
   if (!item || !planForm.exercises[index]) return;
@@ -1096,7 +1102,7 @@ onUnmounted(stopRestTimer);
         <div v-for="workout in workoutHistory" :key="workout.id" class="fitness-metric-row">
           <div><strong>{{ workout.date }} · {{ workout.title || '自由训练' }}</strong><span>{{ workoutStatusLabel(workout.status) }} · {{ fitness.services.fitness.countCompletedSets(workout) }}/{{ fitness.services.fitness.countTotalSets(workout) }} 组<span v-if="workout.durationMin"> · {{ workout.durationMin }} 分钟</span></span><span>{{ workoutHistoryExerciseSummary(workout) }}</span><span v-if="workout.notes">{{ workout.notes }}</span></div>
           <button class="btn btn-secondary" type="button" @click="editWorkout(workout)">编辑</button>
-          <button class="btn btn-danger" type="button" @click="run(() => fitness.removeWorkout(workout.id))">删除</button>
+          <button class="btn btn-danger" type="button" @click="deleteWorkout(workout.id)">删除</button>
         </div>
       </div>
       <div v-else class="empty-state">完成训练后会显示在这里。</div>

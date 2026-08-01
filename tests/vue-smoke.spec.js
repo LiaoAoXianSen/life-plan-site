@@ -2340,6 +2340,41 @@ test('fitness exercise library deletion keeps the legacy confirmation guard', as
     ]));
 });
 
+test('fitness workout log deletion keeps the legacy confirmation guard', async ({ page }) => {
+    const source = emptyData({
+        fitnessWorkouts: [{
+            id: 'fitness-workout-delete', date: '2026-07-30', status: 'done', title: '待删训练', durationMin: 45, notes: '删除前备注',
+            exercises: [{ id: 'fitness-workout-delete-exercise', name: '卧推', targetSets: 2, targetReps: '8', targetWeight: 40, restSec: 90, sets: [{ weight: 40, reps: 8, done: true }, { weight: 40, reps: 8, done: false }] }],
+            createdAt: '2026-07-30T10:00:00', updatedAt: '2026-07-30T10:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+
+    const row = page.locator('article.card').filter({ hasText: '训练历史' }).locator('.fitness-metric-row').filter({ hasText: '待删训练' });
+
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toBe('确定删除这条训练日志吗？');
+        await dialog.dismiss();
+    });
+    await row.getByRole('button', { name: '删除', exact: true }).click();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await row.getByRole('button', { name: '编辑', exact: true }).click();
+    const titleInput = page.locator('#fitness-workout-section').locator('.form-group').filter({ hasText: '训练标题' }).locator('input');
+    await expect(titleInput).toHaveValue('待删训练');
+
+    page.once('dialog', dialog => dialog.accept());
+    await row.getByRole('button', { name: '删除', exact: true }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts).toHaveLength(0);
+    expect(stored.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'fitnessWorkouts', id: 'fitness-workout-delete', reason: 'manual-delete' }),
+    ]));
+    await expect(titleInput).toHaveValue('');
+});
+
 test('fitness plan browse content opens the legacy editor entry point', async ({ page }) => {
     const source = emptyData({
         fitnessPlans: [{ id: 'fitness-browse-edit', name: '可点击计划', status: 'active', goal: 'strength', notes: '计划备注', exercises: [{ name: '深蹲', targetSets: 3, targetReps: '5', sets: [] }] }],
@@ -2696,6 +2731,10 @@ test('fitness history editor saves edits through the legacy workout contract', a
     expect(stored.fitnessWorkouts[0].title).toBe('编辑后的背部训练');
     expect(stored.fitnessWorkouts[0].exercises[0].sets[1]).toEqual(expect.objectContaining({ weight: 52.5, reps: 8, done: true }));
 
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toBe('确定删除这条训练日志吗？');
+        await dialog.accept();
+    });
     await page.locator('article.card').filter({ hasText: '训练历史' }).locator('.fitness-metric-row').filter({ hasText: '编辑后的背部训练' }).getByRole('button', { name: '删除' }).click();
     const afterDelete = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(afterDelete.fitnessWorkouts).toHaveLength(0);
