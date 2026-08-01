@@ -63,7 +63,7 @@ function getTodayTodoReason(todo: Todo) {
 
 const habitRuleLabels: Record<string, string> = {
   daily: '每天',
-  'weekly-fixed': '每周固定',
+  'weekly-fixed': '固定周几',
   'weekly-count': '每周次数',
   'monthly-count': '每月次数',
   interval: '间隔天数',
