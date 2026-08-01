@@ -49,6 +49,30 @@ const todayItems = computed(() => habits.todayHabits.map(habit => ({
   count: habits.getCheckinCount(habit.id),
   target: habits.targetCount(habit),
 })));
+const habitLibraryRows = computed(() => {
+  const today = getTodayStr();
+  return habits.habits.map(habit => {
+    const target = habits.targetCount(habit);
+    const counts = new Map<string, number>();
+    const checkins = (lifePlan.data.checkins as unknown as AnalysisCheckin[]).filter(item => item.habitId === habit.id);
+    checkins.forEach(item => {
+      if (!item.date || item.date > today) return;
+      counts.set(item.date, (counts.get(item.date) || 0) + 1);
+    });
+    const completedDates = new Set([...counts].filter(([, count]) => count >= target).map(([date]) => date));
+    let streak = 0;
+    for (const cursor = new Date(`${today}T12:00:00`); completedDates.has(getTodayStr(cursor)); cursor.setDate(cursor.getDate() - 1)) streak += 1;
+    const latest = [...checkins].sort((a, b) => String(b.checkinAt || b.createdAt || '').localeCompare(String(a.checkinAt || a.createdAt || '')))[0];
+    const latestValue = String(latest?.checkinAt || latest?.createdAt || latest?.date || '');
+    return {
+      habit,
+      target,
+      todayCount: counts.get(today) || 0,
+      streak,
+      lastOperation: latestValue ? formatAnalysisDateTime(latestValue, true) : '暂无',
+    };
+  });
+});
 const activeHabitDate = computed(() => activeTab.value === 'backfill' ? (makeupDate.value || getTodayStr()) : getTodayStr());
 const activeHabitItems = computed(() => {
   const date = activeHabitDate.value;
@@ -1065,18 +1089,18 @@ watch(focusedHabitId, value => {
 
       <div class="habit-library-table habit-management-table">
         <div class="habit-library-row head">
-          <span>习惯</span><span>规则</span><span>次数</span><span>分组</span><span>目标</span><span>操作</span>
+          <span>名称</span><span>规则</span><span>今日</span><span>连续</span><span>最后操作</span><span>操作</span>
         </div>
-        <div v-for="item in habits.habits" :key="item.id" class="habit-library-row" :class="{ 'is-target': focusedHabitId === item.id, archived: item.archived }">
-          <span class="habit-library-name"><strong>{{ item.name }}</strong><em>{{ item.archived ? '已归档' : (item.startDate || '未设置开始日') }}</em></span>
-          <span>{{ ruleLabels[item.rule || 'daily'] || item.rule || '每天' }}</span>
-          <span>{{ habits.targetCount(item) }}/日</span>
-          <span>{{ item.tag || '习惯' }}</span>
-          <span>{{ Number(item.goalCount || 0) || '-' }}</span>
+        <div v-for="row in habitLibraryRows" :key="row.habit.id" class="habit-library-row" :class="{ 'is-target': focusedHabitId === row.habit.id, archived: row.habit.archived }">
+          <span class="habit-library-name"><strong>{{ row.habit.name }}</strong><em>{{ row.habit.archived ? `已归档 · ${row.habit.tag || '习惯'}` : (row.habit.tag || '习惯') }}</em></span>
+          <span>{{ habitRuleText(row.habit) }} · {{ row.target }}次/天</span>
+          <span>{{ row.todayCount }}/{{ row.target }}</span>
+          <span>{{ row.streak }} 天</span>
+          <span>{{ row.lastOperation }}</span>
           <span class="habit-library-actions">
-            <button class="btn btn-secondary" type="button" @click="editHabit(item)">编辑</button>
-            <button class="btn btn-secondary" type="button" @click="setHabitArchive(item.id, !item.archived)">{{ item.archived ? '恢复' : '归档' }}</button>
-            <button class="btn btn-danger" type="button" @click="deleteHabit(item.id)">删除</button>
+            <button class="btn btn-secondary" type="button" @click="editHabit(row.habit)">编辑</button>
+            <button class="btn btn-secondary" type="button" @click="setHabitArchive(row.habit.id, !row.habit.archived)">{{ row.habit.archived ? '恢复' : '归档' }}</button>
+            <button class="btn btn-danger" type="button" @click="deleteHabit(row.habit.id)">删除</button>
           </span>
         </div>
         <div v-if="!habits.habits.length" class="empty-state">暂无习惯，先新建一个习惯。</div>

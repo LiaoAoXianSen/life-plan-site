@@ -3054,6 +3054,44 @@ test('habit base edit and delete preserve legacy management contracts', async ({
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('habit library exposes legacy today streak and last operation summary', async ({ page }) => {
+    const todayDate = new Date();
+    todayDate.setHours(12, 0, 0, 0);
+    const yesterdayDate = new Date(todayDate);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const dayBeforeDate = new Date(todayDate);
+    dayBeforeDate.setDate(dayBeforeDate.getDate() - 2);
+    const today = localDate(todayDate);
+    const yesterday = localDate(yesterdayDate);
+    const dayBefore = localDate(dayBeforeDate);
+    const source = emptyData({
+        habits: [{ id: 'habit-library-summary', name: '连续阅读', tag: '成长', rule: 'daily', timesPerDay: 2, startDate: dayBefore }],
+        checkins: [
+            { id: 'library-before-one', habitId: 'habit-library-summary', date: dayBefore, time: '08:00', checkinAt: `${dayBefore}T08:00:00`, createdAt: `${dayBefore}T08:00:00` },
+            { id: 'library-yesterday-one', habitId: 'habit-library-summary', date: yesterday, time: '08:00', checkinAt: `${yesterday}T08:00:00`, createdAt: `${yesterday}T08:00:00` },
+            { id: 'library-yesterday-two', habitId: 'habit-library-summary', date: yesterday, time: '09:00', checkinAt: `${yesterday}T09:00:00`, createdAt: `${yesterday}T09:00:00` },
+            { id: 'library-today-one', habitId: 'habit-library-summary', date: today, time: '08:30', checkinAt: `${today}T08:30:00`, createdAt: `${today}T08:30:00` },
+            { id: 'library-today-two', habitId: 'habit-library-summary', date: today, time: '09:45', checkinAt: `${today}T09:45:00`, createdAt: `${today}T09:45:00` },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '习惯库' }).click();
+    const table = page.locator('.habit-management-table');
+    await expect(table.locator('.habit-library-row.head')).toContainText('今日');
+    await expect(table.locator('.habit-library-row.head')).toContainText('连续');
+    await expect(table.locator('.habit-library-row.head')).toContainText('最后操作');
+    const row = table.locator('.habit-library-row').filter({ hasText: '连续阅读' });
+    await expect(row).toContainText('成长');
+    await expect(row).toContainText('每天 · 2次/天');
+    await expect(row).toContainText('2/2');
+    await expect(row).toContainText('2 天');
+    await expect(row).toContainText(`${todayDate.getFullYear()}年${todayDate.getMonth() + 1}月${todayDate.getDate()}日 09:45:00`);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('habit today empty state keeps the legacy wording', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/habits');
