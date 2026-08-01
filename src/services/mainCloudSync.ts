@@ -40,26 +40,25 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeConfig(raw: Partial<SyncConfig> = {}): SyncConfig {
+  return {
+    webdavUrl: String(raw.webdavUrl || ''),
+    remotePath: sync.normalizeRemotePath(raw.remotePath || '/life-plan.json'),
+    autoSync: raw.autoSync !== false,
+  };
+}
+
 function readConfig(): SyncConfig {
   try {
     const raw = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}') as Partial<SyncConfig>;
-    return {
-      webdavUrl: String(raw.webdavUrl || ''),
-      remotePath: sync.normalizeRemotePath(raw.remotePath || '/life-plan.json'),
-      autoSync: raw.autoSync !== false,
-      ...raw,
-    };
+    return normalizeConfig(raw);
   } catch {
     return { webdavUrl: '', remotePath: '/life-plan.json', autoSync: true };
   }
 }
 
 function writeConfig(config: SyncConfig) {
-  const next = {
-    ...config,
-    remotePath: sync.normalizeRemotePath(config.remotePath || '/life-plan.json'),
-    autoSync: config.autoSync !== false,
-  };
+  const next = normalizeConfig(config);
   localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
   return next;
 }

@@ -1563,6 +1563,19 @@ test('main import confirmation cancellation keeps data and snapshots unchanged',
     expect(await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'))).toBeNull();
 });
 
+test('sync config removes legacy credential fields when saved', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+        webdavUrl: '', remotePath: '/life-plan.json', autoSync: false, username: 'legacy-user', password: 'legacy-password',
+    })));
+    await page.goto('/#/sync');
+    await page.getByRole('button', { name: '保存配置' }).click();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
+    expect(stored).toEqual({ webdavUrl: '', remotePath: '/life-plan.json', autoSync: false });
+    expect(stored.username).toBeUndefined();
+    expect(stored.password).toBeUndefined();
+});
+
 test('main manual pull keeps dirty state when the merged result differs from cloud', async ({ page }) => {
     const localData = emptyData({
         records: [{ id: 'local-pull-record', type: '日记', title: '本机独有记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [] }],
