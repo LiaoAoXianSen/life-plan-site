@@ -204,6 +204,48 @@ export const useFitnessStore = defineStore('fitness', () => {
     return result.workout as FitnessEntity;
   }
 
+  function copyLastPerformance(exerciseIndex: number) {
+    const current = activeWorkout.value;
+    if (!current) return fail('当前没有进行中的训练');
+    const exercise = current.exercises?.[exerciseIndex];
+    if (!exercise) return fail('找不到对应动作');
+    const history = services.fitness.findLastExercisePerformance(
+      lifePlan.data.fitnessWorkouts,
+      exercise.name || '',
+      current.id,
+    );
+    if (!history?.set && history?.targetWeight == null) return fail('还没有这个动作的历史成绩');
+    const workout = services.fitness.normalizeFitnessWorkout({
+      ...current,
+      exercises: current.exercises.map((item: Record<string, any>, index: number) => {
+        if (index !== exerciseIndex) return item;
+        return {
+          ...item,
+          sets: (Array.isArray(item.sets) ? item.sets : []).map((set: Record<string, any>, setIndex: number) => {
+            if (set.done) return set;
+            if (history.doneSets?.[setIndex]) {
+              return services.fitness.normalizeWorkoutSet({
+                ...set,
+                weight: history.doneSets[setIndex].weight,
+                reps: history.doneSets[setIndex].reps,
+                done: false,
+              });
+            }
+            const suggestion = services.fitness.suggestSetValues(item, setIndex, history);
+            return services.fitness.applySuggestionToSet(set, suggestion);
+          }),
+        };
+      }),
+    });
+    const result = services.fitness.upsertFitnessWorkout(lifePlan.data.fitnessWorkouts, workout, current.id);
+    if (!result.ok) return fail(result.message);
+    lifePlan.mutate('copy-last-performance', data => {
+      data.fitnessWorkouts = result.workouts;
+    });
+    succeed('已套用上次成绩');
+    return result.workout as FitnessEntity;
+  }
+
   function finishWorkout(options: { updatePlanFromWorkout?: boolean } = {}) {
     const current = activeWorkout.value;
     if (!current) return fail('当前没有进行中的训练');
@@ -237,7 +279,7 @@ export const useFitnessStore = defineStore('fitness', () => {
   return {
     metrics, plans, workouts, library, activeWorkout, lastError, lastAction,
     normalize, saveMetric, removeMetric, ensureLibrary, saveLibraryItem, removeLibraryItem,
-    savePlan, removePlan, startFromPlan, startFreeWorkout, saveWorkout, completeSet, addActiveSet, finishWorkout, removeWorkout,
+    savePlan, removePlan, startFromPlan, startFreeWorkout, saveWorkout, completeSet, addActiveSet, copyLastPerformance, finishWorkout, removeWorkout,
     services,
   };
 });

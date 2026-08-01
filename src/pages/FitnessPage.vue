@@ -684,6 +684,37 @@ function setDone(exerciseIndex: number, setIndex: number, done: boolean, weight:
   });
 }
 
+function copyLastPerformanceToLive(exerciseIndex: number) {
+  run(() => fitness.copyLastPerformance(exerciseIndex));
+}
+
+function copyLastPerformanceToDraft(exerciseIndex: number) {
+  const exercise = workoutForm.exercises[exerciseIndex];
+  if (!exercise) return;
+  const history = fitness.services.fitness.findLastExercisePerformance(
+    fitness.workouts,
+    exercise.name || '',
+    workoutEditingId.value,
+  );
+  if (!history?.set && history?.targetWeight == null) {
+    formError.value = '还没有这个动作的历史成绩';
+    return;
+  }
+  exercise.sets = exercise.sets.map((set, setIndex) => {
+    if (history.doneSets?.[setIndex]) {
+      return toWorkoutSet({
+        ...set,
+        weight: history.doneSets[setIndex].weight,
+        reps: history.doneSets[setIndex].reps,
+        done: set.done === true,
+      }, set.done === true);
+    }
+    const suggestion = fitness.services.fitness.suggestSetValues(exercise, setIndex, history);
+    return toWorkoutSet(fitness.services.fitness.applySuggestionToSet(set, suggestion), set.done === true);
+  });
+  formError.value = '';
+}
+
 function workoutStatusLabel(status: string) {
   return fitness.services.fitness.getWorkoutStatusLabel(status);
 }
@@ -871,6 +902,7 @@ onUnmounted(stopRestTimer);
           </div>
         </div>
         <button class="btn btn-secondary todo-mini-btn" type="button" @click="run(() => fitness.addActiveSet(exerciseIndex))">+ 加一组</button>
+        <button class="btn btn-secondary todo-mini-btn" type="button" @click="copyLastPerformanceToLive(exerciseIndex)">复制上次</button>
       </article>
     </article>
 
@@ -1143,6 +1175,7 @@ onUnmounted(stopRestTimer);
           </div>
           <div class="fitness-plan-day-actions compact">
             <button class="btn btn-secondary todo-mini-btn" type="button" @click="addWorkoutSet(exercise)">+ 加一组</button>
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="copyLastPerformanceToDraft(exerciseIndex)">复制上次</button>
           </div>
         </section>
       </div>

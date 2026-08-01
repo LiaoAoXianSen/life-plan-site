@@ -3382,6 +3382,86 @@ test('fitness live workout suggestions and rest timer stay service backed', asyn
     expect(afterDone.exercises[0].sets[0]).toEqual(expect.objectContaining({ weight: 57.5, reps: 7, done: true }));
 });
 
+test('fitness live workout copy last performance fills sets from history', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        exerciseLibrary: [{ id: 'ex-copy-live', name: '硬拉', muscle: 'back', defaultSets: 2, defaultReps: '5', defaultWeight: 100, restSec: 120 }],
+        fitnessWorkouts: [
+            { id: 'workout-history-copy', date: '2026-07-28', status: 'done', title: '上次硬拉日', planId: '', planName: '', exercises: [{ id: 'history-copy-ex', name: '硬拉', targetSets: 2, targetReps: '5', targetWeight: 100, note: '', sets: [{ id: 'history-copy-set-1', weight: 100, reps: 5, done: true }, { id: 'history-copy-set-2', weight: 105, reps: 4, done: true }] }], createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T09:00:00' },
+            { id: 'workout-live-copy', date: today, status: 'inProgress', title: '复制上次训练', planId: '', planName: '', exercises: [{ id: 'live-copy-ex', name: '硬拉', targetSets: 2, targetReps: '5', targetWeight: 100, note: '', sets: [{ id: 'live-copy-set-1', weight: '', reps: '', done: false }, { id: 'live-copy-set-2', weight: '', reps: '', done: false }] }], createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` },
+        ],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-copy-live-before' }));
+    }, source);
+    await page.goto('/#/fitness');
+
+    const active = page.locator('#page-fitness > article.card').first();
+    const activeExercise = active.locator(':scope > article.card').filter({ hasText: '硬拉' });
+    await expect(activeExercise.locator('.fitness-live-row')).toHaveCount(2);
+    await activeExercise.getByRole('button', { name: '复制上次', exact: true }).click();
+    await expect(page.locator('.notice.success')).toContainText('已套用上次成绩');
+    await expect(activeExercise.locator('.fitness-live-row').nth(0).locator('input[type="number"]').nth(0)).toHaveValue('100');
+    await expect(activeExercise.locator('.fitness-live-row').nth(0).locator('input[type="number"]').nth(1)).toHaveValue('5');
+    await expect(activeExercise.locator('.fitness-live-row').nth(1).locator('input[type="number"]').nth(0)).toHaveValue('105');
+    await expect(activeExercise.locator('.fitness-live-row').nth(1).locator('input[type="number"]').nth(1)).toHaveValue('4');
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    const activeWorkout = stored.data.fitnessWorkouts.find(item => item.status === 'inProgress');
+    expect(activeWorkout.exercises[0].sets).toEqual([
+        expect.objectContaining({ weight: 100, reps: 5, done: false }),
+        expect.objectContaining({ weight: 105, reps: 4, done: false }),
+    ]);
+    expect(stored.syncState.dirty).toBe(true);
+});
+
+test('fitness live copy last performance guards a no-history exercise', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        fitnessWorkouts: [{
+            id: 'workout-live-guard', date: today, status: 'inProgress', title: '无历史训练', planId: '', planName: '',
+            exercises: [{ id: 'live-guard-ex', name: '从未练过的动作', targetSets: 1, targetReps: '8', targetWeight: 0, note: '', sets: [{ id: 'live-guard-set', weight: '', reps: '', done: false }] }],
+            createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/fitness');
+    const activeExercise = page.locator('#page-fitness > article.card').first().locator(':scope > article.card').filter({ hasText: '从未练过的动作' });
+    await activeExercise.getByRole('button', { name: '复制上次', exact: true }).click();
+    await expect(page.locator('.notice.warning')).toContainText('还没有这个动作的历史成绩');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('fitness workout draft copy last performance keeps legacy identity and no-history guard', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        fitnessWorkouts: [
+            { id: 'workout-history-draft', date: '2026-07-28', status: 'done', title: '上次背部', planId: '', planName: '', exercises: [{ id: 'history-draft-ex', name: '引体向上', targetSets: 2, targetReps: '10', targetWeight: 0, note: '', sets: [{ id: 'history-draft-set-1', weight: 0, reps: 10, done: true }, { id: 'history-draft-set-2', weight: 0, reps: 9, done: true }] }], createdAt: '2026-07-28T08:00:00', updatedAt: '2026-07-28T09:00:00' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/fitness');
+    await page.locator('.fitness-page-header .fitness-header-actions').getByRole('button', { name: '补记训练' }).click();
+    const form = page.locator('#fitness-workout-section form.card');
+    const card = form.locator('.fitness-plan-exercise-card').first();
+    await card.locator('.fitness-plan-exercise-card-head input').fill('引体向上');
+    await card.getByRole('button', { name: '复制上次', exact: true }).click();
+    await expect(card.locator('.fitness-workout-set-row').nth(0).locator('input[type="number"]').nth(0)).toHaveValue('0');
+    await expect(card.locator('.fitness-workout-set-row').nth(0).locator('input[type="number"]').nth(1)).toHaveValue('10');
+    await expect(card.locator('.fitness-workout-set-row').nth(1).locator('input[type="number"]').nth(1)).toHaveValue('9');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await card.locator('.fitness-plan-exercise-card-head input').fill('未知动作');
+    await card.getByRole('button', { name: '复制上次', exact: true }).click();
+    await expect(page.locator('.notice.warning')).toContainText('还没有这个动作的历史成绩');
+});
+
 test('todo detail edits record-owned relationships and protects an exclusive source', async ({ page }) => {
     const source = emptyData({
         records: [
