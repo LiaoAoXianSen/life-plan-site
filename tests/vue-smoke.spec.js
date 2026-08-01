@@ -2641,6 +2641,66 @@ test('fitness free start keeps the legacy active workout confirmation branch', a
     ]));
 });
 
+test('fitness pause hides the live editor and resume restores the same workout', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        fitnessPlans: [{
+            id: 'fitness-pause-plan', name: '暂停计划', status: 'active', goal: 'strength',
+            exercises: [{ id: 'fitness-pause-plan-exercise', name: '深蹲', targetSets: 2, targetReps: '5', targetWeight: 80, sets: [{ id: 'fitness-pause-plan-set', weight: 80, reps: 5 }] }],
+        }],
+        fitnessWorkouts: [{
+            id: 'fitness-pause-active', date: today, status: 'inProgress', title: '可暂停训练', planId: 'fitness-pause-plan', planName: '暂停计划',
+            exercises: [{ id: 'fitness-pause-exercise', name: '深蹲', targetSets: 2, targetReps: '5', targetWeight: 80, sets: [{ id: 'fitness-pause-set-1', weight: 85, reps: 5, done: true }, { id: 'fitness-pause-set-2', weight: 85, reps: 5, done: false }] }],
+            createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), updatedAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/fitness');
+
+    await expect(page.getByText('正在训练：可暂停训练')).toBeVisible();
+    await page.getByRole('button', { name: '完成本组', exact: true }).click();
+    await expect(page.locator('.vue-fitness-rest-timer')).toBeVisible();
+    await expect(page.locator('.fitness-live-row')).toHaveCount(2);
+
+    let confirmShown = false;
+    page.once('dialog', async dialog => {
+        confirmShown = true;
+        await dialog.dismiss();
+    });
+    await page.getByRole('button', { name: '暂停训练', exact: true }).click();
+    await expect(page.getByText('已暂停：可暂停训练')).toBeVisible();
+    await expect(page.locator('.vue-fitness-rest-timer')).toHaveCount(0);
+    await expect(page.locator('.fitness-live-row')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '继续训练：可暂停训练', exact: true })).toBeVisible();
+    expect(confirmShown).toBe(false);
+
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts).toHaveLength(1);
+    expect(stored.fitnessWorkouts[0]).toMatchObject({ id: 'fitness-pause-active', title: '可暂停训练', status: 'inProgress' });
+    expect(stored.fitnessWorkouts[0].exercises[0].sets).toEqual([
+        expect.objectContaining({ id: 'fitness-pause-set-1', weight: 85, reps: 5, done: true }),
+        expect.objectContaining({ id: 'fitness-pause-set-2', weight: 85, reps: 5, done: true }),
+    ]);
+    expect(stored.fitnessPlans[0]).toMatchObject({ id: 'fitness-pause-plan', name: '暂停计划' });
+    expect(stored.fitnessPlans[0].exercises[0].sets[0]).toEqual(expect.objectContaining({ weight: 80, reps: 5 }));
+
+    await page.getByRole('button', { name: '继续训练：可暂停训练', exact: true }).click();
+    await expect(page.getByText('正在训练：可暂停训练')).toBeVisible();
+    await expect(page.locator('.fitness-live-row')).toHaveCount(2);
+    await expect(page.locator('.fitness-live-row').first().locator('input[type="number"]').first()).toHaveValue('85');
+
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts).toHaveLength(1);
+    expect(stored.fitnessWorkouts[0]).toMatchObject({ id: 'fitness-pause-active', title: '可暂停训练', status: 'inProgress' });
+    expect(stored.fitnessWorkouts[0].exercises[0].sets).toEqual([
+        expect.objectContaining({ id: 'fitness-pause-set-1', weight: 85, reps: 5, done: true }),
+        expect.objectContaining({ id: 'fitness-pause-set-2', weight: 85, reps: 5, done: true }),
+    ]);
+    expect(stored.fitnessPlans[0]).toMatchObject({ id: 'fitness-pause-plan', name: '暂停计划' });
+    expect(stored.fitnessPlans[0].exercises[0].sets[0]).toEqual(expect.objectContaining({ weight: 80, reps: 5 }));
+});
+
 test('fitness plans support multiple exercises and explicit plan writeback', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [

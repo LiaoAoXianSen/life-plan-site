@@ -43,6 +43,7 @@ const planForm = reactive({ name: '', goal: 'general', status: 'active', notes: 
 const workoutForm = reactive({ date: getTodayStr(), status: 'done', title: '', planId: '', durationMin: '', notes: '', exercises: [] as WorkoutExerciseDraft[] });
 const freeForm = reactive({ title: '自由训练', exerciseId: '' });
 const activePlanStartId = ref('');
+const pausedWorkoutId = ref('');
 const formError = ref('');
 const libraryEditingId = ref('');
 const planEditingId = ref('');
@@ -139,9 +140,11 @@ function startPlanFromFitness(planId: string) {
   if (active) {
     const title = fitness.services.fitness.getWorkoutTitle(active);
     if (!window.confirm(`已有进行中的训练「${title}」。要先继续它，还是新开一场？\n确定=新开，取消=继续旧的`)) return;
+    pausedWorkoutId.value = '';
     run(() => fitness.startFromPlan(planId, true));
     return;
   }
+  pausedWorkoutId.value = '';
   run(() => fitness.startFromPlan(planId));
 }
 
@@ -194,6 +197,7 @@ function browseTo(target: string) {
   document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+const activeWorkoutPaused = computed(() => !!fitness.activeWorkout && pausedWorkoutId.value === String(fitness.activeWorkout?.id || ''));
 const activeCompleted = computed(() => fitness.activeWorkout ? fitness.services.fitness.countCompletedSets(fitness.activeWorkout) : 0);
 const activeTotal = computed(() => fitness.activeWorkout ? fitness.services.fitness.countTotalSets(fitness.activeWorkout) : 0);
 const activePlan = computed(() => fitness.activeWorkout?.planId ? fitness.services.fitness.findFitnessPlan(fitness.plans, fitness.activeWorkout.planId) : null);
@@ -430,10 +434,22 @@ function startFreeWorkout() {
   if (fitness.activeWorkout) {
     const title = fitness.services.fitness.getWorkoutTitle(fitness.activeWorkout);
     if (!window.confirm(`已有进行中的训练「${title}」。要先继续它，还是新开一场？\n确定=新开，取消=继续旧的`)) return;
+    pausedWorkoutId.value = '';
     run(() => fitness.startFreeWorkout(freeForm.exerciseId, freeForm.title, true));
     return;
   }
+  pausedWorkoutId.value = '';
   run(() => fitness.startFreeWorkout(freeForm.exerciseId, freeForm.title));
+}
+
+function pauseActiveWorkout() {
+  if (!fitness.activeWorkout) return;
+  pausedWorkoutId.value = String(fitness.activeWorkout.id || '');
+  stopRestTimer();
+}
+
+function resumeActiveWorkout() {
+  pausedWorkoutId.value = '';
 }
 
 function finishActiveWorkout() {
@@ -441,6 +457,7 @@ function finishActiveWorkout() {
     if (activeCompleted.value === 0 && !window.confirm('还没有任何完成组，确定结束本场训练吗？')) return;
     fitness.finishWorkout({ updatePlanFromWorkout: writeBackPlan.value && activePlanDiff.value === true });
     writeBackPlan.value = false;
+    pausedWorkoutId.value = '';
     stopRestTimer();
   });
 }
@@ -801,7 +818,7 @@ onUnmounted(stopRestTimer);
       </div>
     </section>
 
-    <article v-if="fitness.activeWorkout" class="card">
+    <article v-if="fitness.activeWorkout && !activeWorkoutPaused" class="card">
       <div class="section-title-row">
         <div>
           <h2>正在训练：{{ fitness.activeWorkout.title || '自由训练' }}</h2>
@@ -817,6 +834,7 @@ onUnmounted(stopRestTimer);
             <option v-for="plan in fitness.plans" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
           </select>
           <button class="btn btn-secondary" type="button" :disabled="!activePlanStartId" @click="startPlanFromFitness(activePlanStartId)">新开计划训练</button>
+          <button class="btn btn-secondary" type="button" @click="pauseActiveWorkout">暂停训练</button>
           <button class="btn btn-primary" type="button" @click="finishActiveWorkout">结束训练</button>
         </div>
       </div>
@@ -854,6 +872,19 @@ onUnmounted(stopRestTimer);
         </div>
         <button class="btn btn-secondary todo-mini-btn" type="button" @click="run(() => fitness.addActiveSet(exerciseIndex))">+ 加一组</button>
       </article>
+    </article>
+
+    <article v-else-if="fitness.activeWorkout && activeWorkoutPaused" class="card">
+      <div class="section-title-row">
+        <div>
+          <h2>已暂停：{{ fitness.activeWorkout.title || '自由训练' }}</h2>
+          <p class="section-hint">已完成 {{ activeCompleted }}/{{ activeTotal }} 组。训练已暂停，进度已保存，可稍后继续。</p>
+        </div>
+        <div class="fitness-header-actions">
+          <button class="btn btn-primary" type="button" @click="resumeActiveWorkout">继续训练：{{ fitness.activeWorkout.title || '自由训练' }}</button>
+          <button class="btn btn-secondary" type="button" @click="finishActiveWorkout">结束训练</button>
+        </div>
+      </div>
     </article>
 
     <div v-else class="form-row" id="fitness-plan-section">
