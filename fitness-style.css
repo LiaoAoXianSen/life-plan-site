@@ -386,6 +386,41 @@
     color: var(--muted, #647269);
 }
 
+.fitness-list-copy {
+    min-width: 0;
+    flex: 1;
+}
+
+.fitness-list-title,
+.fitness-list-note {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+}
+
+.fitness-list-title {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+.fitness-list-note {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+}
+
+.fitness-workout-exercises {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+.fitness-plan-name-row > .fitness-list-title {
+    flex: 1 1 160px;
+}
+
 .fitness-plan-card-actions {
     display: flex;
     flex-wrap: wrap;

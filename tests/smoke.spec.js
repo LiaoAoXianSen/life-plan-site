@@ -109,6 +109,145 @@ test('loads the app and opens core pages', async ({ page }) => {
     expect(errors).toEqual([]);
 });
 
+test('materials support titles, selectable tags, inline expansion and full detail', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+        if (message.type() === 'error') errors.push(message.text());
+    });
+
+    const oldContent = '旧素材正文没有独立标题，但应该在升级后继续保留，并自动生成可读的回退标题。';
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData({
+        materials: [{
+            id: 'material-old',
+            type: '摘抄',
+            content: oldContent,
+            tags: ['阅读'],
+            source: '旧数据来源',
+            note: '旧数据备注',
+            createdAt: '2026-07-01T09:00:00',
+            updatedAt: '2026-07-01T09:00:00'
+        }]
+    }));
+
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '素材库' }).click();
+    await expect(page.locator('#page-materials')).toBeVisible();
+    await expect(page.locator('#material-list .material-title')).toContainText('旧素材正文没有独立标题');
+
+    await page.getByRole('button', { name: '+ 新增素材' }).click();
+    await expect(page.locator('#material-modal')).toBeVisible();
+    await expect(page.locator('#material-existing-tags .tag-check', { hasText: '阅读' })).toBeVisible();
+    await page.locator('#material-existing-tags .tag-check', { hasText: '阅读' }).click();
+    await page.fill('#material-title', '长文案素材标题');
+    await page.fill('#material-content', '这是需要默认收起的长素材正文。'.repeat(20));
+    await page.fill('#material-source', '一本来源名称很长的书'.repeat(5));
+    await page.fill('#material-note', '这是一段需要折叠的备注。'.repeat(10));
+    await page.fill('#material-new-tag', '写作');
+    await page.getByRole('button', { name: '添加标签' }).click();
+    await expect(page.locator('#material-existing-tags .tag-check', { hasText: '写作' }).locator('input')).toBeChecked();
+    await page.getByRole('button', { name: '保存' }).click();
+
+    const card = page.locator('#material-list .material-card', { hasText: '长文案素材标题' });
+    await expect(card).toBeVisible();
+    await expect(card.locator('.tag-pill', { hasText: '阅读' })).toBeVisible();
+    await expect(card.locator('.tag-pill', { hasText: '写作' })).toBeVisible();
+    const expandButton = card.getByRole('button', { name: '展开内容' });
+    await expect(expandButton).toHaveAttribute('aria-expanded', 'false');
+    await expandButton.click();
+    await expect(card).toHaveClass(/is-expanded/);
+    await expect(card.locator('.material-expand-btn')).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.locator('.material-expand-btn')).toHaveText('收起内容');
+
+    await card.getByRole('button', { name: '查看详情' }).click();
+    await expect(page.locator('#material-detail-modal')).toBeVisible();
+    await expect(page.locator('#material-detail-title')).toHaveText('长文案素材标题');
+    await expect(page.locator('#material-detail-body')).toContainText('这是需要默认收起的长素材正文。');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#material-detail-modal')).toBeHidden();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const created = stored.materials.find(item => item.title === '长文案素材标题');
+    expect(created.tags).toEqual(['阅读', '写作']);
+    expect(created.content).toBe('这是需要默认收起的长素材正文。'.repeat(20));
+    const legacy = stored.materials.find(item => item.id === 'material-old');
+    expect(legacy.title).toBe('');
+    expect(legacy.content).toBe(oldContent);
+    expect(errors).toEqual([]);
+});
+
+test('material flow stays usable on a narrow viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+    }, createEmptyData({
+        materials: [{
+            id: 'material-mobile',
+            title: '移动端长标题'.repeat(10),
+            type: '观点',
+            content: '移动端长正文'.repeat(80),
+            tags: ['超长标签'.repeat(8)],
+            source: '移动端来源'.repeat(20),
+            note: '移动端备注'.repeat(30),
+            createdAt: '2026-07-01T09:00:00',
+            updatedAt: '2026-07-01T09:00:00'
+        }]
+    }));
+
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '素材库' }).click();
+    const card = page.locator('#material-list .material-card').first();
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: '查看详情' }).click();
+    await expect(page.locator('#material-detail-modal')).toBeVisible();
+    const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(hasHorizontalOverflow).toBe(false);
+    await page.getByRole('button', { name: '编辑素材' }).click();
+    await expect(page.locator('#material-modal')).toBeVisible();
+    await expect(page.locator('#material-title')).toHaveValue('移动端长标题'.repeat(10));
+    await page.getByRole('button', { name: '取消' }).click();
+    await expect(page.locator('#material-modal')).toBeHidden();
+});
+
+test('material search safely opens imported ids and renders untrusted copy as text', async ({ page }) => {
+    const maliciousId = "material-'); window.__materialInjected = true; //";
+    const maliciousCopy = '<img src=x onerror="window.__materialInjected = true">素材安全标题';
+    await page.addInitScript(({ value, marker }) => {
+        window.__materialInjected = false;
+        localStorage.setItem('lifePlanData', JSON.stringify(value));
+        localStorage.setItem('materialSecurityMarker', marker);
+    }, {
+        marker: maliciousCopy,
+        value: createEmptyData({
+            materials: [{
+                id: maliciousId,
+                title: maliciousCopy,
+                type: '提示词',
+                content: `${maliciousCopy} 正文`,
+                tags: [maliciousCopy],
+                source: maliciousCopy,
+                note: maliciousCopy,
+                createdAt: '2026-07-01T09:00:00',
+                updatedAt: '2026-07-01T09:00:00'
+            }]
+        })
+    });
+
+    await page.goto('/');
+    await page.locator('.nav-item', { hasText: '全局搜索' }).click();
+    await page.fill('#global-search-input', '素材安全标题');
+    const result = page.locator('.search-result-item', { hasText: '素材安全标题' });
+    await expect(result).toBeVisible();
+    await expect(result.locator('img')).toHaveCount(0);
+    await result.click();
+    await expect(page.locator('#material-detail-modal')).toBeVisible();
+    await expect(page.locator('#material-detail-title')).toContainText('素材安全标题');
+    await expect(page.locator('#material-detail-body img')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__materialInjected)).toBe(false);
+});
+
 test('fitness page can create body metric records', async ({ page }) => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

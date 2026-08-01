@@ -161,11 +161,18 @@
     .timeline-item[class*="type-"] .item-preview { color: var(--muted); }
     .timeline-item[class*="type-"] .item-meta { color: var(--faint); }
     .item-title {
+        max-width: min(100%, 66ch);
         font-size: 15px;
         font-weight: 700;
-        display: inline;
+        vertical-align: top;
         color: var(--text);
         line-height: 1.45;
+        overflow-wrap: anywhere;
+        display: -webkit-inline-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
     }
     .item-meta {
         margin-top: 8px;
@@ -176,9 +183,15 @@
         font-size: 12px;
     }
     .item-meta span {
-        display: inline-flex;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
+        overflow-wrap: anywhere;
         align-items: center;
         min-height: 22px;
+        max-width: min(100%, 58ch);
         padding: 1px 8px;
         border-radius: var(--radius-pill);
         background: rgba(250,248,242,.72);

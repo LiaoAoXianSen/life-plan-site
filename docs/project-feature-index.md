@@ -173,9 +173,10 @@
 素材字段：
 
 - `id`
+- `title`：独立标题；旧素材缺失时由正文首行/前 42 个字符生成展示回退
 - `type`：`金句`、`提示词`、`摘抄`、`观点`、`方法`
-- `content`
-- `tags`
+- `content`：完整正文
+- `tags`：字符串数组，保存时归一化并去重
 - `source`
 - `note`
 - `createdAt`
@@ -184,9 +185,14 @@
 核心入口：
 
 - 标签聚合：`getAllMaterialTags`
+- 标题兼容回退：`getMaterialTitle`
 - 筛选素材：`getFilteredMaterials`
 - 素材卡片：`renderMaterialCard`
-- 标签选择器：`renderMaterialTagPicker`
+- 卡片展开/收起：`toggleMaterialCard`
+- 素材详情：`openMaterialDetail` / `closeMaterialDetail`
+- 随机标签选择器：`renderMaterialTagPicker`
+- 编辑标签选择器：`renderMaterialEditorTags`
+- 现场创建标签：`addMaterialEditorTag`
 - 随机抽取：`getRandomMaterials`
 - 随机展示：`renderMaterialRandom`
 - 页面渲染：`renderMaterialsPage`
@@ -194,6 +200,8 @@
 - 保存素材：`saveMaterial`
 - 删除素材：`deleteCurrentMaterial`
 - 素材筛选跳转：`jumpToMaterials`
+
+展示规则：列表卡片默认以 2 行标题、2–3 行正文/备注摘要保持稳定高度；长内容可以内联展开或进入只读详情，详情与编辑态始终显示全文。
 
 随机展示规则：
 

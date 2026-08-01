@@ -90,7 +90,7 @@
                 <div class="hero-panel">
                     <div>
                         <div class="hero-date" id="hero-date"></div>
-                        <div class="hero-title" id="hero-title">今天先把最重要的事推进一点</div>
+                        <div class="hero-title" id="hero-title" role="button" tabindex="-1">今天先把最重要的事推进一点</div>
                         <div class="hero-meta" id="hero-meta"></div>
                     </div>
                     <div class="quick-create">
@@ -858,15 +858,37 @@
         </div>
     </div>
 
+    <!-- 素材详情弹窗 -->
+    <div id="material-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="material-detail-title">
+        <div class="modal modal-md material-detail-modal">
+            <div class="modal-header">
+                <div class="modal-title" id="material-detail-title">素材详情</div>
+                <button class="close-btn" aria-label="关闭素材详情" onclick="closeMaterialDetail()">×</button>
+            </div>
+            <div id="material-detail-body"></div>
+            <div class="modal-action-row">
+                <span></span>
+                <div class="modal-action-right">
+                    <button class="btn btn-secondary" onclick="closeMaterialDetail()">关闭</button>
+                    <button class="btn btn-primary" onclick="editMaterialFromDetail()">编辑素材</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 素材编辑弹窗 -->
-    <div id="material-modal" class="modal-overlay">
+    <div id="material-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="material-modal-title">
         <div class="modal modal-sm">
             <div class="modal-header">
                 <div class="modal-title" id="material-modal-title">新增素材</div>
-                <button class="close-btn" onclick="closeMaterialModal()">×</button>
+                <button class="close-btn" aria-label="关闭素材编辑" onclick="closeMaterialModal()">×</button>
             </div>
             <div class="form-group">
-                <label>类型</label>
+                <label for="material-title">标题</label>
+                <input id="material-title" placeholder="给这条素材一个方便回看的标题">
+            </div>
+            <div class="form-group">
+                <label for="material-type">类型</label>
                 <select id="material-type">
                     <option value="金句">金句</option>
                     <option value="提示词">提示词</option>
@@ -876,19 +898,24 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>内容</label>
+                <label for="material-content">内容</label>
                 <textarea id="material-content" placeholder="粘贴金句、提示词或摘抄内容"></textarea>
             </div>
             <div class="form-group">
-                <label>标签</label>
-                <input id="material-tags" placeholder="用逗号分隔，例如 AI, 工作">
+                <label for="material-tags">标签</label>
+                <div id="material-existing-tags" class="tag-picker material-existing-tags"></div>
+                <div class="material-new-tag-row">
+                    <input id="material-new-tag" placeholder="输入新标签，按回车或点击添加" onkeydown="if(event.key==='Enter'){event.preventDefault();addMaterialEditorTag();}">
+                    <button class="btn btn-secondary" type="button" onclick="addMaterialEditorTag()">添加标签</button>
+                </div>
+                <input id="material-tags" class="material-tags-fallback" placeholder="也可用逗号批量输入标签">
             </div>
             <div class="form-group">
-                <label>来源</label>
+                <label for="material-source">来源</label>
                 <input id="material-source" placeholder="书名、链接、作者或看到的位置">
             </div>
             <div class="form-group">
-                <label>备注</label>
+                <label for="material-note">备注</label>
                 <textarea id="material-note" placeholder="为什么留下它，适合什么时候用"></textarea>
             </div>
             <div class="modal-action-row">

@@ -609,7 +609,7 @@
     function tagChips(tagIds = []) {
         const tags = tagIds.map(tagId => data.wheelTags.find(tag => tag.id === tagId)).filter(Boolean);
         if (!tags.length) return '<span class="wheel-chip muted">无标签</span>';
-        return tags.map(tag => `<span class="wheel-chip" style="--chip-color:${safeColor(tag.color)}">${safeHtml(tag.name)}</span>`).join('');
+        return tags.map(tag => `<span class="wheel-chip wheel-management-tag-name" style="--chip-color:${safeColor(tag.color)}">${safeHtml(tag.name)}</span>`).join('');
     }
 
     function weightedPick(items) {
@@ -799,7 +799,7 @@
                         <article class="wheel-list-card ${selected ? 'selected' : ''}" data-wheel-id="${safeHtml(wheel.id)}">
                             <div class="wheel-list-card-main">
                                 <div class="wheel-list-card-title">
-                                    <strong>${safeHtml(wheel.name || '未命名转盘')}</strong>
+                                    <strong class="wheel-management-name">${safeHtml(wheel.name || '未命名转盘')}</strong>
                                     ${selected ? '<span class="wheel-list-badge current">当前</span>' : ''}
                                 </div>
                                 <div class="wheel-list-card-meta">
@@ -1158,7 +1158,7 @@
                         <label class="wheel-tag-toggle">
                             <input type="checkbox" ${selected.has(tag.id) ? 'checked' : ''} onchange="toggleWheelTag(${safeJsArg(wheel.id)},${safeJsArg(tag.id)},this.checked)">
                             <span class="wheel-color-dot" style="background:${safeColor(tag.color)}"></span>
-                            <span class="wheel-tag-title">${safeHtml(tag.name)}</span>
+                            <span class="wheel-tag-title wheel-management-name">${safeHtml(tag.name)}</span>
                         </label>
                         <div class="wheel-tag-meta">
                             <span>权重 ${tag.weight}</span>
@@ -1219,7 +1219,7 @@
             <div class="wheel-list">
                 ${(wheel.items || []).map(item => `
                     <div class="wheel-row">
-                        <span class="wheel-row-main"><strong>${safeHtml(item.name)}</strong><small>权重 ${item.weight}${item.note ? ` · ${safeHtml(item.note)}` : ''}</small></span>
+                        <span class="wheel-row-main"><strong class="wheel-management-name">${safeHtml(item.name)}</strong><small class="wheel-management-subtext">权重 ${item.weight}${item.note ? ` · ${safeHtml(item.note)}` : ''}</small></span>
                         <button class="wheel-mini-btn" onclick="editWheelItem(${safeJsArg(wheel.id)},${safeJsArg(item.id)})">修改</button>
                         <button class="wheel-mini-btn danger" onclick="deleteWheelItem(${safeJsArg(wheel.id)},${safeJsArg(item.id)})">删除</button>
                     </div>
@@ -1339,7 +1339,7 @@
                         <label class="wheel-library-select">
                             <input type="checkbox" aria-label="选择${safeHtml(item.name)}" ${selectedIds.has(item.id) ? 'checked' : ''} onchange="toggleWheelLibrarySelection(${safeJsArg(item.id)}, this.checked)">
                         </label>
-                        <span class="wheel-row-main"><strong>${safeHtml(item.name)}</strong><small>权重 ${item.weight} · ${item.enabled === false ? '已停用' : '启用中'}</small><span class="wheel-chip-row">${tagChips(item.tagIds)}</span></span>
+                        <span class="wheel-row-main"><strong class="wheel-management-name">${safeHtml(item.name)}</strong><small class="wheel-management-subtext">权重 ${item.weight} · ${item.enabled === false ? '已停用' : '启用中'}</small><span class="wheel-chip-row">${tagChips(item.tagIds)}</span></span>
                         <button class="wheel-mini-btn" onclick="editWheelLibraryItem(${safeJsArg(item.id)})">修改</button>
                         <button class="wheel-mini-btn" onclick="toggleWheelLibraryItem(${safeJsArg(item.id)})">${item.enabled === false ? '启用' : '停用'}</button>
                         <button class="wheel-mini-btn danger" onclick="deleteWheelLibraryItem(${safeJsArg(item.id)})">删除</button>
@@ -1381,7 +1381,7 @@
                     return `
                         <div class="wheel-row ${editingWheelTagId === tag.id ? 'selected' : ''}" data-wheel-tag-id="${safeHtml(tag.id)}">
                             <span class="wheel-color-dot" style="background:${color}"></span>
-                            <span class="wheel-row-main"><strong>${safeHtml(tag.name)}</strong><small>权重 ${tag.weight} · ${items.length} 个公共项 · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
+                            <span class="wheel-row-main"><strong class="wheel-management-name">${safeHtml(tag.name)}</strong><small class="wheel-management-subtext">权重 ${tag.weight} · ${items.length} 个公共项 · ${tag.enabled === false ? '已停用' : '启用中'}</small></span>
                             <span class="wheel-tag-color-chip" style="--tag-color:${color}" title="${safeHtml(color)}">
                                 <i style="background:${color}"></i>
                                 <em>${safeHtml(color)}</em>
@@ -1416,7 +1416,7 @@
             <div class="wheel-list history">
                 ${history.map(item => `
                     <div class="wheel-row">
-                        <span class="wheel-row-main"><strong>${safeHtml(item.resultName)}</strong><small>${formatStoredDateTime(item.createdAt)} · ${item.mode === 'tag' ? `标签 ${safeHtml(item.tagName || '-')}` : '普通转盘'}${item.convertedTodoId ? ' · 已转待办' : ''}</small></span>
+                        <span class="wheel-row-main"><strong class="wheel-management-name">${safeHtml(item.resultName)}</strong><small class="wheel-management-subtext">${formatStoredDateTime(item.createdAt)} · ${item.mode === 'tag' ? `标签 ${safeHtml(item.tagName || '-')}` : '普通转盘'}${item.convertedTodoId ? ' · 已转待办' : ''}</small></span>
                         ${item.convertedTodoId ? '' : `<button class="wheel-mini-btn" onclick="convertWheelResultToTodo(${safeJsArg(item.id)})">转待办</button>`}
                         <button class="wheel-mini-btn danger" onclick="deleteWheelHistory(${safeJsArg(item.id)})">删除</button>
                     </div>

@@ -335,7 +335,7 @@
         container.innerHTML = metrics.map(metric => `
             <article class="fitness-metric-card" onclick="openBodyMetricModal(${safeJs(metric.id)})">
                 <div class="fitness-metric-head">
-                    <div>
+                    <div class="fitness-list-copy">
                         <div class="fitness-metric-date">${safeHtml(formatDateLabel(metric.date))}</div>
                         <div class="fitness-metric-condition">${safeHtml(service.getConditionLabel(metric.condition))}</div>
                     </div>
@@ -345,7 +345,7 @@
                     </div>
                 </div>
                 <div class="fitness-chip-row">${renderMetricChips(metric)}</div>
-                ${metric.note ? `<div class="fitness-metric-note">${safeHtml(metric.note)}</div>` : ''}
+                ${metric.note ? `<div class="fitness-list-note fitness-metric-note">${safeHtml(metric.note)}</div>` : ''}
             </article>
         `).join('');
     }
@@ -374,8 +374,8 @@
             return `
                 <article class="fitness-workout-card ${isLive ? 'is-live' : ''}" onclick="${openAction}">
                     <div class="fitness-plan-head">
-                        <div>
-                            <div class="fitness-plan-name">${safeHtml(service.getWorkoutTitle(workout))}</div>
+                        <div class="fitness-list-copy">
+                            <div class="fitness-list-title fitness-plan-name">${safeHtml(service.getWorkoutTitle(workout))}</div>
                             <div class="fitness-plan-meta">
                                 ${safeHtml(formatDateLabel(workout.date))} · ${safeHtml(service.getWorkoutStatusLabel(workout.status))}
                             </div>
@@ -390,8 +390,8 @@
                         ${workout.durationMin ? `<span class="fitness-chip">时长 <strong>${workout.durationMin} 分</strong></span>` : ''}
                         ${isLive ? '<span class="fitness-chip fitness-chip-live">训练中</span>' : ''}
                     </div>
-                    ${exerciseNames ? `<div class="fitness-metric-note">${safeHtml(exerciseNames)}${(workout.exercises || []).length > 4 ? '…' : ''}</div>` : ''}
-                    ${workout.notes ? `<div class="fitness-metric-note">${safeHtml(workout.notes)}</div>` : ''}
+                    ${exerciseNames ? `<div class="fitness-list-note fitness-metric-note fitness-workout-exercises">${safeHtml(exerciseNames)}${(workout.exercises || []).length > 4 ? '…' : ''}</div>` : ''}
+                    ${workout.notes ? `<div class="fitness-list-note fitness-metric-note">${safeHtml(workout.notes)}</div>` : ''}
                     ${isLive ? `<div class="fitness-plan-day-actions"><button type="button" class="btn btn-primary todo-mini-btn" onclick="event.stopPropagation(); resumeLiveWorkout(${safeJs(workout.id)})">继续训练</button></div>` : ''}
                 </article>
             `;
@@ -422,8 +422,8 @@
             return `
                 <article class="fitness-library-card" onclick="${action}">
                     <div class="fitness-plan-head">
-                        <div>
-                            <div class="fitness-plan-name">${safeHtml(item.name)}</div>
+                        <div class="fitness-list-copy">
+                            <div class="fitness-list-title fitness-plan-name">${safeHtml(item.name)}</div>
                             <div class="fitness-plan-meta">${safeHtml(service.getMuscleLabel(item.muscle))}</div>
                         </div>
                         <div class="fitness-plan-primary">
@@ -485,15 +485,15 @@
                     : (item.targetWeight != null
                         ? `${setCount}×${item.targetWeight}kg`
                         : `${setCount} 组`);
-                return `<span class="fitness-exercise-tag">${safeHtml(item.name)} · ${safeHtml(detail)}</span>`;
+                return `<span class="fitness-list-title fitness-exercise-tag">${safeHtml(item.name)} · ${safeHtml(detail)}</span>`;
             }).join('');
             const moreCount = Math.max(0, exerciseCount - 5);
             return `
                 <article class="fitness-plan-card">
                     <div class="fitness-plan-head" onclick="openFitnessPlanModal(${safeJs(plan.id)})">
-                        <div>
+                        <div class="fitness-list-copy">
                             <div class="fitness-plan-name-row">
-                                <div class="fitness-plan-name">${safeHtml(plan.name)}</div>
+                                <div class="fitness-list-title fitness-plan-name">${safeHtml(plan.name)}</div>
                                 <span class="fitness-status-badge status-${safeHtml(plan.status || 'active')}">${safeHtml(service.getPlanStatusLabel(plan.status))}</span>
                             </div>
                             <div class="fitness-plan-meta">${safeHtml(service.getPlanGoalLabel(plan.goal))} · ${exerciseCount} 个动作</div>
@@ -507,7 +507,7 @@
                         ${tags || '<span class="fitness-exercise-tag is-empty">暂无动作</span>'}
                         ${moreCount ? `<span class="fitness-exercise-tag is-more">+${moreCount}</span>` : ''}
                     </div>
-                    ${plan.notes ? `<div class="fitness-metric-note" onclick="openFitnessPlanModal(${safeJs(plan.id)})">${safeHtml(plan.notes)}</div>` : ''}
+                    ${plan.notes ? `<div class="fitness-list-note fitness-metric-note" onclick="openFitnessPlanModal(${safeJs(plan.id)})">${safeHtml(plan.notes)}</div>` : ''}
                     <div class="fitness-plan-card-actions">
                         <button type="button" class="btn btn-primary" onclick="event.stopPropagation(); startLiveWorkoutFromPlan(${safeJs(plan.id)})">开练</button>
                         <button type="button" class="btn btn-secondary" onclick="event.stopPropagation(); openFitnessPlanModal(${safeJs(plan.id)})">编辑</button>
