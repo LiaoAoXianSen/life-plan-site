@@ -334,7 +334,10 @@ function metricPayload() {
 
 function saveMetric() {
   run(() => {
-    fitness.saveMetric(metricPayload(), metricForm.id);
+    const input = metricPayload();
+    const sameDay = fitness.services.fitness.findSameDayMetrics(fitness.metrics, input.date, metricForm.id);
+    if (!metricForm.id && sameDay.length && !window.confirm(`当天已有 ${sameDay.length} 条身材记录。继续新增一条吗？\n选“取消”可先去编辑已有记录。`)) return;
+    fitness.saveMetric(input, metricForm.id);
     resetMetricForm();
   });
 }

@@ -2150,7 +2150,7 @@ test('sync main config restores the legacy read-only connection test', async ({ 
         records: [{ id: 'sync-health-record', type: '工作记录', title: '连接测试保留记录', content: '', startDate: '2026-08-01', endDate: '2026-08-01', todoIds: [] }],
     });
     const original = JSON.stringify(source);
-    await page.addInitScript(({ data, raw }) => {
+    await page.addInitScript(({ raw }) => {
         localStorage.setItem('lifePlanData', raw);
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync-health.example.test/dav', remotePath: '/life-plan.json', autoSync: false }));
     }, { data: source, raw: original });
@@ -2710,6 +2710,45 @@ test('fitness workout plan changes confirm before replacing manual exercises', a
     await expect(form.locator('.form-group').filter({ hasText: '训练标题' }).locator('input')).toHaveValue('手动标题');
     await expect(form.locator('.form-group').filter({ hasText: '训练备注' }).locator('input')).toHaveValue('手动备注');
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(source));
+});
+
+test('fitness same-day body metric creation keeps the legacy confirmation guard', async ({ page }) => {
+    const date = '2026-07-29';
+    const source = emptyData({
+        bodyMetrics: [{ id: 'metric-same-day-existing', date, condition: 'fasted', weight: 70, createdAt: `${date}T08:00:00`, updatedAt: `${date}T08:00:00` }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(({ data, raw }) => {
+        localStorage.setItem('lifePlanData', raw);
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'metric-same-day-before' }));
+    }, { data: source, raw: original });
+    await page.goto('/#/fitness');
+    await page.locator('.fitness-page-header .fitness-header-actions').getByRole('button', { name: '记录身材' }).click();
+    const form = page.locator('form.card').filter({ hasText: '记录身材' });
+    await form.locator('.form-group').filter({ hasText: '日期' }).locator('input').fill(date);
+    await form.locator('.form-group').filter({ hasText: '体重' }).locator('input').fill('71.2');
+
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toContain('当天已有 1 条身材记录');
+        await dialog.dismiss();
+    });
+    await form.getByRole('button', { name: '记录身材' }).click();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncState')).dirty)).toBe(false);
+
+    page.once('dialog', dialog => dialog.accept());
+    await form.getByRole('button', { name: '记录身材' }).click();
+    await expect(page.locator('.notice.success')).toContainText('身体指标已保存');
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.bodyMetrics).toHaveLength(2);
+    expect(stored.data.bodyMetrics).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'metric-same-day-existing', date, weight: 70 }),
+        expect.objectContaining({ date, weight: 71.2 }),
+    ]));
+    expect(stored.syncState.dirty).toBe(true);
 });
 
 test('fitness body metrics edit every legacy field through the shared service', async ({ page }) => {
