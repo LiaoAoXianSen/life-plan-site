@@ -3437,6 +3437,28 @@ test('idea conversion draft cancel leaves lifePlanData and todo mirror untouched
 });
 
 
+test('AI page falls back when persisted config is malformed', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'ai-config-record', type: '日记', title: '保留的记录', content: '不要被配置解析影响', startDate: '2026-07-30', endDate: '2026-07-30', todoIds: [], updatedAt: '2026-07-30T08:00:00' }],
+        todos: [todoFixture('ai-config-todo', '保留的待办')],
+    });
+    const original = JSON.stringify(source);
+    const malformedConfig = '{"remoteEnabled":';
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(({ data, malformed }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', malformed);
+    }, { data: source, malformed: malformedConfig });
+
+    await page.goto('/#/ai');
+    await expect(page.locator('#page-ai .page-title')).toHaveText('AI 助手');
+    await expect(page.getByLabel('接口地址')).toBeVisible();
+    expect(errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanAiConfig'))).toBe(malformedConfig);
+});
+
 test('AI ideaNext keeps drafts read-only until confirmed writeback', async ({ page }) => {
     const source = emptyData({
         records: [{

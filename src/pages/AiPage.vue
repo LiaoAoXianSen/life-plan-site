@@ -30,7 +30,15 @@ const records = useRecordsStore();
 const todos = useTodosStore();
 const ai = createLegacyServices().ai;
 
-const config = reactive(ai.normalizeConfig(JSON.parse(localStorage.getItem('lifePlanAiConfig') || '{}')));
+function readPersistedAiConfig() {
+  try {
+    return JSON.parse(localStorage.getItem('lifePlanAiConfig') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+const config = reactive(ai.normalizeConfig(readPersistedAiConfig()));
 const mode = ref<AiMode>('chatCapture');
 const input = ref('');
 const selectedIdeaId = ref('');
