@@ -183,7 +183,7 @@ test('todo detail preserves subtasks sessions relationships tombstones and mirro
     ]));
 });
 
-test('todo legacy filters and linked record navigation stay read-only', async ({ page }) => {
+test('todo legacy filters and linked record navigation open a read-only preview', async ({ page }) => {
     const todo = (id, text, overrides = {}) => ({
         id, text, note: '', done: false, dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他',
         subTodos: [], sessions: [], completedAt: '', sourceType: 'manual', sourceRecordId: '', sourceMatchKey: text,
@@ -226,7 +226,11 @@ test('todo legacy filters and linked record navigation stay read-only', async ({
     await page.getByRole('button', { name: /专属工作待办/ }).click();
     await page.getByRole('button', { name: /筛选关联记录/ }).click();
 
-    await expect(page).toHaveURL(/#\/records\?record=record-filter$/);
+    await expect(page).toHaveURL(/#\/records\?record=record-filter&preview=1$/);
+    const preview = page.getByRole('dialog', { name: '记录预览' });
+    await expect(preview).toContainText('筛选关联记录');
+    await expect(page.locator('.record-editor-panel')).toHaveCount(0);
+    await preview.getByRole('button', { name: '编辑', exact: true }).click();
     const editor = page.locator('.record-editor-panel');
     await expect(editor).toBeVisible();
     await expect(editor.getByLabel('标题')).toHaveValue('筛选关联记录');
@@ -419,7 +423,9 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
 
     await page.goto('/#/dashboard');
     await page.locator('.period-item').filter({ hasText: '本周计划入口' }).click();
-    await expectHashRoute(page, '/records', { record: 'record-dashboard-period' });
+    await expectHashRoute(page, '/records', { record: 'record-dashboard-period', preview: '1' });
+    await expect(page.getByRole('dialog', { name: '记录预览' })).toContainText('本周计划入口');
+    await expect(page.locator('.record-editor-panel')).toHaveCount(0);
 
     await page.goto('/#/dashboard');
     await page.getByRole('button', { name: /执行：执行入口待办/ }).click();

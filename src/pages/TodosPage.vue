@@ -335,7 +335,7 @@ function deleteSelectedTodo() {
 }
 
 function openLinkedRecord(recordId: string) {
-  void router.push({ path: '/records', query: { record: recordId } });
+  void router.push({ path: '/records', query: { record: recordId, preview: '1' } });
 }
 
 function linkSelectedRecord() {

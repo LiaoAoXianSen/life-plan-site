@@ -144,7 +144,7 @@ function openTodo(todoId: string) {
 }
 
 function openRecord(recordId: string) {
-  void router.push({ path: '/records', query: { record: recordId } });
+  void router.push({ path: '/records', query: { record: recordId, preview: '1' } });
 }
 
 function openScheduleItem(item: ScheduleItem) {
