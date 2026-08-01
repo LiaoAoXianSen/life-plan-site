@@ -12,7 +12,7 @@ import { useTodosStore } from '../stores/todosStore';
 import type { DataEntity, Todo } from '../types/lifePlan';
 import { addDays, buildScheduleItems, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
 
-type MaterialEntity = DataEntity & { id?: string; content?: string; type?: string; source?: string; note?: string };
+type MaterialEntity = DataEntity & { id?: string; content?: string; type?: string; tags?: string[]; source?: string; note?: string; createdAt?: string };
 type FloatingMode = 'random' | 'newest' | 'oldest';
 
 const router = useRouter();
@@ -120,6 +120,13 @@ function activeRecordTodos(record: DataEntity) {
 
 function formatDate(value: unknown) {
   return formatLongDate(String(value || ''));
+}
+
+function formatStoredDateTime(value: unknown) {
+  const raw = String(value || '');
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return raw.replace('T', ' ');
+  return `${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${match[4]}:${match[5]}:${match[6] || '00'}`;
 }
 
 function formatLongDate(value: string) {
@@ -455,7 +462,15 @@ const timelineGroups = computed(() => {
         </div>
         <div v-if="materialPicks.length" class="command-materials">
           <button v-for="material in materialPicks" :key="String(material.id)" class="command-row" type="button" @click="openMaterial(String(material.id))">
-            <span>{{ material.content || '空素材' }}</span>
+            <span class="dashboard-material-copy">
+              <span>{{ material.content || '空素材' }}</span>
+              <span class="dashboard-material-details">
+                {{ formatStoredDateTime(material.createdAt) }}
+                <template v-if="material.tags?.length"> · {{ material.tags.join(' · ') }}</template>
+                <template v-if="material.source"> · 来源：{{ material.source }}</template>
+                <template v-if="material.note"> · 备注：{{ material.note }}</template>
+              </span>
+            </span>
             <strong>{{ material.type || '素材' }}</strong>
           </button>
         </div>
@@ -651,6 +666,8 @@ const timelineGroups = computed(() => {
 }
 .dashboard-main-grid { margin-bottom: 16px; }
 .dashboard-timeline { min-width: 0; }
+.dashboard-material-copy { display: grid; gap: 2px; min-width: 0; }
+.dashboard-material-details { color: var(--muted); font-size: 11px; font-weight: 600; }
 .todo-list { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
 .todo-item {
   display: grid;

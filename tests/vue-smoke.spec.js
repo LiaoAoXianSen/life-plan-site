@@ -424,6 +424,25 @@ test('dashboard random material sampling preserves legacy source order', async (
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('dashboard material rows expose legacy metadata without writes', async ({ page }) => {
+    const source = emptyData({
+        materials: [{
+            id: 'material-dashboard-meta', type: '摘抄', content: 'Dashboard 元素材', tags: ['工作', '复盘'],
+            source: '测试来源', note: '测试备注', createdAt: '2026-08-01T08:09:10', updatedAt: '2026-08-01T08:09:10',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/dashboard');
+
+    const row = page.locator('.command-materials .command-row').filter({ hasText: 'Dashboard 元素材' });
+    await expect(row).toContainText('2026年8月1日 08:09:10');
+    await expect(row).toContainText('工作 · 复盘');
+    await expect(row).toContainText('来源：测试来源');
+    await expect(row).toContainText('备注：测试备注');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('dashboard empty habit state keeps the legacy wording', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/dashboard');
