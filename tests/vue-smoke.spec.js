@@ -3986,6 +3986,43 @@ test('records list and editor expose a frozen legacy-style read-only preview', a
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('records deletion keeps the legacy confirmation and exclusive todo cascade', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        records: [{
+            id: 'record-delete-confirm', type: '工作记录', title: '待删记录', content: '删除前内容',
+            startDate: today, endDate: today, todoIds: ['todo-record-exclusive', 'todo-record-linked'],
+        }],
+        todos: [
+            todoFixture('todo-record-exclusive', '专属待办', { isExclusive: true, sourceRecordId: 'record-delete-confirm' }),
+            todoFixture('todo-record-linked', '普通关联待办', { sourceRecordId: 'record-delete-confirm' }),
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records');
+
+    const row = page.locator('.record-row').filter({ hasText: '待删记录' });
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toBe('确定删除这条记录吗？关联的专属待办也会一起删除');
+        await dialog.dismiss();
+    });
+    await row.getByRole('button', { name: '删除', exact: true }).click();
+    await expect(row).toHaveCount(1);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    page.once('dialog', dialog => dialog.accept());
+    await row.getByRole('button', { name: '删除', exact: true }).click();
+    await expect(row).toHaveCount(0);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records).toHaveLength(0);
+    expect(stored.todos.map(todo => todo.id)).toEqual(['todo-record-linked']);
+    expect(stored.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'records', id: 'record-delete-confirm', reason: 'vue-delete-records' }),
+        expect.objectContaining({ collection: 'todos', id: 'todo-record-exclusive', reason: 'record-delete', recordId: 'record-delete-confirm' }),
+    ]));
+});
+
 test('records empty state distinguishes no filters from filtered no-match results', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/records');

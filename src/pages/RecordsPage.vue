@@ -540,6 +540,7 @@ function toggleLinkedTodo(todo: Todo) {
 }
 
 function removeRecord(id: string) {
+  if (!window.confirm('确定删除这条记录吗？关联的专属待办也会一起删除')) return;
   records.remove('records', id);
   if (activeRecordId.value === id) closeEditor(false);
 }
