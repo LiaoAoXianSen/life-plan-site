@@ -1143,6 +1143,25 @@ test('wheel canvas keeps legacy click-only extraction', async ({ page }) => {
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('wheel refuses deleting the last wheel like legacy', async ({ page }) => {
+    const source = emptyData({
+        wheels: [{
+            id: 'wheel-last-only', name: '最后一个转盘', mode: 'normal',
+            items: [{ id: 'wheel-last-item', name: '保留选项', note: '', weight: 1, enabled: true }],
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').last().click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+    const row = page.locator('.wheel-list-card').filter({ hasText: '最后一个转盘' });
+    page.once('dialog', dialog => dialog.accept());
+    await row.getByRole('button', { name: '删除' }).click();
+    await expect(page.locator('.wheel-notice')).toContainText('至少保留一个转盘');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('wheel public library batch actions preserve selection and tombstone contracts', async ({ page }) => {
     const source = emptyData({
         wheelTags: [
