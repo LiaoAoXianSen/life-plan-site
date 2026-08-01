@@ -2712,6 +2712,35 @@ test('fitness workout plan changes confirm before replacing manual exercises', a
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(source));
 });
 
+test('fitness body metric deletion keeps the legacy confirmation guard', async ({ page }) => {
+    const source = emptyData({
+        bodyMetrics: [{
+            id: 'metric-delete-confirm', date: '2026-07-29', condition: 'fasted', weight: 70,
+            createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+    await page.locator('.fitness-page-header .fitness-header-actions').getByRole('button', { name: '记录身材' }).click();
+    const row = page.locator('.fitness-body-metric-row').filter({ hasText: '2026-07-29' });
+
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toBe('确定删除这条身材记录吗？');
+        await dialog.dismiss();
+    });
+    await row.getByRole('button', { name: '删除' }).click();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    page.once('dialog', dialog => dialog.accept());
+    await row.getByRole('button', { name: '删除' }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.bodyMetrics).toHaveLength(0);
+    expect(stored.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'bodyMetrics', id: 'metric-delete-confirm', reason: 'manual-delete' }),
+    ]));
+});
+
 test('fitness body metric list keeps every legacy entry visible', async ({ page }) => {
     const source = emptyData({
         bodyMetrics: Array.from({ length: 9 }, (_, index) => ({
@@ -2844,6 +2873,7 @@ test('fitness body metrics edit every legacy field through the shared service', 
     expect(stored.bodyMetrics).toHaveLength(1);
     expect(stored.bodyMetrics[0]).toEqual(expect.objectContaining({ id: metricId, condition: 'fasted', chest: 99, calf: 39, note: '编辑后记录' }));
 
+    page.once('dialog', dialog => dialog.accept());
     await page.locator('.fitness-body-metric-row').getByRole('button', { name: '删除' }).click();
     const afterDelete = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(afterDelete.bodyMetrics).toHaveLength(0);

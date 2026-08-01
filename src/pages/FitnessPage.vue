@@ -358,6 +358,12 @@ function editMetric(metric: Record<string, any>) {
   });
 }
 
+function deleteMetric(id: string) {
+  if (!window.confirm('确定删除这条身材记录吗？')) return;
+  run(() => fitness.removeMetric(id));
+  if (metricForm.id === id) resetMetricForm();
+}
+
 function metricChips(metric: Record<string, any>) {
   return metricFields.value
     .filter((field: Record<string, string>) => fitness.services.fitness.parseMetricNumber(metric[field.key]) !== null)
@@ -902,7 +908,7 @@ onUnmounted(stopRestTimer);
               <span v-if="item.note">{{ item.note }}</span>
             </div>
             <button class="btn btn-secondary" type="button" @click="editMetric(item)">{{ metricForm.id === item.id ? '正在编辑' : '编辑' }}</button>
-            <button class="btn btn-danger" type="button" @click="run(() => fitness.removeMetric(item.id))">删除</button>
+            <button class="btn btn-danger" type="button" @click="deleteMetric(item.id)">删除</button>
           </div>
         </div>
         <div v-else class="empty-state">还没有身材记录。</div>
