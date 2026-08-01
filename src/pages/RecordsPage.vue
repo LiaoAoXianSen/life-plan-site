@@ -790,7 +790,7 @@ onBeforeUnmount(() => {
               <span>时间 {{ previewDraft.recordTime || '全天' }}<template v-if="previewDraft.recordEndTime"> - {{ previewDraft.recordEndTime }}</template></span>
               <span>待办 {{ previewLinkedTodos.filter(todo => todo.done).length }}/{{ previewLinkedTodos.length }}</span>
               <span v-if="previewDraft.updatedAt || previewDraft.createdAt">更新于 {{ formatStoredDateTime(previewDraft.updatedAt || previewDraft.createdAt) }}</span>
-              <span v-if="previewFromEditor">当前预览，尚未保存</span>
+              <span v-if="previewFromEditor && editorDirty">当前预览，尚未保存</span>
             </div>
           </div>
           <div class="record-preview-content">

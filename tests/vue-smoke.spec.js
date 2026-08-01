@@ -2579,7 +2579,7 @@ test('fitness plan start keeps the legacy active workout confirmation branch', a
         fitnessWorkouts: [{
             id: 'fitness-workout-existing-active', date: today, status: 'inProgress', title: '旧训练', planId: '', planName: '',
             exercises: [{ id: 'fitness-existing-exercise', name: '深蹲', targetSets: 1, targetReps: '5', targetWeight: 60, sets: [{ id: 'fitness-existing-set', weight: 60, reps: 5, done: false }] }],
-            createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+            createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), updatedAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
         }],
     });
     const original = JSON.stringify(source);
@@ -2615,7 +2615,7 @@ test('fitness free start keeps the legacy active workout confirmation branch', a
         fitnessWorkouts: [{
             id: 'fitness-free-existing-active', date: today, status: 'inProgress', title: '旧自由训练', planId: '', planName: '',
             exercises: [{ id: 'fitness-free-existing-exercise', name: '深蹲', targetSets: 1, targetReps: '5', targetWeight: 60, sets: [{ id: 'fitness-free-existing-set', weight: 60, reps: 5, done: false }] }],
-            createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+            createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), updatedAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
         }],
     });
     const original = JSON.stringify(source);
@@ -4110,6 +4110,29 @@ test('records list and editor expose a frozen legacy-style read-only preview', a
     await preview.getByRole('button', { name: '返回继续编辑' }).click();
     await expect(editor.getByLabel('标题')).toHaveValue('尚未保存标题');
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('records saved editor preview does not claim unsaved changes', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        records: [{
+            id: 'record-preview-saved', type: '工作记录', title: '保存前标题', content: '保存前内容',
+            startDate: today, endDate: today, todoIds: [], createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+        }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records?record=record-preview-saved');
+
+    const editor = page.locator('.record-editor-panel');
+    await editor.getByLabel('标题').fill('已经保存的标题');
+    await editor.getByRole('button', { name: '保存修改', exact: true }).click();
+    await expect(editor).toContainText('记录已保存');
+    await editor.getByRole('button', { name: '预览', exact: true }).click();
+    const preview = page.getByRole('dialog', { name: '记录预览' });
+    await expect(preview).toContainText('已经保存的标题');
+    await expect(preview).not.toContainText('当前预览，尚未保存');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records[0].title).toBe('已经保存的标题');
 });
 
 test('records deletion keeps the legacy confirmation and exclusive todo cascade', async ({ page }) => {
