@@ -622,6 +622,23 @@ test('dashboard quick writes plan today execute once toggle and rebuild todo mir
     expect(stored.mirror.todos).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'todo-due-today', done: true })]));
 });
 
+test('dashboard floating todo age modes prefer legacy creation timestamps', async ({ page }) => {
+    const source = emptyData({
+        todos: [
+            todoFixture('todo-created-old', '创建时间较早', { createdAt: '2026-01-01T08:00:00', updatedAt: '2026-08-01T08:00:00' }),
+            todoFixture('todo-created-new', '创建时间较晚', { createdAt: '2026-07-01T08:00:00', updatedAt: '2026-01-01T08:00:00' }),
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+
+    const floating = page.locator('.dashboard-floating-todos');
+    await floating.getByRole('button', { name: '最新', exact: true }).click();
+    await expect(floating.locator('.todo-item').first()).toContainText('创建时间较晚');
+    await floating.getByRole('button', { name: '最老', exact: true }).click();
+    await expect(floating.locator('.todo-item').first()).toContainText('创建时间较早');
+});
+
 test('dashboard habit quick check-in writes checkin and rebuilds habit mirror', async ({ page }) => {
     const today = (() => {
         const date = new Date();
