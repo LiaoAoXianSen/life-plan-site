@@ -928,6 +928,32 @@ test('goals preserve existing out-of-range progress in read-only browse summarie
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('goals loading keeps legacy type-aware progress normalization and writeback', async ({ page }) => {
+    const source = emptyData({
+        goals: [
+            { id: 'goal-string-progress', name: '字符串进度目标', period: '年度', target: '旧数据', status: '进行中', progress: '50', createDate: '2026-01-01' },
+            { id: 'goal-empty-progress', name: '空进度完成目标', period: '长期', target: '旧数据', status: '已完成', progress: '', createDate: '2026-01-02' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/goals');
+
+    await expect(page.getByRole('button', { name: /字符串进度目标/ })).toContainText('0%');
+    await expect(page.getByRole('button', { name: /空进度完成目标/ })).toContainText('100%');
+    await expect(page.locator('.summary-card').filter({ hasText: '平均进度' })).toContainText('50%');
+
+    const persisted = await page.evaluate(() => ({
+        raw: localStorage.getItem('lifePlanData'),
+        goals: JSON.parse(localStorage.getItem('lifePlanData')).goals,
+    }));
+    expect(persisted.raw).not.toBe(original);
+    expect(persisted.goals).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'goal-string-progress', progress: 0 }),
+        expect.objectContaining({ id: 'goal-empty-progress', progress: 100 }),
+    ]));
+});
+
 test('goals empty state keeps the legacy copy', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/goals');

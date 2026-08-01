@@ -47,7 +47,7 @@ function normalizePersistedData(value: unknown, services: ReturnType<typeof crea
   }));
   target.goals = target.goals.map(item => ({
     ...item,
-    progress: Number.isFinite(Number(item.progress)) ? Number(item.progress) : item.status === '已完成' ? 100 : 0,
+    progress: typeof item.progress === 'number' && Number.isFinite(item.progress) ? item.progress : item.status === '已完成' ? 100 : 0,
   }));
   services.fitness.normalizeFitnessData(target);
   return target;
@@ -59,7 +59,19 @@ export class LifePlanRepository {
   load(): LifePlanData {
     try {
       const raw = localStorage.getItem(mainDataKey);
-      return normalizePersistedData(raw ? JSON.parse(raw) : {}, this.services);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const normalized = normalizePersistedData(parsed, this.services);
+      if (raw && parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray(parsed.goals)) {
+        const rawGoals = parsed.goals as Array<Record<string, unknown>>;
+        const goalsWithExplicitProgress = normalized.goals.map((goal, index) => {
+          const rawGoal = rawGoals[index];
+          return rawGoal && Object.prototype.hasOwnProperty.call(rawGoal, 'progress') ? goal : rawGoal;
+        });
+        if (JSON.stringify(rawGoals) !== JSON.stringify(goalsWithExplicitProgress)) {
+          localStorage.setItem(mainDataKey, JSON.stringify({ ...parsed, goals: goalsWithExplicitProgress }));
+        }
+      }
+      return normalized;
     } catch (error) {
       console.warn('lifePlanData 读取失败，已使用空数据加载', error);
       return normalizePersistedData({}, this.services);
