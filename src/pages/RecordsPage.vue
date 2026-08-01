@@ -1048,7 +1048,7 @@ onBeforeUnmount(() => {
                   <div v-if="recordForItem(item) && recordTodoIds(recordForItem(item)!).length" class="item-meta"><span>关联待办 {{ recordTodoIds(recordForItem(item)!).length }}</span></div>
                 </button>
                 <div v-if="recordForItem(item)" class="record-row-actions">
-                  <button class="btn btn-secondary" type="button" @click="openEditor(recordForItem(item)!)">编辑/预览</button>
+                  <button class="btn btn-secondary" type="button" @click="openRecordPreview(recordForItem(item)!)">查看/预览</button>
                   <button class="btn btn-danger" type="button" @click="removeRecord(item.id)">删除</button>
                 </div>
               </div>

@@ -4043,7 +4043,8 @@ test('records list and editor expose a frozen legacy-style read-only preview', a
     await page.goto('/#/records');
 
     const row = page.locator('.record-row').filter({ hasText: '预览记录' });
-    await row.locator('.record-open-button').click();
+    await expect(row.getByRole('button', { name: '查看/预览', exact: true })).toBeVisible();
+    await row.getByRole('button', { name: '查看/预览', exact: true }).click();
     const preview = page.getByRole('dialog', { name: '记录预览' });
     await expect(preview).toContainText('预览记录');
     await expect(preview).toContainText('原始内容');
