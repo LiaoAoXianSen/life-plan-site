@@ -1072,6 +1072,19 @@ test('goals keep legacy insertion order in the browse list', async ({ page }) =>
     await expect(cards.nth(1)).toContainText('后建目标');
 });
 
+test('goals cards expose legacy level-four heading semantics without persisting', async ({ page }) => {
+    const source = emptyData({
+        goals: [{ id: 'goal-heading', name: '语义层级目标', period: '年度', target: '保持只读', status: '进行中', progress: 25, createDate: '2026-01-01' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/goals');
+
+    await expect(page.getByRole('heading', { level: 4, name: /语义层级目标/ })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('goals preserve existing out-of-range progress in read-only browse summaries', async ({ page }) => {
     const source = emptyData({
         goals: [

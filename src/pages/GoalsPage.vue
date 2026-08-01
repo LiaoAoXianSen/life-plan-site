@@ -146,7 +146,7 @@ watch(() => route.query.goal, value => {
     <div class="goal-grid">
       <button v-for="goal in goals" :key="goal.id" class="goal-card goal-card-button" type="button" @click="openGoal(goal)">
         <div class="goal-info">
-          <h2>{{ goal.name }} <span>({{ goal.status }})</span></h2>
+          <h4>{{ goal.name }} <span>({{ goal.status }})</span></h4>
           <p>{{ goal.period }} · {{ goal.target }}</p>
           <div class="progress-bar"><div class="progress-fill" :style="{ width: `${normalizeProgress(goal)}%` }" /></div>
         </div>
@@ -198,13 +198,13 @@ watch(() => route.query.goal, value => {
   border: 0;
   cursor: pointer;
 }
-.goal-info h2 {
+.goal-info h4 {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   overflow-wrap: anywhere;
 }
-.goal-info h2 span {
+.goal-info h4 span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
