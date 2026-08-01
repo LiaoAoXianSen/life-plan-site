@@ -701,6 +701,42 @@ test('records history keeps non-rule-day habit check-ins while calendar stays ru
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('records day view colors habit events with legacy tag-specific tones', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [{ id: 'habit-tone-morning', name: '晨间习惯', tag: '晨间', timesPerDay: 1, startDate: '2026-01-01' }],
+        checkins: [{ id: 'checkin-tone-morning', habitId: 'habit-tone-morning', date: today, time: '08:00', checkinAt: `${today}T08:00:00` }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: '日视图', exact: true }).click();
+
+    const event = page.locator('.agenda-day-column .agenda-event-block').filter({ hasText: '晨间习惯' });
+    await expect(event).toHaveCount(1);
+    const bg = await event.evaluate(node => getComputedStyle(node).getPropertyValue('--event-bg').trim());
+    expect(bg).toBe('#fff1dd');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('records day view falls back to the base habit tone for unknown tags', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [{ id: 'habit-tone-custom', name: '自定义标签习惯', tag: '自定义标签', timesPerDay: 1, startDate: '2026-01-01' }],
+        checkins: [{ id: 'checkin-tone-custom', habitId: 'habit-tone-custom', date: today, time: '09:00', checkinAt: `${today}T09:00:00` }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/records');
+    await page.getByRole('button', { name: '日视图', exact: true }).click();
+
+    const event = page.locator('.agenda-day-column .agenda-event-block').filter({ hasText: '自定义标签习惯' });
+    await expect(event).toHaveCount(1);
+    const bg = await event.evaluate(node => getComputedStyle(node).getPropertyValue('--event-bg').trim());
+    expect(bg).toBe('#e8f3eb');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('sidebar reads the legacy wheel sync state key', async ({ page }) => {
     await page.addInitScript(data => {
         localStorage.setItem('lifePlanData', JSON.stringify(data));

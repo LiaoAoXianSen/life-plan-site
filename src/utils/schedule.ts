@@ -27,6 +27,10 @@ const tones: Record<string, ScheduleTone> = {
   '工作记录': { bg: '#e6f4ed', border: '#5f9b78', ink: '#183b2b' }, '灵感碎片': { bg: '#fff3d2', border: '#cfaf34', ink: '#5f4f11' },
   '待办计划': { bg: '#eef6f1', border: '#8db29b', ink: '#274335' }, '待办截止': { bg: '#fff3d2', border: '#cfaf34', ink: '#5f4f11' },
   '待办执行': { bg: '#ffe9df', border: '#d77f57', ink: '#743116' }, '习惯': { bg: '#e8f3eb', border: '#6ca07c', ink: '#244c33' },
+  '习惯-全天': { bg: '#e8edf4', border: '#8a96a8', ink: '#344055' }, '习惯-晨间': { bg: '#fff1dd', border: '#d99138', ink: '#5e4214' },
+  '习惯-午间': { bg: '#fff3d2', border: '#cfaf34', ink: '#5f4f11' }, '习惯-晚间': { bg: '#f1e9ff', border: '#8c70d1', ink: '#41286f' },
+  '习惯-学习': { bg: '#f1e9ff', border: '#8c70d1', ink: '#41286f' }, '习惯-运动': { bg: '#e5f1ff', border: '#5e9feb', ink: '#153d69' },
+  '习惯-工作': { bg: '#fff0df', border: '#c28a3f', ink: '#614116' }, '习惯-生活': { bg: '#e6f4ed', border: '#5f9b78', ink: '#183b2b' },
 };
 const urgencyLabels: Record<Todo['urgency'], string> = { urgent: '紧急', high: '高', medium: '中', low: '低' };
 
@@ -90,7 +94,7 @@ function makeHabitItem(habit: DataEntity, date: string, checkins: DataEntity[]):
   const tag = entityString(habit, 'tag') || '习惯';
   const note = entityString(latest, 'note').replace(/\s+/g, ' ').trim();
   const target = Math.max(1, Number.parseInt(String(habit.timesPerDay || '1'), 10) || 1);
-  return { key: `habit:${habit.id}:${date}:${latest.id || 'checked'}`, id: String(habit.id || ''), sourceType: 'habit', type: '习惯', date, title: entityString(habit, 'name') || '习惯打卡', preview: `${tag} · 打卡 ${clock || '已记录'}${note ? ` · ${note.slice(0, 42)}` : ''}`, meta: `已打卡 ${checkins.length}/${target}`, done: true, allDay: start === null, startMinutes: start, endMinutes: null, timeLabel: start === null ? '已打卡' : formatMinutesLabel(start), tone: tone('习惯') };
+  return { key: `habit:${habit.id}:${date}:${latest.id || 'checked'}`, id: String(habit.id || ''), sourceType: 'habit', type: '习惯', date, title: entityString(habit, 'name') || '习惯打卡', preview: `${tag} · 打卡 ${clock || '已记录'}${note ? ` · ${note.slice(0, 42)}` : ''}`, meta: `已打卡 ${checkins.length}/${target}`, done: true, allDay: start === null, startMinutes: start, endMinutes: null, timeLabel: start === null ? '已打卡' : formatMinutesLabel(start), tone: tones[`习惯-${tag}`] ?? tones['习惯'] };
 }
 
 function defaultHabitDueOnDate(habit: DataEntity, dateText: string): boolean {
