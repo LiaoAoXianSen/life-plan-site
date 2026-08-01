@@ -2712,6 +2712,28 @@ test('fitness workout plan changes confirm before replacing manual exercises', a
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(source));
 });
 
+test('fitness body metric list keeps every legacy entry visible', async ({ page }) => {
+    const source = emptyData({
+        bodyMetrics: Array.from({ length: 9 }, (_, index) => ({
+            id: `metric-full-list-${index}`,
+            date: `2026-07-${String(20 + index).padStart(2, '0')}`,
+            condition: 'fasted',
+            weight: 70 + index,
+            createdAt: `2026-07-${String(20 + index).padStart(2, '0')}T08:00:00`,
+            updatedAt: `2026-07-${String(20 + index).padStart(2, '0')}T08:00:00`,
+        })),
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+    await page.locator('.fitness-page-header .fitness-header-actions').getByRole('button', { name: '记录身材' }).click();
+
+    const rows = page.locator('.fitness-body-metric-row');
+    await expect(rows).toHaveCount(9);
+    await expect(rows).toContainText(['2026-07-28', '2026-07-27', '2026-07-26', '2026-07-25', '2026-07-24', '2026-07-23', '2026-07-22', '2026-07-21', '2026-07-20']);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('fitness same-day body metric creation keeps the legacy confirmation guard', async ({ page }) => {
     const date = '2026-07-29';
     const source = emptyData({

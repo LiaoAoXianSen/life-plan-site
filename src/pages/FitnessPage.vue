@@ -895,7 +895,7 @@ onUnmounted(stopRestTimer);
         <article class="card">
         <div class="card-title">最近身材</div>
         <div v-if="fitness.metrics.length" class="fitness-metric-list">
-          <div v-for="item in fitness.metrics.slice(0, 8)" :key="item.id" class="fitness-metric-row fitness-body-metric-row">
+          <div v-for="item in fitness.metrics" :key="item.id" class="fitness-metric-row fitness-body-metric-row">
             <div>
               <strong>{{ item.date }} · {{ fitness.services.fitness.getConditionLabel(item.condition) }}</strong>
               <span class="fitness-metric-chip-row"><span v-for="chip in metricChips(item)" :key="chip.key">{{ chip.label }} {{ chip.value }}</span></span>
