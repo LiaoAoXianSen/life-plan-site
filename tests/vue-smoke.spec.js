@@ -906,6 +906,26 @@ test('dashboard today habit metadata mirrors legacy action card', async ({ page 
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('dashboard today habit metadata chooses the legacy latest timed checkin', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [{ id: 'habit-dashboard-time-order', name: '按时间排序习惯', rule: 'daily', timesPerDay: 2, startDate: today }],
+        checkins: [
+            { id: 'checkin-dashboard-evening', habitId: 'habit-dashboard-time-order', date: today, time: '19:30', note: '晚间记录' },
+            { id: 'checkin-dashboard-morning', habitId: 'habit-dashboard-time-order', date: today, time: '08:00', note: '晨间记录' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/dashboard');
+    const row = page.locator('.dashboard-today-habits .todo-item').filter({ hasText: '按时间排序习惯' });
+    await expect(row).toContainText('19:30');
+    await expect(row).toContainText('备注：晚间记录');
+    await expect(row).not.toContainText('晨间记录');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('dashboard fixed habit reward ignores stale random bounds', async ({ page }) => {
     const today = localDate();
     const source = emptyData({

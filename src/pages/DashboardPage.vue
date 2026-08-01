@@ -78,7 +78,10 @@ function habitRuleText(habit: Record<string, any>) {
 }
 
 function latestHabitCheckin(habitId: string) {
-  const checkins = habitsStore.getCheckins(habitId, today);
+  const checkins = habitsStore.getCheckins(habitId, today).slice().sort((a: Record<string, any>, b: Record<string, any>) => {
+    const sortKey = (checkin: Record<string, any>) => String(checkin.checkinAt || (checkin.time ? `${today}T${checkin.time}:00` : checkin.createdAt || ''));
+    return sortKey(a).localeCompare(sortKey(b));
+  });
   return checkins[checkins.length - 1] || null;
 }
 
