@@ -613,3 +613,12 @@
 - Full-suite diagnosis found stale locators after the existing collapsed sidebar/management IA: updated the three Wheel auto-sync tests to open management, scoped import file input to `导入并合并`, and scoped navigation to sidebar buttons for `AI 助手`/`云同步`.
 - Regression group `Vue shell navigates|main import export|wheel conditional auto sync|wheel empty state` passed 7/7. The full run still has one date-sensitive AI chatCapture fixture failure unrelated to this shell change.
 - Final local state: `HEAD=f7e86fe`, `origin/migration/vue-app-v1=2e908cf`; verified commits `d09c242` and `f7e86fe` are not yet pushed because repeated GitHub HTTPS 443 resets/timeouts persisted. Untracked `previews/`, `tmp-legacy.png`, and `tmp-vue.png` were never staged.
+
+## 2026-08-01 - Import/Export, Dashboard, and Wheel checkpoint
+
+- Reconciled API-generated remote history with local history using non-business merge commit `fd431bf`; no force push was used and protected refs stayed unchanged.
+- Import/Export: normalized parsed backup data before the confirmation summary through `LifePlanRepository.normalizeImportPreview`; added `main import summary normalizes legacy shadow records before confirmation`. Commit `913f246`, remote ref verified.
+- Dashboard: added legacy note/decrease action branches to today-habit cards, reusing `habitsStore` check-in, note-edit, undo, ledger, tombstone, and local mirror paths. Commit `9e3af7b`, remote ref verified.
+- Wheel: rejected deletion of the final wheel with the legacy minimum-one message and added no-write UI coverage. Commit `c2212ba`, remote ref verified.
+- Verification: Import/Export focused `5/5`, Dashboard focused `3/3`, Wheel focused `5/5`, `npm run build` after each slice, Vue dist packages created with `scripts/package-vue-dist.ps1 -SkipBuild`, and full `scripts/check.ps1` passed `147/147`.
+- Current next candidate: Records independent read-only preview or Fitness plan-day selection; untracked `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain untouched.

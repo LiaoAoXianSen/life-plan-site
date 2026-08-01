@@ -264,10 +264,20 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 246. Status: complete - Commit and push the Fitness disclosure shell, then close the pending Habits push and append dual-store memory.
 247. Status: complete - Add read-only Fitness 30-day weight/waist trend summaries using existing metric parsing helpers.
 248. Status: complete - Add focused trend-summary coverage and rerun Fitness build/check gates.
-249. Status: in_progress - Commit, push, and append dual-store memory for the Fitness trend-summary shell.
+249. Status: complete - Commit, push, and append dual-store memory for the Fitness trend-summary shell.
 250. Status: complete - Audit Wheel empty-data rendering against the legacy default stage without mutating `lifePlanData`.
 251. Status: complete - Implement the bounded Wheel empty-stage shell and focused canvas/management coverage.
-252. Status: in_progress - Run Wheel build/check gates, commit, push, and append dual-store memory for the empty-stage slice.
+252. Status: complete - Run Wheel build/check gates, commit, push, and append dual-store memory for the empty-stage slice.
+253. Status: complete - Audit and align Vue Import/Export confirmation summaries with legacy pre-confirmation normalization.
+254. Status: complete - Add the legacy shadow-record import summary regression and verify Import/Export persistence safety.
+255. Status: complete - Build, focused-check, package, commit, push, and full-check the Import/Export normalization slice.
+256. Status: complete - Audit and align Dashboard today-habit quick action branches with legacy note and decrease behavior.
+257. Status: complete - Add Dashboard note, single-habit edit, multi-habit `-1`, mirror, and read-only regression coverage.
+258. Status: complete - Build, focused-check, package, commit, push, and full-check the Dashboard habit-action slice.
+259. Status: complete - Audit and align the Wheel last-item deletion guard with legacy minimum-one behavior.
+260. Status: complete - Add Wheel last-item refusal coverage without changing other delete/tombstone paths.
+261. Status: complete - Build, focused-check, package, commit, push, and full-check the Wheel guard slice.
+262. Status: pending - Implement the next bounded parity slice from the current audit queue, prioritizing Records independent preview or Fitness plan-day selection.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

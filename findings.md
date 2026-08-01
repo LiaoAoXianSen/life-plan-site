@@ -231,3 +231,12 @@
 - Closing a dirty modal cancels the pending debounce and synchronously persists; leaving the page must provide the same flush guarantee in Vue.
 - Scoped types are unique for the same range: `日记`, `日计划`, `工作记录`, weekly/monthly/yearly review/plan types, `3年计划`, and `终身愿景` (globally unique). Selecting an existing scope opens that record instead of creating a duplicate.
 - The bounded Vue stage will keep new-record templates and idea fields in the create modal; linked/exclusive Todo editing remains available immediately through the shared existing-record editor after first persistence.
+
+## 2026-08-01 parity checkpoint
+
+- Remote API-pushed commit hashes had the same semantic trees as local commits but different parents/line endings; a non-business `ours` merge commit `fd431bf` reconciled the histories without force-pushing or rewriting protected refs.
+- Vue Import/Export now normalizes the parsed backup through `LifePlanRepository.normalizeImportPreview()` before the confirmation summary, matching legacy `normalizeDataShape` behavior while keeping repository merge normalization as a second safety boundary.
+- Dashboard today-habit actions now match legacy branches: note check-in, single-target note editing, multi-target note check-in/edit, and `-1` latest-checkin undo; all writes still flow through `habitsStore` and rebuild the local-only mirror.
+- Wheel deletion now rejects deleting the last wheel with `至少保留一个转盘`; deletion of two-or-more wheels and tombstone behavior remain unchanged.
+- Current full checkpoint: `scripts/check.ps1` passed `147/147`; current branch is `migration/vue-app-v1`, and user-owned untracked `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain unstaged.
+- Next candidate audits: Records independent read-only preview state (`app.js:7491-7538` vs `src/pages/RecordsPage.vue:859-888`) or Fitness plan-day selection (`fitness-ui.js:677-704` vs `src/pages/FitnessPage.vue:953-979`).
