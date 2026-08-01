@@ -379,6 +379,7 @@ function startFreeWorkout() {
 
 function finishActiveWorkout() {
   run(() => {
+    if (activeCompleted.value === 0 && !window.confirm('还没有任何完成组，确定结束本场训练吗？')) return;
     fitness.finishWorkout({ updatePlanFromWorkout: writeBackPlan.value && activePlanDiff.value === true });
     writeBackPlan.value = false;
     stopRestTimer();

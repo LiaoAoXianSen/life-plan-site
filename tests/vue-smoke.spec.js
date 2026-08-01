@@ -2085,6 +2085,40 @@ test('fitness plans support multiple exercises and explicit plan writeback', asy
     ]));
 });
 
+test('fitness zero-completion finish keeps the legacy confirmation guard', async ({ page }) => {
+    const source = emptyData({
+        fitnessWorkouts: [{
+            id: 'workout-zero-completion', date: '2026-08-01', status: 'inProgress', title: '零完成训练',
+            planId: '', planName: '', durationMin: 0, notes: '',
+            exercises: [{
+                id: 'exercise-zero-completion', name: '空杠深蹲', targetSets: 1, targetReps: '5', targetWeight: 20,
+                restSec: 90, note: '', plannedSets: [],
+                sets: [{ id: 'set-zero-completion', weight: 20, reps: 5, done: false }],
+            }],
+            createdAt: '2026-08-01T08:00:00', updatedAt: '2026-08-01T08:00:00',
+        }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/fitness');
+    await expect(page.getByText('正在训练：零完成训练')).toBeVisible();
+
+    page.once('dialog', async dialog => {
+        expect(dialog.type()).toBe('confirm');
+        expect(dialog.message()).toContain('还没有任何完成组');
+        await dialog.dismiss();
+    });
+    await page.getByRole('button', { name: '结束训练' }).click();
+    await expect(page.getByText('正在训练：零完成训练')).toBeVisible();
+    let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts[0].status).toBe('inProgress');
+
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: '结束训练' }).click();
+    await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).fitnessWorkouts[0].status)).toBe('done');
+    stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.fitnessWorkouts[0].status).toBe('done');
+});
+
 test('fitness history shows every normalized workout status', async ({ page }) => {
     const source = emptyData({
         fitnessWorkouts: [
