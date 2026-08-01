@@ -111,10 +111,12 @@ watch(displayEntries, () => { void nextTick(drawWheelCanvas); }, { immediate: tr
 onMounted(drawWheelCanvas);
 watch([() => route.query.library, () => wheelStore.libraryItems.length], ([value]) => {
   const id = String(Array.isArray(value) ? value[0] || '' : value || '');
-  if (!id || libraryForm.id === id) return;
+  if (!id) return;
   const item = wheelStore.libraryItems.find(entry => entry.id === id);
   if (item) {
-    editLibrary(item);
+    showManagement.value = true;
+    activeManagementPanel.value = 'library';
+    menuOpen.value = false;
     say(`已定位公共项：${item.name}`);
   }
 }, { immediate: true });
@@ -1063,7 +1065,7 @@ function importJson(event: Event) {
             <button class="btn btn-danger" type="button" :disabled="!selectedLibraryIds.length" @click="applyLibraryBatchDelete">批量删除</button>
           </div>
         </div>
-        <div v-for="item in filteredLibraryItems" :key="item.id" class="entity-row library-row" :class="{ selected: selectedLibrarySet.has(item.id) }">
+        <div v-for="item in filteredLibraryItems" :key="item.id" class="entity-row library-row" :data-wheel-library-id="item.id" :class="{ selected: selectedLibrarySet.has(item.id) }">
           <label class="library-select"><input v-model="selectedLibraryIds" type="checkbox" :value="item.id" :aria-label="`选择公共项 ${item.name}`" /></label>
           <span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }} · {{ libraryTagNames(item) }}</em></span>
           <span><button class="link-button" @click="editLibrary(item)">编辑</button><button class="link-button" @click="toggleLibraryEnabled(item)">{{ item.enabled ? '停用' : '启用' }}</button><button class="link-button danger-text" @click="confirmAction(`删除公共项“${item.name}”吗？`, () => wheelStore.deleteLibraryItem(item.id), '已删除公共项')">删除</button></span>

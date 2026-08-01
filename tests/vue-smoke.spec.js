@@ -826,7 +826,10 @@ test('search and tag center restore legacy read-only index navigation', async ({
     await page.goto('/#/search?q=路线转盘&scope=wheel');
     await page.locator('.search-result-item').filter({ hasText: '搜索转盘公共项' }).click();
     await expectHashRoute(page, '/wheel', { library: 'wheel-library-search' });
-    await expect(page.getByPlaceholder('公共项名称')).toHaveValue('搜索转盘公共项');
+    await expect(page.locator('#wheel-management-block')).toBeVisible();
+    await expect(page.locator('#wheel-management-block')).toHaveAttribute('data-management-panel', 'library');
+    await expect(page.locator('[data-wheel-library-id="wheel-library-search"]')).toContainText('搜索转盘公共项');
+    await expect(page.getByPlaceholder('公共项名称')).toHaveValue('');
 
     await page.goto('/#/tags');
     await expect(page.locator('.mini-summary-card').filter({ hasText: '全部标签' })).toContainText('1');
