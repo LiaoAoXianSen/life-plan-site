@@ -194,6 +194,12 @@ const workoutStatusOptions = computed(() => fitness.services.fitness.WORKOUT_STA
 const metricFields = computed(() => fitness.services.fitness.METRIC_FIELDS);
 const conditionOptions = computed(() => fitness.services.fitness.CONDITION_OPTIONS);
 
+function workoutHistoryExerciseSummary(workout: Record<string, any>) {
+  const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
+  const names = exercises.map(exercise => String(exercise.name || '')).filter(Boolean).slice(0, 4).join('、');
+  return `动作 ${exercises.length}${names ? ` · ${names}${exercises.length > 4 ? '…' : ''}` : ''}`;
+}
+
 function localDraftId() {
   return `plan-draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -1050,7 +1056,7 @@ onUnmounted(stopRestTimer);
       <div class="card-title">训练历史</div>
       <div v-if="workoutHistory.length" class="fitness-metric-list">
         <div v-for="workout in workoutHistory" :key="workout.id" class="fitness-metric-row">
-          <div><strong>{{ workout.date }} · {{ workout.title || '自由训练' }}</strong><span>{{ workoutStatusLabel(workout.status) }} · {{ fitness.services.fitness.countCompletedSets(workout) }}/{{ fitness.services.fitness.countTotalSets(workout) }} 组<span v-if="workout.durationMin"> · {{ workout.durationMin }} 分钟</span></span></div>
+          <div><strong>{{ workout.date }} · {{ workout.title || '自由训练' }}</strong><span>{{ workoutStatusLabel(workout.status) }} · {{ fitness.services.fitness.countCompletedSets(workout) }}/{{ fitness.services.fitness.countTotalSets(workout) }} 组<span v-if="workout.durationMin"> · {{ workout.durationMin }} 分钟</span></span><span>{{ workoutHistoryExerciseSummary(workout) }}</span><span v-if="workout.notes">{{ workout.notes }}</span></div>
           <button class="btn btn-secondary" type="button" @click="editWorkout(workout)">编辑</button>
           <button class="btn btn-danger" type="button" @click="run(() => fitness.removeWorkout(workout.id))">删除</button>
         </div>

@@ -2501,6 +2501,25 @@ test('fitness history shows every normalized workout status', async ({ page }) =
     await expect(rows).toContainText(['进行中训练', '完成训练', '跳过训练']);
 });
 
+test('fitness history rows expose legacy exercise and note summaries without writes', async ({ page }) => {
+    const source = emptyData({
+        fitnessWorkouts: [{
+            id: 'workout-history-summary', date: '2026-07-30', status: 'done', title: '全身训练', durationMin: 55, notes: '收尾拉伸',
+            exercises: ['深蹲', '卧推', '划船', '引体', '平板支撑'].map((name, index) => ({ id: `history-exercise-${index}`, name, sets: [] })),
+            createdAt: '2026-07-30T10:00:00', updatedAt: '2026-07-30T10:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/fitness');
+    const row = page.locator('article.card').filter({ hasText: '训练历史' }).locator('.fitness-metric-row').filter({ hasText: '全身训练' });
+    await expect(row).toContainText('已完成 · 0/15 组 · 55 分钟');
+    await expect(row).toContainText('动作 5 · 深蹲、卧推、划船、引体…');
+    await expect(row).toContainText('收尾拉伸');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('fitness history editor saves edits through the legacy workout contract', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [
