@@ -730,6 +730,25 @@ test('dashboard today habit metadata mirrors legacy action card', async ({ page 
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('dashboard weekly fixed habit metadata keeps legacy rule wording', async ({ page }) => {
+    const today = localDate();
+    const weekday = String(new Date(`${today}T12:00:00`).getDay());
+    const source = emptyData({
+        habits: [{
+            id: 'habit-dashboard-weekly-fixed', name: '固定日阅读', tag: '成长', rule: 'weekly-fixed', weekdays: [weekday],
+            timesPerDay: 1, startDate: today,
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+    const row = page.locator('.dashboard-today-habits .todo-item').filter({ hasText: '固定日阅读' });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('固定周几');
+    await expect(row).not.toContainText('每周固定');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('goals detail route save and delete preserve the legacy contract', async ({ page }) => {
     const today = (() => {
         const date = new Date();
