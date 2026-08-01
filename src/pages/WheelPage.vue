@@ -891,12 +891,7 @@ function importJson(event: Event) {
           <div
             class="wheel-canvas-wrap"
             :class="{ spinning }"
-            role="button"
-            tabindex="0"
-            :aria-label="isTagSecondStage ? '抽取具体内容' : selectedWheel?.mode === 'tag' ? '开始抽标签' : '开始转动'"
             @click="canvasClick"
-            @keydown.enter.prevent="nextSpin"
-            @keydown.space.prevent="nextSpin"
             @pointerdown="canvasPointerDown"
             @pointermove="canvasPointerMove"
             @pointerup="canvasPointerUp"
