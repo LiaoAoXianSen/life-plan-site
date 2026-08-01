@@ -802,7 +802,14 @@ onUnmounted(stopRestTimer);
         <div class="card-title">开始计划训练</div>
         <div v-if="fitness.plans.length" class="fitness-metric-list">
           <article v-for="plan in fitness.plans" :key="plan.id" class="fitness-metric-row fitness-plan-browse-row">
-            <div class="fitness-plan-browse-main">
+            <div
+              class="fitness-plan-browse-main"
+              role="button"
+              tabindex="0"
+              @click="editPlan(plan)"
+              @keydown.enter="editPlan(plan)"
+              @keydown.space.prevent="editPlan(plan)"
+            >
               <div class="fitness-plan-name-row">
                 <strong class="fitness-plan-name">{{ plan.name }}</strong>
                 <span class="fitness-status-badge" :class="`status-${plan.status || 'active'}`">{{ planStatusLabel(plan.status) }}</span>

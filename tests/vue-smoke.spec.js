@@ -2056,6 +2056,20 @@ test('fitness browse plan rows expose legacy exercise summaries', async ({ page 
     await expect(row.getByRole('button', { name: '编辑' })).toBeVisible();
 });
 
+test('fitness plan browse content opens the legacy editor entry point', async ({ page }) => {
+    const source = emptyData({
+        fitnessPlans: [{ id: 'fitness-browse-edit', name: '可点击计划', status: 'active', goal: 'strength', notes: '计划备注', exercises: [{ name: '深蹲', targetSets: 3, targetReps: '5', sets: [] }] }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/fitness');
+    const row = page.locator('.fitness-plan-browse-row').filter({ hasText: '可点击计划' });
+    await row.locator('.fitness-plan-browse-main').click();
+    const editor = page.locator('form.card').filter({ hasText: '编辑训练计划' });
+    await expect(editor).toBeVisible();
+    await expect(editor.locator('.form-group').filter({ hasText: '计划名称' }).locator('input')).toHaveValue('可点击计划');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(source));
+});
+
 test('fitness hero secondary actions jump to body and workout forms', async ({ page }) => {
     await page.goto('/#/fitness');
 
