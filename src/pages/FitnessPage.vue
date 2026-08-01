@@ -429,6 +429,11 @@ function applyPlanToWorkout(planId: string) {
   workoutForm.exercises.splice(0, workoutForm.exercises.length, ...generated.exercises.map((exercise: Record<string, any>) => createWorkoutExerciseDraft(exercise)));
 }
 
+function removePlanWithConfirmation(planId: string) {
+  if (!window.confirm('确定删除这个训练计划吗？')) return;
+  run(() => fitness.removePlan(planId));
+}
+
 function editWorkout(workout: Record<string, any>) {
   run(() => {
     workoutSectionOpen.value = true;
@@ -825,7 +830,7 @@ onUnmounted(stopRestTimer);
             <div class="fitness-plan-browse-actions">
               <button class="btn btn-primary" type="button" @click="run(() => fitness.startFromPlan(plan.id))">按计划开练</button>
               <button class="btn btn-secondary" type="button" @click="editPlan(plan)">{{ planEditingId === plan.id ? '正在编辑' : '编辑' }}</button>
-              <button class="btn btn-danger" type="button" @click="run(() => fitness.removePlan(plan.id))">删除</button>
+              <button class="btn btn-danger" type="button" @click="removePlanWithConfirmation(plan.id)">删除</button>
             </div>
           </article>
         </div>
