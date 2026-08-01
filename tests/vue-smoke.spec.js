@@ -3972,6 +3972,31 @@ test('ideas cards keep legacy compact fields only', async ({ page }) => {
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('idea view opens a read-only record preview before editing', async ({ page }) => {
+    const source = emptyData({
+        records: [{
+            id: 'idea-view-preview', type: '灵感碎片', title: '只读查看灵感', content: '先看清楚再决定推进。',
+            startDate: '2026-07-30', endDate: '2026-07-30', todoIds: [], ideaStatus: '实践中', ideaTags: ['验证'],
+            ideaNextAction: '做一个小实验', ideaTodoId: '', ideaConclusion: '',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/ideas');
+    await page.locator('.idea-card').filter({ hasText: '只读查看灵感' }).getByRole('button', { name: '查看', exact: true }).click();
+    await expectHashRoute(page, '/records', { record: 'idea-view-preview', preview: '1' });
+    const preview = page.getByRole('dialog', { name: '记录预览' });
+    await expect(preview).toContainText('只读查看灵感');
+    await expect(preview).toContainText('先看清楚再决定推进。');
+    await expect(page.locator('.record-editor-panel')).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await preview.getByRole('button', { name: '编辑', exact: true }).click();
+    await expect(page.locator('.record-editor-panel')).toBeVisible();
+    await expectHashRoute(page, '/records', { record: 'idea-view-preview' });
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('ideas keep legacy creation and record-time ordering', async ({ page }) => {
     const source = emptyData({
         records: [

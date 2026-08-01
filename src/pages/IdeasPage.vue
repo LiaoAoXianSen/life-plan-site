@@ -69,7 +69,7 @@ function add() {
 }
 
 function openView(idea: Record<string, unknown>) {
-  void router.push({ path: '/records', query: { record: String(idea.id) } });
+  void router.push({ path: '/records', query: { record: String(idea.id), preview: '1' } });
 }
 
 function openEditor(idea: Record<string, unknown>) {
