@@ -344,6 +344,20 @@ test('todo urgency filter treats missing legacy urgency as medium', async ({ pag
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('todo table keeps a legacy empty task title blank', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-empty-text', '', { group: '其他' })],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/todos');
+    const row = page.locator('.todo-table tbody tr').filter({ has: page.locator('input[aria-label="完成 "]') });
+    await expect(row.locator('.todo-title-cell')).toHaveText(/执行 0 次/);
+    await expect(row.locator('.todo-title-cell')).not.toContainText('未命名待办');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('dashboard command center periods and recent timeline stay read-only', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();

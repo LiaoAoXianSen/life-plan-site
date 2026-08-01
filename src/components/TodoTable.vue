@@ -85,7 +85,7 @@ const rows = computed(() => props.todos.map(todo => ({
             @click="emit('select', row.todo.id)"
             @keydown.enter.prevent="emit('select', row.todo.id)"
           >
-            {{ row.todo.text || '未命名待办' }}
+            {{ row.todo.text }}
             <span v-if="row.todo.subTodos?.length" class="todo-subtodo-count">
               ({{ row.todo.subTodos.filter(item => item.done).length }}/{{ row.todo.subTodos.length }})
             </span>
