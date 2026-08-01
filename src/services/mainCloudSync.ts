@@ -188,18 +188,14 @@ export async function runMainCloudSyncBoth(options: { source?: string; force?: b
     const localChanged = state.dirty === true || (!!state.lastRemoteHash && state.lastRemoteHash !== localHash);
 
     if (!remote) {
-      if (localChanged || !state.lastRemoteHash) {
-        lifePlanRepository.createSnapshot('自动上传前', current, {
-          action: 'auto-upload',
-          source: options.source || 'vue-main-auto-sync',
-        });
-        const response = await pushWithEtag(config, current, '');
-        updateAfterPush(current, response);
-        emitStatus('云端文件不存在，已自动上传本地主数据');
-        return { uploaded: true };
-      }
-      emitStatus('云端文件不存在，本地也无待同步变更');
-      return { skipped: true, reason: 'missing-remote' as const };
+      lifePlanRepository.createSnapshot('自动上传前', current, {
+        action: 'auto-upload',
+        source: options.source || 'vue-main-auto-sync',
+      });
+      const response = await pushWithEtag(config, current, '');
+      updateAfterPush(current, response);
+      emitStatus('云端文件不存在，已自动上传本地主数据');
+      return { uploaded: true };
     }
 
     rememberRemoteVersion(remote, state);

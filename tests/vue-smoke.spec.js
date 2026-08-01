@@ -6226,6 +6226,50 @@ test('main auto sync uploads local dirty data after the debounce window', async 
     })).toEqual({ dirty: false, etag: '"etag-2"' });
 });
 
+test('main auto sync recreates a missing remote even when local data is unchanged', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-auto-recreate', '恢复缺失主数据')],
+    });
+    const calls = [];
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+            webdavUrl: 'https://sync-missing.example.test/dav',
+            remotePath: '/life-plan.json',
+            autoSync: true,
+        }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteEtag: '"old"' }));
+    }, source);
+    await page.route('https://sync-missing.example.test/dav/life-plan.json', async route => {
+        const request = route.request();
+        calls.push({ method: request.method(), ifMatch: request.headers()['if-match'] || '' });
+        if (request.method() === 'GET') {
+            await route.fulfill({ status: 404, body: '' });
+            return;
+        }
+        if (request.method() === 'PUT') {
+            await route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: '"recreated"' }, body: JSON.stringify({ ok: true, etag: '"recreated"' }) });
+            return;
+        }
+        await route.fallback();
+    });
+
+    await page.clock.install();
+    await page.goto('/#/sync');
+    await page.evaluate(() => {
+        const data = JSON.parse(localStorage.getItem('lifePlanData'));
+        const hash = window.LifePlanSyncService.create().getDataHash(data);
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: hash, lastRemoteEtag: '"old"' }));
+    });
+    const mainCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
+    await mainCard.getByRole('button', { name: '立即自动同步一次' }).click();
+
+    await expect.poll(() => calls.filter(item => item.method === 'PUT').length).toBe(1);
+    expect(calls.map(item => item.method)).toEqual(['GET', 'PUT']);
+    await expect(mainCard.locator('.sync-status')).toContainText('云端文件不存在，已自动上传本地主数据');
+    await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}'))).toMatchObject({ dirty: false, lastRemoteEtag: '"recreated"' });
+});
+
 test('main auto sync resumes on visibility when enabled', async ({ page }) => {
     const source = emptyData({
         todos: [todoFixture('todo-visible', '恢复同步待办')],
