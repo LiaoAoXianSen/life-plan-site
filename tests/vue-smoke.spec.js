@@ -881,6 +881,24 @@ test('goals empty state keeps the legacy copy', async ({ page }) => {
     await expect(page.locator('#page-goals .empty-state')).toHaveText('暂无目标，点击右上角新建');
 });
 
+test('goals card preserves legacy empty field rendering', async ({ page }) => {
+    const source = emptyData({
+        goals: [{ id: 'goal-empty-fields', name: '字段为空目标', period: '', target: '', status: '', progress: 0, createDate: '2026-07-30' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/goals');
+
+    const card = page.locator('.goal-card').filter({ hasText: '字段为空目标' });
+    await expect(card).toContainText('字段为空目标');
+    const cardText = await card.textContent();
+    expect(cardText).not.toContain('未命名目标');
+    expect(cardText).not.toContain('进行中');
+    expect(cardText).not.toContain('未设置周期');
+    expect(cardText).not.toContain('未填写目标描述');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('search and tag center restore legacy read-only index navigation', async ({ page }) => {
     const source = emptyData({
         records: [
