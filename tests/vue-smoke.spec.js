@@ -1087,6 +1087,28 @@ test('wheel canvas click drag and tag stage preserve interaction contracts', asy
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('wheel canvas keeps legacy click-only extraction', async ({ page }) => {
+    const source = emptyData({
+        wheels: [{
+            id: 'wheel-click-only', name: '点击抽取盘', mode: 'normal',
+            items: [{ id: 'click-only-item', name: '点击项目', note: '', weight: 1, enabled: true }],
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        window.__wheelSpinDurationMs = 1;
+    }, source);
+    await page.goto('/#/wheel');
+
+    const canvasWrap = page.locator('.wheel-canvas-wrap');
+    await expect(canvasWrap).not.toHaveAttribute('role', 'button');
+    await expect(canvasWrap).not.toHaveAttribute('tabindex');
+    await canvasWrap.dispatchEvent('keydown', { key: 'Enter' });
+    await canvasWrap.dispatchEvent('keydown', { key: ' ' });
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('wheel public library batch actions preserve selection and tombstone contracts', async ({ page }) => {
     const source = emptyData({
         wheelTags: [
