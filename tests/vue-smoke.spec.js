@@ -547,6 +547,39 @@ test('sidebar empty snapshot state explains automatic backups', async ({ page })
     await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。');
 });
 
+test('sidebar import confirmation exposes normalized legacy collection summary', async ({ page }) => {
+    const local = emptyData({
+        records: [{ id: 'sidebar-import-local', type: '日记', title: '本地记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28' }],
+    });
+    const imported = emptyData({
+        records: [
+            { id: 'sidebar-import-shadow', type: '习惯打卡', title: '不应计入主记录', isHabitRecord: true, startDate: '2026-07-27', endDate: '2026-07-27' },
+            { id: 'sidebar-import-record', type: '工作记录', title: '摘要记录', content: '', startDate: '2026-07-29', endDate: '2026-07-29' },
+        ],
+        todos: [todoFixture('sidebar-import-todo', '摘要待办')],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), local);
+    await page.goto('/#/dashboard');
+
+    const [dialog] = await Promise.all([
+        page.waitForEvent('dialog'),
+        page.locator('input[type="file"]').setInputFiles({
+            name: 'sidebar-import-summary.json',
+            mimeType: 'application/json',
+            buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
+        }),
+    ]);
+    expect(dialog.type()).toBe('confirm');
+    expect(dialog.message()).toContain('records:1');
+    expect(dialog.message()).toContain('todos:1');
+    expect(dialog.message()).toContain('habits:0');
+    await dialog.accept();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.length)).toBe(2);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.some(record => record.id === 'sidebar-import-shadow')).toBe(false);
+    expect(stored.records.some(record => record.id === 'sidebar-import-record')).toBe(true);
+});
+
 test('records history keeps non-rule-day habit check-ins while calendar stays rule-aware', async ({ page }) => {
     const today = localDate();
     const source = emptyData({

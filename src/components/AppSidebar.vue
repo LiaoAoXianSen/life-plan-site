@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import RecordCreateModal from './RecordCreateModal.vue';
+import { lifePlanRepository } from '../services/lifePlanRepository';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 
 type SnapshotItem = {
@@ -55,6 +56,7 @@ const snapshotNotice = ref('');
 const importInput = ref<HTMLInputElement | null>(null);
 const mainSyncStatus = ref<{ message: string; isError: boolean } | null>(null);
 const mainSyncConfigVersion = ref(0);
+const importCollections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'exerciseLibrary', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
 
 const navigation = [
   { to: '/dashboard', icon: '📊', label: '首页仪表盘' },
@@ -229,14 +231,20 @@ function triggerImport() {
   importInput.value?.click();
 }
 
+function getImportSummary(imported: unknown) {
+  const value = imported && typeof imported === 'object' ? imported as Record<string, unknown> : {};
+  return importCollections.map(key => `${key}:${Array.isArray(value[key]) ? value[key].length : 0}`).join(' · ');
+}
+
 async function importBackup(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
   try {
-    const raw = JSON.parse(await file.text());
+    const raw = lifePlanRepository.normalizeImportPreview(JSON.parse(await file.text()));
+    const summary = getImportSummary(raw);
     const confirmed = window.confirm(
-      '将按安全合并导入，不会静默覆盖较新内容；两边都改过时会保留主版本并生成冲突副本。确认继续？',
+      `将按安全合并导入，不会静默覆盖较新内容；两边都改过时会保留主版本并生成冲突副本。\n\n备份内容：${summary}\n\n确认继续？`,
     );
     if (!confirmed) return;
     lifePlan.importData(raw);
