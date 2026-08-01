@@ -1557,6 +1557,50 @@ test('wheel refuses deleting the last wheel like legacy', async ({ page }) => {
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('wheel list empty state shows legacy mode hint and create entry', async ({ page }) => {
+    const source = emptyData({
+        wheels: [{ id: 'wheel-normal-only', name: '唯一普通盘', mode: 'normal', items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+
+    const list = page.locator('.wheel-list-management');
+    await list.getByRole('button', { name: '标签', exact: true }).click();
+    const empty = list.locator('.wheel-list-empty');
+    await expect(empty).toContainText('这一类还没有转盘');
+    await expect(empty).toContainText('先新建一个标签盘。');
+    await empty.getByRole('button', { name: '新建转盘', exact: true }).click();
+    await expect(page.locator('#wheel-create-panel')).toBeInViewport();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await page.locator('.wheel-management-nav').getByRole('button', { name: '转盘列表' }).click();
+    await page.locator('.wheel-list-management').getByRole('button', { name: '普通', exact: true }).click();
+    await expect(page.locator('.wheel-list-card')).toHaveCount(1);
+    await expect(page.locator('.wheel-list-empty')).toBeHidden();
+});
+
+test('wheel list empty state pins the normal-mode legacy hint with a tag-only seed', async ({ page }) => {
+    const source = emptyData({
+        wheels: [{ id: 'wheel-tag-only', name: '唯一标签盘', mode: 'tag', tagIds: [], items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
+
+    const list = page.locator('.wheel-list-management');
+    await list.getByRole('button', { name: '普通', exact: true }).click();
+    const empty = list.locator('.wheel-list-empty');
+    await expect(empty).toContainText('这一类还没有转盘');
+    await expect(empty).toContainText('先新建一个普通盘。');
+    await empty.getByRole('button', { name: '新建转盘', exact: true }).click();
+    await expect(page.locator('#wheel-create-panel')).toBeInViewport();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(source));
+});
+
 test('wheel public library batch actions preserve selection and tombstone contracts', async ({ page }) => {
     const source = emptyData({
         wheelTags: [
