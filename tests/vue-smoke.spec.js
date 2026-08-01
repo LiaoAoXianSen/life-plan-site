@@ -3441,6 +3441,7 @@ test('record built-in structured template preserves legacy markdown and template
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/records');
     await page.getByRole('button', { name: /模板日记/ }).first().click();
+    await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     const editor = page.locator('.record-editor-panel');
     await expect(editor.getByLabel('记录模板')).toHaveValue('builtin:builtin-diary-daily-review');
     await expect(editor.getByLabel('内容')).toHaveAttribute('readonly', '');
@@ -3498,12 +3499,14 @@ test('custom record templates clone todos and delete with a template tombstone',
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/records');
     await page.getByRole('button', { name: /模板来源/ }).first().click();
+    await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     page.once('dialog', dialog => dialog.accept('工作推进模板'));
     await page.locator('.record-editor-panel').getByRole('button', { name: '保存为模板' }).click();
     const templateId = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).templates[0].id);
 
     await page.locator('.record-editor-panel').getByRole('button', { name: '关闭' }).click();
     await page.getByRole('button', { name: /模板目标/ }).first().click();
+    await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     const editor = page.locator('.record-editor-panel');
     await editor.getByLabel('记录模板').selectOption(templateId);
     await editor.getByRole('button', { name: '应用模板' }).click();
@@ -4215,6 +4218,7 @@ test('diary AI keeps remote drafts read-only until confirmed writeback and Todo 
 
     await page.goto('/#/records');
     await page.getByRole('button', { name: /Vue 日记 AI/ }).first().click();
+    await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     const editor = page.locator('.record-editor-panel');
     const aiPanel = editor.locator('.record-diary-ai');
     await aiPanel.getByLabel('分析偏好').fill('只写一条明确复盘');
