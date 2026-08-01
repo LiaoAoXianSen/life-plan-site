@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import RecordCreateModal from './RecordCreateModal.vue';
@@ -53,6 +53,8 @@ const showSnapshots = ref(false);
 const previewSnapshotId = ref<string | null>(null);
 const snapshotNotice = ref('');
 const importInput = ref<HTMLInputElement | null>(null);
+const mainSyncStatus = ref<{ message: string; isError: boolean } | null>(null);
+const mainSyncConfigVersion = ref(0);
 
 const navigation = [
   { to: '/dashboard', icon: '📊', label: '首页仪表盘' },
@@ -78,7 +80,49 @@ const snapshotStats = computed(() => (showSnapshots.value ? lifePlan.getSnapshot
 const selectedSnapshot = computed(() => snapshots.value.find(item => String(item.id || '') === previewSnapshotId.value) || null);
 const selectedSnapshotSummary = computed(() => selectedSnapshot.value ? getSnapshotSummary(selectedSnapshot.value) : null);
 
+function summarizeMainSyncStatus(message = '', isError = false, configured = false) {
+  const text = String(message || '').trim();
+  if (isError) return '同步：失败';
+  if (!text) return configured ? '同步：待检查' : '同步：未配置';
+  if (text.includes('未配置')) return '同步：未配置';
+  if (text.includes('正在') || text.includes('稍后')) return '同步：进行中';
+  if (text.includes('完成') || text.includes('已上传') || text.includes('已拉取') || text.includes('一致') || text.includes('已同步')) return '同步：已同步';
+  if (text.includes('已加载')) return '同步：已配置';
+  return `同步：${text.replace(/\s+/g, ' ').slice(0, 16)}`;
+}
+
+function handleMainSyncStatus(event: Event) {
+  const detail = (event as CustomEvent<{ message?: unknown; isError?: unknown }>).detail || {};
+  mainSyncStatus.value = {
+    message: String(detail.message || ''),
+    isError: detail.isError === true,
+  };
+}
+
+function handleMainSyncConfig() {
+  mainSyncStatus.value = null;
+  mainSyncConfigVersion.value += 1;
+}
+
+onMounted(() => {
+  window.addEventListener('life-plan-main-sync-status', handleMainSyncStatus);
+  window.addEventListener('life-plan-main-sync-config', handleMainSyncConfig);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('life-plan-main-sync-status', handleMainSyncStatus);
+  window.removeEventListener('life-plan-main-sync-config', handleMainSyncConfig);
+});
+
 const mainSyncLabel = computed(() => {
+  if (mainSyncStatus.value) {
+    let configured = false;
+    try {
+      configured = Boolean((JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}') as { webdavUrl?: string }).webdavUrl);
+    } catch { /* use the event status without a config fallback */ }
+    return summarizeMainSyncStatus(mainSyncStatus.value.message, mainSyncStatus.value.isError, configured);
+  }
+  mainSyncConfigVersion.value;
   try {
     const config = JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}') as { webdavUrl?: string };
     const state = JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}') as {

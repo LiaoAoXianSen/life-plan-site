@@ -25,6 +25,8 @@ type StatusHandler = (message: string, isError?: boolean) => void;
 const sync = createLegacyServices().sync;
 const CONFIG_KEY = 'lifePlanSyncConfig';
 const STATE_KEY = 'lifePlanSyncState';
+const STATUS_EVENT = 'life-plan-main-sync-status';
+const CONFIG_EVENT = 'life-plan-main-sync-config';
 
 let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let periodicTimer: ReturnType<typeof setInterval> | null = null;
@@ -60,6 +62,9 @@ function readConfig(): SyncConfig {
 function writeConfig(config: SyncConfig) {
   const next = normalizeConfig(config);
   localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(CONFIG_EVENT, { detail: next }));
+  }
   return next;
 }
 
@@ -77,6 +82,9 @@ function writeState(next: SyncState) {
 
 function emitStatus(message: string, isError = false) {
   statusHandler?.(message, isError);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(STATUS_EVENT, { detail: { message, isError } }));
+  }
 }
 
 function rememberRemoteVersion(remote: RemotePayload | null, state: SyncState) {
