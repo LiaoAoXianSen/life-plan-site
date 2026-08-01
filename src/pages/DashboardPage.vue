@@ -244,7 +244,7 @@ function undoHabitCheckin(habitId: string) {
 }
 
 function sampleMaterials(items: MaterialEntity[], count: number) {
-  const pool = [...items].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  const pool = [...items];
   for (let index = 0; index < Math.min(count, pool.length); index += 1) {
     const swapIndex = index + Math.floor(Math.random() * (pool.length - index));
     [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
