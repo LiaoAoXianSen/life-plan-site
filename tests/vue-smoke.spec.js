@@ -388,6 +388,27 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     expect(persisted.mirror).toBeNull();
 });
 
+test('dashboard random material sampling preserves legacy source order', async ({ page }) => {
+    const source = emptyData({
+        materials: [
+            { id: 'material-source-first', type: '摘抄', content: '原数组第一条', tags: [], createdAt: '2026-01-01T08:00:00', updatedAt: '2026-01-01T08:00:00' },
+            { id: 'material-source-second', type: '方法', content: '原数组第二条', tags: [], createdAt: '2026-08-01T08:00:00', updatedAt: '2026-08-01T08:00:00' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => {
+        localStorage.setItem('lifePlanData', value);
+        Math.random = () => 0;
+    }, original);
+    await page.goto('/#/dashboard');
+
+    const picks = page.locator('.command-materials .command-row');
+    await expect(picks).toHaveCount(2);
+    await expect(picks.nth(0)).toContainText('原数组第一条');
+    await expect(picks.nth(1)).toContainText('原数组第二条');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('dashboard empty habit state keeps the legacy wording', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/dashboard');
