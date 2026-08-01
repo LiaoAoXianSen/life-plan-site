@@ -547,6 +547,26 @@ test('sidebar summarizes main sync state with legacy status labels', async ({ pa
     await expect(status).not.toContainText('2026-07-31');
 });
 
+test('sidebar follows live legacy main sync status events', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+        webdavUrl: 'https://dav.example.test', remotePath: '/life-plan.json', autoSync: true,
+    })));
+    await page.goto('/#/dashboard');
+    const status = page.locator('.sync-status-inline').filter({ hasText: '同步：' });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('life-plan-main-sync-status', {
+        detail: { message: '正在检查云端', isError: false },
+    })));
+    await expect(status).toHaveText('同步：进行中');
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('life-plan-main-sync-status', {
+        detail: { message: '云端和本地一致，无需同步', isError: false },
+    })));
+    await expect(status).toHaveText('同步：已同步');
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('life-plan-main-sync-status', {
+        detail: { message: '网络失败', isError: true },
+    })));
+    await expect(status).toHaveText('同步：失败');
+});
+
 test('dashboard quick writes plan today execute once toggle and rebuild todo mirror', async ({ page }) => {
     const today = (() => {
         const date = new Date();
