@@ -940,6 +940,7 @@ test('dashboard today habit metadata stays complete and read-only for every due 
     await expect(active.locator('.habit-quick-meta')).toContainText('1/2');
     await expect(active.locator('.habit-quick-meta')).not.toContainText('1/2 次');
     await expect(active.locator('.habit-quick-meta')).toContainText('08:15');
+    await expect(pending.locator('.habit-quick-meta')).toContainText('自定义');
     await expect(pending.locator('.habit-quick-meta')).toContainText('未记录');
     await expect(active.locator('.habit-quick-meta')).toContainText('+5 金币');
     await expect(active.locator('.habit-quick-meta')).toContainText('漏打 -2');
