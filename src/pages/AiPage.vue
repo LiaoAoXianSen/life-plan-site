@@ -150,7 +150,12 @@ function compactTodo(todo: any) {
 }
 
 const context = computed(() => ({
-  todayTodos: store.data.todos.filter(todo => !todo.done && isTodoRelevantToday(todo)).slice(0, 10).map(compactTodo),
+  todayTodos: store.data.todos
+    .filter(todo => !todo.done && isTodoRelevantToday(todo))
+    .slice()
+    .sort(todos.services.todos.compareTodosForFocus)
+    .slice(0, 10)
+    .map(compactTodo),
   floatingTodos: store.data.todos
     .filter(todo => !todo.done && !todo.dueDate && !todo.planStartDate && !todo.planEndDate)
     .slice(0, 12)

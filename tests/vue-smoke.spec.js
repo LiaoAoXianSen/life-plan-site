@@ -3909,6 +3909,28 @@ test('AI todayPlan keeps drafts read-only until confirmed writeback with sourceT
     ]));
 });
 
+test('AI todayPlan orders relevant todos by legacy focus priority', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        todos: [
+            todoFixture('todo-ai-low-today', '低优先级今日待办', { dueDate: today, urgency: 'low', group: '生活' }),
+            todoFixture('todo-ai-high-today', '高优先级今日待办', { dueDate: today, urgency: 'high', group: '工作' }),
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
+    }, source);
+
+    await page.goto('/#/ai?mode=todayPlan');
+    const aiPage = page.locator('#page-ai');
+    await aiPage.getByRole('button', { name: '生成今日计划', exact: true }).click();
+    await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
+    await expect(aiPage.locator('#ai-draft-text-0')).toHaveValue('推进：高优先级今日待办');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('AI remote failure falls back to local drafts before confirmation', async ({ page }) => {
     const source = emptyData({
         todos: [todoFixture('todo-ai-fallback', '远程失败后仍要推进的待办', { group: '迁移' })],
