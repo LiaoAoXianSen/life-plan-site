@@ -892,6 +892,25 @@ test('dashboard today habit metadata mirrors legacy action card', async ({ page 
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('dashboard fixed habit reward ignores stale random bounds', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [{
+            id: 'habit-dashboard-fixed-zero', name: '无固定奖励习惯', rule: 'daily', timesPerDay: 1,
+            rewardPoints: 0, rewardCurrency: '测试代币', randomReward: false, rewardMin: 3, rewardMax: 7, startDate: today,
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/dashboard');
+    const row = page.locator('.dashboard-today-habits .todo-item').filter({ hasText: '无固定奖励习惯' });
+    await expect(row).toHaveCount(1);
+    await expect(row.locator('.habit-quick-meta')).not.toContainText('测试代币');
+    await expect(row).not.toContainText('+0');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('dashboard habit actions expose legacy note and decrease branches', async ({ page }) => {
     const today = localDate();
     const source = emptyData({

@@ -100,7 +100,8 @@ function habitRewardText(habit: Record<string, any>) {
   const min = Math.max(0, Number.parseInt(String(habit.rewardMin ?? habit.rewardPoints ?? 0), 10) || 0);
   const max = Math.max(0, Number.parseInt(String(habit.rewardMax ?? habit.rewardPoints ?? 0), 10) || 0);
   if (habit.randomReward && (min > 0 || max > 0)) return `+${habit.rewardMin ?? habit.rewardPoints ?? 0}-${habit.rewardMax ?? habit.rewardPoints ?? 0} ${currency}`;
-  return min > 0 ? `+${habit.rewardPoints} ${currency}` : '';
+  const points = Math.max(0, Number.parseInt(String(habit.rewardPoints ?? 0), 10) || 0);
+  return points > 0 ? `+${habit.rewardPoints} ${currency}` : '';
 }
 
 function habitPenaltyText(habit: Record<string, any>) {
