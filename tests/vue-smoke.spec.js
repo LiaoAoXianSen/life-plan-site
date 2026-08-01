@@ -253,6 +253,26 @@ test('todo page keeps the legacy cloud sync panel below the workspace', async ({
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('todo detail overdue status mirrors legacy and clears after completion', async ({ page }) => {
+    const today = localDate();
+    const yesterdayDate = new Date(`${today}T12:00:00`);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = localDate(yesterdayDate);
+    const source = emptyData({
+        todos: [todoFixture('todo-overdue-detail', '昨天截止的待办', { dueDate: yesterday, urgency: 'high' })],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/todos?todo=todo-overdue-detail');
+    const detail = page.locator('.todo-detail-panel');
+    await expect(detail).toContainText('已超期 1 天');
+    await expect(detail).not.toContainText('未完成');
+    await detail.getByRole('button', { name: '标记完成', exact: true }).click();
+    await expect(detail).toContainText('已完成');
+    await expect(detail).not.toContainText('已超期 1 天');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).not.toBe(original);
+});
+
 test('todo dashboard route presets and calendar entries preserve one read-only detail target', async ({ page }) => {
     const today = localDate();
     const tomorrow = new Date(`${today}T12:00:00`);

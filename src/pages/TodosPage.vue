@@ -37,6 +37,21 @@ const form = reactive({ text: '', note: '', dueDate: '', planStartDate: '', plan
 const detailForm = reactive({ text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium' as Todo['urgency'], group: '其他', subTodos: [] as TodoSubTodo[] });
 const sessionForm = reactive({ date: getTodayStr(), startTime: new Date().toTimeString().slice(0, 5), endTime: '', note: '' });
 
+function isTodoOverdue(todo: Pick<Todo, 'done' | 'dueDate'>, today = getTodayStr()) {
+  return Boolean(!todo.done && todo.dueDate && todo.dueDate < today);
+}
+
+function getTodoOverdueDays(todo: Pick<Todo, 'done' | 'dueDate'>, today = getTodayStr()) {
+  if (!isTodoOverdue(todo, today)) return 0;
+  const due = new Date(`${todo.dueDate}T12:00:00`).getTime();
+  const current = new Date(`${today}T12:00:00`).getTime();
+  return Math.max(1, Math.floor((current - due) / 86_400_000));
+}
+
+function getTodoStatusText(todo: Todo) {
+  return todo.done ? '已完成' : (isTodoOverdue(todo) ? `已超期 ${getTodoOverdueDays(todo)} 天` : '未完成');
+}
+
 const DEFAULT_GROUPS = ['健身', '学习', '工作', '生活', '其他'];
 const groupOptions = computed(() => {
   const dynamic = todosStore.todos.map(todo => todo.group || '其他');
@@ -480,7 +495,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
 
         <template v-else-if="selectedTodo">
           <div class="todo-detail-meta-list">
-            <span>{{ selectedTodo.done ? '已完成' : '未完成' }}</span><span>{{ selectedTodo.group || '其他' }}</span><span>截止 {{ selectedTodo.dueDate || '未设置' }}</span><span>计划 {{ selectedTodo.planStartDate || '未设置' }}{{ selectedTodo.planEndDate ? ` 至 ${selectedTodo.planEndDate}` : '' }}</span>
+            <span>{{ getTodoStatusText(selectedTodo) }}</span><span>{{ selectedTodo.group || '其他' }}</span><span>截止 {{ selectedTodo.dueDate || '未设置' }}</span><span>计划 {{ selectedTodo.planStartDate || '未设置' }}{{ selectedTodo.planEndDate ? ` 至 ${selectedTodo.planEndDate}` : '' }}</span>
           </div>
           <p v-if="selectedTodo.note" class="todo-detail-copy">{{ selectedTodo.note }}</p>
           <div class="todo-detail-actions"><button class="btn btn-primary" type="button" @click="startEditing">编辑待办</button><button class="btn btn-secondary" type="button" @click="toggleSelectedTodo">{{ selectedTodo.done ? '恢复未完成' : '标记完成' }}</button><button class="btn btn-danger" type="button" @click="deleteSelectedTodo">删除待办</button></div>
