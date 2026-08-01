@@ -145,7 +145,11 @@ watch(allTags, tags => {
   refreshRandom();
 }, { immediate: true });
 watch(selectedRandomTags, refreshRandom, { deep: true });
-watch(() => route.query.tag, value => { tagFilter.value = String(value || ''); });
+watch(() => route.query.tag, value => {
+  tagFilter.value = String(value || '');
+  keyword.value = '';
+  typeFilter.value = 'all';
+});
 watch(() => route.query.material, value => {
   const id = String(value || '');
   if (!id) {

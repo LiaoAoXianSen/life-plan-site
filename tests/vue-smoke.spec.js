@@ -3722,6 +3722,31 @@ test('materials deep links filters and random review remain read-only', async ({
     expect(persisted.mirror).toBeNull();
 });
 
+test('materials tag navigation clears stale keyword and type filters', async ({ page }) => {
+    const source = emptyData({
+        materials: [
+            { id: 'material-tag-beta', type: '方法', content: 'Beta 标签素材', tags: ['Beta'], source: '', note: '' },
+            { id: 'material-tag-alpha', type: '摘抄', content: 'Alpha 标签素材', tags: ['Alpha'], source: '', note: '' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/materials');
+    const materialsPage = page.locator('#page-materials');
+    const list = materialsPage.locator('.material-list');
+    await materialsPage.getByLabel('搜索素材').fill('Alpha');
+    await materialsPage.getByLabel('素材类型筛选').selectOption('方法');
+    await expect(list).toContainText('暂无匹配素材');
+
+    await page.goto('/#/materials?tag=Beta');
+    await expect(materialsPage.getByLabel('素材标签筛选')).toHaveValue('Beta');
+    await expect(materialsPage.getByLabel('搜索素材')).toHaveValue('');
+    await expect(materialsPage.getByLabel('素材类型筛选')).toHaveValue('all');
+    await expect(list).toContainText('Beta 标签素材');
+    await expect(list).not.toContainText('Alpha 标签素材');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('search does not match a todo only through its localized module label', async ({ page }) => {
     const source = emptyData({
         todos: [todoFixture('todo-label-only', '整理周报', { note: '汇总本周工作', group: '工作' })],
