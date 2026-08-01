@@ -6,6 +6,7 @@ type SyncConfig = {
   webdavUrl: string;
   remotePath: string;
   autoSync: boolean;
+  useAppSyncKitProvider?: boolean;
   [key: string]: unknown;
 };
 
@@ -43,11 +44,15 @@ function nowIso() {
 }
 
 function normalizeConfig(raw: Partial<SyncConfig> = {}): SyncConfig {
-  return {
+  const next: SyncConfig = {
     webdavUrl: String(raw.webdavUrl || ''),
     remotePath: sync.normalizeRemotePath(raw.remotePath || '/life-plan.json'),
     autoSync: raw.autoSync !== false,
   };
+  if (Object.prototype.hasOwnProperty.call(raw, 'useAppSyncKitProvider')) {
+    next.useAppSyncKitProvider = raw.useAppSyncKitProvider === true;
+  }
+  return next;
 }
 
 function readConfig(): SyncConfig {

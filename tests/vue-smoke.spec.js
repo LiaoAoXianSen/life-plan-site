@@ -1685,6 +1685,17 @@ test('sync config removes legacy credential fields when saved', async ({ page })
     expect(stored.password).toBeUndefined();
 });
 
+test('sync config preserves the legacy AppSyncKit provider flag', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+        webdavUrl: '', remotePath: '/life-plan.json', autoSync: false, useAppSyncKitProvider: true,
+    })));
+    await page.goto('/#/sync');
+    await page.getByRole('button', { name: '保存配置' }).click();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
+    expect(stored.useAppSyncKitProvider).toBe(true);
+});
+
 test('main manual pull keeps dirty state when the merged result differs from cloud', async ({ page }) => {
     const localData = emptyData({
         records: [{ id: 'local-pull-record', type: '日记', title: '本机独有记录', content: '', startDate: '2026-07-27', endDate: '2026-07-27', todoIds: [] }],
