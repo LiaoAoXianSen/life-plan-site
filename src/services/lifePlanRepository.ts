@@ -88,7 +88,8 @@ export class LifePlanRepository {
 
   mergeImport(data: LifePlanData, imported: unknown): LifePlanData {
     const incoming = normalizePersistedData(imported, this.services);
-    this.createSnapshot('导入前自动备份', data, { action: 'before-import' });
+    const beforeSnapshot = this.createSnapshot('导入前自动备份', data, { action: 'before-import' });
+    if (!beforeSnapshot) throw new Error('导入前快照创建失败，导入已取消');
     const merged = normalizePersistedData(this.services.sync.mergeCloudData(data, incoming), this.services);
     this.createSnapshot('导入合并结果', merged, { action: 'merge-result', mergedWith: { label: '导入文件' } });
     return this.commit(merged, 'import-merge');
