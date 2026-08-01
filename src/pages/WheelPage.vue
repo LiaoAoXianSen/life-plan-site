@@ -120,11 +120,18 @@ watch([() => route.query.library, () => wheelStore.libraryItems.length], ([value
 }, { immediate: true });
 watch([() => route.query.tag, () => wheelStore.tags.length], ([value]) => {
   const id = String(Array.isArray(value) ? value[0] || '' : value || '');
-  if (!id || tagForm.id === id) return;
+  if (!id) return;
   const tag = wheelStore.tags.find(entry => entry.id === id);
   if (tag) {
-    editTag(tag);
+    showManagement.value = true;
+    activeManagementPanel.value = 'tags';
+    menuOpen.value = false;
     say(`已定位转盘标签：${tag.name}`);
+    void nextTick(() => {
+      const row = Array.from(document.querySelectorAll('[data-wheel-tag-id]'))
+        .find(item => item.getAttribute('data-wheel-tag-id') === id);
+      row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
   }
 }, { immediate: true });
 watch(() => wheelStore.libraryItems.map(item => item.id).join('|'), () => {
@@ -1011,7 +1018,7 @@ function importJson(event: Event) {
           <label class="check-label"><input v-model="tagForm.enabled" type="checkbox" />启用</label>
           <div class="inline-actions"><button class="btn btn-primary">{{ tagForm.id ? '保存' : '添加' }}</button><button v-if="tagForm.id" type="button" class="btn btn-secondary" @click="resetTagForm">取消</button></div>
         </form>
-        <div v-for="tag in wheelStore.tags" :key="tag.id" class="entity-row"><span><i class="color-dot" :style="{ background: tag.color }" /><strong>{{ tag.name }}</strong><em>权重 {{ tag.weight }} · {{ tagCandidateCount(tag) }} 个公共项 · {{ tag.enabled ? '启用' : '停用' }}</em></span><span class="tag-row-actions"><button class="link-button" :disabled="tag.enabled === false || !tagCandidateCount(tag)" @click="directTag(tag)">只转这个标签</button><button class="link-button" :disabled="tag.enabled === false || !tagCandidateCount(tag)" @click="previewTagStage(tag)">先看这个标签池</button><button class="link-button" @click="toggleTagEnabled(tag)">{{ tag.enabled === false ? '启用' : '停用' }}</button><button class="link-button" @click="editTag(tag)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除标签“${tag.name}”吗？`, () => wheelStore.deleteTag(tag.id))">删除</button></span></div>
+        <div v-for="tag in wheelStore.tags" :key="tag.id" class="entity-row" :data-wheel-tag-id="tag.id"><span><i class="color-dot" :style="{ background: tag.color }" /><strong>{{ tag.name }}</strong><em>权重 {{ tag.weight }} · {{ tagCandidateCount(tag) }} 个公共项 · {{ tag.enabled ? '启用' : '停用' }}</em></span><span class="tag-row-actions"><button class="link-button" :disabled="tag.enabled === false || !tagCandidateCount(tag)" @click="directTag(tag)">只转这个标签</button><button class="link-button" :disabled="tag.enabled === false || !tagCandidateCount(tag)" @click="previewTagStage(tag)">先看这个标签池</button><button class="link-button" @click="toggleTagEnabled(tag)">{{ tag.enabled === false ? '启用' : '停用' }}</button><button class="link-button" @click="editTag(tag)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除标签“${tag.name}”吗？`, () => wheelStore.deleteTag(tag.id))">删除</button></span></div>
       </article>
       <article id="wheel-library-panel" class="card library-card">
         <div class="card-title-row">
