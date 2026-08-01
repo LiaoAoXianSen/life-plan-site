@@ -46,7 +46,9 @@ function tone(type: string): ScheduleTone { return tones[type] ?? { bg: '#eef6f1
 function entityString(entity: DataEntity, key: string): string { return typeof entity[key] === 'string' ? entity[key] as string : ''; }
 
 function makeRecordItem(record: DataEntity): ScheduleItem {
-  const start = parseTimeToMinutes(entityString(record, 'recordTime'));
+  const storedTime = (entityString(record, 'createdAt') || entityString(record, 'updatedAt')).match(/T(\d{2}:\d{2})/)?.[1] || '';
+  const recordTime = entityString(record, 'recordTime') || storedTime;
+  const start = parseTimeToMinutes(recordTime);
   const end = parseTimeToMinutes(entityString(record, 'recordEndTime'));
   const type = entityString(record, 'type') || '记录';
   const startDate = entityString(record, 'startDate');
@@ -60,7 +62,7 @@ function makeRecordItem(record: DataEntity): ScheduleItem {
   const sortValue = startDate && entityString(record, 'recordTime')
     ? `${startDate}T${entityString(record, 'recordTime')}:00`
     : entityString(record, 'createdAt') || entityString(record, 'updatedAt') || `${startDate || endDate || '0000-00-00'}T00:00:00`;
-  return { key: `record:${record.id}`, id: String(record.id || ''), sourceType: 'record', type, date: startDate, title: entityString(record, 'title') || type, preview: entityString(record, 'content'), meta, done: false, allDay: start === null, startMinutes: start, endMinutes: end !== null && start !== null && end > start ? end : null, timeLabel: entityString(record, 'recordTime') || '全天', tone: tone(type), sortValue };
+  return { key: `record:${record.id}`, id: String(record.id || ''), sourceType: 'record', type, date: startDate, title: entityString(record, 'title') || type, preview: entityString(record, 'content'), meta, done: false, allDay: start === null, startMinutes: start, endMinutes: end !== null && start !== null && end > start ? end : null, timeLabel: recordTime || '全天', tone: tone(type), sortValue };
 }
 function makeTodoPlanItem(todo: Todo, date: string): ScheduleItem {
   return { key: `todo-plan:${todo.id}:${date}`, id: todo.id, sourceType: 'todo-plan', type: '待办计划', date, title: `计划：${todo.text}`, preview: `${todo.planStartDate || date} ~ ${todo.planEndDate || date}`, meta: `${todo.group || '其他'} · ${urgencyLabels[todo.urgency]}`, done: todo.done, allDay: true, startMinutes: null, endMinutes: null, timeLabel: '计划', tone: tone('待办计划') };

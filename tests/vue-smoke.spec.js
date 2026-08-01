@@ -3475,6 +3475,27 @@ test('records day view maintains a fixed-width timed event with a complete hover
     await expect(event).toHaveCSS('width', '160px');
 });
 
+test('records fall back to legacy stored timestamps when recordTime is missing', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        records: [
+            { id: 'record-created-time', type: '工作记录', title: '创建时间回退记录', content: '', startDate: today, endDate: today, createdAt: `${today}T10:30:00`, updatedAt: `${today}T12:00:00`, todoIds: [] },
+            { id: 'record-updated-time', type: '日记', title: '更新时间回退记录', content: '', startDate: today, endDate: today, updatedAt: `${today}T11:45:00`, todoIds: [] },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/records');
+    const rows = page.locator('#all-records .record-row');
+    const createdRow = rows.filter({ hasText: '创建时间回退记录' });
+    const updatedRow = rows.filter({ hasText: '更新时间回退记录' });
+    await expect(createdRow.locator('.record-time')).toHaveText('10:30');
+    await expect(updatedRow.locator('.record-time')).toHaveText('11:45');
+    await expect(createdRow.locator('.record-time')).not.toHaveText('全天');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('records list and editor expose a frozen legacy-style read-only preview', async ({ page }) => {
     const today = localDate();
     const source = emptyData({
