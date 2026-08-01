@@ -2310,6 +2310,36 @@ test('fitness exercise library summaries expose legacy weight and rest metadata'
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('fitness exercise library deletion keeps the legacy confirmation guard', async ({ page }) => {
+    const source = emptyData({
+        exerciseLibrary: [{
+            id: 'fitness-library-delete', name: '待删动作', muscle: 'chest', defaultSets: 3, defaultReps: '8-12', defaultWeight: 30, restSec: 90, note: '删除前备注',
+            createdAt: '2026-07-01T08:00:00', updatedAt: '2026-07-01T08:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+
+    await page.getByRole('button', { name: '动作库', exact: true }).click();
+    const row = page.locator('#fitness-library-section .fitness-metric-row').filter({ hasText: '待删动作' });
+
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toBe('确定删除这个动作吗？');
+        await dialog.dismiss();
+    });
+    await row.getByRole('button', { name: '删除', exact: true }).click();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    page.once('dialog', dialog => dialog.accept());
+    await row.getByRole('button', { name: '删除', exact: true }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.exerciseLibrary).toHaveLength(0);
+    expect(stored.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'exerciseLibrary', id: 'fitness-library-delete', reason: 'manual-delete' }),
+    ]));
+});
+
 test('fitness plan browse content opens the legacy editor entry point', async ({ page }) => {
     const source = emptyData({
         fitnessPlans: [{ id: 'fitness-browse-edit', name: '可点击计划', status: 'active', goal: 'strength', notes: '计划备注', exercises: [{ name: '深蹲', targetSets: 3, targetReps: '5', sets: [] }] }],
