@@ -2308,6 +2308,7 @@ test('fitness history editor saves edits through the legacy workout contract', a
     let historyForm = page.locator('form.card').filter({ hasText: '补记训练日志' });
     await historyForm.locator('.form-group').filter({ hasText: '训练日期' }).locator('input').fill('2026-07-28');
     await historyForm.locator('.form-group').filter({ hasText: '状态' }).locator('select').selectOption('done');
+    page.once('dialog', dialog => dialog.accept());
     await historyForm.locator('.form-group').filter({ hasText: '关联计划' }).locator('select').selectOption('plan-row');
     await historyForm.locator('.form-group').filter({ hasText: '训练标题' }).locator('input').fill('补记背部训练');
     await historyForm.locator('.form-group').filter({ hasText: '时长 分钟' }).locator('input').fill('48');
@@ -2359,6 +2360,44 @@ test('fitness history editor saves edits through the legacy workout contract', a
     expect(afterDelete.deletedItems).toEqual(expect.arrayContaining([
         expect.objectContaining({ collection: 'fitnessWorkouts', id: workoutId, reason: 'manual-delete' }),
     ]));
+});
+
+test('fitness workout plan changes confirm before replacing manual exercises', async ({ page }) => {
+    const source = emptyData({
+        exerciseLibrary: [{ id: 'fitness-confirm-library', name: '计划动作', muscle: 'legs', defaultSets: 2, defaultReps: '8', defaultWeight: 40, restSec: 90 }],
+        fitnessPlans: [{
+            id: 'fitness-confirm-plan', name: '确认计划', goal: 'strength', status: 'active', notes: '',
+            exercises: [{ id: 'fitness-confirm-exercise', name: '计划动作', targetSets: 2, targetReps: '8', targetWeight: 40, sets: [{ weight: 40, reps: 8 }, { weight: 40, reps: 8 }] }],
+        }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/fitness');
+    await page.locator('.fitness-page-header .fitness-header-actions').getByRole('button', { name: '补记训练' }).click();
+    const form = page.locator('form.card').filter({ hasText: '补记训练日志' });
+    await form.locator('.form-group').filter({ hasText: '训练日期' }).locator('input').fill('2026-07-28');
+    await form.locator('.form-group').filter({ hasText: '状态' }).locator('select').selectOption('skipped');
+    await form.locator('.form-group').filter({ hasText: '训练标题' }).locator('input').fill('手动标题');
+    await form.locator('.form-group').filter({ hasText: '训练备注' }).locator('input').fill('手动备注');
+    const exerciseName = form.locator('.fitness-plan-exercise-card').first().locator('input[placeholder="动作名称"]');
+    await exerciseName.fill('手动动作');
+    const planSelect = form.locator('.form-group').filter({ hasText: '关联计划' }).locator('select');
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toBe('要用该计划的动作覆盖当前编辑内容吗？');
+        await dialog.dismiss();
+    });
+    await planSelect.selectOption('fitness-confirm-plan');
+    await expect(planSelect).toHaveValue('fitness-confirm-plan');
+    await expect(exerciseName).toHaveValue('手动动作');
+
+    await planSelect.selectOption('');
+    page.once('dialog', dialog => dialog.accept());
+    await planSelect.selectOption('fitness-confirm-plan');
+    await expect(exerciseName).toHaveValue('计划动作');
+    await expect(form.locator('.form-group').filter({ hasText: '训练日期' }).locator('input')).toHaveValue('2026-07-28');
+    await expect(form.locator('.form-group').filter({ hasText: '状态' }).locator('select')).toHaveValue('skipped');
+    await expect(form.locator('.form-group').filter({ hasText: '训练标题' }).locator('input')).toHaveValue('手动标题');
+    await expect(form.locator('.form-group').filter({ hasText: '训练备注' }).locator('input')).toHaveValue('手动备注');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(source));
 });
 
 test('fitness body metrics edit every legacy field through the shared service', async ({ page }) => {

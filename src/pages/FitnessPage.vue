@@ -414,6 +414,10 @@ function applyPlanToWorkout(planId: string) {
   const plan = fitness.services.fitness.findFitnessPlan(fitness.plans, planId);
   workoutForm.planId = plan?.id || '';
   if (!plan) return;
+  if (!workoutForm.title || workoutForm.title === '自由训练' || String(workoutForm.title).includes('·')) {
+    workoutForm.title = plan.name || '自由训练';
+  }
+  if (fitness.services.fitness.getPlanExercises(plan).length && !window.confirm('要用该计划的动作覆盖当前编辑内容吗？')) return;
   const generated = fitness.services.fitness.createWorkoutFromPlan(plan, {
     date: workoutForm.date,
     status: workoutForm.status,
