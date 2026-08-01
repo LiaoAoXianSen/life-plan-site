@@ -2858,6 +2858,46 @@ test('habit quick check-in writes the legacy fields and rebuilds its local mirro
     expect(stored.mirror.remoteUploadEnabled).toBe(false);
 });
 
+test('habit backfill primary check-in writes the selected date', async ({ page }) => {
+    const today = localDate();
+    const yesterdayDate = new Date(`${today}T12:00:00`);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = localDate(yesterdayDate);
+    const source = emptyData({
+        habits: [{
+            id: 'habit-primary-backfill',
+            name: '补卡主按钮习惯',
+            rule: 'daily',
+            timesPerDay: '1',
+            startDate: '2026-01-01',
+            rewardPoints: 2,
+            rewardCurrency: '金币',
+        }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('habitAppData', JSON.stringify({ localMirror: true, remoteUploadEnabled: true, mirror: { reason: 'stale' } }));
+    }, source);
+
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '补卡' }).click();
+    await page.getByLabel('补卡日期').fill(yesterday);
+    const card = page.locator('.habit-quick-card').filter({ hasText: '补卡主按钮习惯' });
+    await card.getByRole('button', { name: '打卡', exact: true }).click();
+    await expect(page.locator('.notice.success')).toContainText(`补卡 ${yesterday}`);
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+    }));
+    expect(stored.data.checkins).toHaveLength(1);
+    expect(stored.data.checkins[0]).toEqual(expect.objectContaining({ habitId: 'habit-primary-backfill', date: yesterday, note: '' }));
+    expect(stored.data.checkins.some(item => item.date === today)).toBe(false);
+    expect(stored.mirror.localMirror).toBe(true);
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('append-checkin');
+});
+
 test('habit note backfill edit and undo keep local mirror and ledger contracts', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();

@@ -581,7 +581,9 @@ function deleteHabit(id: string) {
 }
 
 function checkin(id: string) {
-  habits.quickCheckin(id);
+  const date = activeHabitDate.value;
+  if (date === getTodayStr()) habits.quickCheckin(id);
+  else habits.appendCheckin(id, date);
 }
 
 function appendWithDraft(habitId: string) {
