@@ -57,40 +57,46 @@ const captureDraft = reactive<Record<CaptureDraftKey, string>>({
   ideaText: '',
 });
 
-const modeMeta: Record<AiMode, { title: string; subtitle: string; placeholder: string; action: string }> = {
+const modeMeta: Record<AiMode, { title: string; subtitle: string; inputLabel: string; placeholder: string; action: string }> = {
   chatCapture: {
     title: 'AI 对话整理',
     subtitle: '把随手说的一段话整理成可创建的待办建议。',
+    inputLabel: '直接和 AI 说',
     placeholder: '例如：明天想把页面检查一下，顺手记个待办。',
     action: '生成建议',
   },
   todayPlan: {
     title: 'AI 今日计划',
     subtitle: '根据今日待办、逾期项和浮动池，生成可确认的今日行动清单。',
+    inputLabel: '补充今天的状态或限制',
     placeholder: '例如：优先补逾期，再推进一个高优先级任务。',
     action: '生成今日计划',
   },
   backlogTriage: {
     title: 'AI 待办整理',
     subtitle: '从逾期、浮动和今日关注里挑出几件能马上推进的小事。',
+    inputLabel: '整理偏好',
     placeholder: '例如：只保留今天能完成的 3 到 5 件。',
     action: '生成整理建议',
   },
   ideaNext: {
     title: 'AI 灵感下一步',
     subtitle: '选择一条灵感，把它变成可确认的小实验或下一步行动。',
+    inputLabel: '转化要求',
     placeholder: '例如：先做最小验证，不要设计太大的项目。',
     action: '生成灵感行动',
   },
   todoBreakdown: {
     title: 'AI 待办拆解',
     subtitle: '选择一个待办，拆成可以勾选的子任务建议。',
+    inputLabel: '拆解要求',
     placeholder: '例如：按准备、执行、收尾拆；每一步必须能直接开始。',
     action: '生成子任务',
   },
   diaryReview: {
     title: 'AI 日记分析',
     subtitle: '从一篇日记里提炼复盘、明日重点和可确认的行动建议。',
+    inputLabel: '分析偏好',
     placeholder: '例如：复盘要直白一点；明日重点只保留一件最关键的事。',
     action: '生成日记分析',
   },
@@ -586,7 +592,7 @@ watch(() => route.query.diary, value => {
       </div>
 
       <div class="form-group">
-        <label for="ai-user-input">{{ modeMeta[mode].title }}</label>
+        <label for="ai-user-input">{{ modeMeta[mode].inputLabel }}</label>
         <textarea id="ai-user-input" v-model="input" :placeholder="modeMeta[mode].placeholder" />
       </div>
       <button class="btn btn-primary" type="button" :disabled="running" @click="run">{{ running ? '生成中…' : modeMeta[mode].action }}</button>

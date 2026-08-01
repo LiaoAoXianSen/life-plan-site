@@ -5270,7 +5270,7 @@ test('AI diaryReview keeps diary drafts read-only until confirmed writeback', as
     const aiPage = page.locator('#page-ai');
     await expect(aiPage.locator('.ai-mode-tabs button.active')).toHaveText('日记分析');
     await expect(aiPage.getByLabel('选择日记')).toHaveValue('diary-ai-page');
-    await aiPage.getByLabel('AI 日记分析').fill('复盘要简短，保留明日动作。');
+    await aiPage.getByLabel('分析偏好').fill('复盘要简短，保留明日动作。');
     await aiPage.getByRole('button', { name: '生成日记分析' }).click();
     await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
     await expect(aiPage.getByLabel('AI 复盘草稿')).toBeVisible();
@@ -5323,7 +5323,7 @@ test('AI todayPlan keeps drafts read-only until confirmed writeback with sourceT
     await page.goto('/#/ai?mode=todayPlan');
     const aiPage = page.locator('#page-ai');
     await expect(aiPage.locator('.ai-mode-tabs button.active')).toHaveText('今日计划');
-    await aiPage.getByLabel('AI 今日计划').fill('优先补逾期，再推进一个迁移事项。');
+    await aiPage.getByLabel('补充今天的状态或限制').fill('优先补逾期，再推进一个迁移事项。');
     await aiPage.getByRole('button', { name: '生成今日计划', exact: true }).click();
     await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
     await expect(aiPage.locator('.ai-result-item').first()).toBeVisible();
@@ -5429,7 +5429,7 @@ test('AI chatCapture keeps multi-destination drafts read-only until confirmed wr
     }, source);
     await page.goto('/#/ai?mode=chatCapture');
     const aiPage = page.locator('#page-ai');
-    await aiPage.getByLabel('AI 对话整理').fill('明天想把 Vue AI 对话整理跑通，顺手记个待办；今天工作里把页面写回做完了。这个想法先放灵感池。');
+    await aiPage.getByLabel('直接和 AI 说').fill('明天想把 Vue AI 对话整理跑通，顺手记个待办；今天工作里把页面写回做完了。这个想法先放灵感池。');
     await aiPage.getByRole('button', { name: '生成建议' }).click();
     await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
     await expect(page.locator('#ai-capture-draft-diaryText')).toHaveValue(/Vue AI 对话整理/);
@@ -5497,6 +5497,31 @@ test('AI chatCapture keeps multi-destination drafts read-only until confirmed wr
     expect(diary.content).toContain('编辑后的日记');
     expect(stored.mirror.authority).toBe('lifePlanData.todos');
     expect(stored.sync.dirty).toBe(true);
+});
+
+test('AI mode tabs swap the input label to the legacy per-mode text', async ({ page }) => {
+    const source = emptyData();
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
+    }, source);
+    await page.goto('/#/ai');
+    const aiPage = page.locator('#page-ai');
+    const inputLabel = aiPage.locator('label[for="ai-user-input"]');
+    const expectations = [
+        ['对话整理', '直接和 AI 说'],
+        ['今日计划', '补充今天的状态或限制'],
+        ['待办整理', '整理偏好'],
+        ['灵感下一步', '转化要求'],
+        ['待办拆解', '拆解要求'],
+        ['日记分析', '分析偏好'],
+    ];
+    for (const [tab, label] of expectations) {
+        await aiPage.getByRole('button', { name: tab, exact: true }).click();
+        await expect(inputLabel).toHaveText(label);
+    }
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
 test('AI todoBreakdown writes selected subtasks only after confirmation', async ({ page }) => {
