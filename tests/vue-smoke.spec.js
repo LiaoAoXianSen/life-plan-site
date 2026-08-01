@@ -1583,6 +1583,43 @@ test('main import confirmation cancellation keeps data and snapshots unchanged',
     expect(await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'))).toBeNull();
 });
 
+test('main import stops when the before-import snapshot cannot be saved', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'import-snapshot-failure-local', type: '日记', title: '导入前记录', content: '保留原文', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
+    });
+    const imported = emptyData({
+        records: [{ id: 'import-snapshot-failure-incoming', type: '工作记录', title: '不应导入记录', content: '不应写入', startDate: '2026-07-29', endDate: '2026-07-29', todoIds: [] }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        const realSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function blockedSnapshotWrite(key, value) {
+            if (key === 'lifePlanSnapshots') throw new Error('snapshot write blocked');
+            return realSetItem.call(this, key, value);
+        };
+    }, source);
+
+    await page.goto('/#/sync');
+    const dialogs = [];
+    page.on('dialog', async dialog => {
+        dialogs.push({ type: dialog.type(), message: dialog.message() });
+        await dialog.accept();
+    });
+    await page.getByLabel('导入并合并').setInputFiles({
+        name: 'import-before-snapshot-failure.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
+    });
+
+    await expect(page.locator('.sync-status.active')).toContainText('导入前快照创建失败');
+    expect(dialogs).toEqual([
+        expect.objectContaining({ type: 'confirm' }),
+    ]);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'))).toBeNull();
+});
+
 test('sync config removes legacy credential fields when saved', async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
         webdavUrl: '', remotePath: '/life-plan.json', autoSync: false, username: 'legacy-user', password: 'legacy-password',
