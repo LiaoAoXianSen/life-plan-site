@@ -417,6 +417,11 @@ function previewCurrentRecord() {
 function closeRecordPreview() {
   previewDraft.value = null;
   previewFromEditor.value = false;
+  if (route.query.preview) {
+    const query = { ...route.query };
+    delete query.preview;
+    void router.replace({ path: route.path, query });
+  }
 }
 
 function editPreviewRecord() {
@@ -710,11 +715,14 @@ function createSelectedDiaryAiTodos() {
 
 watch(editForm, scheduleEditorAutoSave, { deep: true, flush: 'sync' });
 
-watch([() => route.query.record, () => lifePlan.data.records.length], ([value]) => {
+watch([() => route.query.record, () => route.query.preview, () => lifePlan.data.records.length], ([value, preview]) => {
   const recordId = Array.isArray(value) ? value[0] : value;
-  if (!recordId || activeRecordId.value === recordId) return;
+  const previewRequested = (Array.isArray(preview) ? preview[0] : preview) === '1';
+  if (!recordId) return;
   const record = lifePlan.data.records.find(item => item.id === recordId);
-  if (record) openEditor(record, false);
+  if (!record) return;
+  if (previewRequested) openRecordPreview(record, false);
+  else if (activeRecordId.value !== recordId) openEditor(record, false);
 }, { immediate: true });
 
 watch(() => route.query.template, value => {

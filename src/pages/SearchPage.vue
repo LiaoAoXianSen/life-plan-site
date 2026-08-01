@@ -70,7 +70,7 @@ const indexItems = computed<SearchItem[]>(() => {
     body: String(record.content || ''),
     tags: record.type === '灵感碎片' ? normalizeTags(record.ideaTags) : [],
     meta: [record.ideaStatus, record.ideaNextAction, record.ideaConclusion].filter(Boolean).join(' '),
-    target: { path: '/records', query: { record: String(record.id || '') } },
+    target: { path: '/records', query: { record: String(record.id || ''), preview: '1' } },
   }));
   const todoItems = store.data.todos.map(todo => ({
     module: 'todos',

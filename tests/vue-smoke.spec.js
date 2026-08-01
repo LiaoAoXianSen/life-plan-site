@@ -1138,6 +1138,26 @@ test('search and tag center restore legacy read-only index navigation', async ({
     expect(persisted.mirror).toBeNull();
 });
 
+test('search record results open a read-only preview before editing', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'search-preview-record', type: '日记', title: '搜索预览记录', content: '搜索结果正文', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/search?q=搜索预览');
+    await page.locator('.search-result-item').filter({ hasText: '搜索预览记录' }).click();
+    await expectHashRoute(page, '/records', { record: 'search-preview-record', preview: '1' });
+    const preview = page.getByRole('dialog', { name: '记录预览' });
+    await expect(preview).toContainText('搜索结果正文');
+    await expect(page.locator('.record-editor-panel')).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await preview.getByRole('button', { name: '编辑', exact: true }).click();
+    await expect(page.locator('.record-editor-panel')).toBeVisible();
+    await expectHashRoute(page, '/records', { record: 'search-preview-record' });
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('wheel canvas click drag and tag stage preserve interaction contracts', async ({ page }) => {
     const source = emptyData({
         wheels: [
