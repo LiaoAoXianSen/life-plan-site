@@ -308,6 +308,21 @@ test('todo dashboard route presets and calendar entries preserve one read-only d
     expect(persisted.mirror).toBeNull();
 });
 
+test('todo urgency filter treats missing legacy urgency as medium', async ({ page }) => {
+    const source = emptyData({
+        todos: [todoFixture('todo-missing-urgency', '缺失紧急度的旧待办', { urgency: undefined })],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/todos');
+
+    const rows = page.locator('.todo-table tbody tr');
+    await page.getByLabel('待办紧急度').selectOption('medium');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('缺失紧急度的旧待办');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('dashboard command center periods and recent timeline stay read-only', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();
