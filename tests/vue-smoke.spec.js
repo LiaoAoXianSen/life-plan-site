@@ -846,7 +846,10 @@ test('search and tag center restore legacy read-only index navigation', async ({
     await page.goto('/#/tags');
     await page.locator('.tag-center-card').filter({ hasText: '共享标签' }).getByRole('button').filter({ hasText: '转盘项' }).click();
     await expectHashRoute(page, '/wheel', { tag: 'wheel-tag-search' });
-    await expect(page.getByPlaceholder('标签名称')).toHaveValue('共享标签');
+    await expect(page.locator('#wheel-management-block')).toBeVisible();
+    await expect(page.locator('#wheel-management-block')).toHaveAttribute('data-management-panel', 'tags');
+    await expect(page.locator('[data-wheel-tag-id="wheel-tag-search"]')).toContainText('共享标签');
+    await expect(page.getByPlaceholder('标签名称')).toHaveValue('');
 
     const persisted = await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), mirror: localStorage.getItem('todoAppData') }));
     expect(persisted.data).toBe(original);
