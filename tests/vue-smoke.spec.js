@@ -3051,6 +3051,27 @@ test('habit action cards expose legacy rule reward timing and note metadata', as
     await expect(card).toContainText('备注：读完一章');
 });
 
+test('habit action cards order and display legacy time-only checkins', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [{
+            id: 'habit-time-only', name: '旧时间打卡', rule: 'daily', timesPerDay: 3, startDate: '2026-01-01',
+        }],
+        checkins: [
+            { id: 'checkin-time-late', habitId: 'habit-time-only', date: today, time: '21:30', createdAt: `${today}T08:00:00`, note: '晚间备注' },
+            { id: 'checkin-time-early', habitId: 'habit-time-only', date: today, time: '09:15', createdAt: `${today}T22:00:00`, note: '晨间备注' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+
+    await page.goto('/#/habits');
+    const card = page.locator('.habit-quick-card').filter({ hasText: '旧时间打卡' });
+    await expect(card).toContainText('21:30');
+    await expect(card).toContainText('备注：晚间备注');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('habit base edit and delete preserve legacy management contracts', async ({ page }) => {
     const today = new Date().toISOString().slice(0, 10);
     const source = emptyData({

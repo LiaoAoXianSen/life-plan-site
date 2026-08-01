@@ -389,7 +389,11 @@ export const useHabitsStore = defineStore('habits', () => {
     return lifePlan.data.checkins
       .map(asCheckin)
       .filter(item => item.habitId === habitId && item.date === date)
-      .sort((a, b) => String(a.checkinAt || a.createdAt || '').localeCompare(String(b.checkinAt || b.createdAt || '')));
+      .sort((a, b) => {
+        const aValue = a.checkinAt || (a.time ? `${a.date}T${a.time}:00` : a.createdAt || '');
+        const bValue = b.checkinAt || (b.time ? `${b.date}T${b.time}:00` : b.createdAt || '');
+        return aValue.localeCompare(bValue);
+      });
   }
 
   function getCheckinCount(habitId: string, date = getTodayStr()): number {

@@ -363,10 +363,18 @@ function latestCheckinFor(habitId: string, date: string) {
   return checkins[checkins.length - 1] || null;
 }
 
+function checkinClockTime(checkin: Record<string, any> | null) {
+  if (!checkin) return '';
+  const legacyTime = String(checkin.time || '');
+  if (/^\d{2}:\d{2}$/.test(legacyTime)) return legacyTime;
+  const match = String(checkin.checkinAt || checkin.createdAt || checkin.updatedAt || '').match(/T?(\d{2}):(\d{2})(?::\d{2})?/);
+  return match ? `${match[1]}:${match[2]}` : '';
+}
+
 function checkinTimeText(habitId: string, date: string) {
   const latest = latestCheckinFor(habitId, date) as Record<string, any> | null;
   if (!latest) return '未记录';
-  return String(latest.time || latest.checkinAt || latest.createdAt || '').slice(11, 16) || '已记录';
+  return checkinClockTime(latest) || '已记录';
 }
 
 function checkinNoteText(habitId: string, date: string) {
@@ -1028,7 +1036,7 @@ watch(focusedHabitId, value => {
             </div>
             <div v-if="checkinsForDraft(item.habit.id).length" class="habit-checkin-note-list">
               <div v-for="checkinItem in checkinsForDraft(item.habit.id)" :key="checkinItem.id" class="habit-checkin-note-row">
-                <span>{{ checkinItem.time || checkinItem.checkinAt?.slice(11, 16) || '记录' }}</span>
+                <span>{{ checkinClockTime(checkinItem) || '记录' }}</span>
                 <input :value="noteDraft(checkinItem)" maxlength="120" placeholder="备注" @input="updateNoteDraft(checkinItem.id, ($event.target as HTMLInputElement).value)" />
                 <button class="btn btn-secondary" type="button" @click="saveCheckinNote(checkinItem.id)">保存备注</button>
               </div>
