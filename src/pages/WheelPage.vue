@@ -121,13 +121,14 @@ watch([() => route.query.library, () => wheelStore.libraryItems.length], ([value
   }
 }, { immediate: true });
 watch([() => route.query.tag, () => wheelStore.tags.length], ([value]) => {
+  if (value === undefined) return;
+  showManagement.value = true;
+  activeManagementPanel.value = 'tags';
+  menuOpen.value = false;
   const id = String(Array.isArray(value) ? value[0] || '' : value || '');
   if (!id) return;
   const tag = wheelStore.tags.find(entry => entry.id === id);
   if (tag) {
-    showManagement.value = true;
-    activeManagementPanel.value = 'tags';
-    menuOpen.value = false;
     say(`已定位转盘标签：${tag.name}`);
     void nextTick(() => {
       const row = Array.from(document.querySelectorAll('[data-wheel-tag-id]'))

@@ -1158,6 +1158,28 @@ test('search and tag center restore legacy read-only index navigation', async ({
     expect(persisted.mirror).toBeNull();
 });
 
+test('tag center opens wheel tag management when no wheel tag exists', async ({ page }) => {
+    const source = emptyData({
+        records: [{
+            id: 'idea-tag-only', type: '灵感碎片', title: '只有灵感来源的标签', content: '',
+            startDate: '2026-07-28', endDate: '2026-07-28', ideaStatus: '待整理', ideaTags: ['孤立标签'], todoIds: [],
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/tags');
+    const card = page.locator('.tag-center-card').filter({ hasText: '孤立标签' });
+    await expect(card).toContainText('只有灵感来源的标签');
+    await card.getByRole('button').filter({ hasText: '转盘项' }).click();
+
+    await expectHashRoute(page, '/wheel', { tag: '' });
+    const management = page.locator('#wheel-management-block');
+    await expect(management).toBeVisible();
+    await expect(management).toHaveAttribute('data-management-panel', 'tags');
+    await expect(page.getByPlaceholder('标签名称')).toHaveValue('');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('search record results open a read-only preview before editing', async ({ page }) => {
     const source = emptyData({
         records: [{ id: 'search-preview-record', type: '日记', title: '搜索预览记录', content: '搜索结果正文', startDate: '2026-07-28', endDate: '2026-07-28', todoIds: [] }],
