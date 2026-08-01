@@ -3432,6 +3432,25 @@ test('idea filters deep-link to one Records editor and persist all legacy idea f
     });
 });
 
+test('ideas cards keep legacy compact fields only', async ({ page }) => {
+    const source = emptyData({
+        records: [{
+            id: 'idea-card-fields', type: '灵感碎片', title: '卡片字段灵感', content: '灵感卡片正文',
+            startDate: '2026-07-30', endDate: '2026-07-30', ideaStatus: '实践中', ideaTags: [],
+            ideaNextAction: '卡片不展示的下一步', ideaConclusion: '卡片不展示的结论', todoIds: [],
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/ideas');
+
+    const card = page.locator('.idea-card').filter({ hasText: '卡片字段灵感' });
+    await expect(card).toContainText('灵感卡片正文');
+    await expect(card).not.toContainText('卡片不展示的下一步');
+    await expect(card).not.toContainText('卡片不展示的结论');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('ideas keep legacy creation and record-time ordering', async ({ page }) => {
     const source = emptyData({
         records: [
