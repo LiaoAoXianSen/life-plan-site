@@ -94,7 +94,7 @@ function sparklinePoints(series: Array<{ value: number }>) {
 }
 const overviewKpis = computed(() => [
   { label: '当前体重', value: latestWeight.value, hint: latestMetric.value ? String((latestMetric.value as any).date || '') : '还没有身材记录' },
-  { label: '近 30 天训练', value: String(recentWorkoutCount.value), hint: '已完成 / 跳过' },
+  { label: '近 30 天训练', value: String(recentWorkoutCount.value), hint: `计划中 ${fitnessOverview.value.workoutSummary.plannedCount} · 连续 ${fitnessOverview.value.workoutSummary.streak} 天` },
   { label: '进行中计划', value: String(activePlanCount.value), hint: `全部计划 ${fitness.plans.length}` },
   { label: '动作库', value: String(fitness.library.length), hint: '可用于自由训练' },
 ]);

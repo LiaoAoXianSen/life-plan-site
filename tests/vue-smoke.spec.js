@@ -2754,6 +2754,27 @@ test('fitness trend summary shows the legacy insufficient-data wording with one 
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('fitness overview keeps the legacy workout summary sub wording', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        fitnessWorkouts: [
+            { id: 'fitness-kpi-done', date: today, status: 'done', title: '今日完成', exercises: [], createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` },
+            { id: 'fitness-kpi-planned', date: today, status: 'planned', title: '计划安排', exercises: [], createdAt: `${today}T09:00:00`, updatedAt: `${today}T09:00:00` },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-kpi-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    const kpi = page.locator('.fitness-kpi-card').filter({ hasText: '近 30 天训练' });
+    await expect(kpi).toContainText('计划中 1 · 连续 1 天');
+    await expect(kpi).not.toContainText('已完成 / 跳过');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('fitness hero follows the legacy service recommendation and free fallback', async ({ page }) => {
     const source = emptyData({
         fitnessPlans: [
