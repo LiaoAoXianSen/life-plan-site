@@ -1601,6 +1601,34 @@ test('wheel list empty state pins the normal-mode legacy hint with a tag-only se
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(JSON.stringify(source));
 });
 
+test('wheel stage hint follows the legacy three-branch wording', async ({ page }) => {
+    const source = emptyData({
+        wheels: [
+            { id: 'hint-normal', name: '提示普通盘', mode: 'normal', items: [{ id: 'hint-item', name: '提示选项', weight: 1, enabled: true }], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'hint-tag', name: '提示标签盘', mode: 'tag', tagIds: ['hint-tag-a'], items: [], createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+        ],
+        wheelTags: [{ id: 'hint-tag-a', name: '提示标签', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+        wheelLibraryItems: [{ id: 'hint-lib', name: '提示公共项', note: '', tagIds: ['hint-tag-a'], weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        window.__wheelSpinDurationMs = 1;
+    }, source);
+    await page.goto('/#/wheel');
+
+    const hint = page.locator('.wheel-stage-hint');
+    await expect(hint).toHaveText('点击转盘或按钮都可以开始，普通转盘会直接给出最终结果。');
+
+    await page.getByLabel('当前转盘', { exact: true }).selectOption('hint-tag');
+    await expect(hint).toHaveText('标签转盘会先定标签，再抽具体内容；也可以直接点某个标签单独转。');
+
+    await page.locator('.wheel-canvas-wrap').click();
+    await expect(page.locator('.wheel-result')).toContainText('已锁定：提示标签');
+    await expect(hint).toHaveText('当前是第二段，正在从“提示标签”对应的内容池里继续抽取。');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('wheel public library batch actions preserve selection and tombstone contracts', async ({ page }) => {
     const source = emptyData({
         wheelTags: [

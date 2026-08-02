@@ -49,6 +49,11 @@ const sortedHistory = computed(() => wheelStore.history
   .slice()
   .sort((a, b) => String(b.createdAt || b.updatedAt || '').localeCompare(String(a.createdAt || a.updatedAt || ''))));
 const isTagSecondStage = computed(() => Boolean(selectedWheel.value?.mode === 'tag' && stageTag.value));
+const stageHint = computed(() => {
+  if (isTagSecondStage.value) return `当前是第二段，正在从“${stageTag.value?.name || ''}”对应的内容池里继续抽取。`;
+  if (selectedWheel.value?.mode === 'tag') return '标签转盘会先定标签，再抽具体内容；也可以直接点某个标签单独转。';
+  return '点击转盘或按钮都可以开始，普通转盘会直接给出最终结果。';
+});
 const segmentColors = ['#bcdcc9', '#d7e5f5', '#f4d5b7', '#e3d6f4', '#d1e6db', '#f3dfad'];
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const displayEntries = computed(() => {
@@ -901,6 +906,7 @@ function importJson(event: Event) {
             <canvas ref="canvasRef" class="wheel-canvas" :style="{ transform: `rotate(${rotation}deg)` }" />
             <span class="wheel-center-label">{{ spinning ? '转动中' : isTagSecondStage ? '抽项目' : selectedWheel?.mode === 'tag' ? '抽标签' : 'GO' }}</span>
           </div>
+          <div class="wheel-stage-hint">{{ stageHint }}</div>
         </div>
       </div>
     </section>
