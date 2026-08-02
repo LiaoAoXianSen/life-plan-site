@@ -2,7 +2,7 @@
 
 This checklist tracks whether `migration/vue-app-v1` is a credible Vue replacement candidate for the legacy static app on `master`. Passing build, route smoke tests, or preview deployment is not enough. The active project scope covers Vue functionality, tests, documentation, and technical cleanup; switching the live deployment from legacy to Vue is explicitly out of scope and is not tracked as remaining work.
 
-Current whole-project engineering completion estimate: **99%** as of 2026-08-02. This percentage describes the entire active Vue project scope, not the latest implementation slice. The current core replacement audit has no open blocker; the remaining percentage is reserved for documented specialist follow-ups and cleanup.
+Current whole-project engineering completion estimate: **100%** as of 2026-08-02. This percentage describes the entire active Vue project scope, not the latest implementation slice. The current core replacement audit has no open blocker; the remaining percentage is reserved for documented specialist follow-ups and cleanup.
 
 ## Global Acceptance Gates
 
@@ -500,7 +500,7 @@ Status: **READY** on `migration/vue-app-v1`
 1. Global gates remain true: `master` stays deployable; `experiment/vue-preview-poc` and stash `wip-materials-page-v1-before-vue-preview-experiment` stay untouched; `lifePlanData` is the only authority; Todo/Habit mirrors are rebuilt locally; Vue never imports `app.js`; WebDAV paths, tombstones, snapshots, and dirty-state remain compatible.
 2. Every module row in the Page And Module Checklist has no open blocker for its current parity audit (Dashboard, Todos, Records, Ideas, Materials, Tags/Search, Goals, Habits, Fitness, Wheel, Sync, AI, Import/Export).
 3. Sync acceptance is satisfied by the existing modular Playwright coverage for main protected upload/import-export and Todo/Wheel/Habit independent preview/apply/conditional upload/create/auto-sync contracts (persisted shape, not route smoke alone). Current full Vue smoke is 217/217.
-4. Vue artifacts publish without `scripts/package-clean.ps1`: `npm run build` → `dist/`, plus `npm run package:vue` / `scripts/package-vue-dist.ps1` for offline dist delivery.
+4. Vue artifacts publish without `scripts/package-clean.ps1`: `npm run build` produces route-level lazy chunks in `dist/`, keeps the entry bundle below 500 kB, and `npm run package:vue` / `scripts/package-vue-dist.ps1` provides offline dist delivery. The explicit ESM `vite.config.mts` removes the Vite CJS Node API warning.
 5. The previously documented specialist follow-ups are closed: Wheel public-library AI tag-suggest has local/remote generation, fallback, existing-tag filtering, editable draft selection, and no-write-before-save regressions; Habit diagnostics now provides confirmed safe repair with a pre-repair snapshot while leaving ambiguous duplicate/missing IDs for manual review.
 6. The latest Fitness parity closeout covers the legacy four-column live-set layout, set action semantics, `-15s` / `+15s` rest controls, primary skip action, and automatic timer removal at expiry. The final focused checks, production build, Vue package, `git diff --check`, and full 214/214 smoke gate passed on 2026-08-02.
 

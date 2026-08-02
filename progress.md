@@ -650,3 +650,12 @@
 - Focused diagnostics coverage passes **2/2**; `npm run build`, full Vue smoke **217/217**, `git diff --check`, and `npm run package:vue` pass. The generated artifact is `life-plan-site-vue-dist-20260802-113228.zip`.
 - After this slice the only planned remaining work is build technical cleanup: route-level lazy chunks and removal of the Vite CJS warning.
 - Existing untracked `.freebuff/`, `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain untouched.
+
+## 2026-08-02 - Build technical cleanup and scope closeout
+
+- Whole-project engineering completion moved from **99% to 100%** for the documented active Vue scope. Live deployment switching remains excluded by user request.
+- Converted all migrated routes to lazy page imports. The entry JavaScript bundle dropped from about **653 kB** to about **281 kB**, with page chunks emitted separately and no chunk-size warning.
+- Renamed `vite.config.ts` to explicit ESM `vite.config.mts`; the Vite CJS Node API deprecation warning no longer appears.
+- Strengthened the all-routes smoke to fail on page exceptions or failed lazy-chunk requests while preserving route titles and hash navigation. The first full run exposed two Records leave-save timing regressions under lazy routing; route-leave guards now synchronously flush existing editors and new-record drafts before navigation.
+- Final verification passed: Records navigation focused **2/2**, production build with no CJS/chunk warning, full Vue smoke **217/217**, `git diff --check`, and `npm run package:vue`. The final artifact is `life-plan-site-vue-dist-20260802-114758.zip`.
+- Existing untracked `.freebuff/`, `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain untouched.

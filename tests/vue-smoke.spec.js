@@ -53,7 +53,9 @@ async function expectHashRoute(page, path, query = {}) {
 
 test('Vue shell navigates through migrated pages without browser errors', async ({ page }) => {
     const errors = [];
+    const failedRequests = [];
     page.on('pageerror', error => errors.push(error.message));
+    page.on('requestfailed', request => failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`));
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/');
     await expect(page.locator('#page-dashboard')).toBeVisible();
@@ -65,6 +67,7 @@ test('Vue shell navigates through migrated pages without browser errors', async 
         await expect(page.locator('.page-title')).toHaveText(title);
     }
     expect(errors).toEqual([]);
+    expect(failedRequests).toEqual([]);
 });
 
 test('todo writes main data and the compatible todo mirror', async ({ page }) => {

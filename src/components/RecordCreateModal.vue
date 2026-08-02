@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -200,6 +201,11 @@ function saveManual() {
   emit('update:modelValue', false);
 }
 
+function flushDraftBeforeRouteLeave() {
+  window.clearTimeout(autoSaveTimer);
+  if (props.modelValue && step.value === 'edit' && draftDirty.value) persistDraft('silent');
+}
+
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && props.modelValue) closeModal();
 }
@@ -270,6 +276,7 @@ function openWithType(type: string) {
 defineExpose({ openWithType, selectType });
 
 onMounted(() => window.addEventListener('keydown', handleKeydown));
+onBeforeRouteLeave(flushDraftBeforeRouteLeave);
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown);

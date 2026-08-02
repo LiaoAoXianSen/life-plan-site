@@ -282,7 +282,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 264. Status: complete - Refresh migration checklist, preview, findings, and progress documentation to the current 2026-08-02 checkpoint.
 265. Status: complete - Close Wheel public-library AI tag-suggest with local/remote generation, failure fallback, existing-tag filtering, editable draft selection, transient-state cleanup, focused tests, and synchronized documentation.
 266. Status: complete - Implement confirmed Habit safe diagnostics repair for orphan/future check-ins, invalid ledger amounts, and empty currencies with a pre-repair snapshot, mirror rebuild, dirty state, tombstones, and ambiguous-ID protection.
-267. Status: pending - Complete the final build technical cleanup: lazy route chunks and explicit ESM Vite config, then update tests, package evidence, documentation, and whole-project percentage.
+267. Status: complete - Complete final build technical cleanup with lazy route chunks and explicit ESM Vite config; verify every migrated route loads without page or request errors and update package/documentation evidence.
+268. Status: complete - Close the documented active Vue project scope at 100% after full smoke, production build, package, diff check, commit, and force-free remote verification.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

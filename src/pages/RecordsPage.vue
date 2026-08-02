@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
 import RecordCreateModal from '../components/RecordCreateModal.vue';
 import { buildScheduleItems, addDays, getMonthStart, getWeekStart, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
@@ -755,6 +755,10 @@ watch(() => editForm.type, type => {
   selectedTemplateKey.value = '';
   editForm.templateId = '';
   setTemplateValues();
+});
+
+onBeforeRouteLeave(() => {
+  flushPendingEditorSave();
 });
 
 onBeforeUnmount(() => {

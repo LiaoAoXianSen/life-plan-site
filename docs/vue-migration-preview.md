@@ -90,12 +90,13 @@ changes. Keep a manually exported data file before testing complex data flows.
 `migration/vue-app-v1` is an operational **replacement candidate** for daily
 workflows covered by the parity checklist. The current full Vue smoke gate is
 217/217, with production build and Vue dist packaging verified on 2026-08-02.
-The whole active Vue project is estimated at **99% complete**; this is a
-whole-project estimate rather than a per-slice score. The documented specialist
-follow-ups are now closed: Wheel AI suggestions cover local/remote/fallback
-flows, and Habit diagnostics can apply only deterministic safe repairs after
-confirmation and a local snapshot while leaving ambiguous IDs for manual review.
-Live deployment switching is not part of this project scope.
+The whole active Vue project is **100% complete for the documented scope**; this
+is a whole-project status rather than a per-slice score. The documented
+specialist follow-ups are closed, route pages load through lazy chunks, and the
+explicit ESM Vite config removes the prior CJS warning. Wheel AI suggestions
+cover local/remote/fallback flows, while Habit diagnostics applies only
+deterministic safe repairs after confirmation and a local snapshot. Live
+deployment switching is not part of this project scope.
 
 UI/IA shell parity has been tightened toward the legacy product surfaces:
 Habit center tabs/KPI with compact today actions, browse-first Todos filters,

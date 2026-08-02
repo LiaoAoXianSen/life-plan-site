@@ -1,18 +1,18 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 
-import DashboardPage from '../pages/DashboardPage.vue';
-import TodosPage from '../pages/TodosPage.vue';
-import RecordsPage from '../pages/RecordsPage.vue';
-import IdeasPage from '../pages/IdeasPage.vue';
-import MaterialsPage from '../pages/MaterialsPage.vue';
-import TagsPage from '../pages/TagsPage.vue';
-import SearchPage from '../pages/SearchPage.vue';
-import GoalsPage from '../pages/GoalsPage.vue';
-import FitnessPage from '../pages/FitnessPage.vue';
-import AiPage from '../pages/AiPage.vue';
-import SyncPage from '../pages/SyncPage.vue';
-import HabitsPage from '../pages/HabitsPage.vue';
-import WheelPage from '../pages/WheelPage.vue';
+const DashboardPage = () => import('../pages/DashboardPage.vue');
+const TodosPage = () => import('../pages/TodosPage.vue');
+const RecordsPage = () => import('../pages/RecordsPage.vue');
+const IdeasPage = () => import('../pages/IdeasPage.vue');
+const MaterialsPage = () => import('../pages/MaterialsPage.vue');
+const TagsPage = () => import('../pages/TagsPage.vue');
+const SearchPage = () => import('../pages/SearchPage.vue');
+const GoalsPage = () => import('../pages/GoalsPage.vue');
+const FitnessPage = () => import('../pages/FitnessPage.vue');
+const AiPage = () => import('../pages/AiPage.vue');
+const SyncPage = () => import('../pages/SyncPage.vue');
+const HabitsPage = () => import('../pages/HabitsPage.vue');
+const WheelPage = () => import('../pages/WheelPage.vue');
 
 const router = createRouter({
   // Hash routing avoids Cloudflare Pages refresh 404s during the phased migration.

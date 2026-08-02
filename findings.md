@@ -263,3 +263,12 @@
 - Safe automatic scope is deliberately narrow: remove orphan/future check-ins with tombstones, discard non-numeric ledger entries, and normalize empty ledger/reward currencies to the existing default. A local snapshot is created before mutation.
 - Duplicate or missing IDs and orphan ledger references are ambiguous and remain manual blockers. The UI confirmation names this boundary so repair cannot silently merge identities or reassign wallet history.
 - The repair follows authoritative write contracts: `lifePlanData` mutation, local Habit mirror rebuild with upload disabled, main dirty state, and idempotent clean state. Whole-project engineering completion is now **99%**; only build chunk/CJS cleanup remains planned.
+
+## 2026-08-02 build closeout
+
+- Static route imports kept every page and all shared services in one approximately 653 kB entry chunk. Vue Router lazy imports split page code without changing path, name, meta, or hash-history behavior.
+- After lazy loading, the entry bundle is approximately 281 kB; the largest page chunk is approximately 61 kB, so the prior 500 kB warning disappears.
+- The CJS warning came from Vite loading `vite.config.ts` under a package without `type: module`. Using the explicit `.mts` extension fixes only the Vite config boundary and avoids changing legacy CommonJS/package behavior globally.
+- Route smoke now records failed network requests in addition to page exceptions, so a missing lazy page chunk fails the acceptance gate.
+- Lazy navigation changed unmount timing enough to expose a real Records contract gap: URL assertions could complete before `onBeforeUnmount` persisted dirty editors/drafts. `onBeforeRouteLeave` now provides the synchronous pre-navigation save point, while unmount remains a fallback.
+- All known specialist follow-ups and planned technical cleanup are closed. The documented active Vue project scope is **100% complete**; live deployment switching remains excluded.
