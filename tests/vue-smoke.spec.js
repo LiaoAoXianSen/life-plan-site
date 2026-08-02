@@ -5637,6 +5637,31 @@ test('AI mode tabs swap the input label to the legacy per-mode text', async ({ p
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('AI mode tabs keep the legacy per-mode subtitle wording', async ({ page }) => {
+    const source = emptyData();
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
+    }, source);
+    await page.goto('/#/ai');
+    const aiPage = page.locator('#page-ai');
+    const expectations = [
+        ['对话整理', '把你随手说的一段话纠错、整理，并建议放到待办、工作、日记、计划或灵感。'],
+        ['今日计划', '根据今日待办、习惯、目标和近期记录，整理一个短行动清单。'],
+        ['待办整理', '从未完成待办里挑出最值得今天推进的小步。'],
+        ['灵感下一步', '选择一条灵感，把它变成一个小实验或下一步行动。'],
+        ['待办拆解', '选择一个待办，把它拆成可以勾选的子任务。'],
+        ['日记分析', '从一篇日记里提炼复盘、明日重点和可确认的行动建议。'],
+    ];
+    const subtitle = aiPage.locator('.ai-mode-tabs + .todo-page-summary');
+    for (const [tab, text] of expectations) {
+        await aiPage.getByRole('button', { name: tab, exact: true }).click();
+        await expect(subtitle).toHaveText(text);
+    }
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('AI todoBreakdown writes selected subtasks only after confirmation', async ({ page }) => {
     const source = emptyData({
         todos: [todoFixture('todo-break', '拆解这个待办', {
