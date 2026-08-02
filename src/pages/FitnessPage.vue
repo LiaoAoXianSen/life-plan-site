@@ -906,16 +906,25 @@ onUnmounted(stopRestTimer);
           {{ liveExerciseTargetText(exercise) }}
           <span v-if="exerciseHistory(exercise)?.set"> · 上次 {{ exerciseHistory(exercise)?.set?.weight ?? '—' }}kg × {{ exerciseHistory(exercise)?.set?.reps ?? '—' }}</span>
         </p>
-        <div class="fitness-metric-list">
-          <div v-for="(set, setIndex) in exercise.sets" :key="set.id || setIndex" class="fitness-metric-row fitness-live-row">
-            <strong>第 {{ setIndex + 1 }} 组</strong>
-            <label>重量 <input :value="set.weight ?? ''" type="number" min="0" step="0.5" @change="setDone(exerciseIndex, setIndex, set.done === true, ($event.target as HTMLInputElement).value, set.reps)" /></label>
-            <label>次数 <input :value="set.reps ?? ''" type="number" min="1" step="1" @change="setDone(exerciseIndex, setIndex, set.done === true, set.weight, ($event.target as HTMLInputElement).value)" /></label>
-            <button v-if="setSuggestion(exercise, setIndex)" class="btn btn-secondary todo-mini-btn" type="button" @click="applySuggestion(exerciseIndex, setIndex)">套用建议</button>
-            <button class="btn btn-secondary" type="button" @click="setDone(exerciseIndex, setIndex, set.done !== true, set.weight, set.reps)">
+        <div class="fitness-live-set-table">
+          <div class="fitness-live-set-head"><span>组</span><span>重量</span><span>次数</span><span></span></div>
+          <div v-for="(set, setIndex) in exercise.sets" :key="set.id || setIndex" class="fitness-live-set-row fitness-live-row" :class="{ 'is-done': set.done }">
+            <span class="fitness-set-index">{{ setIndex + 1 }}</span>
+            <div class="fitness-live-field">
+              <input :value="set.weight ?? ''" type="number" min="0" step="0.5" @change="setDone(exerciseIndex, setIndex, set.done === true, ($event.target as HTMLInputElement).value, set.reps)" />
+              <span class="fitness-live-unit">kg</span>
+            </div>
+            <div class="fitness-live-field">
+              <input :value="set.reps ?? ''" type="number" min="0" step="1" @change="setDone(exerciseIndex, setIndex, set.done === true, set.weight, ($event.target as HTMLInputElement).value)" />
+              <span class="fitness-live-unit">次</span>
+            </div>
+            <button class="btn fitness-live-done-btn" :class="set.done ? 'btn-secondary' : 'btn-primary'" type="button" @click="setDone(exerciseIndex, setIndex, set.done !== true, set.weight, set.reps)">
               {{ set.done ? '撤销' : '完成' }}
             </button>
-            <span v-if="suggestionHint(setSuggestion(exercise, setIndex))" class="fitness-set-suggestion vue-fitness-set-suggestion">{{ suggestionHint(setSuggestion(exercise, setIndex)) }}</span>
+            <div v-if="suggestionHint(setSuggestion(exercise, setIndex))" class="fitness-set-suggestion vue-fitness-set-suggestion">
+              <span>{{ suggestionHint(setSuggestion(exercise, setIndex)) }}</span>
+              <button class="btn btn-secondary todo-mini-btn" type="button" @click="applySuggestion(exerciseIndex, setIndex)">套用建议</button>
+            </div>
           </div>
         </div>
         <button class="btn btn-secondary todo-mini-btn" type="button" @click="run(() => fitness.addActiveSet(exerciseIndex))">+ 加一组</button>

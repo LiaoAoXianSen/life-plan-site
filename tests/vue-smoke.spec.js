@@ -3007,7 +3007,7 @@ test('fitness plans support multiple exercises and explicit plan writeback', asy
     await page.locator('.fitness-metric-row').filter({ hasText: '力量计划' }).getByRole('button', { name: '按计划开练' }).click();
     await expect(page.getByText('正在训练：力量计划')).toBeVisible();
     let active = page.locator('#page-fitness > article.card').first();
-    let activeRows = active.locator('.fitness-metric-row');
+    let activeRows = active.locator('.fitness-live-row');
     await activeRows.nth(0).locator('input').nth(0).fill('85');
     await activeRows.nth(0).locator('input').nth(0).dispatchEvent('change');
     await activeRows.nth(0).locator('input').nth(1).fill('5');
@@ -3030,7 +3030,7 @@ test('fitness plans support multiple exercises and explicit plan writeback', asy
 
     await page.locator('.fitness-metric-row').filter({ hasText: '力量计划' }).getByRole('button', { name: '按计划开练' }).click();
     active = page.locator('#page-fitness > article.card').first();
-    activeRows = active.locator('.fitness-metric-row');
+    activeRows = active.locator('.fitness-live-row');
     await activeRows.nth(0).locator('input').nth(0).fill('87.5');
     await activeRows.nth(0).locator('input').nth(0).dispatchEvent('change');
     await activeRows.nth(0).locator('input').nth(1).fill('4');
@@ -3498,6 +3498,10 @@ test('fitness live workout suggestions and rest timer stay service backed', asyn
     await expect(active).toContainText('上次 57.5kg × 7');
     await expect(active).not.toContainText('上次 2026-07-28 57.5kg × 7');
     const firstRow = active.locator('.fitness-live-row').first();
+    await expect(active.locator('.fitness-live-set-head')).toContainText('组重量次数');
+    await expect(firstRow.locator('.fitness-set-index')).toHaveText('1');
+    await expect(firstRow.locator('.fitness-live-unit')).toHaveText(['kg', '次']);
+    await expect(firstRow.getByRole('button', { name: '完成', exact: true })).toHaveClass(/btn-primary/);
     await expect(firstRow.locator('.vue-fitness-set-suggestion')).toContainText('2026-07-28 57.5kg × 7');
     await firstRow.getByRole('button', { name: '套用建议' }).click();
 
@@ -3510,7 +3514,7 @@ test('fitness live workout suggestions and rest timer stay service backed', asyn
     expect(stored.syncState.dirty).toBe(true);
 
     await firstRow.getByRole('button', { name: '完成', exact: true }).click();
-    await expect(firstRow.getByRole('button', { name: '撤销', exact: true })).toBeVisible();
+    await expect(firstRow.getByRole('button', { name: '撤销', exact: true })).toHaveClass(/btn-secondary/);
     await expect(active.getByRole('timer')).toContainText('卧推建议');
     await expect(active.getByRole('timer')).toContainText(/1:2\\d|1:30/);
     await expect(active.getByRole('button', { name: '+30s' })).toBeVisible();
