@@ -738,6 +738,16 @@ function planExercises(plan: Record<string, any>) {
   return fitness.services.fitness.getPlanExercises(plan) as Record<string, any>[];
 }
 
+function liveExerciseTargetText(exercise: Record<string, any>) {
+  const restSec = fitness.services.fitness.getExerciseRestSec(exercise, fitness.library);
+  return [
+    `${exercise.targetSets || exercise.sets?.length || 0} 组`,
+    exercise.targetReps ? `${exercise.targetReps} 次` : '',
+    exercise.targetWeight != null ? `${exercise.targetWeight}kg` : '',
+    restSec ? `休 ${restSec}s` : '',
+  ].filter(Boolean).join(' · ');
+}
+
 function planExerciseDetail(exercise: Record<string, any>) {
   const setCount = exercise.targetSets || (Array.isArray(exercise.sets) ? exercise.sets.length : 0) || 0;
   const sample = (Array.isArray(exercise.sets) ? exercise.sets : [])
@@ -893,7 +903,7 @@ onUnmounted(stopRestTimer);
       <article v-for="(exercise, exerciseIndex) in fitness.activeWorkout.exercises" :key="exercise.id || exercise.name" class="card">
         <h3>{{ exercise.name }}</h3>
         <p class="section-hint">
-          目标：{{ exercise.targetSets }} 组 × {{ exercise.targetReps }}<span v-if="exercise.targetWeight"> · {{ exercise.targetWeight }} kg</span><span v-if="fitness.services.fitness.getExerciseRestSec(exercise, fitness.library)"> · 休 {{ fitness.services.fitness.getExerciseRestSec(exercise, fitness.library) }}s</span>
+          {{ liveExerciseTargetText(exercise) }}
           <span v-if="exerciseHistory(exercise)?.set"> · 上次 {{ exerciseHistory(exercise)?.set?.weight ?? '—' }}kg × {{ exerciseHistory(exercise)?.set?.reps ?? '—' }}</span>
         </p>
         <div class="fitness-metric-list">
