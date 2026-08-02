@@ -629,10 +629,7 @@ function stopRestTimer() {
 
 function tickRestTimer() {
   restTimer.remaining = Math.max(0, restTimer.remaining - 1);
-  if (restTimer.remaining <= 0 && restTimerId) {
-    window.clearInterval(restTimerId);
-    restTimerId = null;
-  }
+  if (restTimer.remaining <= 0) stopRestTimer();
 }
 
 function startRestTimer(seconds: unknown, exerciseName = '') {

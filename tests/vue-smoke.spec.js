@@ -3520,6 +3520,17 @@ test('fitness live workout suggestions and rest timer stay service backed', asyn
     await expect(active.getByRole('button', { name: '-15s' })).toBeVisible();
     await expect(active.getByRole('button', { name: '+15s' })).toBeVisible();
     await expect(active.getByRole('button', { name: '跳过' })).toHaveClass(/btn-primary/);
+    await active.getByRole('button', { name: '-15s' }).click();
+    await active.getByRole('button', { name: '-15s' }).click();
+    await active.getByRole('button', { name: '-15s' }).click();
+    await active.getByRole('button', { name: '-15s' }).click();
+    await active.getByRole('button', { name: '-15s' }).click();
+    await active.getByRole('button', { name: '-15s' }).click();
+    await expect(active.getByRole('timer')).toHaveCount(0);
+
+    await firstRow.getByRole('button', { name: '撤销', exact: true }).click();
+    await firstRow.getByRole('button', { name: '完成', exact: true }).click();
+    await expect(active.getByRole('timer')).toBeVisible();
     await active.getByRole('button', { name: '跳过' }).click();
     await expect(active.getByRole('timer')).toHaveCount(0);
 
