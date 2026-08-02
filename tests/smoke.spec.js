@@ -4403,16 +4403,44 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
     const libraryModal = page.locator('#wheel-library-modal');
+    const chooseLibraryTag = async label => {
+        const trigger = libraryModal.locator('#wheel-library-tag-filter');
+        await trigger.click();
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        await libraryModal.locator('#wheel-library-tag-dropdown').getByRole('option', { name: new RegExp(label) }).click();
+        await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    };
     const textFilter = libraryModal.locator('#wheel-library-text-filter');
     await expect(textFilter).toBeVisible();
-    await expect(libraryModal.locator('#wheel-library-filter-count')).toHaveText('全部 2 项');
-    await expect(libraryModal.getByRole('button', { name: '清除筛选' })).toBeHidden();
+    const tagTrigger = libraryModal.locator('#wheel-library-tag-filter');
+    const tagDropdown = libraryModal.locator('#wheel-library-tag-dropdown');
+    await tagTrigger.click();
+    await expect(tagDropdown).toBeVisible();
+    await expect(tagDropdown.getByRole('option')).toHaveCount(3);
+    await expect(tagDropdown.locator('.wheel-color-dot')).toHaveCount(2);
+    await expect(tagDropdown.getByRole('option', { name: /全部标签/ })).toHaveAttribute('aria-selected', 'true');
+    await textFilter.click();
+    await expect(tagDropdown).toBeHidden();
+    await tagTrigger.click();
+    await expect(tagDropdown).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tagDropdown).toBeHidden();
+    await expect(tagTrigger).toBeFocused();
+    await tagTrigger.press('Enter');
+    await expect(tagDropdown).toBeVisible();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(tagTrigger).toContainText('运动');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(1);
+    await expect(libraryModal.locator('#wheel-library-filter-count')).toHaveText('显示 1 / 2');
+    await expect(libraryModal.getByRole('button', { name: '清除筛选' })).toBeVisible();
     await textFilter.fill('有氧');
     await expect(libraryModal.locator('#wheel-library-filter-count')).toHaveText('显示 1 / 2');
     await expect(libraryModal.getByRole('button', { name: '清除筛选' })).toBeVisible();
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(1);
     await expect(libraryModal.locator('.wheel-row.library')).toContainText(['跑步']);
-    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
+    await chooseLibraryTag('美食');
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(0);
     await expect(libraryModal.locator('#wheel-library-list')).toContainText('当前筛选下没有公共项');
     await textFilter.fill('朋友');
@@ -4420,7 +4448,7 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅']);
     await libraryModal.getByRole('button', { name: '清除筛选' }).click();
     await expect(textFilter).toHaveValue('');
-    await expect(libraryModal.locator('#wheel-library-tag-filter')).toHaveValue('');
+    await expect(libraryModal.locator('#wheel-library-tag-filter')).toContainText('全部标签');
     await expect(libraryModal.locator('#wheel-library-filter-count')).toHaveText('全部 2 项');
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(2);
     await libraryModal.locator('#wheel-library-name').fill('周末晨跑拉伸');
@@ -4475,7 +4503,7 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     expect(stored.wheelLibraryItems.find(item => item.name === '周末晨跑,2,运动')?.weight).toBe(1);
     expect(stored.wheelLibraryItems.find(item => item.name === '麦当劳,肯德基')?.weight).toBe(3);
     expect(stored.wheelLibraryItems.find(item => item.name === '晨跑')?.tagIds).toEqual(['tag-food']);
-    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
+    await chooseLibraryTag('美食');
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(5);
     await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅', '寿司', '晨跑', '周末晨跑,2,运动', '麦当劳,肯德基']);
     await libraryModal.getByLabel('选择火锅').check();
@@ -4490,7 +4518,7 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     // Only 火锅 was selected, so 晨跑 keeps the batch checkbox tags only.
     expect(stored.wheelLibraryItems.find(item => item.name === '晨跑').tagIds).toEqual(['tag-food']);
     expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(expect.arrayContaining(['tag-food', 'tag-sport']));
-    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-sport');
+    await chooseLibraryTag('运动');
     // Selection count should show total selected (across filters), not only current filter view.
     await expect(libraryModal.locator('#wheel-library-selected-count')).toContainText('选中 1');
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(2);
@@ -4502,16 +4530,16 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await dialogsDone;
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.id === 'library-hotpot').tagIds).toEqual(['tag-food']);
-    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
+    await chooseLibraryTag('美食');
     // Clear leftover cross-filter selection before the delete count assertion.
     await libraryModal.getByRole('button', { name: '清空勾选' }).click();
     await libraryModal.getByLabel('选择寿司').check();
     await libraryModal.getByLabel('选择晨跑').check();
     await expect(libraryModal.locator('#wheel-library-selected-count')).toContainText('选中 2');
     // Switch filter so UI visible count differs from bulk action count.
-    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-sport');
+    await chooseLibraryTag('运动');
     await expect(libraryModal.locator('#wheel-library-selected-count')).toContainText('选中 2（当前筛选');
-    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
+    await chooseLibraryTag('美食');
     dialogsDone = acceptDialogs(['确定批量停用选中的 2 个公共项', '已批量停用 2 个公共项']);
     await libraryModal.getByRole('button', { name: '批量停用' }).click({ noWaitAfter: true });
     await dialogsDone;

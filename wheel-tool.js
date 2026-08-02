@@ -1309,6 +1309,7 @@
         const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
         const selectionCountText = formatLibrarySelectionCount(selectedTotalCount, selectedVisibleCount, filteredItems.length);
         const filterActive = hasWheelLibraryManageFilter();
+        const selectedFilterTag = getTagById(wheelLibraryTagFilter);
         const filterCountText = filterActive
             ? `显示 ${filteredItems.length} / ${data.wheelLibraryItems.length}`
             : `全部 ${data.wheelLibraryItems.length} 项`;
@@ -1366,16 +1367,36 @@
                     <button type="button" class="wheel-library-clear-filter" ${filterActive ? '' : 'hidden'} onclick="clearWheelLibraryFilters()">清除筛选</button>
                 </div>
                 <div class="wheel-library-filter-group">
-                    <label class="wheel-library-filter">
+                    <div class="wheel-library-filter">
                         <span>按标签</span>
-                        <span class="wheel-library-field-control">
-                            <i class="wheel-library-field-icon" aria-hidden="true">#</i>
-                            <select id="wheel-library-tag-filter" aria-label="按标签筛选公共项" onchange="setWheelLibraryTagFilter(this.value)">
-                                <option value="">全部标签</option>
-                                ${data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}" ${wheelLibraryTagFilter === tag.id ? 'selected' : ''}>${safeHtml(tag.name)}</option>`).join('')}
-                            </select>
-                        </span>
-                    </label>
+                        <div class="wheel-library-tag-select" data-wheel-library-tag-select>
+                            <button type="button" class="wheel-library-tag-trigger" id="wheel-library-tag-filter" aria-haspopup="listbox" aria-expanded="false" onclick="toggleWheelLibraryTagDropdown(event)">
+                                <span class="wheel-library-tag-trigger-main">
+                                    ${selectedFilterTag ? `<i class="wheel-color-dot" style="background:${safeColor(selectedFilterTag.color)}"></i>` : '<i class="wheel-library-hash" aria-hidden="true">#</i>'}
+                                    <span>${safeHtml(selectedFilterTag?.name || '全部标签')}</span>
+                                </span>
+                                <i class="wheel-library-tag-chevron" aria-hidden="true"></i>
+                            </button>
+                            <div class="wheel-library-tag-dropdown" id="wheel-library-tag-dropdown" role="listbox" aria-label="按标签筛选公共项" hidden>
+                                <button type="button" role="option" aria-selected="${!wheelLibraryTagFilter}" class="wheel-library-tag-option ${!wheelLibraryTagFilter ? 'is-selected' : ''}" onclick="chooseWheelLibraryTagFilter('')">
+                                    <span class="wheel-library-option-main"><i class="wheel-library-option-all">#</i><span>全部标签</span></span>
+                                    <span class="wheel-library-option-count">${data.wheelLibraryItems.length}</span>
+                                    <i class="wheel-library-option-check" aria-hidden="true">✓</i>
+                                </button>
+                                ${data.wheelTags.map(tag => {
+                                    const count = data.wheelLibraryItems.filter(item => item.tagIds?.includes(tag.id)).length;
+                                    const selected = wheelLibraryTagFilter === tag.id;
+                                    return `
+                                        <button type="button" role="option" aria-selected="${selected}" class="wheel-library-tag-option ${selected ? 'is-selected' : ''}" onclick="chooseWheelLibraryTagFilter(${safeJsArg(tag.id)})">
+                                            <span class="wheel-library-option-main"><i class="wheel-color-dot" style="background:${safeColor(tag.color)}"></i><span>${safeHtml(tag.name)}</span></span>
+                                            <span class="wheel-library-option-count">${count}</span>
+                                            <i class="wheel-library-option-check" aria-hidden="true">✓</i>
+                                        </button>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>
                     <label class="wheel-library-filter wheel-library-text-search">
                         <span>按关键词</span>
                         <span class="wheel-library-field-control">
@@ -1633,6 +1654,49 @@
 
     window.setWheelLibraryCopyFilter = function setWheelLibraryCopyFilter(tagId = '') {
         wheelLibraryCopyTagFilter = String(tagId || '');
+        renderWheelPage();
+    };
+
+    function closeWheelLibraryTagDropdown({ restoreFocus = false } = {}) {
+        const dropdown = document.getElementById('wheel-library-tag-dropdown');
+        const trigger = document.getElementById('wheel-library-tag-filter');
+        if (!dropdown || !trigger) return;
+        dropdown.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.closest('[data-wheel-library-tag-select]')?.classList.remove('is-open');
+        if (restoreFocus) trigger.focus();
+    }
+
+    window.toggleWheelLibraryTagDropdown = function toggleWheelLibraryTagDropdown(event) {
+        event?.stopPropagation();
+        const dropdown = document.getElementById('wheel-library-tag-dropdown');
+        const trigger = document.getElementById('wheel-library-tag-filter');
+        if (!dropdown || !trigger) return;
+        const opening = dropdown.hidden;
+        if (!opening) {
+            closeWheelLibraryTagDropdown();
+            return;
+        }
+        const rect = trigger.getBoundingClientRect();
+        const estimatedHeight = Math.min(320, 48 * (data.wheelTags.length + 1) + 12);
+        const availableBelow = window.innerHeight - rect.bottom - 12;
+        const openAbove = availableBelow < Math.min(estimatedHeight, 220) && rect.top > availableBelow;
+        dropdown.style.left = `${Math.max(12, rect.left)}px`;
+        dropdown.style.width = `${rect.width}px`;
+        dropdown.style.maxHeight = `${Math.max(160, Math.min(320, openAbove ? rect.top - 12 : availableBelow))}px`;
+        dropdown.style.top = openAbove ? 'auto' : `${rect.bottom + 6}px`;
+        dropdown.style.bottom = openAbove ? `${window.innerHeight - rect.top + 6}px` : 'auto';
+        dropdown.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.closest('[data-wheel-library-tag-select]')?.classList.add('is-open');
+        const options = Array.from(dropdown.querySelectorAll('[role="option"]'));
+        const selectedOption = options.find(option => option.getAttribute('aria-selected') === 'true') || options[0];
+        selectedOption?.focus();
+    };
+
+    window.chooseWheelLibraryTagFilter = function chooseWheelLibraryTagFilter(tagId = '') {
+        wheelLibraryTagFilter = String(tagId || '');
+        closeWheelLibraryTagDropdown();
         renderWheelPage();
     };
 
@@ -2859,14 +2923,47 @@
     };
 
     document.addEventListener('click', event => {
+        if (!event.target.closest?.('[data-wheel-library-tag-select]') && !event.target.closest?.('#wheel-library-tag-dropdown')) {
+            closeWheelLibraryTagDropdown();
+        }
         if (!wheelActionMenuOpen) return;
         if (event.target.closest?.('.wheel-action-menu-wrap')) return;
         window.closeWheelActionMenu();
     });
 
     document.addEventListener('keydown', event => {
+        const dropdown = document.getElementById('wheel-library-tag-dropdown');
+        const trigger = document.getElementById('wheel-library-tag-filter');
+        const dropdownOpen = dropdown && !dropdown.hidden;
+        if (event.key === 'Escape' && dropdownOpen) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            closeWheelLibraryTagDropdown({ restoreFocus: true });
+            return;
+        }
+        if (trigger && dropdown?.contains(event.target)) {
+            const options = Array.from(dropdown?.querySelectorAll('[role="option"]') || []);
+            if (dropdownOpen && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+                event.preventDefault();
+                const currentIndex = options.indexOf(document.activeElement);
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const nextIndex = (currentIndex + delta + options.length) % options.length;
+                options[nextIndex]?.focus();
+                return;
+            }
+            if (dropdownOpen && event.key === 'Home') {
+                event.preventDefault();
+                options[0]?.focus();
+                return;
+            }
+            if (dropdownOpen && event.key === 'End') {
+                event.preventDefault();
+                options[options.length - 1]?.focus();
+                return;
+            }
+        }
         if (event.key === 'Escape' && wheelActionMenuOpen) window.closeWheelActionMenu();
-    });
+    }, true);
 
     if (location.hash === '#wheel' && typeof switchPage === 'function') {
         const nav = Array.from(document.querySelectorAll('.nav-item')).find(item => item.textContent.includes('工具转盘'));
