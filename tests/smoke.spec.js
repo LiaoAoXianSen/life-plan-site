@@ -4351,8 +4351,8 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
             { id: 'tag-sport', name: '运动', color: '#3e65b0', weight: 1, enabled: true }
         ],
         wheelLibraryItems: [
-            { id: 'library-hotpot', name: '火锅', weight: 2, enabled: true, tagIds: ['tag-food'] },
-            { id: 'library-run', name: '跑步', weight: 1, enabled: true, tagIds: ['tag-sport'] }
+            { id: 'library-hotpot', name: '火锅', note: '适合朋友聚餐', weight: 2, enabled: true, tagIds: ['tag-food'] },
+            { id: 'library-run', name: '跑步', note: '清晨有氧训练', weight: 1, enabled: true, tagIds: ['tag-sport'] }
         ],
         wheelHistory: [
             {
@@ -4403,6 +4403,21 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
     const libraryModal = page.locator('#wheel-library-modal');
+    const textFilter = libraryModal.locator('#wheel-library-text-filter');
+    await expect(textFilter).toBeVisible();
+    await textFilter.fill('有氧');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(1);
+    await expect(libraryModal.locator('.wheel-row.library')).toContainText(['跑步']);
+    await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(0);
+    await expect(libraryModal.locator('#wheel-library-list')).toContainText('当前筛选下没有公共项');
+    await textFilter.fill('朋友');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(1);
+    await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅']);
+    await textFilter.fill('');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(1);
+    await libraryModal.locator('#wheel-library-tag-filter').selectOption('');
+    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(2);
     await libraryModal.locator('#wheel-library-name').fill('周末晨跑拉伸');
     await libraryModal.getByRole('button', { name: 'AI 推荐标签' }).click();
     await expect(libraryModal.locator('.wheel-library-ai-tag')).toContainText(['运动']);
