@@ -70,6 +70,45 @@
 
 <!-- 后续每完成一项 master 优化，在此追加一条完整记录。 -->
 
+### [SYNC-20260802-01] 公共项标签下拉局部美化
+
+- 日期：2026-08-02
+- 主分支提交：`待提交`
+- 状态：待同步
+- 主分支范围：转盘工具 → 公共项库 → 标签筛选的展开选项菜单
+
+#### 用户可见变化
+
+- 保持原公共项筛选区、文本筛选、批量操作和大转盘主舞台不变，仅将标签筛选的展开菜单改为更易读的选项面板。
+- 菜单显示标签颜色、当前选中态和勾选；支持外部点击、Escape 与方向键，并在桌面避免被弹窗裁切、在手机端贴近底部完整展示。
+
+#### 主分支实现定位
+
+- 文件：`wheel-tool.js`、`wheel-tool.css`
+- 逻辑：`toggleWheelLibraryTagDropdown`、`chooseWheelLibraryTagFilter`、`closeWheelLibraryTagDropdown`、`positionWheelLibraryTagOptions`
+- 样式：仅 `.wheel-library-tag-*` 命名空间及 640px 下的菜单定位规则
+- 测试：`tests/smoke.spec.js` 的 `wheel library copy is tag-filtered and history can be exported`
+
+#### Vue 同步落点
+
+- 页面/组件：`src/pages/WheelPage.vue` 的公共项管理标签筛选控件
+- 状态/数据：继续使用现有公共项标签筛选状态，不增加业务字段
+- 样式：在组件内建立局部下拉样式，不调整转盘主舞台或公共项工具栏布局
+- 不要直接照搬：静态版全局函数和内联事件；按 Vue 组件事件与响应式状态重写
+
+#### 数据与交互契约
+
+- 数据结构：无变化
+- 交互规则：选择标签后沿用原筛选逻辑；Escape 只关闭下拉、不关闭公共项弹窗；外部点击关闭；基本键盘导航可用
+- 响应式要求：桌面浮层不被弹窗裁切；375px 下无横向溢出且选项完整可见
+
+#### 验收条件
+
+- [ ] 大转盘主舞台和公共项筛选区整体外观保持原样
+- [ ] 标签选择、文本组合筛选、外部关闭、Escape 和键盘操作正常
+- [ ] 桌面与 375px 移动端无裁切或横向溢出
+- [ ] 转盘完整回归测试通过
+
 ### [SYNC-20260801-01] 素材标题、标签编辑与全站长文案治理
 
 - 日期：2026-08-01
@@ -118,17 +157,12 @@
 
 - 日期：2026-08-02
 - 主分支提交：`888c0bf feat(wheel): filter library items by text`
-- 视觉优化提交：`65ab536 polish(wheel): refine library filter controls`
-- 自定义下拉提交：`a840982 polish(wheel): replace native tag filter dropdown`
 - 状态：待同步
 - 主分支范围：工具转盘 → 管理 → 公共项库
 
 #### 用户可见变化
 
-- 在现有标签筛选旁增加关键词搜索，输入时即时更新公共项列表。
-- 筛选区域独立成“筛选公共项”区块，显示当前结果数量；标签与关键词使用统一字段样式，筛选激活后提供轻量状态提示和“清除筛选”入口。
-- 批量操作与筛选区分离，避免搜索、全选和批量按钮拥挤在同一工具栏。
-- 标签筛选使用自定义下拉面板替代原生 `select`：选项显示标签颜色、关联公共项数量、当前选中高亮与勾选；支持外部点击关闭、Escape 和键盘移动/选择。
+- 在现有“标签筛选”旁增加“文本筛选”，输入时即时更新公共项列表。
 - 文本同时匹配公共项名称和备注，忽略首尾空白、连续空白和英文大小写。
 - 标签与文本使用 AND 组合：只有同时满足选中标签和搜索文本的公共项才显示。
 - 清空文本后保留当前标签筛选；清空标签后保留文本筛选结果。
@@ -137,15 +171,15 @@
 #### 主分支实现定位
 
 - 文件：`wheel-tool.js`、`wheel-tool.css`
-- 逻辑：`wheelLibraryTextFilter`、`getFilteredLibraryItemsForManage`、`hasWheelLibraryManageFilter`、`renderWheelLibraryRows`、`refreshWheelLibraryFilterResults`、`setWheelLibraryTextFilter`、`clearWheelLibraryFilters`、`toggleWheelLibraryTagDropdown`、`chooseWheelLibraryTagFilter`、`closeWheelLibraryTagDropdown`
-- 样式：`.wheel-library-filter-shell`、`.wheel-library-filter-head`、`.wheel-library-filter-group`、`.wheel-library-field-control`、`.wheel-library-tag-trigger`、`.wheel-library-tag-dropdown`、`.wheel-library-tag-option`、`.wheel-library-selection-shell` 和移动端单列规则
+- 逻辑：`wheelLibraryTextFilter`、`getFilteredLibraryItemsForManage`、`hasWheelLibraryManageFilter`、`renderWheelLibraryRows`、`refreshWheelLibraryFilterResults`、`setWheelLibraryTextFilter`
+- 样式：`.wheel-library-filter-group`、`.wheel-library-text-search` 和既有 `.wheel-library-toolbar` 移动端单列规则
 - 测试：`tests/smoke.spec.js` 的 `wheel library copy is tag-filtered and history can be exported`
 
 #### Vue 同步落点
 
 - 页面/组件：Vue 工具转盘公共项库管理组件的筛选工具栏和公共项列表
 - 状态/数据：组件内新增会话态文本关键词，不写入 `lifePlanData`、远端快照或同步配置
-- 样式：筛选区有标题、结果计数和清除入口；标签使用带颜色、数量与选中态的自定义 listbox，关键词搜索桌面并排、窄屏单列；批量操作独立成相邻区块
+- 样式：标签下拉与文本搜索并排，窄屏改为单列；沿用现有筛选控件视觉
 - 不要直接照搬：静态版全局函数和 `oninput`；Vue 使用响应式 computed 对 `wheelLibraryItems` 做标签 + 文本组合过滤
 
 #### 数据与交互契约
