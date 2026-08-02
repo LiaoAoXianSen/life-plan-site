@@ -4405,7 +4405,11 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     const libraryModal = page.locator('#wheel-library-modal');
     const textFilter = libraryModal.locator('#wheel-library-text-filter');
     await expect(textFilter).toBeVisible();
+    await expect(libraryModal.locator('#wheel-library-filter-count')).toHaveText('全部 2 项');
+    await expect(libraryModal.getByRole('button', { name: '清除筛选' })).toBeHidden();
     await textFilter.fill('有氧');
+    await expect(libraryModal.locator('#wheel-library-filter-count')).toHaveText('显示 1 / 2');
+    await expect(libraryModal.getByRole('button', { name: '清除筛选' })).toBeVisible();
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(1);
     await expect(libraryModal.locator('.wheel-row.library')).toContainText(['跑步']);
     await libraryModal.locator('#wheel-library-tag-filter').selectOption('tag-food');
@@ -4414,9 +4418,10 @@ test('wheel library copy is tag-filtered and history can be exported', async ({ 
     await textFilter.fill('朋友');
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(1);
     await expect(libraryModal.locator('.wheel-row.library')).toContainText(['火锅']);
-    await textFilter.fill('');
-    await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(1);
-    await libraryModal.locator('#wheel-library-tag-filter').selectOption('');
+    await libraryModal.getByRole('button', { name: '清除筛选' }).click();
+    await expect(textFilter).toHaveValue('');
+    await expect(libraryModal.locator('#wheel-library-tag-filter')).toHaveValue('');
+    await expect(libraryModal.locator('#wheel-library-filter-count')).toHaveText('全部 2 项');
     await expect(libraryModal.locator('.wheel-row.library')).toHaveCount(2);
     await libraryModal.locator('#wheel-library-name').fill('周末晨跑拉伸');
     await libraryModal.getByRole('button', { name: 'AI 推荐标签' }).click();

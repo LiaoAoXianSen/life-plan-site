@@ -1091,26 +1091,82 @@
     accent-color: var(--accent);
 }
 
-.wheel-library-toolbar {
-    display: grid;
-    grid-template-columns: minmax(360px, 1fr) minmax(0, 1.35fr);
-    gap: 10px;
+.wheel-library-filter-shell,
+.wheel-library-selection-shell {
+    margin-bottom: 10px;
+    padding: 13px 14px;
+    border: 1px solid rgba(218, 227, 221, 0.96);
+    border-radius: 14px;
+    background: rgba(251, 253, 251, 0.96);
+}
+
+.wheel-library-filter-shell.is-filtering {
+    border-color: rgba(66, 137, 105, 0.34);
+    background: rgba(246, 251, 248, 0.98);
+}
+
+.wheel-library-filter-head,
+.wheel-library-selection-head {
+    display: flex;
     align-items: center;
-    margin-bottom: 12px;
-    padding: 10px;
-    border: 1px solid rgba(224, 231, 239, 0.96);
-    border-radius: 18px;
-    background: rgba(248, 250, 253, 0.92);
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.wheel-library-filter-head > div,
+.wheel-library-selection-head {
+    min-width: 0;
+}
+
+.wheel-library-filter-head strong,
+.wheel-library-selection-head strong {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 850;
+}
+
+.wheel-library-filter-head span,
+.wheel-library-selection-head span {
+    margin-left: 7px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 750;
+}
+
+.wheel-library-clear-filter {
+    min-height: 30px;
+    padding: 4px 9px;
+    border: 0;
+    border-radius: 9px;
+    background: rgba(33, 110, 78, 0.08);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 850;
+    cursor: pointer;
+}
+
+.wheel-library-clear-filter:hover {
+    background: rgba(33, 110, 78, 0.14);
+}
+
+.wheel-library-clear-filter[hidden] {
+    display: none;
 }
 
 .wheel-library-filter-group {
     display: grid;
-    grid-template-columns: minmax(150px, 0.8fr) minmax(190px, 1.2fr);
-    gap: 8px;
+    grid-template-columns: minmax(150px, 0.75fr) minmax(210px, 1.25fr);
+    gap: 9px;
     min-width: 0;
 }
 
-.wheel-library-filter,
+.wheel-library-filter {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
 .wheel-library-bulk-actions {
     display: flex;
     align-items: center;
@@ -1118,12 +1174,31 @@
     min-width: 0;
 }
 
-.wheel-library-filter span,
+.wheel-library-filter > span:first-child,
 .wheel-select-all-row span {
     color: var(--muted);
-    font-size: 12px;
-    font-weight: 850;
+    font-size: 11px;
+    font-weight: 800;
     white-space: nowrap;
+}
+
+.wheel-library-field-control {
+    position: relative;
+    display: block;
+    min-width: 0;
+}
+
+.wheel-library-field-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    z-index: 1;
+    transform: translateY(-50%);
+    color: #708279;
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 850;
+    pointer-events: none;
 }
 
 .wheel-library-filter select,
@@ -1131,11 +1206,37 @@
 .wheel-library-bulk-actions select {
     min-width: 0;
     width: 100%;
-    padding: 8px 10px;
-    border: 1px solid rgba(220, 228, 236, 0.96);
-    border-radius: 13px;
+    min-height: 39px;
+    padding: 8px 10px 8px 30px;
+    border: 1px solid rgba(205, 217, 210, 0.98);
+    border-radius: 10px;
     background: #fff;
     color: var(--text);
+    outline: none;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.wheel-library-filter select:hover,
+.wheel-library-filter input:hover {
+    border-color: rgba(121, 158, 139, 0.8);
+}
+
+.wheel-library-filter select:focus,
+.wheel-library-filter input:focus {
+    border-color: rgba(33, 110, 78, 0.62);
+    box-shadow: 0 0 0 3px rgba(33, 110, 78, 0.1);
+}
+
+.wheel-library-selection-shell {
+    display: grid;
+    gap: 2px;
+    background: rgba(249, 250, 252, 0.92);
+    border-color: rgba(224, 229, 235, 0.96);
+}
+
+.wheel-library-selection-head {
+    justify-content: flex-start;
+    margin-bottom: 6px;
 }
 
 .wheel-library-bulk-actions {
@@ -1713,13 +1814,28 @@
     .wheel-inline-form.library-form,
     .wheel-inline-form.tags-form,
     .wheel-library-batch-box,
-    .wheel-library-toolbar,
     .wheel-library-filter-group {
         grid-template-columns: 1fr;
     }
 
     .wheel-create-item-row {
         grid-template-columns: 1fr;
+    }
+
+    .wheel-library-filter-head,
+    .wheel-library-selection-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .wheel-library-filter-head span,
+    .wheel-library-selection-head span {
+        margin-left: 0;
+    }
+
+    .wheel-library-clear-filter {
+        width: 100%;
     }
 
     .wheel-library-filter,

@@ -1287,6 +1287,17 @@
         const filteredItems = getFilteredLibraryItemsForManage();
         const selectedIds = new Set(getSelectedLibraryItemIds());
         list.innerHTML = renderWheelLibraryRows(filteredItems, selectedIds);
+        const filterActive = hasWheelLibraryManageFilter();
+        const filterShell = document.querySelector('.wheel-library-filter-shell');
+        filterShell?.classList.toggle('is-filtering', filterActive);
+        const countEl = document.getElementById('wheel-library-filter-count');
+        if (countEl) {
+            countEl.textContent = filterActive
+                ? `显示 ${filteredItems.length} / ${data.wheelLibraryItems.length}`
+                : `全部 ${data.wheelLibraryItems.length} 项`;
+        }
+        const clearButton = document.querySelector('.wheel-library-clear-filter');
+        if (clearButton) clearButton.hidden = !filterActive;
         updateWheelLibrarySelectionUi();
     }
 
@@ -1297,6 +1308,10 @@
         const selectedTotalCount = selectedIds.size;
         const allVisibleSelected = Boolean(filteredItems.length && selectedVisibleCount === filteredItems.length);
         const selectionCountText = formatLibrarySelectionCount(selectedTotalCount, selectedVisibleCount, filteredItems.length);
+        const filterActive = hasWheelLibraryManageFilter();
+        const filterCountText = filterActive
+            ? `显示 ${filteredItems.length} / ${data.wheelLibraryItems.length}`
+            : `全部 ${data.wheelLibraryItems.length} 项`;
         const validQuickTagIds = new Set(data.wheelTags.map(tag => tag.id));
         Array.from(wheelLibraryQuickTagIds).forEach(tagId => {
             if (!validQuickTagIds.has(tagId)) wheelLibraryQuickTagIds.delete(tagId);
@@ -1342,19 +1357,38 @@
                     ${batchTagPicker || '<div class="empty-state compact">还没有标签，先在标签面板新增。</div>'}
                 </div>
             </div>
-            <div class="wheel-library-toolbar">
+            <section class="wheel-library-filter-shell ${filterActive ? 'is-filtering' : ''}">
+                <div class="wheel-library-filter-head">
+                    <div>
+                        <strong>筛选公共项</strong>
+                        <span id="wheel-library-filter-count">${safeHtml(filterCountText)}</span>
+                    </div>
+                    <button type="button" class="wheel-library-clear-filter" ${filterActive ? '' : 'hidden'} onclick="clearWheelLibraryFilters()">清除筛选</button>
+                </div>
                 <div class="wheel-library-filter-group">
                     <label class="wheel-library-filter">
-                        <span>标签筛选</span>
-                        <select id="wheel-library-tag-filter" onchange="setWheelLibraryTagFilter(this.value)">
-                            <option value="">全部标签</option>
-                            ${data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}" ${wheelLibraryTagFilter === tag.id ? 'selected' : ''}>${safeHtml(tag.name)}</option>`).join('')}
-                        </select>
+                        <span>按标签</span>
+                        <span class="wheel-library-field-control">
+                            <i class="wheel-library-field-icon" aria-hidden="true">#</i>
+                            <select id="wheel-library-tag-filter" aria-label="按标签筛选公共项" onchange="setWheelLibraryTagFilter(this.value)">
+                                <option value="">全部标签</option>
+                                ${data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}" ${wheelLibraryTagFilter === tag.id ? 'selected' : ''}>${safeHtml(tag.name)}</option>`).join('')}
+                            </select>
+                        </span>
                     </label>
                     <label class="wheel-library-filter wheel-library-text-search">
-                        <span>文本筛选</span>
-                        <input id="wheel-library-text-filter" type="search" value="${safeHtml(wheelLibraryTextFilter)}" placeholder="搜索名称或备注" oninput="setWheelLibraryTextFilter(this.value, this)">
+                        <span>按关键词</span>
+                        <span class="wheel-library-field-control">
+                            <i class="wheel-library-field-icon" aria-hidden="true">⌕</i>
+                            <input id="wheel-library-text-filter" type="search" value="${safeHtml(wheelLibraryTextFilter)}" aria-label="按名称或备注搜索公共项" placeholder="名称或备注" oninput="setWheelLibraryTextFilter(this.value)">
+                        </span>
                     </label>
+                </div>
+            </section>
+            <section class="wheel-library-selection-shell">
+                <div class="wheel-library-selection-head">
+                    <strong>批量操作</strong>
+                    <span>对当前勾选项生效</span>
                 </div>
                 <div class="wheel-library-bulk-actions">
                     <label class="wheel-check-row wheel-select-all-row">
@@ -1368,7 +1402,7 @@
                     <button class="wheel-mini-btn" data-library-bulk="disable" ${selectedTotalCount ? '' : 'disabled'} onclick="batchToggleWheelLibraryItems(false)">批量停用</button>
                     <button class="wheel-mini-btn danger" data-library-bulk="delete" ${selectedTotalCount ? '' : 'disabled'} onclick="batchDeleteWheelLibraryItems()">批量删除</button>
                 </div>
-            </div>
+            </section>
             <div class="wheel-hint compact">批量加/去标签、启用/停用、删除和导入前都会二次确认；加标签/导入会显示当前选中的标签名，避免多加或错加。批量操作按全部勾选项计数（跨筛选保留）。</div>
             <div class="wheel-list" id="wheel-library-list">
                 ${renderWheelLibraryRows(filteredItems, selectedIds)}
@@ -1610,6 +1644,12 @@
     window.setWheelLibraryTextFilter = function setWheelLibraryTextFilter(value = '') {
         wheelLibraryTextFilter = String(value || '');
         refreshWheelLibraryFilterResults();
+    };
+
+    window.clearWheelLibraryFilters = function clearWheelLibraryFilters() {
+        wheelLibraryTagFilter = '';
+        wheelLibraryTextFilter = '';
+        renderWheelPage();
     };
 
     window.toggleWheelPanelCollapse = function toggleWheelPanelCollapse() {
