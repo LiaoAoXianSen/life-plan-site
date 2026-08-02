@@ -9,6 +9,7 @@
     let wheelBatchTarget = 'panel';
     let wheelLibraryCopyTagFilter = '';
     let wheelLibraryTagFilter = '';
+    let wheelLibraryTextFilter = '';
     let wheelListModeFilter = 'normal';
     let wheelActionMenuOpen = false;
     let editingWheelTagId = null;
@@ -713,9 +714,16 @@
     }
 
     function getFilteredLibraryItemsForManage() {
-        return data.wheelLibraryItems.filter(item => (
-            !wheelLibraryTagFilter || item.tagIds?.includes(wheelLibraryTagFilter)
-        ));
+        const keyword = normalizeName(wheelLibraryTextFilter);
+        return data.wheelLibraryItems.filter(item => {
+            const matchesTag = !wheelLibraryTagFilter || item.tagIds?.includes(wheelLibraryTagFilter);
+            const matchesText = !keyword || normalizeName(`${item.name || ''} ${item.note || ''}`).includes(keyword);
+            return matchesTag && matchesText;
+        });
+    }
+
+    function hasWheelLibraryManageFilter() {
+        return Boolean(wheelLibraryTagFilter || normalizeName(wheelLibraryTextFilter));
     }
 
     function getSelectedLibraryItemIds() {
@@ -728,7 +736,7 @@
 
     function formatLibrarySelectionCount(selectedTotalCount, selectedVisibleCount, filteredCount) {
         // Always show total selected count used by bulk actions; also show current filter view.
-        if (wheelLibraryTagFilter && selectedTotalCount !== selectedVisibleCount) {
+        if (hasWheelLibraryManageFilter() && selectedTotalCount !== selectedVisibleCount) {
             return `选中 ${selectedTotalCount}（当前筛选 ${selectedVisibleCount}/${filteredCount}）`;
         }
         return `选中 ${selectedTotalCount}/${filteredCount}`;
@@ -1259,6 +1267,29 @@
         `;
     }
 
+    function renderWheelLibraryRows(filteredItems = [], selectedIds = new Set()) {
+        return filteredItems.map(item => `
+            <div class="wheel-row library ${selectedIds.has(item.id) ? 'selected' : ''}" data-library-item-id="${safeHtml(item.id)}">
+                <label class="wheel-library-select">
+                    <input type="checkbox" aria-label="选择${safeHtml(item.name)}" ${selectedIds.has(item.id) ? 'checked' : ''} onchange="toggleWheelLibrarySelection(${safeJsArg(item.id)}, this.checked)">
+                </label>
+                <span class="wheel-row-main"><strong class="wheel-management-name">${safeHtml(item.name)}</strong><small class="wheel-management-subtext">权重 ${item.weight} · ${item.enabled === false ? '已停用' : '启用中'}</small><span class="wheel-chip-row">${tagChips(item.tagIds)}</span></span>
+                <button class="wheel-mini-btn" onclick="editWheelLibraryItem(${safeJsArg(item.id)})">修改</button>
+                <button class="wheel-mini-btn" onclick="toggleWheelLibraryItem(${safeJsArg(item.id)})">${item.enabled === false ? '启用' : '停用'}</button>
+                <button class="wheel-mini-btn danger" onclick="deleteWheelLibraryItem(${safeJsArg(item.id)})">删除</button>
+            </div>
+        `).join('') || '<div class="empty-state">当前筛选下没有公共项。</div>';
+    }
+
+    function refreshWheelLibraryFilterResults() {
+        const list = document.getElementById('wheel-library-list');
+        if (!list) return;
+        const filteredItems = getFilteredLibraryItemsForManage();
+        const selectedIds = new Set(getSelectedLibraryItemIds());
+        list.innerHTML = renderWheelLibraryRows(filteredItems, selectedIds);
+        updateWheelLibrarySelectionUi();
+    }
+
     function renderLibraryPanel() {
         const filteredItems = getFilteredLibraryItemsForManage();
         const selectedIds = new Set(getSelectedLibraryItemIds());
@@ -1312,13 +1343,19 @@
                 </div>
             </div>
             <div class="wheel-library-toolbar">
-                <label class="wheel-library-filter">
-                    <span>标签筛选</span>
-                    <select id="wheel-library-tag-filter" onchange="setWheelLibraryTagFilter(this.value)">
-                        <option value="">全部标签</option>
-                        ${data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}" ${wheelLibraryTagFilter === tag.id ? 'selected' : ''}>${safeHtml(tag.name)}</option>`).join('')}
-                    </select>
-                </label>
+                <div class="wheel-library-filter-group">
+                    <label class="wheel-library-filter">
+                        <span>标签筛选</span>
+                        <select id="wheel-library-tag-filter" onchange="setWheelLibraryTagFilter(this.value)">
+                            <option value="">全部标签</option>
+                            ${data.wheelTags.map(tag => `<option value="${safeHtml(tag.id)}" ${wheelLibraryTagFilter === tag.id ? 'selected' : ''}>${safeHtml(tag.name)}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label class="wheel-library-filter wheel-library-text-search">
+                        <span>文本筛选</span>
+                        <input id="wheel-library-text-filter" type="search" value="${safeHtml(wheelLibraryTextFilter)}" placeholder="搜索名称或备注" oninput="setWheelLibraryTextFilter(this.value, this)">
+                    </label>
+                </div>
                 <div class="wheel-library-bulk-actions">
                     <label class="wheel-check-row wheel-select-all-row">
                         <input type="checkbox" id="wheel-library-select-all" ${allVisibleSelected ? 'checked' : ''} ${filteredItems.length ? '' : 'disabled'} onchange="toggleAllWheelLibrarySelection(this.checked)">
@@ -1334,17 +1371,7 @@
             </div>
             <div class="wheel-hint compact">批量加/去标签、启用/停用、删除和导入前都会二次确认；加标签/导入会显示当前选中的标签名，避免多加或错加。批量操作按全部勾选项计数（跨筛选保留）。</div>
             <div class="wheel-list" id="wheel-library-list">
-                ${filteredItems.map(item => `
-                    <div class="wheel-row library ${selectedIds.has(item.id) ? 'selected' : ''}" data-library-item-id="${safeHtml(item.id)}">
-                        <label class="wheel-library-select">
-                            <input type="checkbox" aria-label="选择${safeHtml(item.name)}" ${selectedIds.has(item.id) ? 'checked' : ''} onchange="toggleWheelLibrarySelection(${safeJsArg(item.id)}, this.checked)">
-                        </label>
-                        <span class="wheel-row-main"><strong class="wheel-management-name">${safeHtml(item.name)}</strong><small class="wheel-management-subtext">权重 ${item.weight} · ${item.enabled === false ? '已停用' : '启用中'}</small><span class="wheel-chip-row">${tagChips(item.tagIds)}</span></span>
-                        <button class="wheel-mini-btn" onclick="editWheelLibraryItem(${safeJsArg(item.id)})">修改</button>
-                        <button class="wheel-mini-btn" onclick="toggleWheelLibraryItem(${safeJsArg(item.id)})">${item.enabled === false ? '启用' : '停用'}</button>
-                        <button class="wheel-mini-btn danger" onclick="deleteWheelLibraryItem(${safeJsArg(item.id)})">删除</button>
-                    </div>
-                `).join('') || '<div class="empty-state">当前筛选下没有公共项。</div>'}
+                ${renderWheelLibraryRows(filteredItems, selectedIds)}
             </div>
         `;
     }
@@ -1578,6 +1605,11 @@
     window.setWheelLibraryTagFilter = function setWheelLibraryTagFilter(tagId = '') {
         wheelLibraryTagFilter = String(tagId || '');
         renderWheelPage();
+    };
+
+    window.setWheelLibraryTextFilter = function setWheelLibraryTextFilter(value = '') {
+        wheelLibraryTextFilter = String(value || '');
+        refreshWheelLibraryFilterResults();
     };
 
     window.toggleWheelPanelCollapse = function toggleWheelPanelCollapse() {

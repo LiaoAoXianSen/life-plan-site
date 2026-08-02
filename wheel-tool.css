@@ -1093,7 +1093,7 @@
 
 .wheel-library-toolbar {
     display: grid;
-    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+    grid-template-columns: minmax(360px, 1fr) minmax(0, 1.35fr);
     gap: 10px;
     align-items: center;
     margin-bottom: 12px;
@@ -1101,6 +1101,13 @@
     border: 1px solid rgba(224, 231, 239, 0.96);
     border-radius: 18px;
     background: rgba(248, 250, 253, 0.92);
+}
+
+.wheel-library-filter-group {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(190px, 1.2fr);
+    gap: 8px;
+    min-width: 0;
 }
 
 .wheel-library-filter,
@@ -1120,8 +1127,10 @@
 }
 
 .wheel-library-filter select,
+.wheel-library-filter input,
 .wheel-library-bulk-actions select {
     min-width: 0;
+    width: 100%;
     padding: 8px 10px;
     border: 1px solid rgba(220, 228, 236, 0.96);
     border-radius: 13px;
@@ -1704,7 +1713,8 @@
     .wheel-inline-form.library-form,
     .wheel-inline-form.tags-form,
     .wheel-library-batch-box,
-    .wheel-library-toolbar {
+    .wheel-library-toolbar,
+    .wheel-library-filter-group {
         grid-template-columns: 1fr;
     }
 

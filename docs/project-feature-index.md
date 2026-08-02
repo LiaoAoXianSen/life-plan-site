@@ -391,6 +391,7 @@
 - 普通转盘项：`addWheelItem`、`editWheelItem`、`deleteWheelItem`
 - 批量导入普通项：`openWheelBatchImport`
 - 公共项：`addWheelLibraryItem`、`editWheelLibraryItem`、`toggleWheelLibraryItem`、`deleteWheelLibraryItem`
+- 公共项筛选：`getFilteredLibraryItemsForManage`、`setWheelLibraryTagFilter`、`setWheelLibraryTextFilter`；标签与名称/备注文本按 AND 组合过滤
 - 批量导入公共项：`openWheelLibraryBatchImport`
 - 标签：`addWheelTag`、`editWheelTag`、`toggleWheelTagEnabled`、`deleteWheelTag`
 - 抽取：`spinWheel`
