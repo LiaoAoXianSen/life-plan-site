@@ -896,7 +896,7 @@ onUnmounted(stopRestTimer);
             <label>次数 <input :value="set.reps ?? ''" type="number" min="1" step="1" @change="setDone(exerciseIndex, setIndex, set.done === true, set.weight, ($event.target as HTMLInputElement).value)" /></label>
             <button v-if="setSuggestion(exercise, setIndex)" class="btn btn-secondary todo-mini-btn" type="button" @click="applySuggestion(exerciseIndex, setIndex)">套用建议</button>
             <button class="btn btn-secondary" type="button" @click="setDone(exerciseIndex, setIndex, set.done !== true, set.weight, set.reps)">
-              {{ set.done ? '撤销完成' : '完成本组' }}
+              {{ set.done ? '撤销' : '完成' }}
             </button>
             <span v-if="suggestionHint(setSuggestion(exercise, setIndex))" class="fitness-set-suggestion vue-fitness-set-suggestion">{{ suggestionHint(setSuggestion(exercise, setIndex)) }}</span>
           </div>

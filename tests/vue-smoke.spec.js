@@ -2918,7 +2918,7 @@ test('fitness pause hides the live editor and resume restores the same workout',
     await page.goto('/#/fitness');
 
     await expect(page.getByText('正在训练：可暂停训练')).toBeVisible();
-    await page.getByRole('button', { name: '完成本组', exact: true }).click();
+    await page.getByRole('button', { name: '完成', exact: true }).click();
     await expect(page.locator('.vue-fitness-rest-timer')).toBeVisible();
     await expect(page.locator('.fitness-live-row')).toHaveCount(2);
 
@@ -3010,12 +3010,12 @@ test('fitness plans support multiple exercises and explicit plan writeback', asy
     await activeRows.nth(0).locator('input').nth(0).dispatchEvent('change');
     await activeRows.nth(0).locator('input').nth(1).fill('5');
     await activeRows.nth(0).locator('input').nth(1).dispatchEvent('change');
-    await activeRows.nth(0).getByRole('button', { name: '完成本组' }).click();
+    await activeRows.nth(0).getByRole('button', { name: '完成' }).click();
     await activeRows.nth(2).locator('input').nth(0).fill('65');
     await activeRows.nth(2).locator('input').nth(0).dispatchEvent('change');
     await activeRows.nth(2).locator('input').nth(1).fill('6');
     await activeRows.nth(2).locator('input').nth(1).dispatchEvent('change');
-    await activeRows.nth(2).getByRole('button', { name: '完成本组' }).click();
+    await activeRows.nth(2).getByRole('button', { name: '完成' }).click();
     await expect(page.getByLabel(/结束时回写到计划/)).toBeVisible();
     await page.getByRole('button', { name: '结束训练' }).click();
 
@@ -3033,7 +3033,7 @@ test('fitness plans support multiple exercises and explicit plan writeback', asy
     await activeRows.nth(0).locator('input').nth(0).dispatchEvent('change');
     await activeRows.nth(0).locator('input').nth(1).fill('4');
     await activeRows.nth(0).locator('input').nth(1).dispatchEvent('change');
-    await activeRows.nth(0).getByRole('button', { name: '完成本组' }).click();
+    await activeRows.nth(0).getByRole('button', { name: '完成' }).click();
     await page.getByLabel(/结束时回写到计划/).check();
     await page.getByRole('button', { name: '结束训练' }).click();
 
@@ -3504,7 +3504,8 @@ test('fitness live workout suggestions and rest timer stay service backed', asyn
     expect(activeWorkout.exercises[0].sets[0]).toEqual(expect.objectContaining({ weight: 57.5, reps: 7, done: false }));
     expect(stored.syncState.dirty).toBe(true);
 
-    await firstRow.getByRole('button', { name: '完成本组' }).click();
+    await firstRow.getByRole('button', { name: '完成', exact: true }).click();
+    await expect(firstRow.getByRole('button', { name: '撤销', exact: true })).toBeVisible();
     await expect(active.getByRole('timer')).toContainText('卧推建议');
     await expect(active.getByRole('timer')).toContainText(/1:2\\d|1:30/);
     await expect(active.getByRole('button', { name: '+30s' })).toBeVisible();
