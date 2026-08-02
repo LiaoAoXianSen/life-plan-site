@@ -113,3 +113,47 @@
 - [ ] 各列表态长文案不会撑坏卡片或横向溢出，详情/编辑态仍显示全文
 - [ ] 恶意标题、标签、内容、来源、备注和带引号 ID 不执行脚本
 - [ ] 桌面与 375px 移动端视觉和回归测试通过
+
+### [SYNC-20260802-01] 转盘公共项文本与标签组合筛选
+
+- 日期：2026-08-02
+- 主分支提交：`888c0bf feat(wheel): filter library items by text`
+- 状态：待同步
+- 主分支范围：工具转盘 → 管理 → 公共项库
+
+#### 用户可见变化
+
+- 在现有“标签筛选”旁增加“文本筛选”，输入时即时更新公共项列表。
+- 文本同时匹配公共项名称和备注，忽略首尾空白、连续空白和英文大小写。
+- 标签与文本使用 AND 组合：只有同时满足选中标签和搜索文本的公共项才显示。
+- 清空文本后保留当前标签筛选；清空标签后保留文本筛选结果。
+- 全选与批量操作只作用于组合筛选后的可见项，跨筛选勾选总数继续保留并正确提示。
+
+#### 主分支实现定位
+
+- 文件：`wheel-tool.js`、`wheel-tool.css`
+- 逻辑：`wheelLibraryTextFilter`、`getFilteredLibraryItemsForManage`、`hasWheelLibraryManageFilter`、`renderWheelLibraryRows`、`refreshWheelLibraryFilterResults`、`setWheelLibraryTextFilter`
+- 样式：`.wheel-library-filter-group`、`.wheel-library-text-search` 和既有 `.wheel-library-toolbar` 移动端单列规则
+- 测试：`tests/smoke.spec.js` 的 `wheel library copy is tag-filtered and history can be exported`
+
+#### Vue 同步落点
+
+- 页面/组件：Vue 工具转盘公共项库管理组件的筛选工具栏和公共项列表
+- 状态/数据：组件内新增会话态文本关键词，不写入 `lifePlanData`、远端快照或同步配置
+- 样式：标签下拉与文本搜索并排，窄屏改为单列；沿用现有筛选控件视觉
+- 不要直接照搬：静态版全局函数和 `oninput`；Vue 使用响应式 computed 对 `wheelLibraryItems` 做标签 + 文本组合过滤
+
+#### 数据与交互契约
+
+- 数据结构：无变化；文本条件读取 `wheelLibraryItems[*].name` 与可选 `note`
+- 交互规则：标签条件 AND 文本包含条件；输入仅局部刷新列表，不打断焦点或中文输入；批量选择基于当前组合筛选结果
+- 响应式要求：桌面筛选器并排，移动端单列且输入框不横向溢出
+
+#### 验收条件
+
+- [ ] 仅文本筛选可按名称命中
+- [ ] 仅存在于备注的关键词也可命中
+- [ ] 标签与文本同时启用时只显示共同命中项
+- [ ] 清空任一筛选不会清除另一筛选
+- [ ] 组合筛选下全选、跨筛选计数和批量操作范围正确
+- [ ] 桌面与移动端无溢出，回归测试通过
