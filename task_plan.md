@@ -277,14 +277,19 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 259. Status: complete - Audit and align the Wheel last-item deletion guard with legacy minimum-one behavior.
 260. Status: complete - Add Wheel last-item refusal coverage without changing other delete/tombstone paths.
 261. Status: complete - Build, focused-check, package, commit, push, and full-check the Wheel guard slice.
-262. Status: pending - Implement the next bounded parity slice from the current audit queue, prioritizing Records independent preview or Fitness plan-day selection.
+262. Status: complete - Re-audit the stale next-candidate entry: Records independent read-only preview is already implemented and covered; current legacy and Vue Fitness both use the first plan day, so plan-day selection is not a confirmed parity blocker.
+263. Status: complete - Close the Fitness live-workout visual parity queue with legacy live-set layout, rest controls, timer-expiry cleanup, build/package, and full Vue smoke 214/214.
+264. Status: complete - Refresh migration checklist, preview, findings, and progress documentation to the current 2026-08-02 checkpoint.
+265. Status: pending - Implement the next optional specialist slice serially, choosing either Wheel public-library AI tag-suggest or deeper Habit diagnostics repair; update implementation, focused tests, whole-project percentage, and migration documentation in the same slice.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
 - Use browser-local `localStorage` configuration for personal direct URL + key mode, with visible warnings that browser-stored keys are not safe for public deployment.
 - Keep AI optional and fail closed: no AI calls unless configured by the user.
 - Prefer a small, embedded assistant panel/action buttons over turning the app into a chat-first product.
-- Use multi-agent work for independent read-only investigation while main implementation proceeds.
+- Historical stages used multi-agent read-only investigation, but all work from the 2026-08-02 documentation checkpoint onward must use one main agent serially; do not start subagents.
+- Every subsequent implementation slice must update the relevant checklist, plan, progress, or findings documentation in the same slice and report the whole-project completion percentage at both start and finish.
+- Continue improving Vue functionality, tests, documentation, and technical quality; switching the live deployment from legacy to Vue is outside scope and must not be tracked as a pending task.
 - Keep this thread scoped to AI integration and closeout only; defer non-AI UX follow-ups unless the user explicitly reopens that scope.
 - A later attempt to continue non-AI work was a scope misunderstanding and was reverted back to the AI-only state.
 - User explicitly reopened non-AI scope for todo detail and idea pool fixes on 2026-07-07.

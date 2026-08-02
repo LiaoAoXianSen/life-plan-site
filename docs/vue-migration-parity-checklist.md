@@ -1,6 +1,8 @@
 # Vue Migration Parity Checklist
 
-This checklist tracks whether `migration/vue-app-v1` can become a replacement candidate for the legacy static app on `master`. Passing build, route smoke tests, or Cloudflare preview deployment is not enough.
+This checklist tracks whether `migration/vue-app-v1` is a credible Vue replacement candidate for the legacy static app on `master`. Passing build, route smoke tests, or preview deployment is not enough. The active project scope covers Vue functionality, tests, documentation, and technical cleanup; switching the live deployment from legacy to Vue is explicitly out of scope and is not tracked as remaining work.
+
+Current whole-project engineering completion estimate: **96.5%** as of 2026-08-02. This percentage describes the entire active Vue project scope, not the latest implementation slice. The current core replacement audit has no open blocker; the remaining percentage is reserved for documented specialist follow-ups and cleanup.
 
 ## Global Acceptance Gates
 
@@ -497,11 +499,14 @@ Status: **READY** on `migration/vue-app-v1`
 
 1. Global gates remain true: `master` stays deployable; `experiment/vue-preview-poc` and stash `wip-materials-page-v1-before-vue-preview-experiment` stay untouched; `lifePlanData` is the only authority; Todo/Habit mirrors are rebuilt locally; Vue never imports `app.js`; WebDAV paths, tombstones, snapshots, and dirty-state remain compatible.
 2. Every module row in the Page And Module Checklist has no open blocker for its current parity audit (Dashboard, Todos, Records, Ideas, Materials, Tags/Search, Goals, Habits, Fitness, Wheel, Sync, AI, Import/Export).
-3. Sync acceptance is satisfied by the existing modular Playwright coverage for main protected upload/import-export and Todo/Wheel/Habit independent preview/apply/conditional upload/create/auto-sync contracts (persisted shape, not route smoke alone). Current full Vue smoke is 78/78.
-4. Vue artifacts publish without `scripts/package-clean.ps1`: `npm run build` → `dist/` for Pages preview, plus `npm run package:vue` / `scripts/package-vue-dist.ps1` for offline dist delivery.
-5. Explicit non-blockers deferred to follow-up releases (not required for this label): optional wheel library AI tag-suggest; deeper Habit diagnostics repair / dual-write readiness console beyond read-only diagnostics and settle-through-yesterday.
+3. Sync acceptance is satisfied by the existing modular Playwright coverage for main protected upload/import-export and Todo/Wheel/Habit independent preview/apply/conditional upload/create/auto-sync contracts (persisted shape, not route smoke alone). Current full Vue smoke is 214/214.
+4. Vue artifacts publish without `scripts/package-clean.ps1`: `npm run build` → `dist/`, plus `npm run package:vue` / `scripts/package-vue-dist.ps1` for offline dist delivery.
+5. Explicit non-blockers retained as follow-up work (not required for READY): optional wheel library AI tag-suggest; deeper Habit diagnostics repair / dual-write readiness console beyond read-only diagnostics and settle-through-yesterday.
+6. The latest Fitness parity closeout covers the legacy four-column live-set layout, set action semantics, `-15s` / `+15s` rest controls, primary skip action, and automatic timer removal at expiry. The final focused checks, production build, Vue package, `git diff --check`, and full 214/214 smoke gate passed on 2026-08-02.
 
-Protected refs at acceptance:
+The READY label is an engineering acceptance state only. Live deployment switching is outside the active project scope and is not a remaining task.
+
+Protected refs recorded at the original acceptance checkpoint (historical snapshot, not a current deployment instruction):
 
 - `master` = `38f885f08ecf11bbf55f588cf7baaed2a505bc0d`
 - `experiment/vue-preview-poc` = `d5daf32d752dcf681ccda68c121f05ce2dad6e20`

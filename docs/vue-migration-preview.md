@@ -1,9 +1,8 @@
 # Vue migration preview deployment
 
-The Vite/Vue migration is isolated on `migration/vue-app-v1`. Do not point the
-production Pages project at this branch until the migration has received a
-separate release decision. `master` remains the static production application
-and its deployment configuration must not change.
+The Vite/Vue work is isolated on `migration/vue-app-v1`. The active project scope is to improve and verify the Vue application, its tests, and its documentation. Switching the live deployment from the legacy app to Vue is intentionally out of scope and is not tracked as remaining work.
+
+The deployment notes below are retained only as reference for local or isolated preview verification; they are not an instruction to change the existing live deployment.
 
 ## Local verification
 
@@ -34,11 +33,9 @@ npm run package:vue
 This writes `life-plan-site-vue-dist-YYYYMMDD-HHMMSS.zip` from `dist/` and keeps
 the newest 5 Vue dist packages by default.
 
-## Separate Cloudflare Pages preview
+## Optional isolated preview reference
 
-Create a new Pages project connected to the same GitHub repository, limited to
-the `migration/vue-app-v1` branch. Do **not** edit the existing production
-Pages project.
+If an isolated preview is needed for testing, use a separate Pages project connected to the same GitHub repository and limited to `migration/vue-app-v1`. This is optional reference material; changing the live deployment is outside the active work scope.
 
 | Setting | Value |
 | --- | --- |
@@ -91,10 +88,13 @@ changes. Keep a manually exported data file before testing complex data flows.
 ## Replacement-candidate status
 
 `migration/vue-app-v1` is an operational **replacement candidate** for daily
-workflows covered by the parity checklist. Optional specialist depth still on
-master only: wheel library AI tag-suggest and deeper Habit diagnostics repair
-beyond read-only diagnostics plus settle-through-yesterday. Do not substitute
-incompatible shortcuts; ship those as separately tested follow-ups.
+workflows covered by the parity checklist. The current full Vue smoke gate is
+214/214, with production build and Vue dist packaging verified on 2026-08-02.
+The whole active Vue project is estimated at **96.5% complete**; this is a
+whole-project estimate rather than a per-slice score. Remaining non-blocking
+specialist depth is wheel library AI tag-suggest and deeper Habit diagnostics
+repair beyond read-only diagnostics plus settle-through-yesterday. Live
+deployment switching is not part of this project scope.
 
 UI/IA shell parity has been tightened toward the legacy product surfaces:
 Habit center tabs/KPI with compact today actions, browse-first Todos filters,
@@ -117,8 +117,9 @@ wallet redemption, read-only diagnostics, settle-through-yesterday penalties,
 tombstones, dirty-state updates, local-only mirror rebuilding, independent
 remote preview/apply, protected upload/create, and guarded conditional
 auto-sync; Fitness now covers full-field body metric editing, multi-exercise
-plan editing, explicit plan writeback, and workout history create/edit plus live
-rest timers and last-performance suggestions; Wheel now covers canvas
+plan editing, explicit plan writeback, workout history create/edit, legacy-style
+four-column live sets, last-performance suggestions, and rest timers with
+legacy `-15s` / `+15s` / skip controls plus automatic expiry cleanup; Wheel now covers canvas
 interaction, public-library batch management, independent remote preview/apply,
 protected upload/create, guarded conditional auto-sync, and final
 management-form polish; Todo independent sync now covers guarded existing-file

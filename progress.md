@@ -622,3 +622,13 @@
 - Wheel: rejected deletion of the final wheel with the legacy minimum-one message and added no-write UI coverage. Commit `c2212ba`, remote ref verified.
 - Verification: Import/Export focused `5/5`, Dashboard focused `3/3`, Wheel focused `5/5`, `npm run build` after each slice, Vue dist packages created with `scripts/package-vue-dist.ps1 -SkipBuild`, and full `scripts/check.ps1` passed `147/147`.
 - Current next candidate: Records independent read-only preview or Fitness plan-day selection; untracked `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain untouched.
+
+## 2026-08-02 - Whole-project documentation checkpoint
+
+- Current whole-project engineering completion estimate is **96.5%** after this documentation closeout. This is the entire active Vue project percentage, not the completion of the latest slice; live deployment switching is outside scope and is not counted as pending work.
+- Re-audited the stale next-candidate entry: Records independent preview is already implemented and covered, while legacy and Vue Fitness both currently use the first plan day, so neither remains a confirmed parity blocker.
+- Closed the Fitness live-workout queue with legacy four-column live-set structure, set action labels/styles, `-15s` / `+15s` rest controls, primary skip action, and timer expiry cleanup. Local commits are `90ddcf9`, `231a0ec`, and `28bc21e`; their force-free Git Data API equivalents were verified on the remote branch.
+- Final current gates passed: Fitness focused coverage, `npm run build`, `git diff --check`, `npm run package:vue`, and full `tests/vue-smoke.spec.js` **214/214**. The generated artifact was `life-plan-site-vue-dist-20260802-101004.zip`.
+- No open blocker remains in the current core replacement audit. The two explicit non-blocking specialist candidates are Wheel public-library AI tag-suggest and deeper Habit diagnostics repair / dual-write readiness tooling.
+- From this checkpoint onward, work is single-agent and serial. Each implementation slice must update its tests and migration documentation together, and report the whole-project percentage at both start and finish.
+- Existing untracked `.freebuff/`, `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain untouched.

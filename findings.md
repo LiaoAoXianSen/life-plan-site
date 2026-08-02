@@ -240,3 +240,12 @@
 - Wheel deletion now rejects deleting the last wheel with `至少保留一个转盘`; deletion of two-or-more wheels and tombstone behavior remain unchanged.
 - Current full checkpoint: `scripts/check.ps1` passed `147/147`; current branch is `migration/vue-app-v1`, and user-owned untracked `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain unstaged.
 - Next candidate audits: Records independent read-only preview state (`app.js:7491-7538` vs `src/pages/RecordsPage.vue:859-888`) or Fitness plan-day selection (`fitness-ui.js:677-704` vs `src/pages/FitnessPage.vue:953-979`).
+
+## 2026-08-02 current project status
+
+- Earlier readiness estimates such as 72%-78% and 80% are historical audit snapshots and must not be used as the current percentage. After the documentation closeout, the current whole-project engineering estimate is **96.5%**, excluding live deployment switching because the user explicitly removed it from scope.
+- The current core replacement audit has no open blocker, and the full Vue smoke gate now passes **214/214** with production build, Vue dist packaging, and `git diff --check` green.
+- The prior Records-preview candidate is already implemented and covered by read-only preview tests. Fitness plan-day selection is not a demonstrated legacy gap because both current UIs resolve plans through the first day/exercise prescription.
+- The final Fitness audit restored legacy live-set table semantics and rest controls and found one real behavioral gap: Vue left the timer visible at `0:00`. Calling the unified timer cleanup at expiry now matches legacy behavior and has focused regression coverage.
+- Remaining user-visible depth is explicitly non-blocking: Wheel public-library AI tag-suggest and deeper Habit diagnostics repair / dual-write readiness tooling. Build chunk size and the Vite CJS warning remain technical cleanup rather than parity blockers.
+- All future slices must be handled by one main agent serially, with implementation, focused regression coverage, relevant migration documentation, and whole-project percentage reporting updated together.
