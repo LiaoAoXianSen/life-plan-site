@@ -379,6 +379,29 @@ export const useHabitsStore = defineStore('habits', () => {
       remoteUploadEnabled: false,
     };
   });
+  const repairPreview = computed(() => {
+    const habitIds = new Set(lifePlan.data.habits.map(item => String(item.id || '').trim()).filter(Boolean));
+    const today = getTodayStr();
+    const orphanCheckins = lifePlan.data.checkins.filter(item => {
+      const habitId = String(item.habitId || '').trim();
+      return Boolean(habitId && !habitIds.has(habitId));
+    });
+    const futureCheckins = lifePlan.data.checkins.filter(item => String(item.date || '').trim() > today);
+    const invalidLedger = lifePlan.data.habitPointLedger.filter(item => !Number.isFinite(Number(item.amount)));
+    const emptyLedgerCurrencies = lifePlan.data.habitPointLedger.filter(item => Number.isFinite(Number(item.amount)) && !String(item.currency || '').trim());
+    const emptyRewardCurrencies = lifePlan.data.habitRewards.filter(item => !String(item.currency || '').trim());
+    const checkinIds = new Set([...orphanCheckins, ...futureCheckins].map(item => String(item.id || '')).filter(Boolean));
+    return {
+      orphanCheckins: orphanCheckins.length,
+      futureCheckins: futureCheckins.length,
+      invalidLedger: invalidLedger.length,
+      emptyLedgerCurrencies: emptyLedgerCurrencies.length,
+      emptyRewardCurrencies: emptyRewardCurrencies.length,
+      removableCheckins: checkinIds.size,
+      total: checkinIds.size + invalidLedger.length + emptyLedgerCurrencies.length + emptyRewardCurrencies.length,
+    };
+  });
+  const repairableCount = computed(() => repairPreview.value.total);
   const balances = computed(() => lifePlan.data.habitPointLedger.reduce<Record<string, number>>((summary, entry) => {
     const currency = normalizeCurrency(entry.currency);
     summary[currency] = (summary[currency] || 0) + (Number(entry.amount) || 0);
@@ -1140,6 +1163,54 @@ export const useHabitsStore = defineStore('habits', () => {
     }
   }
 
+  function repairSafeDiagnosticIssues() {
+    const preview = repairPreview.value;
+    if (!preview.total) {
+      lastAction.value = '没有可自动安全修复的问题';
+      lastError.value = '';
+      return { changed: false, ...preview };
+    }
+    try {
+      lifePlan.createManualSnapshot('Habit 安全修复前自动快照');
+      lifePlan.mutate('vue-repair-habit-diagnostics', data => {
+        const habitIds = new Set(data.habits.map(item => String(item.id || '').trim()).filter(Boolean));
+        const today = getTodayStr();
+        const removedCheckins = data.checkins.filter(item => {
+          const habitId = String(item.habitId || '').trim();
+          return Boolean((habitId && !habitIds.has(habitId)) || String(item.date || '').trim() > today);
+        });
+        removedCheckins.forEach(item => {
+          const id = String(item.id || '').trim();
+          if (id) habitServices.sync.markDeletedItem(data, 'checkins', id, {
+            reason: 'diagnostic-safe-repair',
+            habitId: String(item.habitId || ''),
+          });
+        });
+        const removedIds = new Set(removedCheckins.map(item => item.id));
+        data.checkins = data.checkins.filter(item => !removedIds.has(item.id));
+        data.habitPointLedger = data.habitPointLedger.filter(item => Number.isFinite(Number(item.amount)));
+        data.habitPointLedger.forEach(item => {
+          item.amount = Number(item.amount);
+          item.currency = normalizeCurrency(item.currency);
+          item.updatedAt = getNowLocal();
+        });
+        data.habitRewards.forEach(item => {
+          item.currency = normalizeCurrency(item.currency);
+          item.updatedAt = getNowLocal();
+        });
+        data.habitPointLedger.forEach(item => ensureHabitCurrency(data, item.currency));
+        data.habitRewards.forEach(item => ensureHabitCurrency(data, item.currency));
+      });
+      rebuildLocalMirror('vue-repair-habit-diagnostics');
+      lastAction.value = `已安全修复 ${preview.total} 项：移除异常打卡 ${preview.removableCheckins} 条，移除无效流水 ${preview.invalidLedger} 条，补齐币种 ${preview.emptyLedgerCurrencies + preview.emptyRewardCurrencies} 项`;
+      lastError.value = '';
+      return { changed: true, ...preview };
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return { changed: false, ...preview };
+    }
+  }
+
   return {
     habits,
     todayHabits,
@@ -1148,6 +1219,8 @@ export const useHabitsStore = defineStore('habits', () => {
     diagnostics,
     diagnosticIssues,
     dualWriteReadiness,
+    repairPreview,
+    repairableCount,
     balances,
     lastError,
     lastAction,
@@ -1170,5 +1243,6 @@ export const useHabitsStore = defineStore('habits', () => {
     undoLatestCheckin,
     quickCheckin,
     settlePenaltiesThroughYesterday,
+    repairSafeDiagnosticIssues,
   };
 });

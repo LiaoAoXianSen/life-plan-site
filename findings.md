@@ -256,3 +256,10 @@
 - The real closure gaps were evidence and interface parity: remote payload/success/failure had no Vue regression, invented remote tags were not explicitly tested, and the always-visible legacy help/result shell plus color/selected styling was missing.
 - The completed slice keeps suggestions transient and draft-only, filters all AI results through exact existing-tag names, lets manual tag selections override AI, clears suggestions after form reset/edit/save, and preserves remote-failure local fallback.
 - Whole-project engineering completion is now **97.5%**. Remaining active work is Habit safe diagnostics repair plus build chunk and Vite CJS technical cleanup.
+
+## 2026-08-02 Habit safe repair audit
+
+- Existing diagnostics already identified duplicate/missing IDs, orphan/future check-ins, invalid amounts, empty currencies, and readiness blockers; the missing depth was a bounded repair action rather than more read-only reporting.
+- Safe automatic scope is deliberately narrow: remove orphan/future check-ins with tombstones, discard non-numeric ledger entries, and normalize empty ledger/reward currencies to the existing default. A local snapshot is created before mutation.
+- Duplicate or missing IDs and orphan ledger references are ambiguous and remain manual blockers. The UI confirmation names this boundary so repair cannot silently merge identities or reassign wallet history.
+- The repair follows authoritative write contracts: `lifePlanData` mutation, local Habit mirror rebuild with upload disabled, main dirty state, and idempotent clean state. Whole-project engineering completion is now **99%**; only build chunk/CJS cleanup remains planned.

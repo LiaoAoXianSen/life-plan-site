@@ -641,3 +641,12 @@
 - Final gates passed: Wheel AI focused **3/3**, `npm run build`, full Vue smoke **216/216**, `git diff --check`, and `npm run package:vue`; the generated artifact is `life-plan-site-vue-dist-20260802-111622.zip`.
 - Wheel public-library AI tag-suggest is no longer a specialist follow-up. The remaining user-visible specialist item is deeper Habit diagnostics repair / dual-write readiness tooling; build chunk and Vite CJS warnings remain technical cleanup.
 - Existing untracked `.freebuff/`, `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain untouched.
+
+## 2026-08-02 - Habit safe diagnostics repair
+
+- Whole-project engineering completion moved from **97.5% to 99%**. This is the entire active Vue project percentage, not the Habit slice percentage.
+- Added a deterministic repair preview and confirmed action for orphan/future check-ins, invalid ledger amounts, and empty ledger/reward currencies. The repair creates a local snapshot first, writes check-in tombstones, rebuilds the local-only `habitAppData` mirror, and marks main sync dirty.
+- Duplicate or missing IDs and orphan wallet references remain visible blockers and are never auto-merged or guessed. Cancelling confirmation keeps authority, mirror, snapshots, and sync state unchanged; after repair the clean action is disabled/no-op.
+- Focused diagnostics coverage passes **2/2**; `npm run build`, full Vue smoke **217/217**, `git diff --check`, and `npm run package:vue` pass. The generated artifact is `life-plan-site-vue-dist-20260802-113228.zip`.
+- After this slice the only planned remaining work is build technical cleanup: route-level lazy chunks and removal of the Vite CJS warning.
+- Existing untracked `.freebuff/`, `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain untouched.

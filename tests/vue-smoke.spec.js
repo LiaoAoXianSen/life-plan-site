@@ -4402,6 +4402,86 @@ test('habit diagnostics stays read-only and surfaces legacy issues', async ({ pa
     expect(unchanged.mirror).toBeNull();
 });
 
+test('habit safe diagnostics repair confirms snapshots exact fixes and keeps ambiguous blockers', async ({ page }) => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const source = emptyData({
+        habits: [
+            { id: 'habit-repair-duplicate', name: '重复习惯 A', rule: 'daily', timesPerDay: '1', startDate: '2026-07-01' },
+            { id: 'habit-repair-duplicate', name: '重复习惯 B', rule: 'daily', timesPerDay: '1', startDate: '2026-07-01' },
+        ],
+        checkins: [
+            { id: 'checkin-repair-valid', habitId: 'habit-repair-duplicate', date: '2026-07-29', time: '08:00', checkinAt: '2026-07-29T08:00:00' },
+            { id: 'checkin-repair-orphan', habitId: 'missing-habit', date: '2026-07-29', time: '09:00', checkinAt: '2026-07-29T09:00:00' },
+            { id: 'checkin-repair-future', habitId: 'habit-repair-duplicate', date: tomorrow, time: '10:00', checkinAt: `${tomorrow}T10:00:00` },
+        ],
+        habitPointLedger: [
+            { id: 'ledger-repair-invalid', amount: 'not-a-number', currency: '', type: 'adjust', date: '2026-07-29' },
+            { id: 'ledger-repair-currency', amount: '5', currency: '', type: 'adjust', date: '2026-07-29' },
+        ],
+        habitRewards: [{ id: 'reward-repair-currency', name: '修复心愿', cost: 3, currency: '', stock: 0, redeemedCount: 0 }],
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'habit-repair-before' }));
+    }, source);
+
+    await page.goto('/#/habits');
+    await page.locator('.habit-center-tabs').getByRole('tab', { name: '分析' }).click();
+    const diagnostics = page.locator('.habit-diagnostics-panel');
+    const repairButton = diagnostics.getByRole('button', { name: '安全修复 5 项' });
+    await expect(repairButton).toBeVisible();
+    await expect(diagnostics.locator('.habit-repair-preview')).toContainText('异常打卡 2');
+    await expect(diagnostics.locator('.habit-repair-preview')).toContainText('无效流水 1');
+    await expect(diagnostics.locator('.habit-repair-preview')).toContainText('空币种 2');
+
+    page.once('dialog', dialog => dialog.dismiss());
+    await repairButton.click();
+    let cancelled = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: localStorage.getItem('habitAppData'),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'),
+    }));
+    expect(cancelled.data).toEqual(source);
+    expect(cancelled.mirror).toBeNull();
+    expect(cancelled.snapshots).toHaveLength(0);
+
+    page.once('dialog', dialog => {
+        expect(dialog.message()).toContain('重复 ID 不会自动修改');
+        dialog.accept();
+    });
+    await repairButton.click();
+    await expect(page.getByRole('status')).toContainText('已安全修复 5 项');
+    await expect(diagnostics.getByRole('button', { name: '安全修复 0 项' })).toBeDisabled();
+    await expect(diagnostics).toContainText('重复习惯 ID');
+    await expect(diagnostics).not.toContainText('孤儿打卡记录');
+    await expect(diagnostics).not.toContainText('未来日期打卡');
+    await expect(diagnostics).not.toContainText('流水金额异常');
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        sync: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+        snapshots: JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'),
+    }));
+    expect(stored.data.habits).toHaveLength(2);
+    expect(stored.data.habits.map(item => item.id)).toEqual(['habit-repair-duplicate', 'habit-repair-duplicate']);
+    expect(stored.data.checkins).toEqual([expect.objectContaining({ id: 'checkin-repair-valid' })]);
+    expect(stored.data.habitPointLedger).toEqual([expect.objectContaining({ id: 'ledger-repair-currency', amount: 5, currency: '金币' })]);
+    expect(stored.data.habitRewards[0]).toEqual(expect.objectContaining({ id: 'reward-repair-currency', currency: '金币' }));
+    expect(stored.data.deletedItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'checkins', id: 'checkin-repair-orphan', reason: 'diagnostic-safe-repair' }),
+        expect.objectContaining({ collection: 'checkins', id: 'checkin-repair-future', reason: 'diagnostic-safe-repair' }),
+    ]));
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.mirror.mirror.reason).toBe('vue-repair-habit-diagnostics');
+    expect(stored.sync.dirty).toBe(true);
+    expect(stored.snapshots[0].reason).toBe('Habit 安全修复前自动快照');
+
+    const afterRepair = await page.evaluate(() => localStorage.getItem('lifePlanData'));
+    await expect(diagnostics.getByRole('button', { name: '安全修复 0 项' })).toBeDisabled();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(afterRepair);
+});
+
 test('habit analysis summary reports per-habit window stats without writes', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();

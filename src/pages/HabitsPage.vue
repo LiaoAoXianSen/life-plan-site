@@ -661,6 +661,23 @@ function settlePenalties() {
   habits.settlePenaltiesThroughYesterday();
 }
 
+function repairSafeDiagnostics() {
+  const preview = habits.repairPreview;
+  if (!preview.total) {
+    habits.repairSafeDiagnosticIssues();
+    return;
+  }
+  const message = [
+    `将安全修复 ${preview.total} 项 Habit 数据问题：`,
+    `- 移除异常打卡 ${preview.removableCheckins} 条（孤儿 ${preview.orphanCheckins}，未来日期 ${preview.futureCheckins}）`,
+    `- 移除无效金额流水 ${preview.invalidLedger} 条`,
+    `- 补齐默认币种 ${preview.emptyLedgerCurrencies + preview.emptyRewardCurrencies} 项`,
+    '',
+    '修复前会创建本地快照；重复 ID 不会自动修改，仍需人工处理。继续吗？',
+  ].join('\n');
+  if (window.confirm(message)) habits.repairSafeDiagnosticIssues();
+}
+
 watch(focusedHabitId, value => {
   if (!value || habitForm.id) return;
   const item = habits.habits.find(habit => habit.id === value);
@@ -799,6 +816,7 @@ watch(focusedHabitId, value => {
         </div>
         <div class="habit-diagnostics-actions">
           <button class="btn btn-secondary" type="button" @click="settlePenalties">结算昨日扣分</button>
+          <button class="btn btn-primary" type="button" :disabled="!habits.repairableCount" @click="repairSafeDiagnostics">安全修复 {{ habits.repairableCount }} 项</button>
           <span class="habit-diagnostics-pill">近{{ matrixDays }}天</span>
         </div>
       </div>
@@ -960,6 +978,13 @@ watch(focusedHabitId, value => {
         <div v-else class="empty-state">暂无可分析的习惯。</div>
       </div>
 
+      <div class="habit-repair-preview" aria-label="Habit 安全修复预览">
+        <div>
+          <strong>可自动安全修复 {{ habits.repairableCount }} 项</strong>
+          <span>异常打卡 {{ habits.repairPreview.removableCheckins }} · 无效流水 {{ habits.repairPreview.invalidLedger }} · 空币种 {{ habits.repairPreview.emptyLedgerCurrencies + habits.repairPreview.emptyRewardCurrencies }}</span>
+        </div>
+        <p>只处理归属明确的问题，并先创建本地快照；重复 ID、缺少 ID 和孤儿钱包引用不会自动猜测或合并。</p>
+      </div>
       <div class="habit-diagnostics-grid">
         <article><span>权威源</span><strong>{{ habits.diagnostics.authority || 'lifePlanData' }}</strong></article>
         <article><span>习惯/打卡</span><strong>{{ Number(diagnosticSummary.habits || 0) }} / {{ Number(diagnosticSummary.checkins || 0) }}</strong></article>
@@ -1795,9 +1820,22 @@ watch(focusedHabitId, value => {
 .habit-diagnostics-panel > .habit-matrix-summary { order: 3; }
 .habit-diagnostics-panel > .habit-matrix-block { order: 4; }
 .habit-diagnostics-panel > .habit-analysis-summary { order: 5; }
-.habit-diagnostics-panel > .habit-diagnostics-grid { order: 6; }
-.habit-diagnostics-panel > .habit-diagnostics-issues { order: 7; }
-.habit-diagnostics-panel > .habit-diagnostics-details { order: 8; }
+.habit-diagnostics-panel > .habit-repair-preview { order: 6; }
+.habit-diagnostics-panel > .habit-diagnostics-grid { order: 7; }
+.habit-diagnostics-panel > .habit-diagnostics-issues { order: 8; }
+.habit-diagnostics-panel > .habit-diagnostics-details { order: 9; }
+.habit-repair-preview {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(42, 75, 56, .14);
+  border-radius: 12px;
+  background: #f7fbf8;
+}
+.habit-repair-preview div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 14px; }
+.habit-repair-preview strong { color: var(--text, #17211b); }
+.habit-repair-preview span,
+.habit-repair-preview p { margin: 0; color: var(--muted, #647269); font-size: 12px; line-height: 1.5; }
 .habit-diagnostics-details {
   border-top: 1px solid rgba(42, 75, 56, .11);
   padding-top: 12px;

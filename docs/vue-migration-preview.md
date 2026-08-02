@@ -89,13 +89,13 @@ changes. Keep a manually exported data file before testing complex data flows.
 
 `migration/vue-app-v1` is an operational **replacement candidate** for daily
 workflows covered by the parity checklist. The current full Vue smoke gate is
-216/216, with production build and Vue dist packaging verified on 2026-08-02.
-The whole active Vue project is estimated at **97.5% complete**; this is a
-whole-project estimate rather than a per-slice score. The remaining non-blocking
-specialist depth is deeper Habit diagnostics repair beyond read-only diagnostics
-plus settle-through-yesterday. Wheel public-library AI tag suggestions now support
-local or remote generation, failure fallback, existing-tag filtering, and editable
-selection before save. Live deployment switching is not part of this project scope.
+217/217, with production build and Vue dist packaging verified on 2026-08-02.
+The whole active Vue project is estimated at **99% complete**; this is a
+whole-project estimate rather than a per-slice score. The documented specialist
+follow-ups are now closed: Wheel AI suggestions cover local/remote/fallback
+flows, and Habit diagnostics can apply only deterministic safe repairs after
+confirmation and a local snapshot while leaving ambiguous IDs for manual review.
+Live deployment switching is not part of this project scope.
 
 UI/IA shell parity has been tightened toward the legacy product surfaces:
 Habit center tabs/KPI with compact today actions, browse-first Todos filters,
@@ -114,7 +114,8 @@ modules; Import/Export now covers snapshots, tombstone-aware merge, dirty-state
 updates, and Todo/Habit mirror rebuilds; Habits now covers local note check-ins,
 backfills, note edits, undo-latest check-in, advanced reward/penalty/milestone
 editing, reward/penalty ledger reversals, archive/restore, wish create/archive,
-wallet redemption, read-only diagnostics, settle-through-yesterday penalties,
+wallet redemption, diagnostics with confirmed safe repair and pre-repair snapshots,
+settle-through-yesterday penalties,
 tombstones, dirty-state updates, local-only mirror rebuilding, independent
 remote preview/apply, protected upload/create, and guarded conditional
 auto-sync; Fitness now covers full-field body metric editing, multi-exercise

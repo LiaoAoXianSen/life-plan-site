@@ -281,7 +281,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 263. Status: complete - Close the Fitness live-workout visual parity queue with legacy live-set layout, rest controls, timer-expiry cleanup, build/package, and full Vue smoke 214/214.
 264. Status: complete - Refresh migration checklist, preview, findings, and progress documentation to the current 2026-08-02 checkpoint.
 265. Status: complete - Close Wheel public-library AI tag-suggest with local/remote generation, failure fallback, existing-tag filtering, editable draft selection, transient-state cleanup, focused tests, and synchronized documentation.
-266. Status: pending - Implement deeper Habit diagnostics repair serially; update implementation, focused tests, whole-project percentage, and migration documentation in the same slice.
+266. Status: complete - Implement confirmed Habit safe diagnostics repair for orphan/future check-ins, invalid ledger amounts, and empty currencies with a pre-repair snapshot, mirror rebuild, dirty state, tombstones, and ambiguous-ID protection.
+267. Status: pending - Complete the final build technical cleanup: lazy route chunks and explicit ESM Vite config, then update tests, package evidence, documentation, and whole-project percentage.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
