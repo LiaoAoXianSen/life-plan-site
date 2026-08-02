@@ -1195,7 +1195,7 @@ onUnmounted(stopRestTimer);
           <button class="btn btn-danger" type="button" @click="deleteWorkout(workout.id)">删除</button>
         </div>
       </div>
-      <div v-else class="empty-state">完成训练后会显示在这里。</div>
+      <div v-else class="empty-state">还没有训练日志。可以从训练计划一键开练，也可以直接自由开练。</div>
     </article>
   </section>
 </template>

@@ -3079,6 +3079,21 @@ test('fitness history rows expose legacy exercise and note summaries without wri
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('fitness history keeps the legacy empty-state wording', async ({ page }) => {
+    const source = emptyData();
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-history-empty-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    const history = page.locator('article.card').filter({ hasText: '训练历史' });
+    await expect(history).toContainText('训练历史');
+    await expect(history.locator('.empty-state')).toHaveText('还没有训练日志。可以从训练计划一键开练，也可以直接自由开练。');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('fitness history editor saves edits through the legacy workout contract', async ({ page }) => {
     const source = emptyData({
         exerciseLibrary: [
