@@ -3491,7 +3491,8 @@ test('fitness live workout suggestions and rest timer stay service backed', asyn
     await page.goto('/#/fitness');
     await page.locator('article.card').filter({ hasText: '开始计划训练' }).locator('.fitness-metric-row').filter({ hasText: '实时训练计划' }).getByRole('button', { name: '按计划开练' }).click();
     const active = page.locator('#page-fitness > article.card').first();
-    await expect(active).toContainText('上次 2026-07-28 57.5kg × 7');
+    await expect(active).toContainText('上次 57.5kg × 7');
+    await expect(active).not.toContainText('上次 2026-07-28 57.5kg × 7');
     const firstRow = active.locator('.fitness-live-row').first();
     await expect(firstRow.locator('.vue-fitness-set-suggestion')).toContainText('2026-07-28 57.5kg × 7');
     await firstRow.getByRole('button', { name: '套用建议' }).click();

@@ -887,7 +887,7 @@ onUnmounted(stopRestTimer);
         <h3>{{ exercise.name }}</h3>
         <p class="section-hint">
           目标：{{ exercise.targetSets }} 组 × {{ exercise.targetReps }}<span v-if="exercise.targetWeight"> · {{ exercise.targetWeight }} kg</span><span v-if="fitness.services.fitness.getExerciseRestSec(exercise, fitness.library)"> · 休 {{ fitness.services.fitness.getExerciseRestSec(exercise, fitness.library) }}s</span>
-          <span v-if="exerciseHistory(exercise)?.set"> · 上次 {{ exerciseHistory(exercise)?.workoutDate }} {{ exerciseHistory(exercise)?.set?.weight ?? '—' }}kg × {{ exerciseHistory(exercise)?.set?.reps ?? '—' }}</span>
+          <span v-if="exerciseHistory(exercise)?.set"> · 上次 {{ exerciseHistory(exercise)?.set?.weight ?? '—' }}kg × {{ exerciseHistory(exercise)?.set?.reps ?? '—' }}</span>
         </p>
         <div class="fitness-metric-list">
           <div v-for="(set, setIndex) in exercise.sets" :key="set.id || setIndex" class="fitness-metric-row fitness-live-row">
