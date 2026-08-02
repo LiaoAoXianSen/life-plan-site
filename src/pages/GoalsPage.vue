@@ -20,7 +20,7 @@ const route = useRoute();
 const router = useRouter();
 const services = createLegacyServices();
 const periodOptions = ['季度', '年度', '长期'];
-const statusOptions = ['进行中', '暂停', '已完成'];
+const statusOptions = ['进行中', '已完成', '已搁置'];
 const editorOpen = ref(false);
 const activeGoalId = ref('');
 const formError = ref('');
@@ -138,7 +138,7 @@ watch(() => route.query.goal, value => {
 
     <div class="summary-grid goal-summary-grid">
       <div class="summary-card"><strong class="summary-value">{{ activeGoals.length }}</strong><span class="summary-label">进行中</span></div>
-      <div class="summary-card"><strong class="summary-value">{{ goals.filter(goal => goal.status === '暂停').length }}</strong><span class="summary-label">暂停</span></div>
+      <div class="summary-card"><strong class="summary-value">{{ goals.filter(goal => goal.status === '已搁置').length }}</strong><span class="summary-label">已搁置</span></div>
       <div class="summary-card"><strong class="summary-value">{{ goals.filter(goal => goal.status === '已完成').length }}</strong><span class="summary-label">已完成</span></div>
       <div class="summary-card"><strong class="summary-value">{{ goals.length ? Math.round(goals.reduce((sum, goal) => sum + normalizeProgress(goal), 0) / goals.length) : 0 }}%</strong><span class="summary-label">平均进度</span></div>
     </div>

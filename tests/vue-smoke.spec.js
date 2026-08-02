@@ -403,7 +403,7 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
         checkins: [{ id: 'checkin-dashboard', habitId: 'habit-dashboard', date: today, time: '07:00', checkinAt: `${today}T07:00:00`, note: '首页习惯记录' }],
         goals: [
             { id: 'goal-dashboard', name: 'Dashboard 目标', status: '进行中', progress: 66, createdAt: `${yesterday}T08:00:00`, updatedAt: `${today}T08:00:00` },
-            { id: 'goal-paused', name: '暂停目标', status: '暂停', progress: 20 },
+            { id: 'goal-paused', name: '已搁置目标', status: '已搁置', progress: 20 },
         ],
         materials: [{ id: 'material-dashboard', type: '摘抄', content: 'Dashboard 素材内容', tags: ['dashboard'], source: '测试', note: '首页入口', createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00` }],
     });
@@ -1138,13 +1138,13 @@ test('goals detail route save and delete preserve the legacy contract', async ({
     const createDialog = page.getByRole('dialog', { name: '新建目标' });
     await createDialog.getByLabel('目标', { exact: true }).fill('新增季度目标');
     await createDialog.getByLabel('目标描述').fill('季度描述');
-    await createDialog.getByLabel('状态').selectOption('暂停');
+    await createDialog.getByLabel('状态').selectOption('已搁置');
     await createDialog.getByRole('slider').fill('20');
     await createDialog.getByRole('button', { name: '保存' }).click();
 
     persisted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     const created = persisted.goals.find(goal => goal.name === '新增季度目标');
-    expect(created).toMatchObject({ period: '', target: '季度描述', status: '暂停', progress: 20, createDate: today });
+    expect(created).toMatchObject({ period: '', target: '季度描述', status: '已搁置', progress: 20, createDate: today });
     expect(created.createdAt).toBeUndefined();
     expect(created.updatedAt).toBeUndefined();
 
@@ -1215,7 +1215,7 @@ test('goals preserve existing out-of-range progress in read-only browse summarie
     const source = emptyData({
         goals: [
             { id: 'goal-over', name: '超额目标', period: '年度', target: '超过一百', status: '进行中', progress: 120, createDate: '2026-01-01' },
-            { id: 'goal-under', name: '负值目标', period: '长期', target: '旧数据', status: '暂停', progress: -5, createDate: '2026-01-02' },
+            { id: 'goal-under', name: '负值目标', period: '长期', target: '旧数据', status: '已搁置', progress: -5, createDate: '2026-01-02' },
         ],
     });
     const original = JSON.stringify(source);
@@ -1278,6 +1278,31 @@ test('goals card preserves legacy empty field rendering', async ({ page }) => {
     expect(cardText).not.toContain('进行中');
     expect(cardText).not.toContain('未设置周期');
     expect(cardText).not.toContain('未填写目标描述');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('goals status select keeps the legacy option set and shelved display', async ({ page }) => {
+    const source = emptyData({
+        goals: [
+            { id: 'goal-active-status', name: '进行中目标', period: '年度', target: '保持', status: '进行中', progress: 30, createDate: '2026-01-01' },
+            { id: 'goal-shelved-status', name: '已搁置目标', period: '长期', target: '旧数据', status: '已搁置', progress: 40, createDate: '2026-01-02' },
+            { id: 'goal-done-status', name: '已完成目标', period: '季度', target: '收尾', status: '已完成', progress: 100, createDate: '2026-01-03' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/goals');
+
+    const pageGoals = page.locator('#page-goals');
+    await expect(pageGoals.locator('.summary-card').filter({ hasText: '已搁置' })).toContainText('1');
+    const shelved = pageGoals.locator('.goal-card').filter({ hasText: '已搁置目标' });
+    await expect(shelved).toContainText('(已搁置)');
+
+    await pageGoals.getByRole('button', { name: '+ 新建目标' }).click();
+    const statusSelect = page.getByRole('dialog', { name: '新建目标' }).getByLabel('状态');
+    await expect(statusSelect.locator('option')).toHaveText(['进行中', '已完成', '已搁置']);
+    await expect(statusSelect).not.toContainText('暂停');
+    await page.getByRole('button', { name: '关闭目标编辑' }).click();
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
