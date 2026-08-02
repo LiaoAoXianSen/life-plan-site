@@ -280,7 +280,8 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 262. Status: complete - Re-audit the stale next-candidate entry: Records independent read-only preview is already implemented and covered; current legacy and Vue Fitness both use the first plan day, so plan-day selection is not a confirmed parity blocker.
 263. Status: complete - Close the Fitness live-workout visual parity queue with legacy live-set layout, rest controls, timer-expiry cleanup, build/package, and full Vue smoke 214/214.
 264. Status: complete - Refresh migration checklist, preview, findings, and progress documentation to the current 2026-08-02 checkpoint.
-265. Status: pending - Implement the next optional specialist slice serially, choosing either Wheel public-library AI tag-suggest or deeper Habit diagnostics repair; update implementation, focused tests, whole-project percentage, and migration documentation in the same slice.
+265. Status: complete - Close Wheel public-library AI tag-suggest with local/remote generation, failure fallback, existing-tag filtering, editable draft selection, transient-state cleanup, focused tests, and synchronized documentation.
+266. Status: pending - Implement deeper Habit diagnostics repair serially; update implementation, focused tests, whole-project percentage, and migration documentation in the same slice.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.

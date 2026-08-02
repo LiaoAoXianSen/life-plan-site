@@ -1891,16 +1891,105 @@ test('wheel library AI suggestions stay within existing tags before save', async
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
     const panel = page.locator('#wheel-library-panel');
+    await expect(panel.locator('.library-ai-suggestions')).toContainText('输入公共项后点“AI 推荐标签”');
     await panel.getByLabel('公共项名称').fill('学习');
+    const beforeSuggestion = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     await panel.getByRole('button', { name: 'AI 推荐标签' }).click();
+    await expect(panel.locator('.library-ai-suggestion-head')).toContainText('AI 推荐（可改）');
     await expect(panel.locator('.library-ai-suggestion')).toContainText('学习');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(beforeSuggestion);
     await panel.locator('.tag-checks').getByRole('checkbox', { name: '健康' }).check();
     const manualStudyTag = panel.locator('.tag-checks').getByRole('checkbox', { name: '学习' });
     await manualStudyTag.uncheck();
     await expect(panel.locator('.library-ai-suggestion').getByRole('checkbox', { name: '学习' })).not.toBeChecked();
     await panel.getByRole('button', { name: '添加公共项' }).click();
+    await expect(panel.locator('.library-ai-suggestions')).toContainText('输入公共项后点“AI 推荐标签”');
+    await expect(panel.locator('.library-ai-suggestion')).toHaveCount(0);
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems).toEqual(expect.arrayContaining([expect.objectContaining({ name: '学习', tagIds: ['tag-ai-health'] })]));
+});
+
+test('wheel library remote AI filters invented tags and stays draft-only until save', async ({ page }) => {
+    const source = emptyData({
+        wheelTags: [
+            { id: 'tag-ai-remote-study', name: '学习', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'tag-ai-remote-sport', name: '运动', color: '#4f7cac', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+        ],
+        wheelLibraryItems: [{ id: 'library-ai-sample', name: '晨跑', tagIds: ['tag-ai-remote-sport'], weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    const original = JSON.stringify(source);
+    const requests = [];
+    await page.route('https://wheel-ai.example.test/v1/chat/completions', async route => {
+        requests.push(route.request().postDataJSON());
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+                title: '公共项标签推荐',
+                summary: '远程推荐完成',
+                tags: [
+                    { name: '运动', reason: '晨跑属于运动' },
+                    { name: '不存在的新标签', reason: '必须被过滤' },
+                ],
+                items: [],
+            }) } }] }),
+        });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: true, endpointUrl: 'https://wheel-ai.example.test/v1', model: 'wheel-model', apiKey: 'wheel-key' }));
+    }, source);
+
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
+    const panel = page.locator('#wheel-library-panel');
+    await panel.getByLabel('公共项名称').fill('周末晨跑');
+    await panel.getByRole('button', { name: 'AI 推荐标签' }).click();
+
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0].messages[1].content).toContain('wheelTagSuggest');
+    expect(requests[0].messages[1].content).toContain('existingTags');
+    expect(requests[0].messages[1].content).toContain('sampleLibraryItems');
+    await expect(panel.locator('.library-ai-suggestion')).toHaveCount(1);
+    await expect(panel.locator('.library-ai-suggestion')).toContainText('运动');
+    await expect(panel).not.toContainText('不存在的新标签');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await panel.locator('.library-ai-suggestion').getByRole('checkbox', { name: '运动' }).uncheck();
+    await panel.locator('.tag-checks').getByRole('checkbox', { name: '学习' }).check();
+    await panel.getByRole('button', { name: '添加公共项' }).click();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.wheelLibraryItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: '周末晨跑', tagIds: ['tag-ai-remote-study'] }),
+    ]));
+});
+
+test('wheel library remote AI failure falls back locally without writes', async ({ page }) => {
+    const source = emptyData({
+        wheelTags: [{ id: 'tag-ai-fallback-sport', name: '运动', color: '#216e4e', weight: 1, enabled: true, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' }],
+    });
+    const original = JSON.stringify(source);
+    let requests = 0;
+    await page.route('https://wheel-ai-fallback.example.test/**', async route => {
+        requests += 1;
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'temporary outage' }) });
+    });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: true, endpointUrl: 'https://wheel-ai-fallback.example.test/v1', model: 'wheel-model', apiKey: 'wheel-key' }));
+    }, source);
+
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
+    const panel = page.locator('#wheel-library-panel');
+    await panel.getByLabel('公共项名称').fill('运动');
+    await panel.getByRole('button', { name: 'AI 推荐标签' }).click();
+
+    await expect.poll(() => requests).toBe(1);
+    await expect(panel.locator('.library-ai-suggestions')).toContainText('远程 AI 请求失败，已使用本地规则推荐');
+    await expect(panel.locator('.library-ai-suggestion')).toContainText('运动');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
 test('wheel management landing keeps workspace navigation focused', async ({ page }) => {

@@ -89,12 +89,13 @@ changes. Keep a manually exported data file before testing complex data flows.
 
 `migration/vue-app-v1` is an operational **replacement candidate** for daily
 workflows covered by the parity checklist. The current full Vue smoke gate is
-214/214, with production build and Vue dist packaging verified on 2026-08-02.
-The whole active Vue project is estimated at **96.5% complete**; this is a
-whole-project estimate rather than a per-slice score. Remaining non-blocking
-specialist depth is wheel library AI tag-suggest and deeper Habit diagnostics
-repair beyond read-only diagnostics plus settle-through-yesterday. Live
-deployment switching is not part of this project scope.
+216/216, with production build and Vue dist packaging verified on 2026-08-02.
+The whole active Vue project is estimated at **97.5% complete**; this is a
+whole-project estimate rather than a per-slice score. The remaining non-blocking
+specialist depth is deeper Habit diagnostics repair beyond read-only diagnostics
+plus settle-through-yesterday. Wheel public-library AI tag suggestions now support
+local or remote generation, failure fallback, existing-tag filtering, and editable
+selection before save. Live deployment switching is not part of this project scope.
 
 UI/IA shell parity has been tightened toward the legacy product surfaces:
 Habit center tabs/KPI with compact today actions, browse-first Todos filters,
@@ -120,9 +121,9 @@ auto-sync; Fitness now covers full-field body metric editing, multi-exercise
 plan editing, explicit plan writeback, workout history create/edit, legacy-style
 four-column live sets, last-performance suggestions, and rest timers with
 legacy `-15s` / `+15s` / skip controls plus automatic expiry cleanup; Wheel now covers canvas
-interaction, public-library batch management, independent remote preview/apply,
-protected upload/create, guarded conditional auto-sync, and final
-management-form polish; Todo independent sync now covers guarded existing-file
+interaction, public-library batch management and local/remote AI tag suggestions,
+independent remote preview/apply, protected upload/create, guarded conditional
+auto-sync, and final management-form polish; Todo independent sync now covers guarded existing-file
 auto-sync without background first-create; AI now covers multi-destination chat
 capture writeback, today-plan and backlog-triage confirmed Todo writeback, plus
 diary, idea-next, and Todo-breakdown confirmation flows.

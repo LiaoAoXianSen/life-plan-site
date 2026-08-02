@@ -249,3 +249,10 @@
 - The final Fitness audit restored legacy live-set table semantics and rest controls and found one real behavioral gap: Vue left the timer visible at `0:00`. Calling the unified timer cleanup at expiry now matches legacy behavior and has focused regression coverage.
 - Remaining user-visible depth is explicitly non-blocking: Wheel public-library AI tag-suggest and deeper Habit diagnostics repair / dual-write readiness tooling. Build chunk size and the Vite CJS warning remain technical cleanup rather than parity blockers.
 - All future slices must be handled by one main agent serially, with implementation, focused regression coverage, relevant migration documentation, and whole-project percentage reporting updated together.
+
+## 2026-08-02 Wheel AI tag-suggest audit
+
+- The prior “Wheel AI tag-suggest missing” statement was stale: `WheelPage.vue` already called the shared `ai-service.js` `wheelTagSuggest` mode for local or configured remote generation and mapped results back to existing `wheelTags`.
+- The real closure gaps were evidence and interface parity: remote payload/success/failure had no Vue regression, invented remote tags were not explicitly tested, and the always-visible legacy help/result shell plus color/selected styling was missing.
+- The completed slice keeps suggestions transient and draft-only, filters all AI results through exact existing-tag names, lets manual tag selections override AI, clears suggestions after form reset/edit/save, and preserves remote-failure local fallback.
+- Whole-project engineering completion is now **97.5%**. Remaining active work is Habit safe diagnostics repair plus build chunk and Vite CJS technical cleanup.
