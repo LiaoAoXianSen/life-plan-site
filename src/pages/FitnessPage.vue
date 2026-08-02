@@ -827,8 +827,8 @@ onUnmounted(stopRestTimer);
         <article v-for="item in trendSummaries" :key="item.key" class="fitness-trend-summary-card">
           <span>{{ item.label }}</span>
           <strong>{{ item.change.delta === null ? '—' : fitness.services.fitness.formatSignedChange(item.change.delta, item.unit) }}</strong>
-          <em v-if="item.change.previous && item.change.latest">{{ item.change.previous.date }} → {{ item.change.latest.date }}</em>
-          <em v-else>至少两次记录后显示变化</em>
+          <em v-if="item.change.previous">对比 {{ item.change.previous.date }}</em>
+          <em v-else>记录不足</em>
         </article>
       </div>
       <div class="fitness-trend-grid" aria-label="身材趋势图">

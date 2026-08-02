@@ -2680,6 +2680,52 @@ test('fitness overview renders service-backed body metric trends without writes'
     expect(unchanged.mirror).toBeNull();
 });
 
+test('fitness trend summary keeps the legacy comparison wording', async ({ page }) => {
+    const source = emptyData({
+        bodyMetrics: [
+            { id: 'metric-wording-old', date: '2026-07-29', weight: 70, waist: 82, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'metric-wording-new', date: '2026-07-31', weight: 71.5, waist: 81.5, createdAt: '2026-07-31T08:00:00', updatedAt: '2026-07-31T08:00:00' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-wording-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    const trends = page.locator('.fitness-trend-summary');
+    const weightCard = trends.locator('.fitness-trend-summary-card').filter({ hasText: '体重' });
+    await expect(weightCard).toContainText('对比 2026-07-29');
+    await expect(weightCard).not.toContainText('→');
+    const waistCard = trends.locator('.fitness-trend-summary-card').filter({ hasText: '腰围' });
+    await expect(waistCard).toContainText('对比 2026-07-29');
+    await expect(waistCard).not.toContainText('→');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('fitness trend summary shows the legacy insufficient-data wording with one metric', async ({ page }) => {
+    const source = emptyData({
+        bodyMetrics: [
+            { id: 'metric-wording-single', date: '2026-07-31', weight: 71.5, waist: 81.5, createdAt: '2026-07-31T08:00:00', updatedAt: '2026-07-31T08:00:00' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'fitness-wording-single-before' }));
+    }, source);
+
+    await page.goto('/#/fitness');
+    const trends = page.locator('.fitness-trend-summary');
+    const weightCard = trends.locator('.fitness-trend-summary-card').filter({ hasText: '体重' });
+    await expect(weightCard).toContainText('记录不足');
+    await expect(weightCard).not.toContainText('至少两次');
+    const waistCard = trends.locator('.fitness-trend-summary-card').filter({ hasText: '腰围' });
+    await expect(waistCard).toContainText('记录不足');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('fitness hero follows the legacy service recommendation and free fallback', async ({ page }) => {
     const source = emptyData({
         fitnessPlans: [
