@@ -2910,7 +2910,7 @@ test('fitness pause hides the live editor and resume restores the same workout',
         fitnessWorkouts: [{
             id: 'fitness-pause-active', date: today, status: 'inProgress', title: '可暂停训练', planId: 'fitness-pause-plan', planName: '暂停计划',
             exercises: [{ id: 'fitness-pause-exercise', name: '深蹲', targetSets: 2, targetReps: '5', targetWeight: 80, sets: [{ id: 'fitness-pause-set-1', weight: 85, reps: 5, done: true }, { id: 'fitness-pause-set-2', weight: 85, reps: 5, done: false }] }],
-            createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), updatedAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+            startedAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), updatedAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
         }],
     });
     const original = JSON.stringify(source);
@@ -2918,6 +2918,8 @@ test('fitness pause hides the live editor and resume restores the same workout',
     await page.goto('/#/fitness');
 
     await expect(page.getByText('正在训练：可暂停训练')).toBeVisible();
+    const [year, month, day] = today.split('-');
+    await expect(page.locator('#page-fitness > article.card').first().locator('.section-hint').first()).toContainText(`${year}年${Number(month)}月${Number(day)}日 · 1/2 组 · 已练`);
     await page.getByRole('button', { name: '完成', exact: true }).click();
     await expect(page.locator('.vue-fitness-rest-timer')).toBeVisible();
     await expect(page.locator('.fitness-live-row')).toHaveCount(2);

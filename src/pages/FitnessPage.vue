@@ -200,6 +200,13 @@ function browseTo(target: string) {
 const activeWorkoutPaused = computed(() => !!fitness.activeWorkout && pausedWorkoutId.value === String(fitness.activeWorkout?.id || ''));
 const activeCompleted = computed(() => fitness.activeWorkout ? fitness.services.fitness.countCompletedSets(fitness.activeWorkout) : 0);
 const activeTotal = computed(() => fitness.activeWorkout ? fitness.services.fitness.countTotalSets(fitness.activeWorkout) : 0);
+const activeDateLabel = computed(() => {
+  const match = String(fitness.activeWorkout?.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[1]}年${Number(match[2])}月${Number(match[3])}日` : String(fitness.activeWorkout?.date || '');
+});
+const activeElapsedMin = computed(() => fitness.activeWorkout?.startedAt
+  ? fitness.services.fitness.computeDurationMin(fitness.activeWorkout.startedAt)
+  : null);
 const activePlan = computed(() => fitness.activeWorkout?.planId ? fitness.services.fitness.findFitnessPlan(fitness.plans, fitness.activeWorkout.planId) : null);
 const activePlanDiff = computed(() => activePlan.value && fitness.activeWorkout
   ? fitness.services.fitness.hasPlanPrescriptionDiff(activePlan.value, fitness.activeWorkout)
@@ -853,7 +860,7 @@ onUnmounted(stopRestTimer);
       <div class="section-title-row">
         <div>
           <h2>正在训练：{{ fitness.activeWorkout.title || '自由训练' }}</h2>
-          <p class="section-hint">已完成 {{ activeCompleted }}/{{ activeTotal }} 组。每次点击都会立即保存，可安全刷新或稍后继续。</p>
+          <p class="section-hint">{{ activeDateLabel }} · {{ activeCompleted }}/{{ activeTotal }} 组<span v-if="activeElapsedMin"> · 已练 {{ activeElapsedMin }} 分</span></p>
           <label v-if="activePlanDiff" class="fitness-inline-check">
             <input v-model="writeBackPlan" type="checkbox" />
             本场重量/次数变化，结束时回写到计划「{{ activePlan?.name }}」
