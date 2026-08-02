@@ -3517,8 +3517,9 @@ test('fitness live workout suggestions and rest timer stay service backed', asyn
     await expect(firstRow.getByRole('button', { name: '撤销', exact: true })).toHaveClass(/btn-secondary/);
     await expect(active.getByRole('timer')).toContainText('卧推建议');
     await expect(active.getByRole('timer')).toContainText(/1:2\\d|1:30/);
-    await expect(active.getByRole('button', { name: '+30s' })).toBeVisible();
-    await expect(active.getByRole('button', { name: '-30s' })).toBeVisible();
+    await expect(active.getByRole('button', { name: '-15s' })).toBeVisible();
+    await expect(active.getByRole('button', { name: '+15s' })).toBeVisible();
+    await expect(active.getByRole('button', { name: '跳过' })).toHaveClass(/btn-primary/);
     await active.getByRole('button', { name: '跳过' }).click();
     await expect(active.getByRole('timer')).toHaveCount(0);
 

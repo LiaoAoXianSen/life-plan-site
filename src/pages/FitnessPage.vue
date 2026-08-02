@@ -893,9 +893,9 @@ onUnmounted(stopRestTimer);
             <div class="fitness-rest-timer-clock">{{ formatClock(restTimer.remaining) }}</div>
           </div>
           <div class="fitness-rest-timer-actions">
-            <button class="btn btn-secondary todo-mini-btn" type="button" @click="adjustRestTimer(30)">+30s</button>
-            <button class="btn btn-secondary todo-mini-btn" type="button" @click="adjustRestTimer(-30)">-30s</button>
-            <button class="btn btn-secondary todo-mini-btn" type="button" @click="stopRestTimer">跳过</button>
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="adjustRestTimer(-15)">-15s</button>
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="adjustRestTimer(15)">+15s</button>
+            <button class="btn btn-primary todo-mini-btn" type="button" @click="stopRestTimer">跳过</button>
           </div>
         </div>
         <div class="fitness-rest-timer-track"><div class="fitness-rest-timer-fill" :style="{ width: `${restTimer.total ? Math.max(0, Math.min(100, (restTimer.remaining / restTimer.total) * 100)) : 0}%` }" /></div>
