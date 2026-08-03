@@ -22,6 +22,7 @@ const activeMaterialId = ref('');
 const formError = ref('');
 const materialTitleRef = ref<HTMLInputElement | null>(null);
 const newTag = ref('');
+const batchTags = ref('');
 const form = reactive({ title: '', type: '摘抄', content: '', tags: [] as string[], source: '', note: '' });
 let randomTagsInitialized = false;
 
@@ -43,16 +44,14 @@ function truncateText(value: unknown, maxLength: number) {
 function materialTitle(material: Material) {
   const explicit = normalizePreviewText(material.title);
   if (explicit) return explicit;
-  const firstLine = String(material.content || '').split(/\r?\n/).map(line => line.trim()).find(Boolean) || '';
-  return truncateText(firstLine || material.content, 42) || '空素材';
-}
-
-function materialSummary(material: Material, maxLength = 120) {
-  return truncateText(material.content, maxLength) || '空素材';
+  return truncateText(material.content, 42) || '空素材';
 }
 
 function isLongMaterial(material: Material) {
-  return normalizePreviewText(material.content).length > 120;
+  return materialTitle(material).length > 46
+    || normalizePreviewText(material.content).length > 110
+    || normalizePreviewText(material.source).length > 54
+    || normalizePreviewText(material.note).length > 72;
 }
 
 function isExpanded(materialId: string) {
@@ -100,19 +99,22 @@ function refreshRandom() {
 function resetForm() {
   Object.assign(form, { title: '', type: '摘抄', content: '', tags: [], source: '', note: '' });
   newTag.value = '';
+  batchTags.value = '';
   formError.value = '';
 }
 
 function openEditor(material?: Material) {
   activeMaterialId.value = material?.id || '';
   Object.assign(form, {
-    title: material?.title || '',
+    title: material ? materialTitle(material) : '',
     type: material?.type || '摘抄',
     content: material?.content || '',
     tags: normalizeTags(material?.tags),
     source: material?.source || '',
     note: material?.note || '',
   });
+  batchTags.value = normalizeTags(material?.tags).join(', ');
+  newTag.value = '';
   detailMaterialId.value = '';
   formError.value = '';
   editorOpen.value = true;
@@ -153,11 +155,13 @@ function addMaterialEditorTag() {
   const additions = normalizeTags(newTag.value);
   if (!additions.length) return;
   form.tags = normalizeTags([...form.tags, ...additions]);
+  batchTags.value = form.tags.join(', ');
   newTag.value = '';
 }
 
-function removeMaterialEditorTag(tag: string) {
-  form.tags = form.tags.filter(item => item !== tag);
+function syncBatchTags() {
+  form.tags = normalizeTags([...form.tags, ...normalizeTags(batchTags.value)]);
+  batchTags.value = form.tags.join(', ');
 }
 
 function saveMaterial() {
@@ -166,6 +170,7 @@ function saveMaterial() {
     return;
   }
   addMaterialEditorTag();
+  syncBatchTags();
   try {
     records.saveMaterial(activeMaterialId.value, {
       title: form.title,
@@ -261,11 +266,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
       <div class="material-grid material-random-list">
         <article v-for="material in randomMaterials" :key="material.id" class="material-card compact">
           <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredDateTime(material.createdAt) }}</span></div>
-          <button class="material-card-main" type="button" :aria-label="`查看素材 ${materialTitle(material)}`" @click="openDetail(material)">
-            <strong class="material-title">{{ materialTitle(material) }}</strong>
-            <span class="material-summary material-content">{{ materialSummary(material, 88) }}</span>
-          </button>
+          <h3 class="material-title">{{ materialTitle(material) }}</h3>
+          <div class="material-card-copy">
+            <div class="material-content">{{ material.content || '空素材' }}</div>
+            <div v-if="material.source" class="material-meta material-source">来源：{{ material.source }}</div>
+            <div v-if="material.note" class="material-meta material-note">备注：{{ material.note }}</div>
+          </div>
           <div v-if="normalizeTags(material.tags).length" class="idea-badge-row"><span v-for="tag in normalizeTags(material.tags)" :key="tag" class="tag-pill">{{ tag }}</span></div>
+          <div class="idea-card-actions material-card-actions"><button class="btn btn-secondary todo-mini-btn" type="button" @click="openDetail(material)">查看详情</button></div>
         </article>
         <div v-if="!randomMaterials.length" class="empty-state">当前标签下没有可展示素材</div>
       </div>
@@ -278,47 +286,51 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
     </div>
 
     <div class="material-grid material-list">
-      <article v-for="material in filteredMaterials" :key="material.id" class="material-card" :class="{ expanded: isExpanded(material.id) }">
+      <article v-for="material in filteredMaterials" :key="material.id" class="material-card" :class="{ 'is-expanded': isExpanded(material.id) }">
         <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredDateTime(material.createdAt) }}</span></div>
-        <button class="material-card-main" type="button" :aria-label="`查看素材 ${materialTitle(material)}`" @click="openDetail(material)">
-          <strong class="material-title">{{ materialTitle(material) }}</strong>
-          <span class="material-summary material-content" :class="{ full: isExpanded(material.id) }">{{ isExpanded(material.id) ? material.content || '空素材' : materialSummary(material) }}</span>
-        </button>
-        <button v-if="isLongMaterial(material)" class="material-expand-button" type="button" :aria-expanded="isExpanded(material.id)" @click="toggleMaterialCard(material.id)">{{ isExpanded(material.id) ? '收起正文' : '展开正文' }}</button>
+        <h3 class="material-title">{{ materialTitle(material) }}</h3>
+        <div class="material-card-copy">
+          <div class="material-content">{{ material.content || '空素材' }}</div>
+          <div v-if="material.source" class="material-meta material-source">来源：{{ material.source }}</div>
+          <div v-if="material.note" class="material-meta material-note">备注：{{ material.note }}</div>
+        </div>
         <div v-if="normalizeTags(material.tags).length" class="idea-badge-row"><span v-for="tag in normalizeTags(material.tags)" :key="tag" class="tag-pill">{{ tag }}</span></div>
-        <div v-if="material.source" class="material-meta">来源：{{ material.source }}</div>
-        <div v-if="material.note" class="material-meta">备注：{{ material.note }}</div>
-        <div class="idea-card-actions"><button class="btn btn-secondary" type="button" :aria-label="`编辑素材 ${materialTitle(material)}`" @click="openEditor(material)">编辑</button></div>
+        <div class="idea-card-actions material-card-actions">
+          <button v-if="isLongMaterial(material)" class="mini-link material-expand-btn" type="button" :aria-expanded="isExpanded(material.id)" @click="toggleMaterialCard(material.id)">{{ isExpanded(material.id) ? '收起内容' : '展开内容' }}</button>
+          <button class="btn btn-secondary todo-mini-btn" type="button" @click="openDetail(material)">查看详情</button>
+          <button class="btn btn-secondary todo-mini-btn" type="button" :aria-label="`编辑素材 ${materialTitle(material)}`" @click="openEditor(material)">编辑</button>
+        </div>
       </article>
       <div v-if="!filteredMaterials.length" class="empty-state">暂无匹配素材</div>
     </div>
 
     <div v-if="detailMaterial" class="modal-overlay active" role="presentation">
-      <article class="modal material-detail" role="dialog" aria-modal="true" aria-labelledby="material-detail-title">
-        <div class="modal-header"><div><span class="material-type">{{ detailMaterial.type || '素材' }}</span><h2 class="modal-title" id="material-detail-title">{{ materialTitle(detailMaterial) }}</h2></div><button class="close-btn" type="button" aria-label="关闭素材详情" @click="closeDetail()">×</button></div>
-        <div class="material-detail-meta">{{ formatStoredDateTime(detailMaterial.createdAt) }}</div>
+      <article class="modal modal-md material-detail-modal" role="dialog" aria-modal="true" aria-labelledby="material-detail-title">
+        <div class="modal-header"><div class="modal-title" id="material-detail-title">{{ materialTitle(detailMaterial) }}</div><button class="close-btn" type="button" aria-label="关闭素材详情" @click="closeDetail()">×</button></div>
+        <div class="material-detail-meta"><span class="material-type">{{ detailMaterial.type || '素材' }}</span><span>{{ formatStoredDateTime(detailMaterial.createdAt) }}</span></div>
         <div class="material-detail-content">{{ detailMaterial.content || '空素材' }}</div>
         <div v-if="normalizeTags(detailMaterial.tags).length" class="idea-badge-row"><span v-for="tag in normalizeTags(detailMaterial.tags)" :key="tag" class="tag-pill">{{ tag }}</span></div>
-        <div v-if="detailMaterial.source" class="material-meta">来源：{{ detailMaterial.source }}</div>
-        <div v-if="detailMaterial.note" class="material-meta">备注：{{ detailMaterial.note }}</div>
-        <div class="modal-action-row"><div /><div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="closeDetail()">关闭</button><button class="btn btn-primary" type="button" @click="editDetailMaterial">编辑素材</button></div></div>
+        <section v-if="detailMaterial.source" class="material-detail-section"><strong>来源</strong><p>{{ detailMaterial.source }}</p></section>
+        <section v-if="detailMaterial.note" class="material-detail-section"><strong>备注</strong><p>{{ detailMaterial.note }}</p></section>
+        <div class="modal-action-row"><span /><div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="closeDetail()">关闭</button><button class="btn btn-primary" type="button" @click="editDetailMaterial">编辑素材</button></div></div>
       </article>
     </div>
 
     <div v-if="editorOpen" class="modal-overlay active" role="presentation">
       <form class="modal modal-sm material-editor" role="dialog" aria-modal="true" aria-labelledby="material-editor-title" @submit.prevent="saveMaterial">
         <div class="modal-header"><div class="modal-title" id="material-editor-title">{{ activeMaterialId ? '编辑素材' : '新增素材' }}</div><button class="close-btn" type="button" aria-label="关闭素材编辑" @click="closeEditor()">×</button></div>
-        <label class="form-group"><span>标题（可选）</span><input ref="materialTitleRef" v-model="form.title" placeholder="不填写时使用正文首行作为标题" /></label>
+        <label class="form-group"><span>标题</span><input ref="materialTitleRef" v-model="form.title" placeholder="给这条素材一个方便回看的标题" /></label>
         <label class="form-group"><span>类型</span><select v-model="form.type"><option v-for="type in materialTypes" :key="type" :value="type">{{ type }}</option></select></label>
         <label class="form-group"><span>内容</span><textarea v-model="form.content" required rows="8" placeholder="粘贴金句、提示词或摘抄内容" /></label>
-        <fieldset class="material-tag-editor">
-          <legend>标签</legend>
-          <div v-if="allTags.length" class="tag-picker" role="group" aria-label="已有素材标签">
-            <label v-for="tag in allTags" :key="tag" class="tag-check"><input v-model="form.tags" type="checkbox" :value="tag" /><span>{{ tag }}</span></label>
+        <div class="form-group material-tag-editor">
+          <span>标签</span>
+          <div v-if="allTags.length" class="tag-picker material-existing-tags" role="group" aria-label="已有素材标签">
+            <label v-for="tag in allTags" :key="tag" class="tag-check material-tag-option"><input v-model="form.tags" type="checkbox" :value="tag" @change="batchTags = normalizeTags(form.tags).join(', ')" /><span>{{ tag }}</span></label>
           </div>
-          <div class="material-new-tag-row"><input v-model="newTag" aria-label="新素材标签" placeholder="输入新标签，支持逗号分隔" @keydown.enter.prevent="addMaterialEditorTag" /><button class="btn btn-secondary" type="button" @click="addMaterialEditorTag">加入标签</button></div>
-          <div v-if="form.tags.length" class="material-draft-tags" aria-label="当前素材标签"><button v-for="tag in form.tags" :key="tag" type="button" class="tag-pill removable" :aria-label="`移除标签 ${tag}`" @click="removeMaterialEditorTag(tag)">{{ tag }} ×</button></div>
-        </fieldset>
+          <div v-else class="material-tag-empty">暂无已有标签，可在下方添加</div>
+          <div class="material-new-tag-row"><input v-model="newTag" aria-label="新素材标签" placeholder="输入新标签，按回车或点击添加" @keydown.enter.prevent="addMaterialEditorTag" /><button class="btn btn-secondary" type="button" @click="addMaterialEditorTag">添加标签</button></div>
+          <input v-model="batchTags" class="material-tags-fallback" aria-label="批量素材标签" placeholder="也可用逗号批量输入标签" @blur="syncBatchTags" />
+        </div>
         <label class="form-group"><span>来源</span><input v-model="form.source" placeholder="书名、链接、作者或看到的位置" /></label>
         <label class="form-group"><span>备注</span><textarea v-model="form.note" rows="3" placeholder="为什么留下它，适合什么时候用" /></label>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
@@ -336,27 +348,38 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 .material-random-panel { margin-bottom: 18px; }
 .material-random-panel .section-title-row { margin-bottom: 10px; }
 .material-random-list { margin-top: 12px; }
-.material-card { min-width: 0; }
-.material-card-main { display: grid; gap: 7px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.material-title { color: var(--text); font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }
-.material-summary { display: block; color: var(--text); font-size: 14px; line-height: 1.72; overflow-wrap: anywhere; }
-.material-summary.full { white-space: pre-wrap; }
-.material-expand-button { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; }
-.material-detail { width: min(720px, calc(100vw - 28px)); max-height: min(86vh, 820px); overflow: auto; }
-.material-detail .modal-header { align-items: flex-start; }
-.material-detail .modal-title { margin: 8px 0 0; overflow-wrap: anywhere; }
-.material-detail-meta { color: var(--muted); font-size: 12px; }
-.material-detail-content { margin: 18px 0; color: var(--text); line-height: 1.78; overflow-wrap: anywhere; white-space: pre-wrap; }
+.material-card { min-width: 0; display: flex; flex-direction: column; }
+.material-card.compact { background: #fbfdfb; }
+.material-title { margin: 0 0 8px; color: var(--text); font-size: 16px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.material-card-copy { min-width: 0; }
+.material-content { color: var(--text); font-size: 13px; font-weight: 650; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.material-card.compact .material-content { -webkit-line-clamp: 2; line-clamp: 2; }
+.material-meta { margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.material-source { -webkit-line-clamp: 1; line-clamp: 1; }
+.material-card.is-expanded .material-title,
+.material-card.is-expanded .material-content,
+.material-card.is-expanded .material-meta { display: block; max-height: none; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
+.material-card-actions { margin-top: auto; padding-top: 12px; align-items: center; }
+.material-expand-btn { margin: 0 auto 0 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; }
+.material-detail-modal { width: min(720px, calc(100vw - 28px)); max-height: min(86vh, 820px); overflow: auto; }
+.material-detail-modal .modal-title { overflow-wrap: anywhere; }
+.material-detail-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; color: var(--faint); font-size: 12px; font-weight: 700; }
+.material-detail-content { color: var(--text); font-size: 15px; line-height: 1.8; overflow-wrap: anywhere; white-space: pre-wrap; }
+.material-detail-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.material-detail-section strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 13px; }
+.material-detail-section p { margin: 0; color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; white-space: pre-wrap; }
 .material-editor .form-group > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; font-weight: 800; }
 .material-editor .modal-action-row { position: sticky; bottom: 0; padding-top: 14px; background: var(--surface); }
-.material-tag-editor { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
-.material-tag-editor legend { padding: 0 5px; color: var(--muted); font-size: 12px; font-weight: 800; }
-.material-new-tag-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.material-draft-tags { display: flex; flex-wrap: wrap; gap: 7px; }
-.tag-pill.removable { border: 0; cursor: pointer; font: inherit; }
+.material-tag-editor { min-width: 0; }
+.material-existing-tags { max-height: 132px; overflow-y: auto; padding: 2px; }
+.material-tag-option:has(input:checked) { border-color: #a9cdb7; background: var(--accent-soft); color: var(--accent); }
+.material-tag-empty { width: 100%; margin: 8px 0; padding: 10px 12px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--faint); font-size: 12px; text-align: center; }
+.material-new-tag-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 8px; }
+.material-new-tag-row .btn { min-height: 40px; }
+.material-tags-fallback { font-size: 12px !important; }
 @media (max-width: 640px) {
   .material-filter-bar { grid-template-columns: minmax(0, 1fr); }
   .material-new-tag-row { grid-template-columns: minmax(0, 1fr); }
-  .material-detail { width: min(100%, calc(100vw - 18px)); }
+  .material-detail-modal { width: min(100%, calc(100vw - 18px)); }
 }
 </style>

@@ -467,7 +467,7 @@ export const useRecordsStore = defineStore('records', () => {
     lifePlan.mutate(id ? 'update-material' : 'create-material', data => {
       const now = getNowLocal();
       const next = {
-        title: input.title.trim(),
+        title: input.title.trim() || content.replace(/\s+/g, ' ').trim().slice(0, 42),
         type: materialTypes.has(input.type) ? input.type : '摘抄',
         content,
         tags: services.records.getIdeaTags({ ideaTags: input.tags }),

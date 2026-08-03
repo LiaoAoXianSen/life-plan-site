@@ -1685,13 +1685,13 @@ test('wheel public library batch actions preserve selection and tombstone contra
     await page.getByRole('option', { name: '晚餐' }).click();
     await expect(page.locator('.library-row')).toHaveCount(2);
 
-    await page.locator('.library-batch-bar input[type="checkbox"]').first().check();
-    await expect(page.locator('.library-batch-bar')).toContainText('选中 2');
+    await page.locator('.wheel-library-toolbar input[type="checkbox"]').first().check();
+    await expect(page.locator('.wheel-library-toolbar')).toContainText('选中 2');
     await page.getByRole('checkbox', { name: '选择公共项 番茄牛肉面' }).check();
     await page.getByRole('checkbox', { name: '选择公共项 泡茶放空' }).check();
 
     await library.locator('.batch-tag-checks').getByRole('checkbox', { name: '活动' }).check();
-    await page.getByRole('button', { name: '批量加标签' }).click();
+    await page.getByRole('button', { name: '加标签', exact: true }).click();
     await expect(page.locator('.wheel-notice')).toContainText('已给 2 个公共项加上标签：活动');
     let stored = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
@@ -1702,7 +1702,7 @@ test('wheel public library batch actions preserve selection and tombstone contra
     expect(stored.data.wheelLibraryItems.find(item => item.id === 'lib-noodle')).toMatchObject({ tagIds: ['tag-dinner', 'tag-move'] });
     expect(stored.data.wheelLibraryItems.find(item => item.id === 'lib-tea')).toMatchObject({ tagIds: ['tag-rest', 'tag-dinner', 'tag-move'] });
 
-    await page.getByRole('button', { name: '批量去标签' }).click();
+    await page.getByRole('button', { name: '去标签', exact: true }).click();
     await expect(page.locator('.wheel-notice')).toContainText('已从 2 个公共项去掉标签：活动');
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.wheelLibraryItems.find(item => item.id === 'lib-noodle')).toMatchObject({ tagIds: ['tag-dinner'] });
@@ -1727,7 +1727,7 @@ test('wheel public library batch actions preserve selection and tombstone contra
     await page.getByRole('button', { name: '公共项标签筛选' }).click();
     await page.getByRole('option', { name: '活动' }).click();
     await page.getByRole('checkbox', { name: '选择公共项 拉伸十分钟' }).check();
-    await page.getByRole('button', { name: '批量去标签' }).click();
+    await page.getByRole('button', { name: '去标签', exact: true }).click();
     await expect(page.locator('.wheel-notice')).toContainText('没有可移除的标签；公共项至少要保留一个标签');
 });
 
@@ -1757,13 +1757,13 @@ test('wheel public library combines text and tag filters without mutating data',
     await page.getByRole('option', { name: '吃饭' }).click();
     await expect(page.locator('.library-row')).toHaveCount(1);
     await expect(page.locator('.library-row')).toContainText('番茄牛肉面');
-    await expect(page.locator('.library-filter-result')).toHaveText('显示 1 / 3 项');
+    await expect(page.locator('.wheel-library-toolbar + .wheel-hint')).toContainText('显示 1 / 3 项');
 
-    await page.locator('.library-batch-bar input[type="checkbox"]').first().check();
-    await expect(page.locator('.library-batch-bar')).toContainText('选中 1');
+    await page.locator('.wheel-library-toolbar input[type="checkbox"]').first().check();
+    await expect(page.locator('.wheel-library-toolbar')).toContainText('选中 1');
     await textFilter.fill('晚餐');
     await expect(page.locator('.library-row')).toHaveCount(1);
-    await expect(page.locator('.library-batch-bar')).toContainText('选中 1（当前筛选 0/1）');
+    await expect(page.locator('.wheel-library-toolbar')).toContainText('选中 1（当前筛选 0/1）');
 
     await page.getByRole('button', { name: '清除筛选' }).click();
     await expect(textFilter).toHaveValue('');
@@ -5067,17 +5067,17 @@ test('materials create edit filter and delete preserve the legacy data contract'
 
     await materialsPage.getByRole('button', { name: '新增素材' }).click();
     const editor = materialsPage.getByRole('dialog', { name: '新增素材' });
-    await expect(editor.getByLabel('标题（可选）')).toHaveValue('');
+    await expect(editor.getByLabel('标题', { exact: true })).toHaveValue('');
     await editor.getByLabel('内容').fill('   ');
     await editor.getByRole('button', { name: '保存' }).click();
     await expect(editor.getByRole('alert')).toHaveText('请输入素材内容');
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 
-    await editor.getByLabel('标题（可选）').fill('素材功能升级');
+    await editor.getByLabel('标题', { exact: true }).fill('素材功能升级');
     await editor.getByLabel('类型').selectOption('金句');
     await editor.getByLabel('内容').fill('真正的素材正文');
     await editor.getByLabel('新素材标签').fill('AI, 工作 AI，迁移');
-    await editor.getByRole('button', { name: '加入标签' }).click();
+    await editor.getByRole('button', { name: '添加标签' }).click();
     await editor.getByLabel('来源').fill('迁移手册');
     await editor.getByLabel('备注').fill('用于验证旧字段');
     await editor.getByRole('button', { name: '保存' }).click();
@@ -5106,13 +5106,13 @@ test('materials create edit filter and delete preserve the legacy data contract'
     const editDialog = materialsPage.getByRole('dialog', { name: '编辑素材' });
     await expectHashRoute(page, '/materials');
     await expect(editDialog.getByLabel('内容')).toHaveValue('真正的素材正文');
-    await editDialog.getByLabel('标题（可选）').fill('更新后的观点标题');
+    await editDialog.getByLabel('标题', { exact: true }).fill('更新后的观点标题');
     await editDialog.getByLabel('类型').selectOption('观点');
     await editDialog.getByLabel('内容').fill('更新后的观点正文');
-    await editDialog.getByRole('button', { name: '移除标签 工作' }).click();
-    await editDialog.getByRole('button', { name: '移除标签 迁移' }).click();
+    await editDialog.getByRole('checkbox', { name: '工作' }).uncheck();
+    await editDialog.getByRole('checkbox', { name: '迁移' }).uncheck();
     await editDialog.getByLabel('新素材标签').fill('复盘');
-    await editDialog.getByRole('button', { name: '加入标签' }).click();
+    await editDialog.getByRole('button', { name: '添加标签' }).click();
     await editDialog.getByLabel('来源').fill('更新来源');
     await editDialog.getByLabel('备注').fill('更新备注');
     await editDialog.getByRole('button', { name: '保存' }).click();
@@ -5241,24 +5241,25 @@ test('materials titles details tag drafts and long text follow the upgraded cont
     const materialsPage = page.locator('#page-materials');
     const titledCard = materialsPage.locator('.material-list .material-card').filter({ hasText: '独立素材标题' });
     await expect(titledCard).toContainText('长文内容用于验证摘要');
-    await expect(titledCard).not.toContainText(longContent);
+    await expect(titledCard.locator('.material-content')).toHaveText(longContent);
+    await expect(titledCard.locator('.material-content')).toHaveCSS('-webkit-line-clamp', '3');
     await expect(materialsPage.locator('.material-list')).toContainText('旧素材首行标题');
 
-    await titledCard.getByRole('button', { name: '展开正文' }).click();
+    await titledCard.getByRole('button', { name: '展开内容' }).click();
     await expect(titledCard).toContainText('<img src=x onerror=alert(1)>');
     await expect(titledCard.locator('img')).toHaveCount(0);
-    await titledCard.getByRole('button', { name: '查看素材 独立素材标题' }).click();
+    await titledCard.getByRole('button', { name: '查看详情' }).click();
     const detail = materialsPage.getByRole('dialog', { name: '独立素材标题' });
     await expect(detail.locator('.material-detail-content')).toHaveText(longContent);
     await expect(detail.locator('img')).toHaveCount(0);
     await detail.getByRole('button', { name: '编辑素材' }).click();
 
     const editor = materialsPage.getByRole('dialog', { name: '编辑素材' });
-    await expect(editor.getByLabel('标题（可选）')).toHaveValue('独立素材标题');
+    await expect(editor.getByLabel('标题', { exact: true })).toHaveValue('独立素材标题');
     await expect(editor.getByRole('checkbox', { name: 'AI' })).toBeChecked();
     await expect(editor.getByRole('checkbox', { name: '工作' })).toBeChecked();
     await editor.getByLabel('新素材标签').fill('AI, 新标签, 新标签');
-    await editor.getByRole('button', { name: '加入标签' }).click();
+    await editor.getByRole('button', { name: '添加标签' }).click();
     await editor.getByRole('button', { name: '保存' }).click();
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));

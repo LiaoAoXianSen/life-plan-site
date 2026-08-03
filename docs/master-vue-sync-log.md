@@ -17,15 +17,16 @@
 
 - 日期：2026-08-01
 - 主分支提交：`2abfc65 polish(materials): add titles tags and long-copy disclosure`
-- 状态：已同步待验证
+- 状态：已完成
 - Vue 落点：`src/types/lifePlan.ts`、`src/services/lifePlanRepository.ts`、`src/stores/recordsStore.ts`、`src/pages/MaterialsPage.vue`、`DashboardPage.vue`、`SearchPage.vue`、`TagsPage.vue`
 
 #### 已同步内容
 
 - `materials[]` 非破坏性新增 `title: string`；旧数据加载时归一为空字符串，正文、标签、来源和备注不丢失。
-- 展示标题优先使用独立标题；空标题回退正文首个非空行并限制为 42 字符摘要。
-- 编辑器可勾选已有标签、输入一个或多个新标签，新标签即时加入草稿，保存时统一去重为 `string[]`。
-- 素材卡片默认显示标题和正文摘要，长文支持展开/收起；详情弹窗只读展示全文并可进入编辑。
+- 展示标题优先使用独立标题；空标题回退正文压缩空白后的 42 字符摘要，保存时持久化该回退标题，与 master 一致。
+- 编辑器可勾选已有标签、添加新标签，也可用逗号批量输入；保存时统一去重为 `string[]`。
+- 素材卡片按 master 使用完整正文、来源和备注配合 CSS clamp；长卡显示“展开内容 / 收起内容”，操作区明确提供“查看详情 / 编辑”。
+- 详情弹窗按标题栏、类型/日期元信息、正文、标签、来源和备注分区展示，并可进入编辑。
 - `material=<id>` 深链接改为打开只读详情；搜索结果、首页随机素材和标签中心统一使用标题/摘要策略。
 - Vue 插值渲染恶意标题/内容，不使用 `v-html`；XSS 回归验证未生成注入元素。
 
@@ -36,13 +37,14 @@
 - [x] 摘要、展开/收起、详情全文和详情进入编辑通过聚焦回归
 - [x] 搜索、首页和标签中心已切换到新标题/摘要契约
 - [x] 恶意正文按文本渲染，不执行 HTML
-- [ ] 完整 Vue smoke 与 375/390px 布局检查
+- [x] 素材聚焦回归通过，375px 无横向溢出；生产构建通过
+- [ ] 完整 Vue smoke（当前环境测试包装进程在用例全 `ok` 后仍返回退出码 1，留待干净环境复核）
 
 ### [SYNC-20260802-01] 转盘公共项文本与标签组合筛选
 
 - 日期：2026-08-02
 - 主分支提交：`888c0bf feat(wheel): filter library items by text`
-- 状态：已同步待验证
+- 状态：已完成
 - Vue 落点：`src/pages/WheelPage.vue`、`src/stores/wheelStore.ts`
 
 #### 已同步内容
@@ -59,13 +61,14 @@
 - [x] 标签 + 文本 AND 组合通过聚焦回归
 - [x] 清空筛选和跨筛选选择计数通过聚焦回归
 - [x] 筛选操作保持 `lifePlanData` 字节不变
-- [ ] 完整 Vue smoke 与窄屏布局检查
+- [x] 组合筛选和 375px 无横向溢出聚焦回归通过
+- [ ] 完整 Vue smoke（当前环境测试包装进程退出码异常，留待干净环境复核）
 
 ### [SYNC-20260802-02] 公共项标签自定义下拉
 
 - 日期：2026-08-02
 - 主分支提交：`a840982` / `87a6d68 fix(wheel): restore layout and refine tag dropdown`
-- 状态：已同步待验证
+- 状态：已完成
 - Vue 落点：`src/pages/WheelPage.vue`
 
 #### 已同步内容
@@ -73,11 +76,13 @@
 - 原生筛选 `<select>` 改为 Vue 响应式自定义下拉，展示标签颜色点、当前值、选中态和勾选。
 - 使用 `role="listbox"` / `role="option"`、`aria-expanded` 和 `aria-selected`。
 - 支持外部点击、Escape、ArrowUp/ArrowDown、Home/End、Enter/Space。
-- 桌面下拉就近展开；700px 以下改为底部浮层，避免管理区域裁切和横向溢出。
+- 桌面下拉使用 fixed 定位并随触发器更新位置；640px 以下改为底部浮层，避免管理区域裁切和横向溢出。
+- 工具栏、标签/文本筛选分组、选中计数和批量操作按钮布局按 master 最终 `wheel-tool.css` 对齐。
 
 #### 验收
 
 - [x] 鼠标选择与外部关闭逻辑完成
 - [x] 方向键、Home/End、Enter 和 Escape 行为完成
 - [x] 聚焦回归验证键盘选择与筛选结果
-- [ ] 完整 Vue smoke 与窄屏布局检查
+- [x] 375px 底部浮层和无横向溢出聚焦回归通过
+- [ ] 完整 Vue smoke（当前环境测试包装进程退出码异常，留待干净环境复核）

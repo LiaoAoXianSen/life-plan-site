@@ -75,6 +75,7 @@ const libraryTextFilter = ref('');
 const libraryTagDropdownOpen = ref(false);
 const libraryTagTriggerRef = ref<HTMLButtonElement | null>(null);
 const libraryTagOptionRefs = ref<HTMLButtonElement[]>([]);
+const libraryTagDropdownStyle = ref<Record<string, string>>({});
 const selectedLibraryIds = ref<string[]>([]);
 const batchLibraryTagIds = ref<string[]>([]);
 const libraryAiSuggestions = ref<Array<{ tagId: string; name: string; reason: string; selected: boolean }>>([]);
@@ -126,6 +127,8 @@ watch(displayEntries, () => { void nextTick(drawWheelCanvas); }, { immediate: tr
 onMounted(() => {
   drawWheelCanvas();
   document.addEventListener('click', onWheelDocumentClick);
+  window.addEventListener('resize', updateLibraryTagDropdownPosition);
+  window.addEventListener('scroll', updateLibraryTagDropdownPosition, true);
 });
 watch([() => route.query.library, () => wheelStore.libraryItems.length], ([value]) => {
   const id = String(Array.isArray(value) ? value[0] || '' : value || '');
@@ -168,6 +171,8 @@ onBeforeUnmount(() => {
   if (spinTimer) window.clearTimeout(spinTimer);
   if (spinFrame) window.cancelAnimationFrame(spinFrame);
   document.removeEventListener('click', onWheelDocumentClick);
+  window.removeEventListener('resize', updateLibraryTagDropdownPosition);
+  window.removeEventListener('scroll', updateLibraryTagDropdownPosition, true);
 });
 const copyableLibraryItems = computed(() => {
   if (!copyLibraryTagFilter.value) return wheelStore.libraryItems;
@@ -351,7 +356,21 @@ function clearCurrentResult() {
 }
 function itemTagIds(item: WheelItem) { return Array.isArray(item.tagIds) ? item.tagIds as string[] : []; }
 function libraryTagNames(item: WheelItem) { return itemTagIds(item).map(id => wheelStore.tags.find(tag => tag.id === id)?.name).filter(Boolean).join('、') || '未分类'; }
-function libraryTagOptions() { return [{ id: '', name: '全部标签', color: '#8a8f98' }, ...wheelStore.tags]; }
+function libraryTagOptions() { return [{ id: '', name: '全部标签', color: '' }, ...wheelStore.tags]; }
+function updateLibraryTagDropdownPosition() {
+  if (!libraryTagDropdownOpen.value || window.matchMedia('(max-width: 640px)').matches) {
+    libraryTagDropdownStyle.value = {};
+    return;
+  }
+  const trigger = libraryTagTriggerRef.value;
+  if (!trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  libraryTagDropdownStyle.value = {
+    top: `${Math.round(rect.bottom + 7)}px`,
+    left: `${Math.round(rect.left)}px`,
+    width: `${Math.round(rect.width)}px`,
+  };
+}
 function setLibraryTagOptionRef(element: unknown, index: number) {
   if (element instanceof HTMLButtonElement) libraryTagOptionRefs.value[index] = element;
 }
@@ -365,8 +384,11 @@ function focusLibraryTagOption(index: number) {
 function toggleLibraryTagDropdown() {
   libraryTagDropdownOpen.value = !libraryTagDropdownOpen.value;
   if (libraryTagDropdownOpen.value) {
+    updateLibraryTagDropdownPosition();
     const currentIndex = libraryTagOptions().findIndex(tag => tag.id === libraryTagFilter.value);
     focusLibraryTagOption(Math.max(0, currentIndex));
+  } else {
+    libraryTagDropdownStyle.value = {};
   }
 }
 function chooseLibraryTagFilter(tagId: string) {
@@ -388,6 +410,7 @@ function onLibraryTagTriggerKeydown(event: KeyboardEvent) {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
   event.preventDefault();
   libraryTagDropdownOpen.value = true;
+  updateLibraryTagDropdownPosition();
   const options = libraryTagOptions();
   const currentIndex = Math.max(0, options.findIndex(tag => tag.id === libraryTagFilter.value));
   if (event.key === 'End') focusLibraryTagOption(options.length - 1);
@@ -1107,21 +1130,8 @@ function importJson(event: Event) {
       </article>
       <article id="wheel-library-panel" class="card library-card">
         <div class="card-title-row library-card-title-row">
-          <div><div class="card-title">公共项库</div><span class="library-filter-result">显示 {{ filteredLibraryItems.length }} / {{ wheelStore.libraryItems.length }} 项</span></div>
+          <div><div class="card-title">公共项库</div><span class="library-filter-result">公共项可被普通转盘复制，也会被标签转盘用于二段抽取。</span></div>
           <button v-if="libraryFilterActive" class="link-button" type="button" @click="clearLibraryFilters">清除筛选</button>
-        </div>
-        <div class="library-filter-toolbar" :class="{ active: libraryFilterActive }">
-          <label class="library-text-filter"><span>名称或备注</span><input v-model="libraryTextFilter" type="search" aria-label="公共项文本筛选" placeholder="搜索公共项名称或备注" /></label>
-          <div class="library-tag-filter">
-            <span class="library-filter-label">标签</span>
-            <button ref="libraryTagTriggerRef" class="library-tag-trigger" type="button" aria-label="公共项标签筛选" aria-haspopup="listbox" :aria-expanded="libraryTagDropdownOpen" @click.stop="toggleLibraryTagDropdown" @keydown="onLibraryTagTriggerKeydown">
-              <i class="color-dot" :style="{ background: selectedLibraryTag?.color || '#8a8f98' }" />
-              <span>{{ selectedLibraryTag?.name || '全部标签' }}</span><b aria-hidden="true">⌄</b>
-            </button>
-            <div v-show="libraryTagDropdownOpen" class="library-tag-options" role="listbox" aria-label="公共项标签选项" @click.stop>
-              <button v-for="(tag, index) in libraryTagOptions()" :key="tag.id || 'all'" :ref="element => setLibraryTagOptionRef(element, index)" type="button" role="option" :aria-selected="libraryTagFilter === tag.id" :class="{ selected: libraryTagFilter === tag.id }" @click="chooseLibraryTagFilter(tag.id)" @keydown="onLibraryTagOptionKeydown($event, index, tag.id)"><i class="color-dot" :style="{ background: tag.color }" /><span>{{ tag.name }}</span><b v-if="libraryTagFilter === tag.id" aria-hidden="true">✓</b></button>
-            </div>
-          </div>
         </div>
         <form class="library-form" @submit.prevent="submitLibrary">
           <label class="field-label"><span>公共项名称</span><input v-model="libraryForm.name" required placeholder="公共项名称" /></label>
@@ -1151,20 +1161,32 @@ function importJson(event: Event) {
           <div class="batch-tag-checks" role="group" aria-label="批量导入标签"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="batchLibraryTagIds.includes(tag.id)" @change="batchLibraryTagIds = toggleTag(batchLibraryTagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label></div>
           <button class="btn btn-secondary" type="button" @click="submitBatchLibrary">导入公共项</button>
         </details>
-        <div class="library-batch-bar">
-          <label class="select-all-row"><input type="checkbox" :checked="allVisibleLibrarySelected" :disabled="!filteredLibraryItems.length" @change="setAllVisibleLibrarySelection(($event.target as HTMLInputElement).checked)" />{{ librarySelectionSummary }}</label>
-          <button type="button" class="link-button" :disabled="!selectedLibraryIds.length" @click="clearLibrarySelection">清空选择</button>
-          <div class="batch-tag-checks" role="group" aria-label="批量标签">
-            <label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="batchLibraryTagIds.includes(tag.id)" @change="batchLibraryTagIds = toggleTag(batchLibraryTagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label>
+        <div class="wheel-library-toolbar" :class="{ active: libraryFilterActive }">
+          <div class="wheel-library-filter-group">
+            <label class="wheel-library-filter">
+              <span>标签筛选</span>
+              <div class="wheel-library-tag-select library-tag-filter" :class="{ 'is-open': libraryTagDropdownOpen }">
+                <button ref="libraryTagTriggerRef" class="wheel-library-tag-trigger" type="button" aria-label="公共项标签筛选" aria-haspopup="listbox" :aria-expanded="libraryTagDropdownOpen" @click.stop="toggleLibraryTagDropdown" @keydown="onLibraryTagTriggerKeydown">
+                  <span class="wheel-library-tag-value"><i class="wheel-library-tag-dot" :class="{ 'is-all': !selectedLibraryTag }" :style="selectedLibraryTag ? { background: selectedLibraryTag.color } : undefined" /><span>{{ selectedLibraryTag?.name || '全部标签' }}</span></span><i class="wheel-library-tag-chevron" aria-hidden="true" />
+                </button>
+                <div v-show="libraryTagDropdownOpen" class="wheel-library-tag-options" :style="libraryTagDropdownStyle" role="listbox" aria-label="公共项标签选项" @click.stop>
+                  <button v-for="(tag, index) in libraryTagOptions()" :key="tag.id || 'all'" :ref="element => setLibraryTagOptionRef(element, index)" type="button" role="option" class="wheel-library-tag-option" :aria-selected="libraryTagFilter === tag.id" :class="{ 'is-selected': libraryTagFilter === tag.id }" @click="chooseLibraryTagFilter(tag.id)" @keydown="onLibraryTagOptionKeydown($event, index, tag.id)"><span class="wheel-library-tag-option-label"><i class="wheel-library-tag-dot" :class="{ 'is-all': !tag.id }" :style="tag.id ? { background: tag.color } : undefined" /><span>{{ tag.name }}</span></span><i class="wheel-library-tag-check" aria-hidden="true">✓</i></button>
+                </div>
+              </div>
+            </label>
+            <label class="wheel-library-filter wheel-library-text-search"><span>文本筛选</span><input v-model="libraryTextFilter" type="search" aria-label="公共项文本筛选" placeholder="搜索名称或备注" /></label>
           </div>
-          <div class="inline-actions">
-            <button class="btn btn-secondary" type="button" :disabled="!selectedLibraryIds.length || !batchLibraryTagIds.length" @click="applyLibraryBatchTags('add')">批量加标签</button>
-            <button class="btn btn-secondary" type="button" :disabled="!selectedLibraryIds.length || !batchLibraryTagIds.length" @click="applyLibraryBatchTags('remove')">批量去标签</button>
-            <button class="btn btn-secondary" type="button" :disabled="!selectedLibraryIds.length" @click="applyLibraryBatchEnabled(true)">批量启用</button>
-            <button class="btn btn-secondary" type="button" :disabled="!selectedLibraryIds.length" @click="applyLibraryBatchEnabled(false)">批量停用</button>
-            <button class="btn btn-danger" type="button" :disabled="!selectedLibraryIds.length" @click="applyLibraryBatchDelete">批量删除</button>
+          <div class="wheel-library-bulk-actions">
+            <label class="check-label wheel-select-all-row"><input type="checkbox" :checked="allVisibleLibrarySelected" :disabled="!filteredLibraryItems.length" @change="setAllVisibleLibrarySelection(($event.target as HTMLInputElement).checked)" /><span>{{ librarySelectionSummary }}</span></label>
+            <button type="button" class="wheel-mini-btn" :disabled="!selectedLibraryIds.length" @click="clearLibrarySelection">清空勾选</button>
+            <button class="wheel-mini-btn primary" type="button" :disabled="!selectedLibraryIds.length || !batchLibraryTagIds.length" @click="applyLibraryBatchTags('add')">加标签</button>
+            <button class="wheel-mini-btn" type="button" :disabled="!selectedLibraryIds.length || !batchLibraryTagIds.length" @click="applyLibraryBatchTags('remove')">去标签</button>
+            <button class="wheel-mini-btn" type="button" :disabled="!selectedLibraryIds.length" @click="applyLibraryBatchEnabled(true)">批量启用</button>
+            <button class="wheel-mini-btn" type="button" :disabled="!selectedLibraryIds.length" @click="applyLibraryBatchEnabled(false)">批量停用</button>
+            <button class="wheel-mini-btn danger" type="button" :disabled="!selectedLibraryIds.length" @click="applyLibraryBatchDelete">批量删除</button>
           </div>
         </div>
+        <div class="wheel-hint compact">显示 {{ filteredLibraryItems.length }} / {{ wheelStore.libraryItems.length }} 项；批量操作按全部勾选项计数，跨筛选保留。</div>
         <div v-for="item in filteredLibraryItems" :key="item.id" class="entity-row library-row" :data-wheel-library-id="item.id" :class="{ selected: selectedLibrarySet.has(item.id) }">
           <label class="library-select"><input v-model="selectedLibraryIds" type="checkbox" :value="item.id" :aria-label="`选择公共项 ${item.name}`" /></label>
           <span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }} · {{ libraryTagNames(item) }}</em><small v-if="item.note" class="library-item-note">{{ item.note }}</small></span>
@@ -1231,8 +1253,20 @@ function importJson(event: Event) {
 .wheel-management-block[data-management-panel="history"] .wheel-management-grid {
   display: none !important;
 }
+.wheel-library-toolbar{display:grid;grid-template-columns:minmax(360px,1fr) minmax(0,1.35fr);gap:10px;align-items:center;margin:12px 0;padding:10px;border:1px solid rgba(224,231,239,.96);border-radius:18px;background:rgba(248,250,253,.92)}
+.wheel-library-toolbar.active{border-color:rgba(33,110,78,.3);background:rgba(244,250,246,.94)}
+.wheel-library-filter-group{display:grid;grid-template-columns:minmax(150px,.8fr) minmax(190px,1.2fr);gap:8px;min-width:0}
+.wheel-library-filter,.wheel-library-bulk-actions{display:flex;align-items:center;gap:8px;min-width:0}.wheel-library-filter>span,.wheel-select-all-row span{color:var(--muted);font-size:12px;font-weight:850;white-space:nowrap}.wheel-library-filter input,.wheel-library-tag-trigger{min-width:0;width:100%;padding:8px 10px;border:1px solid rgba(220,228,236,.96);border-radius:13px;background:#fff;color:var(--text)}
+.wheel-library-tag-select{position:relative;min-width:0;width:100%}.wheel-library-tag-trigger{display:flex;min-height:37px;align-items:center;justify-content:space-between;gap:10px;font:inherit;text-align:left;cursor:pointer}.wheel-library-tag-trigger:hover,.wheel-library-tag-trigger:focus-visible{border-color:rgba(113,147,130,.88);outline:none}.wheel-library-tag-trigger:focus-visible{box-shadow:0 0 0 3px rgba(33,110,78,.1)}
+.wheel-library-tag-value,.wheel-library-tag-option-label{display:flex;min-width:0;align-items:center;gap:9px}.wheel-library-tag-value span,.wheel-library-tag-option-label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wheel-library-tag-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.09)}.wheel-library-tag-dot.is-all{background:#fff;border:2px solid #8b9991;box-shadow:none}.wheel-library-tag-chevron{width:7px;height:7px;border-right:2px solid #7a8981;border-bottom:2px solid #7a8981;transform:rotate(45deg) translateY(-2px);transition:transform .18s cubic-bezier(.22,1,.36,1);flex:0 0 auto}.wheel-library-tag-select.is-open .wheel-library-tag-chevron{transform:rotate(225deg) translate(-1px,-1px)}
+.wheel-library-tag-options{position:fixed;z-index:110;display:grid;overflow-y:auto;max-height:min(252px,38vh);padding:5px;border:1px solid rgba(207,218,211,.98);border-radius:12px;background:#fff;box-shadow:0 6px 8px rgba(29,54,41,.14)}.wheel-library-tag-option{display:flex;width:100%;min-height:38px;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;border:0;border-radius:8px;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer}.wheel-library-tag-option:hover,.wheel-library-tag-option:focus-visible{background:rgba(33,110,78,.07);outline:none}.wheel-library-tag-option.is-selected{background:rgba(33,110,78,.1);color:var(--accent);font-weight:850}.wheel-library-tag-check{color:var(--accent);font-size:13px;font-style:normal;font-weight:900;opacity:0}.wheel-library-tag-option.is-selected .wheel-library-tag-check{opacity:1}
+.wheel-library-bulk-actions{justify-content:flex-end;flex-wrap:wrap;gap:6px}.wheel-library-bulk-actions .wheel-mini-btn{min-height:32px;padding:0 10px}.wheel-select-all-row{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800}
 @media (max-width: 700px) {
   .library-filter-toolbar{grid-template-columns:minmax(0,1fr)}
+  .wheel-library-toolbar,.wheel-library-filter-group{grid-template-columns:1fr}
+  .wheel-library-filter,.wheel-library-bulk-actions{align-items:stretch;flex-direction:column}
+  .wheel-library-tag-options{top:auto!important;left:10px!important;right:10px;bottom:10px;width:auto!important;max-height:min(52vh,360px);border-radius:18px;padding:10px}
+  .wheel-library-bulk-actions .wheel-mini-btn{width:100%}
   .library-tag-options{position:fixed;left:10px;right:10px;top:auto;bottom:10px;width:auto;max-height:min(52vh,360px);border-radius:18px;padding:10px}
 }
 </style>
