@@ -435,7 +435,7 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-overdue' });
 
     await page.goto('/#/dashboard');
-    await page.getByRole('button', { name: /Dashboard 素材内容/ }).click();
+    await page.locator('.command-materials .material-card').filter({ hasText: 'Dashboard 素材内容' }).getByRole('button', { name: '查看详情' }).click();
     await expectHashRoute(page, '/materials', { material: 'material-dashboard' });
 
     await page.goto('/#/dashboard');
@@ -475,14 +475,14 @@ test('dashboard random material sampling preserves legacy source order', async (
     }, original);
     await page.goto('/#/dashboard');
 
-    const picks = page.locator('.command-materials .command-row');
+    const picks = page.locator('.command-materials .material-card');
     await expect(picks).toHaveCount(2);
     await expect(picks.nth(0)).toContainText('原数组第一条');
     await expect(picks.nth(1)).toContainText('原数组第二条');
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
-test('dashboard material rows expose legacy metadata without writes', async ({ page }) => {
+test('dashboard material cards match compact master structure without writes', async ({ page }) => {
     const source = emptyData({
         materials: [{
             id: 'material-dashboard-meta', type: '摘抄', content: 'Dashboard 元素材', tags: ['工作', '复盘'],
@@ -493,9 +493,9 @@ test('dashboard material rows expose legacy metadata without writes', async ({ p
     await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
     await page.goto('/#/dashboard');
 
-    const row = page.locator('.command-materials .command-row').filter({ hasText: 'Dashboard 元素材' });
+    const row = page.locator('.command-materials .material-card').filter({ hasText: 'Dashboard 元素材' });
     await expect(row).toContainText('2026年8月1日 08:09:10');
-    await expect(row).toContainText('工作 · 复盘');
+    await expect(row.locator('.tag-pill')).toHaveText(['工作', '复盘']);
     await expect(row).toContainText('来源：测试来源');
     await expect(row).toContainText('备注：测试备注');
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);

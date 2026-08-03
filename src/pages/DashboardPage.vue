@@ -26,6 +26,7 @@ const todayLabel = formatLongDate(today);
 const showCreateRecord = ref(false);
 const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
 const floatingMode = ref<FloatingMode>('random');
+const expandedMaterialIds = ref<string[]>([]);
 const timelineRangeDays = ref(30);
 const periodTypes = ['周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
 const urgencyLabels: Record<Todo['urgency'], string> = { urgent: '紧急', high: '高', medium: '中', low: '低' };
@@ -157,17 +158,38 @@ function openMaterial(materialId: string) {
   void router.push({ path: '/materials', query: { material: materialId } });
 }
 
+function normalizeMaterialText(value: unknown) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
 function materialDisplayTitle(material: MaterialEntity) {
-  const explicit = String(material.title || '').replace(/\s+/g, ' ').trim();
+  const explicit = normalizeMaterialText(material.title);
   if (explicit) return explicit;
-  const firstLine = String(material.content || '').split(/\r?\n/).map(line => line.trim()).find(Boolean) || '';
-  const clean = firstLine.replace(/\s+/g, ' ').trim();
+  const clean = normalizeMaterialText(material.content);
   return clean.length > 42 ? `${clean.slice(0, 41).trimEnd()}…` : clean || '空素材';
 }
 
-function materialDisplaySummary(material: MaterialEntity) {
-  const clean = String(material.content || '').replace(/\s+/g, ' ').trim();
-  return clean.length > 72 ? `${clean.slice(0, 71).trimEnd()}…` : clean;
+function normalizeMaterialTags(material: MaterialEntity) {
+  return Array.from(new Set((Array.isArray(material.tags) ? material.tags : []).map(tag => String(tag || '').trim()).filter(Boolean)));
+}
+
+function isDashboardMaterialLong(material: MaterialEntity) {
+  return materialDisplayTitle(material).length > 46
+    || normalizeMaterialText(material.content).length > 110
+    || normalizeMaterialText(material.source).length > 54
+    || normalizeMaterialText(material.note).length > 72;
+}
+
+function isDashboardMaterialExpanded(materialId: unknown) {
+  return expandedMaterialIds.value.includes(String(materialId || ''));
+}
+
+function toggleDashboardMaterial(materialId: unknown) {
+  const id = String(materialId || '');
+  if (!id) return;
+  expandedMaterialIds.value = isDashboardMaterialExpanded(id)
+    ? expandedMaterialIds.value.filter(item => item !== id)
+    : [...expandedMaterialIds.value, id];
 }
 
 function openCreateRecord() {
@@ -503,18 +525,20 @@ const timelineGroups = computed(() => {
           <button class="btn btn-secondary todo-mini-btn" type="button" @click="router.push('/materials')">去素材库</button>
         </div>
         <div v-if="materialPicks.length" class="command-materials">
-          <button v-for="material in materialPicks" :key="String(material.id)" class="command-row" type="button" @click="openMaterial(String(material.id))">
-            <span class="dashboard-material-copy">
-              <span><strong>{{ materialDisplayTitle(material) }}</strong><template v-if="materialDisplaySummary(material)"> · {{ materialDisplaySummary(material) }}</template></span>
-              <span class="dashboard-material-details">
-                {{ formatStoredDateTime(material.createdAt) }}
-                <template v-if="material.tags?.length"> · {{ material.tags.join(' · ') }}</template>
-                <template v-if="material.source"> · 来源：{{ material.source }}</template>
-                <template v-if="material.note"> · 备注：{{ material.note }}</template>
-              </span>
-            </span>
-            <strong>{{ material.type || '素材' }}</strong>
-          </button>
+          <article v-for="material in materialPicks" :key="String(material.id)" class="material-card compact dashboard-material-card" :class="{ 'is-expanded': isDashboardMaterialExpanded(material.id) }">
+            <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredDateTime(material.createdAt) }}</span></div>
+            <h3 class="material-title">{{ materialDisplayTitle(material) }}</h3>
+            <div class="material-card-copy">
+              <div class="material-content">{{ material.content || '空素材' }}</div>
+              <div v-if="material.source" class="material-meta material-source">来源：{{ material.source }}</div>
+              <div v-if="material.note" class="material-meta material-note">备注：{{ material.note }}</div>
+            </div>
+            <div v-if="normalizeMaterialTags(material).length" class="idea-badge-row"><span v-for="tag in normalizeMaterialTags(material)" :key="tag" class="tag-pill">{{ tag }}</span></div>
+            <div class="idea-card-actions material-card-actions">
+              <button v-if="isDashboardMaterialLong(material)" class="mini-link material-expand-btn" type="button" :aria-expanded="isDashboardMaterialExpanded(material.id)" @click="toggleDashboardMaterial(material.id)">{{ isDashboardMaterialExpanded(material.id) ? '收起内容' : '展开内容' }}</button>
+              <button class="btn btn-secondary todo-mini-btn" type="button" @click="openMaterial(String(material.id))">查看详情</button>
+            </div>
+          </article>
         </div>
         <div v-else class="empty-state compact-empty">素材库还没有内容</div>
       </article>
@@ -716,8 +740,19 @@ const timelineGroups = computed(() => {
 }
 .dashboard-main-grid { margin-bottom: 16px; }
 .dashboard-timeline { min-width: 0; }
-.dashboard-material-copy { display: grid; gap: 2px; min-width: 0; }
-.dashboard-material-details { color: var(--muted); font-size: 11px; font-weight: 600; }
+.command-materials { display: grid; gap: 9px; }
+.dashboard-material-card { min-width: 0; display: flex; flex-direction: column; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: #fbfdfb; box-shadow: 0 12px 26px rgba(35,60,45,.055); }
+.dashboard-material-card .material-card-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; margin-bottom: 9px; color: var(--faint); font-size: 12px; font-weight: 750; }
+.dashboard-material-card .material-title { margin: 0 0 8px; color: var(--text); font-size: 16px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.dashboard-material-card .material-card-copy { min-width: 0; }
+.dashboard-material-card .material-content { color: var(--text); font-size: 13px; font-weight: 650; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.dashboard-material-card .material-meta { margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.dashboard-material-card .material-source { -webkit-line-clamp: 1; line-clamp: 1; }
+.dashboard-material-card.is-expanded .material-title,
+.dashboard-material-card.is-expanded .material-content,
+.dashboard-material-card.is-expanded .material-meta { display: block; max-height: none; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
+.dashboard-material-card .material-card-actions { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; align-items: center; margin-top: auto; padding-top: 12px; }
+.dashboard-material-card .material-expand-btn { margin: 0 auto 0 0; padding: 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; }
 .todo-list { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
 .todo-item {
   display: grid;
