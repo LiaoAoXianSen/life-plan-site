@@ -12,7 +12,7 @@ import { useTodosStore } from '../stores/todosStore';
 import type { DataEntity, Todo } from '../types/lifePlan';
 import { addDays, buildScheduleItems, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
 
-type MaterialEntity = DataEntity & { id?: string; content?: string; type?: string; tags?: string[]; source?: string; note?: string; createdAt?: string };
+type MaterialEntity = DataEntity & { id?: string; title?: string; content?: string; type?: string; tags?: string[]; source?: string; note?: string; createdAt?: string };
 type FloatingMode = 'random' | 'newest' | 'oldest';
 
 const router = useRouter();
@@ -155,6 +155,19 @@ function openScheduleItem(item: ScheduleItem) {
 
 function openMaterial(materialId: string) {
   void router.push({ path: '/materials', query: { material: materialId } });
+}
+
+function materialDisplayTitle(material: MaterialEntity) {
+  const explicit = String(material.title || '').replace(/\s+/g, ' ').trim();
+  if (explicit) return explicit;
+  const firstLine = String(material.content || '').split(/\r?\n/).map(line => line.trim()).find(Boolean) || '';
+  const clean = firstLine.replace(/\s+/g, ' ').trim();
+  return clean.length > 42 ? `${clean.slice(0, 41).trimEnd()}…` : clean || '空素材';
+}
+
+function materialDisplaySummary(material: MaterialEntity) {
+  const clean = String(material.content || '').replace(/\s+/g, ' ').trim();
+  return clean.length > 72 ? `${clean.slice(0, 71).trimEnd()}…` : clean;
 }
 
 function openCreateRecord() {
@@ -492,7 +505,7 @@ const timelineGroups = computed(() => {
         <div v-if="materialPicks.length" class="command-materials">
           <button v-for="material in materialPicks" :key="String(material.id)" class="command-row" type="button" @click="openMaterial(String(material.id))">
             <span class="dashboard-material-copy">
-              <span>{{ material.content || '空素材' }}</span>
+              <span><strong>{{ materialDisplayTitle(material) }}</strong><template v-if="materialDisplaySummary(material)"> · {{ materialDisplaySummary(material) }}</template></span>
               <span class="dashboard-material-details">
                 {{ formatStoredDateTime(material.createdAt) }}
                 <template v-if="material.tags?.length"> · {{ material.tags.join(' · ') }}</template>

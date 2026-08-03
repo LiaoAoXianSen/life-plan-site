@@ -27,7 +27,9 @@ dist/
 build/
 *.tsbuildinfo
 test-results/
+test-results-*/
 playwright-report/
+vite.config.*.timestamp-*.mjs
 
 # Local planning notes (agent scratchpad)
 .planning/

@@ -38,7 +38,8 @@ function normalizePersistedData(value: unknown, services: ReturnType<typeof crea
   target.materials = target.materials.map(item => ({
     ...item,
     id: typeof item.id === 'string' && item.id ? item.id : genId(),
-    type: materialTypes.has(String(item.type || '')) ? item.type : '摘抄',
+    type: materialTypes.has(String(item.type || '')) ? String(item.type) : '摘抄',
+    title: typeof item.title === 'string' ? item.title : '',
     content: typeof item.content === 'string' ? item.content : '',
     tags: services.records.getIdeaTags({ ideaTags: item.tags }),
     source: typeof item.source === 'string' ? item.source : '',

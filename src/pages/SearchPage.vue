@@ -56,6 +56,14 @@ function wheelTagNames(tagIds: unknown) {
   return ids.map(id => store.data.wheelTags.find(tag => tag.id === id)?.name).filter(Boolean) as string[];
 }
 
+function materialTitle(title: unknown, content: unknown) {
+  const explicit = String(title || '').replace(/\s+/g, ' ').trim();
+  if (explicit) return explicit;
+  const firstLine = String(content || '').split(/\r?\n/).map(line => line.trim()).find(Boolean) || '';
+  const clean = firstLine.replace(/\s+/g, ' ').trim();
+  return clean.length > 42 ? `${clean.slice(0, 41).trimEnd()}…` : clean || '空素材';
+}
+
 const indexItems = computed<SearchItem[]>(() => {
   const recordItems = store.data.records.map(record => ({
     module: 'records',
@@ -94,7 +102,7 @@ const indexItems = computed<SearchItem[]>(() => {
     module: 'materials',
     label: moduleLabels.materials,
     id: String(material.id || ''),
-    title: String(material.content || '').slice(0, 42) || '空素材',
+    title: materialTitle(material.title, material.content),
     subtitle: `${material.type || '素材'} · ${formatStoredDateTime(material.createdAt)}`,
     body: `${material.content || ''} ${material.source || ''} ${material.note || ''}`,
     tags: normalizeTags(material.tags),

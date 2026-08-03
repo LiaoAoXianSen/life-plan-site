@@ -1,5 +1,15 @@
 # Findings
 
+## 2026-08-03 - master material and wheel parity sync
+
+- `master` 的待同步切片集中在素材标题/长文详情和转盘公共项组合筛选；Vue 按响应式状态和 Pinia/store 边界重写，没有导入旧 `app.js`、全局函数或 inline handler。
+- 素材 `title` 是非破坏性新增字符串字段：旧行加载后归一为空字符串，显示时回退正文首个非空行/42 字摘要；完整 `content/source/note/tags` 仍原样保存。
+- 素材深链接现在打开只读详情，详情再进入编辑；标签编辑使用本地草稿集合，取消不写数据，保存经 Records service 统一去重。
+- 首页随机素材、全局搜索和标签中心都使用同一标题回退/摘要原则；用户文本通过 Vue 插值输出，不使用 `v-html`。
+- 转盘公共项文本筛选只存在于 `WheelPage` 会话态，同时匹配 `name`/`note`，与标签条件按 AND 组合；筛选、清空、下拉导航均不写 `lifePlanData`。
+- 公共项自定义标签筛选使用 listbox/option ARIA 和方向键/Home/End/Enter/Space/Escape；窄屏候选列表固定在底部以避免管理容器裁切。
+- WorkBuddy 安全删除层无法回收旧 `dist/assets`、`test-results` 和 Vite deps 缓存。验证时应复用 `vite preview`，给 Playwright 指定新的 `--output` 目录，并用 `vite build --emptyOutDir false` 验证产物，避免任何删除绕行。
+
 ## 2026-07-27 - Vue migration continuation
 
 - Current authoritative branch is `migration/vue-app-v1` at `cc18d62`, clean and matching `origin/migration/vue-app-v1`.

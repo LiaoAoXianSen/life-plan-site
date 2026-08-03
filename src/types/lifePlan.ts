@@ -32,6 +32,18 @@ export interface Todo extends DataEntity {
   sourceMatchKey: string;
 }
 
+export interface Material extends DataEntity {
+  id: string;
+  title: string;
+  type: string;
+  content: string;
+  tags: string[];
+  source: string;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LifePlanData {
   records: DataEntity[];
   todos: Todo[];
@@ -43,7 +55,7 @@ export interface LifePlanData {
   templates: DataEntity[];
   goals: DataEntity[];
   deletedItems: DataEntity[];
-  materials: DataEntity[];
+  materials: Material[];
   bodyMetrics: DataEntity[];
   fitnessPlans: DataEntity[];
   fitnessWorkouts: DataEntity[];

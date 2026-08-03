@@ -6,7 +6,7 @@ The deployment notes below are retained only as reference for local or isolated 
 
 ## Local verification
 
-Use Node 20 (the pinned toolchain works with the local 20.13.1 runtime):
+Use the project-supported Node 20 or Node 22 runtime (current local verification uses managed Node 22.22.2):
 
 ```powershell
 npm ci
@@ -44,9 +44,9 @@ If an isolated preview is needed for testing, use a separate Pages project conne
 | Build command | `npm run build` |
 | Build output directory | `dist` |
 | Root directory | blank / repository root |
-| Environment variable | `NODE_VERSION=20` |
+| Environment variable | `NODE_VERSION=22` (Node 20 is also supported) |
 
-The application has `base: './'` in `vite.config.ts`, which makes generated
+The application has `base: './'` in `vite.config.mts`, which makes generated
 assets work from the Pages project root. Use the preview URL for data testing;
 export a user backup first because browser `localStorage` is origin-scoped.
 

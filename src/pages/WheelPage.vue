@@ -68,22 +68,32 @@ const optionBatchText = ref('');
 const copyLibraryTagFilter = ref('');
 const copyLibraryId = ref('');
 const tagForm = reactive({ id: '', name: '', color: '#216e4e', weight: 1, enabled: true });
-const libraryForm = reactive({ id: '', name: '', tagIds: [] as string[], weight: 1, enabled: true });
+const libraryForm = reactive({ id: '', name: '', note: '', tagIds: [] as string[], weight: 1, enabled: true });
 const libraryBatchText = ref('');
 const libraryTagFilter = ref('');
+const libraryTextFilter = ref('');
+const libraryTagDropdownOpen = ref(false);
+const libraryTagTriggerRef = ref<HTMLButtonElement | null>(null);
+const libraryTagOptionRefs = ref<HTMLButtonElement[]>([]);
 const selectedLibraryIds = ref<string[]>([]);
 const batchLibraryTagIds = ref<string[]>([]);
 const libraryAiSuggestions = ref<Array<{ tagId: string; name: string; reason: string; selected: boolean }>>([]);
 const libraryAiStatus = ref('');
 const libraryAiRunning = ref(false);
 const filteredLibraryItems = computed(() => {
-  if (!libraryTagFilter.value) return wheelStore.libraryItems;
-  return wheelStore.libraryItems.filter(item => itemTagIds(item).includes(libraryTagFilter.value));
+  const keyword = libraryTextFilter.value.trim().replace(/\s+/g, ' ').toLowerCase();
+  return wheelStore.libraryItems.filter(item => {
+    const matchesTag = !libraryTagFilter.value || itemTagIds(item).includes(libraryTagFilter.value);
+    const matchesText = !keyword || `${item.name || ''} ${item.note || ''}`.replace(/\s+/g, ' ').trim().toLowerCase().includes(keyword);
+    return matchesTag && matchesText;
+  });
 });
+const selectedLibraryTag = computed(() => wheelStore.tags.find(tag => tag.id === libraryTagFilter.value) || null);
+const libraryFilterActive = computed(() => Boolean(libraryTagFilter.value || libraryTextFilter.value.trim()));
 const selectedLibrarySet = computed(() => new Set(selectedLibraryIds.value));
 const selectedVisibleLibraryCount = computed(() => filteredLibraryItems.value.filter(item => selectedLibrarySet.value.has(item.id)).length);
 const allVisibleLibrarySelected = computed(() => Boolean(filteredLibraryItems.value.length && selectedVisibleLibraryCount.value === filteredLibraryItems.value.length));
-const librarySelectionSummary = computed(() => libraryTagFilter.value && selectedLibraryIds.value.length !== selectedVisibleLibraryCount.value
+const librarySelectionSummary = computed(() => libraryFilterActive.value && selectedLibraryIds.value.length !== selectedVisibleLibraryCount.value
   ? `选中 ${selectedLibraryIds.value.length}（当前筛选 ${selectedVisibleLibraryCount.value}/${filteredLibraryItems.value.length}）`
   : `选中 ${selectedLibraryIds.value.length}/${filteredLibraryItems.value.length}`);
 const managementStats = computed(() => {
@@ -113,7 +123,10 @@ watch(() => wheelStore.wheels, wheels => {
 }, { immediate: true, deep: true });
 watch(selectedId, () => { stageTag.value = null; resultId.value = ''; notice.value = ''; });
 watch(displayEntries, () => { void nextTick(drawWheelCanvas); }, { immediate: true, deep: true });
-onMounted(drawWheelCanvas);
+onMounted(() => {
+  drawWheelCanvas();
+  document.addEventListener('click', onWheelDocumentClick);
+});
 watch([() => route.query.library, () => wheelStore.libraryItems.length], ([value]) => {
   const id = String(Array.isArray(value) ? value[0] || '' : value || '');
   if (!id) return;
@@ -154,6 +167,7 @@ watch(() => wheelStore.tags.map(tag => tag.id).join('|'), () => {
 onBeforeUnmount(() => {
   if (spinTimer) window.clearTimeout(spinTimer);
   if (spinFrame) window.cancelAnimationFrame(spinFrame);
+  document.removeEventListener('click', onWheelDocumentClick);
 });
 const copyableLibraryItems = computed(() => {
   if (!copyLibraryTagFilter.value) return wheelStore.libraryItems;
@@ -337,6 +351,68 @@ function clearCurrentResult() {
 }
 function itemTagIds(item: WheelItem) { return Array.isArray(item.tagIds) ? item.tagIds as string[] : []; }
 function libraryTagNames(item: WheelItem) { return itemTagIds(item).map(id => wheelStore.tags.find(tag => tag.id === id)?.name).filter(Boolean).join('、') || '未分类'; }
+function libraryTagOptions() { return [{ id: '', name: '全部标签', color: '#8a8f98' }, ...wheelStore.tags]; }
+function setLibraryTagOptionRef(element: unknown, index: number) {
+  if (element instanceof HTMLButtonElement) libraryTagOptionRefs.value[index] = element;
+}
+function focusLibraryTagOption(index: number) {
+  void nextTick(() => {
+    const options = libraryTagOptionRefs.value;
+    if (!options.length) return;
+    options[Math.max(0, Math.min(index, options.length - 1))]?.focus();
+  });
+}
+function toggleLibraryTagDropdown() {
+  libraryTagDropdownOpen.value = !libraryTagDropdownOpen.value;
+  if (libraryTagDropdownOpen.value) {
+    const currentIndex = libraryTagOptions().findIndex(tag => tag.id === libraryTagFilter.value);
+    focusLibraryTagOption(Math.max(0, currentIndex));
+  }
+}
+function chooseLibraryTagFilter(tagId: string) {
+  libraryTagFilter.value = tagId;
+  libraryTagDropdownOpen.value = false;
+  void nextTick(() => libraryTagTriggerRef.value?.focus());
+}
+function clearLibraryFilters() {
+  libraryTextFilter.value = '';
+  libraryTagFilter.value = '';
+  libraryTagDropdownOpen.value = false;
+}
+function onLibraryTagTriggerKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && libraryTagDropdownOpen.value) {
+    event.preventDefault();
+    libraryTagDropdownOpen.value = false;
+    return;
+  }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  libraryTagDropdownOpen.value = true;
+  const options = libraryTagOptions();
+  const currentIndex = Math.max(0, options.findIndex(tag => tag.id === libraryTagFilter.value));
+  if (event.key === 'End') focusLibraryTagOption(options.length - 1);
+  else if (event.key === 'Home') focusLibraryTagOption(0);
+  else focusLibraryTagOption(event.key === 'ArrowUp' ? Math.max(0, currentIndex - 1) : Math.min(options.length - 1, currentIndex + 1));
+}
+function onLibraryTagOptionKeydown(event: KeyboardEvent, index: number, tagId: string) {
+  const options = libraryTagOptions();
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    libraryTagDropdownOpen.value = false;
+    void nextTick(() => libraryTagTriggerRef.value?.focus());
+  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+    event.preventDefault();
+    if (event.key === 'Home') focusLibraryTagOption(0);
+    else if (event.key === 'End') focusLibraryTagOption(options.length - 1);
+    else focusLibraryTagOption(event.key === 'ArrowDown' ? (index + 1) % options.length : (index - 1 + options.length) % options.length);
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    chooseLibraryTagFilter(tagId);
+  }
+}
+function onWheelDocumentClick(event: MouseEvent) {
+  if (!(event.target as Element | null)?.closest('.library-tag-filter')) libraryTagDropdownOpen.value = false;
+}
 function resetWheelForm() { Object.assign(wheelForm, { id: '', name: '', mode: 'normal', tagIds: [], itemsText: '' }); wheelCreateItems.value = [{ name: '', weight: 1 }]; }
 function editWheel() {
   const wheel = selectedWheel.value;
@@ -461,13 +537,13 @@ function clearLibraryAiSuggestions() {
   libraryAiSuggestions.value = [];
   libraryAiStatus.value = '';
 }
-function resetLibraryForm() { Object.assign(libraryForm, { id: '', name: '', tagIds: [], weight: 1, enabled: true }); clearLibraryAiSuggestions(); }
+function resetLibraryForm() { Object.assign(libraryForm, { id: '', name: '', note: '', tagIds: [], weight: 1, enabled: true }); clearLibraryAiSuggestions(); }
 function editLibrary(item: WheelItem) {
   showManagement.value = true;
   activeManagementPanel.value = 'library';
   menuOpen.value = false;
   clearLibraryAiSuggestions();
-  Object.assign(libraryForm, { id: item.id, name: item.name, tagIds: [...(Array.isArray(item.tagIds) ? item.tagIds as string[] : [])], weight: item.weight, enabled: item.enabled });
+  Object.assign(libraryForm, { id: item.id, name: item.name, note: item.note || '', tagIds: [...(Array.isArray(item.tagIds) ? item.tagIds as string[] : [])], weight: item.weight, enabled: item.enabled });
 }
 function getWheelAiConfig() {
   try {
@@ -1030,18 +1106,26 @@ function importJson(event: Event) {
         <div v-for="tag in wheelStore.tags" :key="tag.id" class="entity-row" :data-wheel-tag-id="tag.id"><span><i class="color-dot" :style="{ background: tag.color }" /><strong>{{ tag.name }}</strong><em>权重 {{ tag.weight }} · {{ tagCandidateCount(tag) }} 个公共项 · {{ tag.enabled ? '启用' : '停用' }}</em></span><span class="tag-row-actions"><button class="link-button" :disabled="tag.enabled === false || !tagCandidateCount(tag)" @click="directTag(tag)">只转这个标签</button><button class="link-button" :disabled="tag.enabled === false || !tagCandidateCount(tag)" @click="previewTagStage(tag)">先看这个标签池</button><button class="link-button" @click="toggleTagEnabled(tag)">{{ tag.enabled === false ? '启用' : '停用' }}</button><button class="link-button" @click="editTag(tag)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除标签“${tag.name}”吗？`, () => wheelStore.deleteTag(tag.id))">删除</button></span></div>
       </article>
       <article id="wheel-library-panel" class="card library-card">
-        <div class="card-title-row">
-          <div class="card-title">公共项库</div>
-          <label class="library-filter">
-            <span>按标签筛选</span>
-            <select v-model="libraryTagFilter" aria-label="公共项标签筛选">
-              <option value="">全部标签</option>
-              <option v-for="tag in wheelStore.tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-            </select>
-          </label>
+        <div class="card-title-row library-card-title-row">
+          <div><div class="card-title">公共项库</div><span class="library-filter-result">显示 {{ filteredLibraryItems.length }} / {{ wheelStore.libraryItems.length }} 项</span></div>
+          <button v-if="libraryFilterActive" class="link-button" type="button" @click="clearLibraryFilters">清除筛选</button>
+        </div>
+        <div class="library-filter-toolbar" :class="{ active: libraryFilterActive }">
+          <label class="library-text-filter"><span>名称或备注</span><input v-model="libraryTextFilter" type="search" aria-label="公共项文本筛选" placeholder="搜索公共项名称或备注" /></label>
+          <div class="library-tag-filter">
+            <span class="library-filter-label">标签</span>
+            <button ref="libraryTagTriggerRef" class="library-tag-trigger" type="button" aria-label="公共项标签筛选" aria-haspopup="listbox" :aria-expanded="libraryTagDropdownOpen" @click.stop="toggleLibraryTagDropdown" @keydown="onLibraryTagTriggerKeydown">
+              <i class="color-dot" :style="{ background: selectedLibraryTag?.color || '#8a8f98' }" />
+              <span>{{ selectedLibraryTag?.name || '全部标签' }}</span><b aria-hidden="true">⌄</b>
+            </button>
+            <div v-show="libraryTagDropdownOpen" class="library-tag-options" role="listbox" aria-label="公共项标签选项" @click.stop>
+              <button v-for="(tag, index) in libraryTagOptions()" :key="tag.id || 'all'" :ref="element => setLibraryTagOptionRef(element, index)" type="button" role="option" :aria-selected="libraryTagFilter === tag.id" :class="{ selected: libraryTagFilter === tag.id }" @click="chooseLibraryTagFilter(tag.id)" @keydown="onLibraryTagOptionKeydown($event, index, tag.id)"><i class="color-dot" :style="{ background: tag.color }" /><span>{{ tag.name }}</span><b v-if="libraryTagFilter === tag.id" aria-hidden="true">✓</b></button>
+            </div>
+          </div>
         </div>
         <form class="library-form" @submit.prevent="submitLibrary">
           <label class="field-label"><span>公共项名称</span><input v-model="libraryForm.name" required placeholder="公共项名称" /></label>
+          <label class="field-label library-note-field"><span>备注</span><input v-model="libraryForm.note" placeholder="可选，用于说明场景并支持筛选" /></label>
           <label class="field-label field-small"><span>权重</span><input v-model.number="libraryForm.weight" type="number" min="1" /></label>
           <label class="check-label"><input v-model="libraryForm.enabled" type="checkbox" />启用</label>
           <button class="btn btn-secondary" type="button" :disabled="libraryAiRunning" @click="suggestLibraryTags">{{ libraryAiRunning ? '推荐中…' : 'AI 推荐标签' }}</button>
@@ -1083,7 +1167,7 @@ function importJson(event: Event) {
         </div>
         <div v-for="item in filteredLibraryItems" :key="item.id" class="entity-row library-row" :data-wheel-library-id="item.id" :class="{ selected: selectedLibrarySet.has(item.id) }">
           <label class="library-select"><input v-model="selectedLibraryIds" type="checkbox" :value="item.id" :aria-label="`选择公共项 ${item.name}`" /></label>
-          <span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }} · {{ libraryTagNames(item) }}</em></span>
+          <span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }} · {{ libraryTagNames(item) }}</em><small v-if="item.note" class="library-item-note">{{ item.note }}</small></span>
           <span><button class="link-button" @click="editLibrary(item)">编辑</button><button class="link-button" @click="toggleLibraryEnabled(item)">{{ item.enabled ? '停用' : '启用' }}</button><button class="link-button danger-text" @click="confirmAction(`删除公共项“${item.name}”吗？`, () => wheelStore.deleteLibraryItem(item.id), '已删除公共项')">删除</button></span>
         </div>
         <p v-if="!filteredLibraryItems.length" class="empty-state">当前筛选下没有公共项。</p>
@@ -1110,6 +1194,7 @@ function importJson(event: Event) {
 .wheel-copy-row{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(180px,1.3fr) auto;gap:8px;align-items:center}.wheel-copy-row select{min-height:38px;min-width:0}
 .tag-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
 .library-batch-tools{margin-top:12px}
+.library-card-title-row{align-items:flex-end}.library-filter-result{display:block;margin-top:4px;color:#74817b;font-size:12px}.library-filter-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,.42fr);gap:10px;align-items:end;margin:12px 0;padding:12px;border:1px solid rgba(215,224,232,.95);border-radius:14px;background:#fafbfd}.library-filter-toolbar.active{border-color:rgba(33,110,78,.35);background:#f4faf6;box-shadow:0 0 0 2px rgba(33,110,78,.06)}.library-text-filter{display:grid;gap:6px;min-width:0}.library-text-filter span,.library-filter-label{color:#74817b;font-size:11px;font-weight:850}.library-text-filter input{min-width:0;width:100%}.library-tag-filter{position:relative;display:grid;gap:6px;min-width:0}.library-tag-trigger{display:flex;align-items:center;gap:8px;width:100%;min-height:42px;padding:9px 11px;border:1px solid rgba(205,216,225,.98);border-radius:10px;background:#fff;color:#2b3a33;cursor:pointer;font:inherit;font-size:13px;font-weight:800;text-align:left}.library-tag-trigger span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.library-tag-trigger b{color:#74817b}.library-tag-options{position:absolute;z-index:60;top:calc(100% + 7px);right:0;display:grid;width:max(220px,100%);max-height:270px;overflow:auto;padding:6px;border:1px solid rgba(215,224,232,.98);border-radius:13px;background:#fff;box-shadow:0 18px 42px rgba(35,60,45,.18)}.library-tag-options button{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;padding:8px 9px;border:0;border-radius:9px;background:transparent;color:#3c4b44;cursor:pointer;font:inherit;font-size:13px;text-align:left}.library-tag-options button:hover,.library-tag-options button:focus{outline:none;background:#f2f7f4}.library-tag-options button.selected{background:#e8f5ed;color:#216e4e;font-weight:850}.library-tag-options button span{flex:1}.library-note-field{grid-column:1 / -1}.library-item-note{display:block;margin-top:4px;color:#74817b;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
 .wheel-list-management{display:grid;gap:12px;margin-top:16px}.wheel-list-mode-filter{display:flex;flex-wrap:wrap;gap:6px}.wheel-list-mode-filter button{min-height:34px;padding:7px 12px;border:1px solid rgba(215,224,232,.95);border-radius:10px;background:#fff;color:#53625a;cursor:pointer;font:inherit;font-size:12px;font-weight:800}.wheel-list-mode-filter button.active{background:#eaf5ee;border-color:#a6cdb3;color:#216e4e}.wheel-list-stack{display:grid;gap:10px}.wheel-list-empty{display:grid;gap:8px;justify-items:center;align-content:center;padding:28px 16px}.wheel-list-empty strong{font-size:14px;color:#2b3a33}.wheel-list-empty .wheel-hint{display:block}.wheel-list-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid rgba(220,228,235,.96);border-radius:14px;background:#fff}.wheel-list-card.selected{border-color:#a8cdb4;box-shadow:0 0 0 2px rgba(33,110,78,.08)}.wheel-list-card-main{display:grid;gap:7px;min-width:0}.wheel-list-card-title{display:flex;align-items:center;gap:8px;min-width:0}.wheel-list-card-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wheel-list-card-meta{display:flex;flex-wrap:wrap;gap:8px;color:#74817b;font-size:12px}.wheel-list-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#f3f6f4;color:#53625a;font-size:11px;font-weight:800}.wheel-list-badge.current{background:#e8f5ed;color:#216e4e}.wheel-list-card-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;flex-shrink:0}.wheel-mini-btn{min-height:32px;padding:6px 10px;border:1px solid rgba(215,224,232,.95);border-radius:9px;background:#fff;color:#53625a;cursor:pointer;font:inherit;font-size:12px;font-weight:800}.wheel-mini-btn.primary{background:#eef8f1;border-color:#afd1b8;color:#216e4e}.wheel-mini-btn.danger{color:#b64d47}
 .history-head-actions,.history-row-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}.history-done{color:#688276;font-size:12px}
 .wheel-create-items{display:grid;gap:8px}.wheel-create-item-row{display:grid;grid-template-columns:minmax(0,1fr) 84px auto;gap:8px;align-items:center}.wheel-create-item-row input{min-width:0}
@@ -1145,5 +1230,9 @@ function importJson(event: Event) {
 .wheel-management-block[data-management-panel="history"] #wheel-create-panel,
 .wheel-management-block[data-management-panel="history"] .wheel-management-grid {
   display: none !important;
+}
+@media (max-width: 700px) {
+  .library-filter-toolbar{grid-template-columns:minmax(0,1fr)}
+  .library-tag-options{position:fixed;left:10px;right:10px;top:auto;bottom:10px;width:auto;max-height:min(52vh,360px);border-radius:18px;padding:10px}
 }
 </style>

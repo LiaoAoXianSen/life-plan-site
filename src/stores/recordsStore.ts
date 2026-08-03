@@ -44,6 +44,7 @@ type DiaryAiSectionKey = 'oneLine' | 'review' | 'tomorrow' | 'improve' | 'thinki
 type DiaryAiTodoInput = Partial<Todo> & Pick<Todo, 'text'>;
 type AiCaptureApplyResult = { id: string; type: string; created: boolean };
 type MaterialInput = {
+  title: string;
   type: string;
   content: string;
   tags: string[];
@@ -466,6 +467,7 @@ export const useRecordsStore = defineStore('records', () => {
     lifePlan.mutate(id ? 'update-material' : 'create-material', data => {
       const now = getNowLocal();
       const next = {
+        title: input.title.trim(),
         type: materialTypes.has(input.type) ? input.type : '摘抄',
         content,
         tags: services.records.getIdeaTags({ ideaTags: input.tags }),

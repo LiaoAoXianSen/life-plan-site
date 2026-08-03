@@ -75,6 +75,14 @@ function firstId(items: DataEntity[]) {
 function totalCount(item: TagCenterItem) {
   return item.ideas.length + item.materials.length + item.wheelItems.length;
 }
+
+function materialPreview(material: DataEntity) {
+  const explicit = String(material.title || '').replace(/\s+/g, ' ').trim();
+  if (explicit) return explicit;
+  const firstLine = String(material.content || '').split(/\r?\n/).map(line => line.trim()).find(Boolean) || '';
+  const clean = firstLine.replace(/\s+/g, ' ').trim();
+  return clean.length > 34 ? `${clean.slice(0, 33).trimEnd()}…` : clean || '空素材';
+}
 </script>
 
 <template>
@@ -123,7 +131,7 @@ function totalCount(item: TagCenterItem) {
         </div>
         <div class="tag-center-preview">
           <span v-if="item.ideas[0]">灵感：{{ item.ideas[0].title || '未命名灵感' }}</span>
-          <span v-if="item.materials[0]">素材：{{ String(item.materials[0].content || '').slice(0, 34) }}</span>
+          <span v-if="item.materials[0]">素材：{{ materialPreview(item.materials[0]) }}</span>
           <span v-if="item.wheelItems[0]">转盘：{{ item.wheelItems[0].name || '未命名公共项' }}</span>
         </div>
       </article>
