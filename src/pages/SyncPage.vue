@@ -39,21 +39,21 @@ bindMainCloudSync({
   getData: () => store.data,
   replaceData: (next, reason) => store.replace(next, reason, 'sync'),
   onStatus: (message, isError) => {
-    autoStatus.value = isError ? `自动同步失败：${message}` : message;
+    status.value = isError ? `自动同步失败：${message}` : message;
   },
 });
 bindWheelCloudSync({
   getData: () => store.data,
   replaceData: (next, reason) => store.replace(next, reason, 'sync'),
   onStatus: (message, isError) => {
-    autoStatus.value = isError ? `Wheel 自动同步失败：${message}` : message;
+    status.value = isError ? `Wheel 自动同步失败：${message}` : message;
   },
 });
 bindHabitCloudSync({
   getData: () => store.data,
   replaceData: (next, reason) => store.replace(next, reason, 'sync'),
   onStatus: (message, isError) => {
-    autoStatus.value = isError ? `Habit 自动同步失败：${message}` : message;
+    status.value = isError ? `Habit 自动同步失败：${message}` : message;
   },
 });
 
@@ -80,7 +80,6 @@ function writeSyncState(next: SyncState) {
 
 function rememberRemoteVersion(remote: RemotePayload | null, state: SyncState) {
   if (!remote) return;
-  state.lastRemoteHash = remote.hash;
   if (remote.etag) state.lastRemoteEtag = remote.etag;
 }
 
@@ -135,17 +134,27 @@ async function pushWithEtag(ifMatch = '') {
   return await sync.pushJson(config, normalizeRemotePath(), store.data, 'life-plan', { ifMatch }) as { etag?: string };
 }
 
-function saveConfig() {
+async function saveConfig() {
   normalizeRemotePath();
   Object.assign(config, saveMainSyncConfig({ ...config, autoSync: !!config.autoSync }));
   startMainAutoSyncEngine();
   startTodoAutoSyncEngine();
   startWheelAutoSyncEngine();
   startHabitAutoSyncEngine();
-  autoStatus.value = configStatusHint();
-  status.value = config.autoSync
-    ? '配置已保存；主数据自动同步与页面恢复同步已启用。'
-    : '配置已保存；主数据自动同步已关闭。';
+  const savedMessage = config.autoSync
+    ? `${configStatusHint()}；配置已保存；主数据自动同步与页面恢复同步已启用。`
+    : `${configStatusHint()}；配置已保存；主数据自动同步已关闭。`;
+  autoStatus.value = savedMessage;
+  status.value = savedMessage;
+  if (config.webdavUrl) {
+    try {
+      await runMainCloudSyncBoth({ force: true, source: 'config-save-auto-sync' });
+      autoStatus.value = `${configStatusHint()}；${status.value}`;
+    } catch (error) {
+      status.value = error instanceof Error ? error.message : String(error);
+      autoStatus.value = `${configStatusHint()}；${savedMessage}；${status.value}`;
+    }
+  }
 }
 
 async function testConnection() {
@@ -168,9 +177,11 @@ async function runAutoNow() {
   status.value = '';
   try {
     await runMainCloudSyncBoth({ force: true, source: 'manual-auto-both' });
-    status.value = autoStatus.value || '已执行一次主数据自动同步流程。';
+    status.value = status.value || '已执行一次主数据自动同步流程。';
+    autoStatus.value = `${configStatusHint()}；${status.value}`;
   } catch (error) {
     status.value = error instanceof Error ? error.message : String(error);
+    autoStatus.value = `${configStatusHint()}；${status.value}`;
   } finally {
     busy.value = false;
   }
@@ -311,7 +322,7 @@ async function importFile(event: Event) {
         <button class="btn btn-secondary" type="button" @click="saveConfig">保存配置</button>
         <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="runAutoNow">立即自动同步一次</button>
       </div>
-      <p v-if="autoStatus" class="sync-status active">{{ autoStatus }}</p>
+      <p v-if="autoStatus" class="sync-modal-status sync-status active">{{ autoStatus }}</p>
     </article>
 
     <article class="card">

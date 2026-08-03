@@ -365,3 +365,27 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | Habits summary initially labeled any non-zero checkin streak as completed continuity | Read-only sidecar audit compared the new UI with `habitsStore` target-aware streak helpers | Renamed the computed field and UI label to `连续有打卡` so it does not claim target completion for multi-count or non-daily habits |
 | Full 84-test Vue smoke exceeded the first 184-second check gate and the extended 300-second run reported six failures | The alternative full run reached 78/84; three Wheel auto-sync failures were stale hidden-management locators, import/export had two file inputs, navigation used sidebar buttons as links, and AI chatCapture used a fixed prior-day fixture | Updated only the stale Wheel/import/navigation locators; focused reruns passed 7/7. Left the date-sensitive AI fixture unchanged because it is outside this shell slice and no persistence code changed |
 | Push attempts for the verified Fitness trend and Wheel empty-stage commits repeatedly failed with GitHub HTTPS 443 reset/timeout | Retried normal push, HTTP/1.1, and porcelain push after successful local verification | Kept both commits local and intact; remote tracking point remains `2e908cf`, with no force push or branch changes |
+
+## Current task - Vue main sync re-audit
+
+- Status: complete - Recheck the current master-to-Vue sync behavior after the user reported that entering the online sync address does not pull data while export/import works.
+- Scope: compare `master:app.js` startup/config-save sync behavior with `src/App.vue`, `src/pages/SyncPage.vue`, `src/services/mainCloudSync.ts`, and existing Vue contracts.
+- Current finding: `master` performs an immediate `runCloudSync('both')` after startup and after saving sync settings; Vue only starts background engines and does not trigger an immediate sync in either path.
+- Verification: source comparison confirmed the two missing immediate-sync calls; repository Playwright runner passed the 3 Sync-page tests and 7 main-sync/auto-sync tests. No production files were changed in this diagnostic pass.
+
+## Errors Encountered
+
+| Error | Attempt | Resolution |
+|---|---|---|
+| Node stdin rejected top-level `await` in the browser probe | 1 | Wrap the Playwright probe in an async IIFE before rerunning; no application files changed |
+| Inline Playwright probe timed out before producing a request trace | 2 | Stop using the bare Node probe; use the repository Playwright runner/configuration for focused verification |
+| Initial process cleanup command returned an abnormal exit code while stopping the local probe server | 3 | Checked the exact remaining node PID, stopped it, and verified port 5173 was free |
+
+## Current task - Implement Vue main sync repair
+
+- Status: complete - Restore the master-compatible immediate main sync on Vue startup and after saving the sync configuration.
+- Implementation: update `src/App.vue` and `src/pages/SyncPage.vue`; preserve existing ETag, merge, snapshot, dirty-state, and independent module safeguards.
+- Implementation also adds the legacy outer sidebar reminder in `src/components/AppSidebar.vue` and broadcasts status from `src/services/mainCloudSync.ts` so the full message/time appears outside the sync page.
+- Tests: focused sync/reminder coverage passed `10/10`; full Vue smoke passed `223/223`; production build, `git diff --check`, and Vue dist packaging passed.
+- Artifact: `life-plan-site-vue-dist-20260803-214454.zip`.
+- Deployment: local Vue artifact is ready; no production switch or push was performed because the deployment target was not provided and project policy keeps live switching out of scope.

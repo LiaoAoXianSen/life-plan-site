@@ -303,3 +303,19 @@
 - Live browser inspection found two additional migration regressions not covered by behavioral tests: the fixed custom tag menu could open below the viewport after list mutations, and Vue management classes lacked the legacy form/list styles. The menu now flips/clamps within the viewport, and Wheel forms, entity rows, list cards, history rows, imports, and mobile layouts have scoped styles.
 - Verification: `npm run build`; Wheel 34/34; Materials 5/5; full Vue smoke 219/219; `git diff --check`; `npm run package:vue` produced `life-plan-site-vue-dist-20260803-175211.zip`. Browser checks covered Wheel desktop, Wheel library/list management, Materials empty state, mobile layout, and document/page horizontal overflow.
 - A parallel Materials run once observed both expected list contents missing while four later tests passed; an isolated rerun passed 5/5, and the final serial full suite passed 219/219. No unresolved runtime failure remains.
+
+## 2026-08-03 Vue sync report audit
+
+- `master:app.js` performs an initial main sync after `init()` when `syncConfig.autoSync && syncConfig.webdavUrl` (`master:app.js:11983-11992`). Its `saveSyncSettings()` also persists the form, starts the periodic engine, then immediately awaits `runCloudSync('both')` (`master:app.js:5834-5841`).
+- Vue `src/App.vue` only calls `lifePlan.load()`, binds sync services, and starts background engines; its comment explicitly suppresses startup sync. Vue `src/pages/SyncPage.vue` saves config and restarts engines but never invokes `runMainCloudSyncBoth()`.
+- This explains a fresh Vue client with a valid remote address appearing unable to sync: no GET is issued at configuration-save or application-start time. The remote is only checked after a user commit debounce, visibility resume, or periodic timer, unless the user separately presses an explicit sync button.
+- Vue already contains the later main-sync parity fixes inspected so far: ETag conditional writes/conflict retry, missing-remote recreation, import dirty notifications, provider-flag preservation, and connection testing. Export/import working therefore does not disprove a sync-trigger regression.
+- Verification: `npx playwright test tests/vue-smoke.spec.js --grep "sync page"` passed 3/3, and `npx playwright test tests/vue-smoke.spec.js --grep "main sync|main auto sync"` passed 7/7. These existing tests cover sync mechanics but do not assert startup/config-save GET behavior.
+- Diagnostic conclusion: the primary Vue regression is missing immediate sync invocation, not the JSON import/export contract. The smallest parity repair should invoke the main both-direction sync after Vue startup when auto sync is configured and await it after saving a new sync configuration, with focused tests for both request sequences.
+
+## 2026-08-03 Vue sync repair closeout
+
+- Restored the two missing triggers: Vue now runs main both-direction sync on startup when configured and immediately after saving the sync address, matching `master:app.js`.
+- `mainCloudSync` now emits browser status events for the global shell; Vue's sidebar renders the separate legacy-style full reminder below the data/backup controls, while the compact pill remains available in the summary row.
+- Browser verification confirmed the reminder is visible at both 1440px and 390px widths and renders `云端和本地一致，无需同步 20:39:18` as a complete message.
+- Focused sync/reminder tests passed `10/10`; full Vue smoke passed `223/223`; build, diff check, and package passed. Artifact: `life-plan-site-vue-dist-20260803-214454.zip`.

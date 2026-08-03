@@ -12,6 +12,8 @@ type SyncConfig = {
 
 type SyncState = Record<string, unknown> & {
   dirty?: boolean;
+  lastLocalHash?: string;
+  lastLocalUpdateAt?: string;
   lastRemoteHash?: string;
   lastRemoteEtag?: string;
   lastPullAt?: string;
@@ -43,6 +45,15 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function formatClockTime(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function withClockTime(message: string) {
+  return `${message} ${formatClockTime()}`;
+}
+
 function normalizeConfig(raw: Partial<SyncConfig> = {}): SyncConfig {
   const next: SyncConfig = {
     webdavUrl: String(raw.webdavUrl || ''),
@@ -58,7 +69,21 @@ function normalizeConfig(raw: Partial<SyncConfig> = {}): SyncConfig {
 function readConfig(): SyncConfig {
   try {
     const raw = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}') as Partial<SyncConfig>;
-    return normalizeConfig(raw);
+    let migratedFromWheel = false;
+    if (!raw.webdavUrl) {
+      try {
+        const legacyWheelConfig = JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig') || '{}') as { webdavUrl?: unknown };
+        if (legacyWheelConfig.webdavUrl) {
+          raw.webdavUrl = String(legacyWheelConfig.webdavUrl);
+          migratedFromWheel = true;
+        }
+      } catch {
+        // Ignore malformed legacy wheel settings and keep the main settings usable.
+      }
+    }
+    const next = normalizeConfig(raw);
+    if (migratedFromWheel) localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
+    return next;
   } catch {
     return { webdavUrl: '', remotePath: '/life-plan.json', autoSync: true };
   }
@@ -94,7 +119,6 @@ function emitStatus(message: string, isError = false) {
 
 function rememberRemoteVersion(remote: RemotePayload | null, state: SyncState) {
   if (!remote) return;
-  state.lastRemoteHash = remote.hash;
   if (remote.etag) state.lastRemoteEtag = remote.etag;
 }
 
@@ -141,6 +165,7 @@ function updateAfterPush(data: LifePlanData, response: { etag?: string }, fallba
   writeState({
     ...state,
     dirty: false,
+    lastLocalHash: hash,
     lastRemoteHash: hash,
     lastRemoteEtag: response.etag || fallbackEtag || state.lastRemoteEtag || '',
     lastPushAt: stamp,
@@ -156,6 +181,11 @@ export function bindMainCloudSync(options: {
   dataProvider = options.getData;
   dataReplacer = options.replaceData;
   statusHandler = options.onStatus || null;
+  const state = readState();
+  const localHash = sync.getDataHash(dataProvider());
+  if (!state.lastLocalHash) {
+    writeState({ ...state, lastLocalHash: localHash });
+  }
 }
 
 export function getMainSyncConfig() {
@@ -181,11 +211,15 @@ export async function runMainCloudSyncBoth(options: { source?: string; force?: b
 
   isCloudSyncing = true;
   try {
+    emitStatus(withClockTime('正在同步...'));
     const current = dataProvider!();
     const localHash = sync.getDataHash(current);
     const state = readState();
     const remote = await fetchRemote(config);
-    const localChanged = state.dirty === true || (!!state.lastRemoteHash && state.lastRemoteHash !== localHash);
+    const previousRemoteHash = String(state.lastRemoteHash || '');
+    const localChanged = state.dirty === true
+      || (!!previousRemoteHash && previousRemoteHash !== localHash)
+      || (!previousRemoteHash && !!remote && localHash !== remote.hash);
 
     if (!remote) {
       lifePlanRepository.createSnapshot('自动上传前', current, {
@@ -194,26 +228,28 @@ export async function runMainCloudSyncBoth(options: { source?: string; force?: b
       });
       const response = await pushWithEtag(config, current, '');
       updateAfterPush(current, response);
-      emitStatus('云端文件不存在，已自动上传本地主数据');
+      emitStatus(withClockTime('云端文件不存在，已自动上传本地主数据'));
       return { uploaded: true };
     }
 
     rememberRemoteVersion(remote, state);
-    const remoteChanged = remote.hash !== localHash && (!state.lastRemoteHash || remote.hash !== state.lastRemoteHash);
+    const remoteChanged = !!remote && !!previousRemoteHash && remote.hash !== previousRemoteHash;
 
     if (!localChanged && !remoteChanged) {
       writeState({
         ...state,
         dirty: false,
+        lastLocalHash: localHash,
         lastRemoteHash: remote.hash,
         lastRemoteEtag: remote.etag || state.lastRemoteEtag || '',
         lastSyncAt: nowIso(),
       });
-      emitStatus('云端和本地一致，无需同步');
+      emitStatus(withClockTime('云端和本地一致，无需同步'));
       return { synced: true, unchanged: true };
     }
 
     if (!localChanged && remoteChanged) {
+      const remoteEtag = remote.etag || String(state.lastRemoteEtag || '');
       const merged = createMergeSnapshots('拉取云端安全合并', current, remote, 'auto-pull', options.source || 'vue-main-auto-sync');
       dataReplacer!(merged, 'auto-pull-merge');
       const mergedHash = sync.getDataHash(merged);
@@ -221,6 +257,7 @@ export async function runMainCloudSyncBoth(options: { source?: string; force?: b
       writeState({
         ...readState(),
         dirty: shouldUpload,
+        lastLocalHash: mergedHash,
         lastRemoteHash: remote.hash,
         lastRemoteEtag: remote.etag || '',
         lastPullAt: nowIso(),
@@ -228,12 +265,12 @@ export async function runMainCloudSyncBoth(options: { source?: string; force?: b
       });
       if (shouldUpload) {
         const latest = dataProvider!();
-        const response = await pushWithEtag(config, latest, remote.etag || '');
-        updateAfterPush(latest, response, remote.etag || '');
-        emitStatus('发现云端更新，已安全合并并回传');
+        const response = await pushWithEtag(config, latest, remoteEtag);
+        updateAfterPush(latest, response, remoteEtag);
+        emitStatus(withClockTime('发现云端更新，已安全合并并回传'));
         return { merged: true, uploaded: true };
       }
-      emitStatus('发现云端更新，已安全合并');
+      emitStatus(withClockTime('发现云端更新，已安全合并'));
       return { merged: true };
     }
 
@@ -253,10 +290,10 @@ export async function runMainCloudSyncBoth(options: { source?: string; force?: b
         dataReplacer!(merged, 'auto-etag-conflict-merge');
         const response = await pushWithEtag(config, dataProvider!(), latestRemote.etag);
         updateAfterPush(dataProvider!(), response, latestRemote.etag);
-        emitStatus('云端版本变化，已合并后重新上传');
+        emitStatus(withClockTime('云端版本变化，已合并后重新上传'));
         return { merged: true, uploaded: true, conflict: true };
       }
-      emitStatus('发现本地更新，已上传');
+      emitStatus(withClockTime('发现本地更新，已上传'));
       return { uploaded: true };
     }
 
@@ -265,14 +302,16 @@ export async function runMainCloudSyncBoth(options: { source?: string; force?: b
     writeState({
       ...readState(),
       dirty: true,
+      lastLocalHash: sync.getDataHash(merged),
       lastRemoteHash: remote.hash,
       lastRemoteEtag: remote.etag || '',
       lastPullAt: nowIso(),
       lastConflictAt: nowIso(),
     });
-    const response = await pushWithEtag(config, dataProvider!(), remote.etag || '');
-    updateAfterPush(dataProvider!(), response, remote.etag || '');
-    emitStatus('本地和云端都有变化，已按条目时间保守合并');
+    const remoteEtag = remote.etag || String(state.lastRemoteEtag || '');
+    const response = await pushWithEtag(config, dataProvider!(), remoteEtag);
+    updateAfterPush(dataProvider!(), response, remoteEtag);
+    emitStatus(withClockTime('本地和云端都有变化，已按条目时间保守合并'));
     return { merged: true, uploaded: true, conflict: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

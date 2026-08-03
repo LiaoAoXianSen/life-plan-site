@@ -676,3 +676,24 @@
 - Updated `tests/vue-smoke.spec.js` for the legacy seed contract, mode-first tag flow, expanded batch controls, and normal/tag-only list filtering.
 - Verification passed: `npm run build`; Wheel 34/34; Materials 5/5; full `npm test` 219/219; `git diff --check`; `npm run package:vue`.
 - Visual verification used the preview server at `http://127.0.0.1:5175`, with Wheel main/library/list and Materials screenshots plus desktop/mobile overflow checks. Artifact: `life-plan-site-vue-dist-20260803-175211.zip`.
+
+## 2026-08-03 - Vue sync re-audit
+
+- Started from the current worktree and preserved user-owned Wheel changes/untracked preview artifacts.
+- Compared `master:app.js` with Vue sync modules and traced the legacy sync lifecycle.
+- Confirmed the likely behavioral gap: master immediately syncs on startup and after saving configuration; Vue currently does neither.
+- Next: run focused browser request-sequence checks before editing implementation.
+- Browser probe setup reached the local Vite page, but the first inline Node script failed before launch because stdin does not allow top-level `await`; retrying with an async wrapper.
+- The async-wrapped bare Node Playwright probe timed out before emitting a trace; switched to the repository's Playwright runner instead of repeating the same harness.
+- Repository Playwright verification passed: Sync page configuration tests 3/3; main sync and auto-sync tests 7/7.
+- Final diagnosis: Vue omits the master startup sync and post-save sync calls. No production code was changed in this diagnostic pass; the local probe server was stopped and port 5173 verified free.
+
+## 2026-08-03 - Vue sync repair
+
+- User authorized implementation and later direct release after the master/Vue audit.
+- Restored master-compatible immediate main sync after Vue startup and after saving the main sync configuration in `src/App.vue`, `src/pages/SyncPage.vue`, and `src/services/mainCloudSync.ts`.
+- Added the missing standalone outer sidebar reminder in `src/components/AppSidebar.vue`, including full status text/time and summary labels for pending, syncing, success, and failure states.
+- Added regression coverage for startup/config-save request sequences, remote changes, legacy config migration, status events, and the full sidebar reminder; focused coverage passed `10/10`.
+- Verification passed: `npm run build`, full Vue smoke `223/223`, `git diff --check`, and `npm run package:vue`.
+- Generated artifact: `life-plan-site-vue-dist-20260803-214454.zip`.
+- Deployment remains local artifact validation only; no live production switch or push was performed.

@@ -82,6 +82,11 @@ const snapshotStats = computed(() => (showSnapshots.value ? lifePlan.getSnapshot
 const selectedSnapshot = computed(() => snapshots.value.find(item => String(item.id || '') === previewSnapshotId.value) || null);
 const selectedSnapshotSummary = computed(() => selectedSnapshot.value ? getSnapshotSummary(selectedSnapshot.value) : null);
 
+function formatSyncClock(value = '') {
+  const match = String(value || '').match(/T(\d{2}:\d{2}(?::\d{2})?)/);
+  return match ? match[1].padEnd(8, ':00') : '';
+}
+
 function summarizeMainSyncStatus(message = '', isError = false, configured = false) {
   const text = String(message || '').trim();
   if (isError) return '同步：失败';
@@ -138,6 +143,24 @@ const mainSyncLabel = computed(() => {
     return '同步：待检查';
   } catch {
     return '同步：未配置';
+  }
+});
+
+const mainSyncMessage = computed(() => {
+  if (mainSyncStatus.value?.message) return mainSyncStatus.value.message;
+  mainSyncConfigVersion.value;
+  try {
+    const config = JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}') as { webdavUrl?: string };
+    const state = JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}') as {
+      dirty?: boolean;
+      lastSyncAt?: string;
+    };
+    if (!config.webdavUrl) return '未配置云同步';
+    if (state.dirty) return '本地有更新，等待自动同步';
+    if (state.lastSyncAt) return `上次同步 ${formatSyncClock(state.lastSyncAt)}`;
+    return '同步状态待检查';
+  } catch {
+    return '未配置云同步';
   }
 });
 
@@ -337,7 +360,7 @@ function restoreSnapshot(item: SnapshotItem) {
       <summary>
         <span>数据与备份</span>
         <span class="sync-status-stack">
-          <span class="sync-status-inline">{{ mainSyncLabel }}</span>
+          <span :class="['sync-status-inline', { 'is-error': mainSyncStatus?.isError }]">{{ mainSyncLabel }}</span>
           <span class="sync-status-inline">{{ wheelSyncLabel }}</span>
         </span>
       </summary>
@@ -360,6 +383,9 @@ function restoreSnapshot(item: SnapshotItem) {
           <button class="btn btn-secondary" type="button" @click="openSnapshotModal">管理快照</button>
           <button class="btn btn-primary" type="button" @click="retryLocalSave">重试保存</button>
         </div>
+      </div>
+      <div :class="['sync-status', 'active', { 'is-error': mainSyncStatus?.isError }]" role="status">
+        {{ mainSyncMessage }}
       </div>
     </details>
 

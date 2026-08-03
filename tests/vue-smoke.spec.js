@@ -743,7 +743,7 @@ test('records day view falls back to the base habit tone for unknown tags', asyn
 test('sidebar reads the legacy wheel sync state key', async ({ page }) => {
     await page.addInitScript(data => {
         localStorage.setItem('lifePlanData', JSON.stringify(data));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://dav.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://dav.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanWheelSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'wheel-hash' }));
     }, emptyData());
     await page.goto('/#/dashboard');
@@ -753,7 +753,7 @@ test('sidebar reads the legacy wheel sync state key', async ({ page }) => {
 test('sidebar summarizes main sync state with legacy status labels', async ({ page }) => {
     await page.addInitScript(data => {
         localStorage.setItem('lifePlanData', JSON.stringify(data));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://dav.example.test', remotePath: '/life-plan.json' }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://dav.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastSyncAt: '2026-07-31T12:34:56.000Z', lastRemoteHash: 'main-hash' }));
     }, emptyData());
     await page.goto('/#/dashboard');
@@ -780,6 +780,19 @@ test('sidebar follows live legacy main sync status events', async ({ page }) => 
         detail: { message: '网络失败', isError: true },
     })));
     await expect(status).toHaveText('同步：失败');
+});
+
+test('sidebar keeps the full independent sync reminder with completion time', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
+        webdavUrl: 'https://dav.example.test', remotePath: '/life-plan.json', autoSync: false,
+    })));
+    await page.goto('/#/dashboard');
+
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('life-plan-main-sync-status', {
+        detail: { message: '云端和本地一致，无需同步 20:39:18', isError: false },
+    })));
+    const reminder = page.locator('.sync-status').filter({ hasText: '云端和本地一致' });
+    await expect(reminder).toContainText('20:39:18');
 });
 
 test('dashboard quick writes plan today execute once toggle and rebuild todo mirror', async ({ page }) => {
@@ -2365,7 +2378,7 @@ test('main import schedules the shared auto-sync notification', async ({ page })
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
     });
-    await expect.poll(() => page.evaluate(() => window.__mainAutoSyncSchedules.length)).toBe(1);
+    await expect.poll(() => page.evaluate(() => window.__mainAutoSyncSchedules.length)).toBeGreaterThanOrEqual(1);
     const state = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncState')));
     expect(state.dirty).toBe(true);
 });
@@ -2599,6 +2612,75 @@ test('sync page saving a config refreshes the config card hint', async ({ page }
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}'));
     expect(saved.webdavUrl).toBe('https://dav-save.example.test/life-plan.json');
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('saving a configured sync address immediately runs the main sync flow', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'save-sync-record', type: '日记', title: '保存后同步', content: '', startDate: '2026-08-01', endDate: '2026-08-01' }],
+    });
+    const methods = [];
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.route('https://save-now.example.test/**', async route => {
+        methods.push(route.request().method());
+        if (route.request().method() === 'GET') return route.fulfill({ status: 404, body: 'not found' });
+        await route.fulfill({ status: 201, headers: { ETag: '"save-now"' }, body: '' });
+    });
+
+    await page.goto('/#/sync');
+    await page.getByLabel('同步地址').fill('https://save-now.example.test');
+    await page.getByRole('button', { name: '保存配置', exact: true }).click();
+
+    await expect.poll(() => methods).toEqual(['GET', 'PUT']);
+    await expect(page.locator('article.card').filter({ hasText: '手动同步' }).locator('.sync-status')).toContainText('云端文件不存在，已自动上传本地主数据');
+    const state = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncState')));
+    expect(state.dirty).toBe(false);
+    expect(state.lastLocalHash).toBeTruthy();
+});
+
+test('startup sync detects cloud changes from the previous remote baseline and writes the merged data', async ({ page }) => {
+    const localData = emptyData({
+        records: [{ id: 'startup-local', type: '日记', title: '本地记录', content: '', startDate: '2026-08-01', endDate: '2026-08-01' }],
+    });
+    const remoteData = emptyData({
+        records: [{ id: 'startup-remote', type: '日记', title: '云端记录', content: '', startDate: '2026-08-02', endDate: '2026-08-02' }],
+    });
+    const methods = [];
+    await page.addInitScript(({ data }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://startup-sync.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'previous-remote', lastRemoteEtag: '"previous-remote"' }));
+    }, { data: localData });
+    await page.route('https://startup-sync.example.test/**', async route => {
+        methods.push(route.request().method());
+        if (route.request().method() === 'GET') {
+            return route.fulfill({ status: 200, contentType: 'application/json', headers: { ETag: '"startup-remote"' }, body: JSON.stringify(remoteData) });
+        }
+        const body = JSON.parse(route.request().postData() || '{}');
+        await route.fulfill({ status: 201, headers: { ETag: '"startup-merged"' }, body: '' });
+        expect(body.records.map(item => item.id)).toEqual(expect.arrayContaining(['startup-local', 'startup-remote']));
+    });
+
+    await page.goto('/#/dashboard');
+    await expect.poll(() => methods).toEqual(['GET', 'PUT']);
+    const result = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        state: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(result.data.records.map(record => record.id)).toEqual(expect.arrayContaining(['startup-local', 'startup-remote']));
+    expect(result.state.dirty).toBe(false);
+    expect(result.state.lastRemoteHash).toBeTruthy();
+});
+
+test('main sync migrates the legacy wheel endpoint into the shared config', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
+        webdavUrl: 'https://legacy-wheel-endpoint.example.test', remotePath: '/apps/wheel-app/data.json', autoSync: false,
+    })));
+    await page.goto('/#/sync');
+
+    await expect(page.getByLabel('同步地址')).toHaveValue('https://legacy-wheel-endpoint.example.test');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
+    expect(stored.webdavUrl).toBe('https://legacy-wheel-endpoint.example.test');
+    expect(stored.remotePath).toBe('/life-plan.json');
 });
 
 test('main manual pull keeps dirty state when the merged result differs from cloud', async ({ page }) => {
@@ -4531,7 +4613,7 @@ test('habit safe diagnostics repair confirms snapshots exact fixes and keeps amb
         dialog.accept();
     });
     await repairButton.click();
-    await expect(page.getByRole('status')).toContainText('已安全修复 5 项');
+    await expect(page.locator('.notice.success')).toContainText('已安全修复 5 项');
     await expect(diagnostics.getByRole('button', { name: '安全修复 0 项' })).toBeDisabled();
     await expect(diagnostics).toContainText('重复习惯 ID');
     await expect(diagnostics).not.toContainText('孤儿打卡记录');
@@ -6354,7 +6436,7 @@ test('todo remote preview stays GET-only and apply rechecks then persists the me
     const original = JSON.stringify(local);
     await page.addInitScript(({ localData, remoteData }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
         window.__todoSyncRequests = [];
         window.fetch = async (url, options = {}) => {
@@ -6460,7 +6542,7 @@ test('habit remote preview stays GET-only and leaves local habit mirrors untouch
     });
     await page.addInitScript(({ localData, mirrorData, stateData }) => {
         localStorage.setItem('lifePlanData', localData);
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-vue.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-vue.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('habitAppData', mirrorData);
         localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-habit.json', autoSync: true, remoteUploadEnabled: true }));
         localStorage.setItem('habitAppSyncState', stateData);
@@ -6591,7 +6673,7 @@ test('habit remote apply rechecks then persists the merged legacy contract', asy
     });
     await page.addInitScript(({ localData }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-apply.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-apply.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
         localStorage.setItem('habitAppSyncConfig', JSON.stringify({ remotePath: '/unsafe-habit.json', autoSync: true, remoteUploadEnabled: true }));
         localStorage.removeItem('todoAppData');
@@ -6679,7 +6761,7 @@ test('habit remote apply stops before persistence when cloud changed after previ
     });
     await page.addInitScript(({ localData, mirrorData }) => {
         localStorage.setItem('lifePlanData', localData);
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-race.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://habit-race.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('habitAppData', mirrorData);
         localStorage.setItem('habitAppSyncState', JSON.stringify({ dirty: true, lastRemoteHash: 'old-habit-race' }));
     }, { localData: original, mirrorData: mirror });
@@ -7035,7 +7117,7 @@ test('wheel remote preview stays GET-only and apply rechecks then persists the m
     const original = JSON.stringify(local);
     await page.addInitScript(({ localData, remoteData }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
         localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
         window.__wheelSyncRequests = [];
@@ -8141,7 +8223,7 @@ test('main sync upload uses If-Match and merges after a 412 conflict', async ({ 
 
     await page.addInitScript(({ local, firstRemote, secondRemote }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(local));
-        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: true }));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: true, lastRemoteHash: '', lastRemoteEtag: '' }));
         window.__syncRequests = [];
         window.fetch = async (url, options = {}) => {
@@ -8245,7 +8327,7 @@ test('main auto sync uploads local dirty data after the debounce window', async 
     await page.clock.fastForward(20000);
     await expect.poll(() => calls.filter(item => item.method === 'PUT').length).toBe(putsBeforeEdit + 1);
     expect(calls.some(item => item.method === 'GET')).toBe(true);
-    expect(calls.filter(item => item.method === 'PUT').at(-1).ifMatch).toBe('"etag-1"');
+    expect(calls.filter(item => item.method === 'PUT').at(-1).ifMatch).toBe('"etag-2"');
 
     await expect.poll(async () => page.evaluate(() => {
         const state = JSON.parse(localStorage.getItem('lifePlanSyncState') || '{}');
@@ -8263,7 +8345,7 @@ test('main auto sync recreates a missing remote even when local data is unchange
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
             webdavUrl: 'https://sync-missing.example.test/dav',
             remotePath: '/life-plan.json',
-            autoSync: true,
+            autoSync: false,
         }));
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteEtag: '"old"' }));
     }, source);
@@ -8331,14 +8413,15 @@ test('main auto sync resumes on visibility when enabled', async ({ page }) => {
 
     await page.goto('/#/sync');
     await expect(page.getByRole('button', { name: '保存配置' })).toBeVisible();
-    expect(methods.length).toBe(0);
+    await expect.poll(() => methods.filter(method => method === 'GET').length).toBeGreaterThan(0);
+    const startupGets = methods.filter(method => method === 'GET').length;
     await page.evaluate(() => {
         Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
         document.dispatchEvent(new Event('visibilitychange'));
         Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
         document.dispatchEvent(new Event('visibilitychange'));
     });
-    await expect.poll(() => methods.filter(method => method === 'GET').length).toBeGreaterThan(0);
+    await expect.poll(() => methods.filter(method => method === 'GET').length).toBeGreaterThan(startupGets);
 });
 
 test('main auto sync stays idle when autoSync is disabled', async ({ page }) => {
