@@ -396,4 +396,4 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 - Implementation: removed the Vue list-level `查看/预览` and `删除` actions, kept the existing editor delete confirmation, and updated the regression tests.
 - Verification: focused checks passed `3/3`; full Vue smoke passed `223/223`; production build, `git diff --check`, and packaging passed.
 - Artifact: `life-plan-site-vue-dist-20260803-222647.zip`.
-- Release: commit only this slice and its test/documentation updates, then push `migration/vue-app-v1`.
+- Release: code/test slice committed as `28e5eaa` and pushed to `origin/migration/vue-app-v1`.

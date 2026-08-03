@@ -705,4 +705,4 @@
 - Updated `tests/vue-smoke.spec.js` to assert no row actions after timeline navigation and to exercise preview/edit/delete through the row/editor flow.
 - Verification passed: targeted `3/3`, full Vue smoke `223/223`, production build, `git diff --check`, and `npm run package:vue`.
 - Generated artifact: `life-plan-site-vue-dist-20260803-222647.zip`.
-- Next release step: commit this slice and push `migration/vue-app-v1`.
+- Release complete: code/test slice committed as `28e5eaa` and pushed to `origin/migration/vue-app-v1`.
