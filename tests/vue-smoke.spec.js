@@ -443,6 +443,7 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     await expectHashRoute(page, '/records', { record: 'record-dashboard-period', preview: '1' });
     await expect(page.getByRole('dialog', { name: '记录预览' })).toContainText('本周计划入口');
     await expect(page.locator('.record-editor-panel')).toHaveCount(0);
+    await expect(page.locator('#all-records .record-row-actions')).toHaveCount(0);
 
     await page.goto('/#/dashboard');
     await page.getByRole('button', { name: /执行：执行入口待办/ }).click();
@@ -4925,8 +4926,7 @@ test('records list and editor expose a frozen legacy-style read-only preview', a
     await page.goto('/#/records');
 
     const row = page.locator('.record-row').filter({ hasText: '预览记录' });
-    await expect(row.getByRole('button', { name: '查看/预览', exact: true })).toBeVisible();
-    await row.getByRole('button', { name: '查看/预览', exact: true }).click();
+    await row.locator('.record-open-button').click();
     const preview = page.getByRole('dialog', { name: '记录预览' });
     await expect(preview).toContainText('预览记录');
     await expect(preview).toContainText('原始内容');
@@ -4987,17 +4987,21 @@ test('records deletion keeps the legacy confirmation and exclusive todo cascade'
     await page.goto('/#/records');
 
     const row = page.locator('.record-row').filter({ hasText: '待删记录' });
+    await row.locator('.record-open-button').click();
+    const preview = page.getByRole('dialog', { name: '记录预览' });
+    await preview.getByRole('button', { name: '编辑', exact: true }).click();
+    const editor = page.locator('.record-editor-panel');
     page.once('dialog', async dialog => {
         expect(dialog.message()).toBe('确定删除这条记录吗？关联的专属待办也会一起删除');
         await dialog.dismiss();
     });
-    await row.getByRole('button', { name: '删除', exact: true }).click();
+    await editor.getByRole('button', { name: '删除记录', exact: true }).click();
     await expect(row).toHaveCount(1);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 
     page.once('dialog', dialog => dialog.accept());
-    await row.getByRole('button', { name: '删除', exact: true }).click();
-    await expect(row).toHaveCount(0);
+    await editor.getByRole('button', { name: '删除记录', exact: true }).click();
+    await expect(page.locator('.record-editor-panel')).toHaveCount(0);
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.records).toHaveLength(0);
     expect(stored.todos.map(todo => todo.id)).toEqual(['todo-record-linked']);

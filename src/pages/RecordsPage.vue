@@ -1001,7 +1001,10 @@ onBeforeUnmount(() => {
             </div>
             <p v-else class="empty-state">还没有关联待办。</p>
           </div>
-          <div class="form-actions"><button class="btn btn-primary" type="submit">保存修改</button></div>
+          <div class="form-actions">
+            <button v-if="editForm.id" class="btn btn-danger" type="button" aria-label="删除记录" @click="removeRecord(editForm.id)">删除</button>
+            <button class="btn btn-primary" type="submit">保存修改</button>
+          </div>
         </form>
         <aside class="record-preview-shell">
           <div class="record-preview-top">
@@ -1051,10 +1054,6 @@ onBeforeUnmount(() => {
                   <p v-if="item.preview" class="item-preview">{{ item.preview }}</p>
                   <div v-if="recordForItem(item) && recordTodoIds(recordForItem(item)!).length" class="item-meta"><span>关联待办 {{ recordTodoIds(recordForItem(item)!).length }}</span></div>
                 </button>
-                <div v-if="recordForItem(item)" class="record-row-actions">
-                  <button class="btn btn-secondary" type="button" @click="openRecordPreview(recordForItem(item)!)">查看/预览</button>
-                  <button class="btn btn-danger" type="button" @click="removeRecord(item.id)">删除</button>
-                </div>
               </div>
             </article>
           </section>
@@ -1121,7 +1120,6 @@ onBeforeUnmount(() => {
 .linked-todo-list { display: grid; gap: 6px; }
 .record-open-button { display: block; width: 100%; min-width: 0; border: 0; background: transparent; padding: 0; text-align: left; color: inherit; cursor: pointer; }
 .record-open-button .item-title { overflow-wrap: anywhere; word-break: break-word; }
-.record-row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .record-preview-text { white-space: pre-wrap; }
 .record-preview-todo-item { gap: 8px; }
 .record-preview-todo-item em { margin-left: auto; color: var(--faint); font-style: normal; font-size: 12px; }

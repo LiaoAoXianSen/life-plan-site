@@ -319,3 +319,9 @@
 - `mainCloudSync` now emits browser status events for the global shell; Vue's sidebar renders the separate legacy-style full reminder below the data/backup controls, while the compact pill remains available in the summary row.
 - Browser verification confirmed the reminder is visible at both 1440px and 390px widths and renders `云端和本地一致，无需同步 20:39:18` as a complete message.
 - Focused sync/reminder tests passed `10/10`; full Vue smoke passed `223/223`; build, diff check, and package passed. Artifact: `life-plan-site-vue-dist-20260803-214454.zip`.
+
+## 2026-08-03 Vue Records timeline action audit
+
+- The dashboard timeline itself remained read-only, but the destination Vue Records list rendered extra per-row `查看/预览` and `删除` controls that are absent from the legacy first-type flow.
+- The correct interaction is row selection to open the existing preview/editor path; deletion belongs in the editor action area, where the existing confirmation and linked exclusive-Todo cascade are already preserved.
+- The bounded fix removes only the list action container and keeps the editor delete button. Regression coverage now checks the absence of `.record-row-actions` after timeline navigation and uses row/editor controls for preview and deletion.

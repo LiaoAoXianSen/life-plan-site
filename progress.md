@@ -697,3 +697,12 @@
 - Verification passed: `npm run build`, full Vue smoke `223/223`, `git diff --check`, and `npm run package:vue`.
 - Generated artifact: `life-plan-site-vue-dist-20260803-214454.zip`.
 - Deployment remains local artifact validation only; no live production switch or push was performed.
+
+## 2026-08-03 - Vue Records timeline action parity
+
+- Rechecked the reported behavior against the legacy flow: the initial timeline has no edit/view controls, while the Vue Records list incorrectly added per-row `查看/预览` and `删除` buttons after navigation.
+- Removed those list-level actions and retained deletion in the existing record editor, preserving the legacy confirmation and relationship cascade behavior.
+- Updated `tests/vue-smoke.spec.js` to assert no row actions after timeline navigation and to exercise preview/edit/delete through the row/editor flow.
+- Verification passed: targeted `3/3`, full Vue smoke `223/223`, production build, `git diff --check`, and `npm run package:vue`.
+- Generated artifact: `life-plan-site-vue-dist-20260803-222647.zip`.
+- Next release step: commit this slice and push `migration/vue-app-v1`.
