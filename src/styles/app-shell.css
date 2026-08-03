@@ -112,10 +112,8 @@ body {
 
 .todo-page-summary { margin-top: 4px; color: var(--muted); font-size: 13px; }
 #page-todos .page-header { align-items: flex-end; margin-bottom: 12px; }
-#page-todos .todo-create-form { margin-bottom: 12px; padding: 14px 16px; }
-#page-todos .todo-create-form .card-title { margin-bottom: 10px; font-size: 14px; }
-#page-todos .todo-create-form .form-row { gap: 10px; }
-#page-todos .todo-create-form .form-group { margin-bottom: 8px; }
+#page-todos .todo-create-modal { margin-bottom: 0; }
+#page-todos .todo-create-modal .todo-detail-section { margin-top: 8px; }
 #page-todos .todo-create-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 #page-todos .filter-bar,
 #page-todos .todo-legacy-filters {
@@ -177,6 +175,7 @@ body {
 .todo-dashboard-link:hover { color: var(--accent); }
 .todo-dashboard-link:focus-visible { outline: 3px solid rgba(47,128,237,.18); outline-offset: 3px; border-radius: 4px; }
 .todo-detail-panel, .todo-detail-placeholder { position: sticky; top: 18px; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.todo-detail-modal { position: static; top: auto; width: min(520px, 100%); max-height: 90vh; overflow-y: auto; }
 .todo-detail-placeholder { display: grid; gap: 5px; color: var(--muted); }
 .todo-detail-placeholder strong { color: var(--text); font-size: 15px; }
 .todo-detail-placeholder span { font-size: 13px; line-height: 1.6; }

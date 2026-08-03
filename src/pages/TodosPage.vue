@@ -30,6 +30,8 @@ const editing = ref(false);
 const detailError = ref('');
 const detailStatus = ref('');
 const newSubTodo = ref('');
+const newCreateSubTodo = ref('');
+const createSubTodos = ref<TodoSubTodo[]>([]);
 const recordLinkId = ref('');
 /** Browse-first: create form is secondary and collapsed until the user opens it. */
 const showCreateForm = ref(false);
@@ -96,14 +98,28 @@ const sortedSessions = computed(() => [...(selectedTodo.value?.sessions ?? [])].
   `${right.date}T${right.startTime || '00:00'}`.localeCompare(`${left.date}T${left.startTime || '00:00'}`)));
 
 function toggleCreateForm() {
-  showCreateForm.value = !showCreateForm.value;
+  if (showCreateForm.value) {
+    closeCreateForm();
+    return;
+  }
+  closeDetail();
+  Object.assign(form, { text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他' });
+  createSubTodos.value = [];
+  newCreateSubTodo.value = '';
+  showCreateForm.value = true;
+}
+
+function closeCreateForm() {
+  showCreateForm.value = false;
+  Object.assign(form, { text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他' });
+  createSubTodos.value = [];
+  newCreateSubTodo.value = '';
 }
 
 function submit() {
   if (!form.text.trim()) return;
-  const todo = todosStore.create({ ...form, text: form.text.trim() });
-  Object.assign(form, { text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他' });
-  showCreateForm.value = false;
+  const todo = todosStore.create({ ...form, text: form.text.trim(), subTodos: createSubTodos.value });
+  closeCreateForm();
   selectTodo(todo.id);
 }
 
@@ -266,6 +282,13 @@ function addSubTodo() {
   newSubTodo.value = '';
 }
 
+function addCreateSubTodo() {
+  const text = newCreateSubTodo.value.trim();
+  if (!text) return;
+  createSubTodos.value.push({ text, done: false });
+  newCreateSubTodo.value = '';
+}
+
 type TodoDateTarget = Pick<Todo, 'planStartDate' | 'planEndDate' | 'dueDate'>;
 
 function applyDatePresetTo(target: TodoDateTarget, preset: 'today' | 'tomorrow' | 'this-week' | 'next-week' | 'no-date') {
@@ -311,6 +334,17 @@ function addSession() {
     Object.assign(sessionForm, { date: getTodayStr(), startTime: new Date().toTimeString().slice(0, 5), endTime: '', note: '' });
     detailError.value = '';
     detailStatus.value = '执行记录已保存';
+  } catch (error) {
+    detailError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function quickSession() {
+  if (!selectedTodo.value) return;
+  try {
+    todosStore.quickSession(selectedTodo.value.id);
+    detailError.value = '';
+    detailStatus.value = '已记录一次执行';
   } catch (error) {
     detailError.value = error instanceof Error ? error.message : String(error);
   }
@@ -394,29 +428,47 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
       </div>
     </header>
 
-    <form v-if="showCreateForm" id="todo-create-panel" class="card todo-create-form" @submit.prevent="submit">
-      <div class="card-title">新建通用待办</div>
-      <div class="form-row">
-        <div class="form-group"><label for="todo-create-text">任务</label><input id="todo-create-text" v-model="form.text" required placeholder="下一步要推进什么？" /></div>
-        <div class="form-group"><label for="todo-create-group">分组</label><input id="todo-create-group" v-model="form.group" /></div>
-        <div class="form-group"><label for="todo-create-plan-start">计划开始</label><input id="todo-create-plan-start" v-model="form.planStartDate" type="date" /></div>
-        <div class="form-group"><label for="todo-create-plan-end">计划结束</label><input id="todo-create-plan-end" v-model="form.planEndDate" type="date" /></div>
-        <div class="form-group"><label for="todo-create-date">截止日期</label><input id="todo-create-date" v-model="form.dueDate" type="date" /></div>
-        <div class="form-group"><label for="todo-create-urgency">紧急度</label><select id="todo-create-urgency" v-model="form.urgency"><option value="urgent">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></div>
-      </div>
-      <div class="todo-date-presets" aria-label="新建待办日期预设">
-        <button type="button" @click="applyCreateDatePreset('today')">今天</button>
-        <button type="button" @click="applyCreateDatePreset('tomorrow')">明天</button>
-        <button type="button" @click="applyCreateDatePreset('this-week')">本周</button>
-        <button type="button" @click="applyCreateDatePreset('next-week')">下周</button>
-        <button type="button" @click="applyCreateDatePreset('no-date')">无日期</button>
-      </div>
-      <div class="form-group"><label for="todo-create-note">备注</label><input id="todo-create-note" v-model="form.note" placeholder="可选备注" /></div>
-      <div class="todo-create-actions">
-        <button class="btn btn-primary" type="submit">保存待办</button>
-        <button class="btn btn-secondary" type="button" @click="showCreateForm = false">取消</button>
-      </div>
-    </form>
+    <div v-if="showCreateForm" class="modal-overlay active" role="presentation" @click.self="closeCreateForm">
+      <form id="todo-create-panel" class="modal modal-sm todo-create-modal" role="dialog" aria-modal="true" aria-labelledby="todo-create-title" @submit.prevent="submit">
+        <div class="modal-header">
+          <div class="modal-title" id="todo-create-title">新建通用待办</div>
+          <button class="close-btn" type="button" aria-label="关闭新建待办" title="关闭" @click="closeCreateForm">×</button>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label for="todo-create-text">任务</label><input id="todo-create-text" v-model="form.text" required placeholder="下一步要推进什么？" /></div>
+          <div class="form-group"><label for="todo-create-group">分组</label><input id="todo-create-group" v-model="form.group" /></div>
+          <div class="form-group"><label for="todo-create-plan-start">计划开始</label><input id="todo-create-plan-start" v-model="form.planStartDate" type="date" /></div>
+          <div class="form-group"><label for="todo-create-plan-end">计划结束</label><input id="todo-create-plan-end" v-model="form.planEndDate" type="date" /></div>
+          <div class="form-group"><label for="todo-create-date">截止日期</label><input id="todo-create-date" v-model="form.dueDate" type="date" /></div>
+          <div class="form-group"><label for="todo-create-urgency">紧急度</label><select id="todo-create-urgency" v-model="form.urgency"><option value="urgent">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></div>
+        </div>
+        <div class="todo-date-presets" aria-label="新建待办日期预设">
+          <button type="button" @click="applyCreateDatePreset('today')">今天</button>
+          <button type="button" @click="applyCreateDatePreset('tomorrow')">明天</button>
+          <button type="button" @click="applyCreateDatePreset('this-week')">本周</button>
+          <button type="button" @click="applyCreateDatePreset('next-week')">下周</button>
+          <button type="button" @click="applyCreateDatePreset('no-date')">无日期</button>
+        </div>
+        <div class="form-group"><label for="todo-create-note">备注</label><input id="todo-create-note" v-model="form.note" placeholder="可选备注" /></div>
+        <section class="todo-detail-section" aria-label="步骤">
+          <div class="todo-section-heading"><h3 id="todo-create-subtasks">子任务</h3><span>{{ createSubTodos.length }} 项</span></div>
+          <p v-if="!createSubTodos.length" class="todo-detail-empty">暂无子任务，可以在下方添加。</p>
+          <div v-for="(subTodo, index) in createSubTodos" :key="`${index}-${subTodo.text}`" class="todo-detail-row">
+            <input v-model="subTodo.done" type="checkbox" :aria-label="`完成子任务 ${subTodo.text}`" />
+            <input v-model="subTodo.text" :aria-label="`子任务 ${index + 1}`" />
+            <button class="link-button danger-text" type="button" @click="createSubTodos.splice(index, 1)">删除</button>
+          </div>
+          <div class="todo-inline-add"><input v-model="newCreateSubTodo" aria-label="添加步骤" placeholder="添加一个可执行步骤" @keyup.enter.prevent="addCreateSubTodo" /><button class="btn btn-secondary" type="button" @click="addCreateSubTodo">添加</button></div>
+        </section>
+        <div class="modal-action-row todo-create-actions">
+          <span />
+          <div class="modal-action-right">
+            <button class="btn btn-secondary" type="button" @click="closeCreateForm">取消</button>
+            <button class="btn btn-primary" type="submit">保存待办</button>
+          </div>
+        </div>
+      </form>
+    </div>
 
     <div class="filter-bar todo-legacy-filters">
       <span class="todo-filter-label">日期：</span>
@@ -446,16 +498,18 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
       </select>
     </div>
 
-    <div class="todo-workspace" :class="{ 'has-detail': showDetailPanel }">
+    <div class="todo-workspace">
       <div class="todo-list-pane">
         <TodoTable :todos="filteredTodos" :selected-id="selectedId" @toggle="todosStore.toggle" @select="selectTodo" />
       </div>
+    </div>
 
-      <aside v-if="showDetailPanel" class="todo-detail-panel" aria-labelledby="todo-detail-heading">
-        <div class="todo-detail-header">
+    <div v-if="showDetailPanel" class="modal-overlay active" role="presentation" @click.self="closeDetail">
+      <aside class="modal modal-sm todo-detail-panel todo-detail-modal" role="dialog" aria-modal="true" aria-labelledby="todo-detail-heading">
+        <div class="modal-header todo-detail-header">
           <div>
             <span :class="`todo-urgency todo-urgency-${isIdeaDraft ? detailForm.urgency : selectedTodo!.urgency}`">{{ todosStore.services.todos.getTodoUrgencyMeta(isIdeaDraft ? detailForm.urgency : selectedTodo!.urgency).label }}</span>
-            <h2 id="todo-detail-heading">{{ isIdeaDraft ? '灵感转待办' : (editing ? '编辑待办' : selectedTodo!.text) }}</h2>
+            <h2 id="todo-detail-heading" class="modal-title">{{ isIdeaDraft ? '灵感转待办' : (editing ? '编辑待办' : selectedTodo!.text) }}</h2>
             <p v-if="isIdeaDraft && draftIdea" class="todo-detail-copy">来源灵感：{{ draftIdea.title || '未命名灵感' }}</p>
           </div>
           <button class="close-btn" type="button" aria-label="关闭待办详情" title="关闭" @click="closeDetail">×</button>
@@ -491,7 +545,11 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
           </section>
 
           <p v-if="detailError" class="form-error" role="alert">{{ detailError }}</p>
-          <div class="todo-detail-actions"><button class="btn btn-primary" type="submit">{{ isIdeaDraft ? '创建并关联灵感' : '保存修改' }}</button><button class="btn btn-secondary" type="button" @click="cancelEditing">取消</button></div>
+          <div class="modal-action-row todo-detail-actions">
+            <button v-if="!isIdeaDraft" class="btn btn-danger" type="button" @click="deleteSelectedTodo">删除待办</button>
+            <span v-else />
+            <div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="cancelEditing">取消</button><button class="btn btn-primary" type="submit">{{ isIdeaDraft ? '创建并关联灵感' : '保存修改' }}</button></div>
+          </div>
         </form>
 
         <template v-else-if="selectedTodo">
@@ -499,7 +557,10 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
             <span>{{ getTodoStatusText(selectedTodo) }}</span><span>{{ selectedTodo.group || '其他' }}</span><span>截止 {{ selectedTodo.dueDate || '未设置' }}</span><span>计划 {{ selectedTodo.planStartDate || '未设置' }}{{ selectedTodo.planEndDate ? ` 至 ${selectedTodo.planEndDate}` : '' }}</span>
           </div>
           <p v-if="selectedTodo.note" class="todo-detail-copy">{{ selectedTodo.note }}</p>
-          <div class="todo-detail-actions"><button class="btn btn-primary" type="button" @click="startEditing">编辑待办</button><button class="btn btn-secondary" type="button" @click="toggleSelectedTodo">{{ selectedTodo.done ? '恢复未完成' : '标记完成' }}</button><button class="btn btn-danger" type="button" @click="deleteSelectedTodo">删除待办</button></div>
+          <div class="modal-action-row todo-detail-actions">
+            <button class="btn btn-danger" type="button" @click="deleteSelectedTodo">删除待办</button>
+            <div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="toggleSelectedTodo">{{ selectedTodo.done ? '恢复未完成' : '标记完成' }}</button><button class="btn btn-secondary" type="button" @click="quickSession">执行一次</button><button class="btn btn-primary" type="button" @click="startEditing">编辑待办</button></div>
+          </div>
 
           <section class="todo-detail-section" aria-labelledby="todo-view-subtasks">
             <div class="todo-section-heading"><h3 id="todo-view-subtasks">子任务</h3><span>{{ selectedTodo.subTodos.filter(item => item.done).length }}/{{ selectedTodo.subTodos.length }}</span></div>

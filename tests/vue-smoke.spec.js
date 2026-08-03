@@ -107,6 +107,43 @@ test('todo create form exposes legacy date range presets', async ({ page }) => {
     expect(stored.mirror.todos[0]).toMatchObject({ planStartDate: tomorrowDate, planEndDate: tomorrowDate, dueDate: tomorrowDate });
 });
 
+test('todo create modal accepts subtasks before the first save', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/todos');
+    await page.getByRole('button', { name: /新建.*待办/ }).click();
+
+    const create = page.locator('#todo-create-panel');
+    await expect(create).toHaveAttribute('role', 'dialog');
+    await create.getByLabel('任务', { exact: true }).fill('带子任务的 Vue 待办');
+    await create.getByLabel('添加步骤').fill('第一步');
+    await create.getByRole('button', { name: '添加', exact: true }).click();
+    await expect(create.getByLabel('子任务 1')).toHaveValue('第一步');
+    await create.getByRole('button', { name: '保存待办' }).click();
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.todos[0]).toMatchObject({
+        text: '带子任务的 Vue 待办',
+        subTodos: [{ text: '第一步', done: false }],
+    });
+});
+
+test('todo detail quick action records one execution', async ({ page }) => {
+    const source = emptyData({ todos: [todoFixture('todo-quick-session', '快捷执行待办')] });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/todos?todo=todo-quick-session');
+
+    const detail = page.locator('.todo-detail-panel');
+    await expect(detail).toHaveAttribute('role', 'dialog');
+    await detail.getByRole('button', { name: '执行一次', exact: true }).click();
+    await expect(detail).toContainText('已记录一次执行');
+    await expect(detail).toContainText('1 次');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.todos[0].sessions).toEqual([
+        expect.objectContaining({ date: expect.any(String), note: '快捷执行' }),
+    ]);
+});
+
 test('todo detail preserves subtasks sessions relationships tombstones and mirror contracts', async ({ page }) => {
     const source = emptyData({
         records: [
