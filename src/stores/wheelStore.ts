@@ -40,6 +40,46 @@ export const useWheelStore = defineStore('wheel', () => {
   const libraryItems = computed(() => lifePlan.data.wheelLibraryItems as unknown as WheelItem[]);
   const history = computed(() => lifePlan.data.wheelHistory as unknown as WheelHistory[]);
 
+  function ensureSeedData() {
+    if (wheels.value.length || tags.value.length || libraryItems.value.length || history.value.length) return false;
+    const stamp = getNowLocal();
+    const seedTags: WheelTag[] = [
+      ['出门', '#2f7d6d'],
+      ['在家', '#e86c52'],
+      ['学习', '#3e65b0'],
+      ['美食', '#ebb050'],
+    ].map(([name, tagColor]) => ({ id: genId(), name, color: tagColor, weight: 1, enabled: true, createdAt: stamp, updatedAt: stamp }));
+    const tagId = (name: string) => seedTags.find(tag => tag.name === name)?.id || '';
+    const seeds = [
+      ['去公园走走', ['出门'], '换个地方透透气'],
+      ['整理房间', ['在家'], '让空间清爽一点'],
+      ['背 20 个单词', ['学习'], '小任务也算前进'],
+      ['吃火锅', ['美食'], '适合奖励自己'],
+      ['咖啡店学习', ['出门', '学习', '美食'], '出门和学习一起完成'],
+    ] as const;
+    const seedItems = seeds.map(([name, itemTags, note]) => ({
+      id: genId(), name, note, weight: 1, enabled: true,
+      tagIds: itemTags.map(tagId).filter(Boolean), createdAt: stamp, updatedAt: stamp,
+    }));
+    mutate('seed-wheel-data', () => {
+      lifePlan.data.wheelTags.push(...seedTags);
+      lifePlan.data.wheelLibraryItems.push(...seedItems);
+      lifePlan.data.wheels.push({
+        id: genId(), name: '默认普通转盘', mode: 'normal',
+        items: seedItems.map(item => ({
+          id: genId(), name: item.name, note: item.note, weight: item.weight, enabled: true,
+          sourceLibraryItemId: item.id, createdAt: stamp, updatedAt: stamp,
+        })),
+        createdAt: stamp, updatedAt: stamp,
+      });
+      lifePlan.data.wheels.push({
+        id: genId(), name: '默认标签转盘', mode: 'tag', tagIds: seedTags.map(tag => tag.id), items: [],
+        createdAt: stamp, updatedAt: stamp,
+      });
+    });
+    return true;
+  }
+
   function validTagIds(input: unknown) {
     const valid = new Set(tags.value.map(tag => tag.id));
     return Array.from(new Set(safeArray(input).map(String).filter(id => valid.has(id))));
@@ -292,5 +332,5 @@ export const useWheelStore = defineStore('wheel', () => {
   }
   function exportHistoryCsv() { const header = ['时间', '转盘', '模式', '标签', '结果', '备注', '是否已转待办']; const rows = history.value.map(item => [item.createdAt, item.wheelName, item.mode === 'tag' ? '标签转盘' : '普通转盘', item.tagName || '', item.resultName, item.note, item.convertedTodoId ? '是' : '否']); download(`大转盘抽取记录_${fileStamp()}.csv`, `\uFEFF${[header, ...rows].map(row => row.map(csvCell).join(',')).join('\n')}`, 'text/csv;charset=utf-8'); }
 
-  return { wheels, tags, libraryItems, history, candidates, candidateTags, weightedPick, createWheel, updateWheel, deleteWheel, saveOption, batchAddOptions, copyLibraryItemToWheel, deleteOption, saveTag, toggleTagEnabled, deleteTag, saveLibraryItem, batchAddLibraryItems, toggleLibraryEnabled, deleteLibraryItem, batchSetLibraryEnabled, batchUpdateLibraryTags, batchDeleteLibraryItems, recordSpin, deleteHistory, clearHistory, convertHistoryToTodo, backupSnapshot, exportBackup, restoreBackup, exportHistoryCsv };
+  return { wheels, tags, libraryItems, history, ensureSeedData, candidates, candidateTags, weightedPick, createWheel, updateWheel, deleteWheel, saveOption, batchAddOptions, copyLibraryItemToWheel, deleteOption, saveTag, toggleTagEnabled, deleteTag, saveLibraryItem, batchAddLibraryItems, toggleLibraryEnabled, deleteLibraryItem, batchSetLibraryEnabled, batchUpdateLibraryTags, batchDeleteLibraryItems, recordSpin, deleteHistory, clearHistory, convertHistoryToTodo, backupSnapshot, exportBackup, restoreBackup, exportHistoryCsv };
 });

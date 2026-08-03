@@ -659,3 +659,20 @@
 - Strengthened the all-routes smoke to fail on page exceptions or failed lazy-chunk requests while preserving route titles and hash navigation. The first full run exposed two Records leave-save timing regressions under lazy routing; route-leave guards now synchronously flush existing editors and new-record drafts before navigation.
 - Final verification passed: Records navigation focused **2/2**, production build with no CJS/chunk warning, full Vue smoke **217/217**, `git diff --check`, and `npm run package:vue`. The final artifact is `life-plan-site-vue-dist-20260802-114758.zip`.
 - Existing untracked `.freebuff/`, `previews/`, `tmp-legacy.png`, and `tmp-vue.png` remain untouched.
+## 2026-08-03 master-to-Vue re-audit
+
+- Started from `migration/vue-app-v1` after checking status and existing planning context.
+- Found 13 commits present on `master` but not on the Vue branch; current dirty Wheel files are user-owned and will be preserved.
+- Next: inspect the complete master-only patch and compare each affected module with the Vue implementation before editing.
+- First source pass confirms the master changes affect both Materials and the whole Wheel surface, so the audit remains module-wide rather than limited to one filter control.
+- Confirmed a likely parity defect: legacy seed initialization is called from the page path, while the Vue seed helper is currently uncalled.
+- Implemented seed initialization, private-item field correction, and selected-wheel/mode synchronization; updated the empty-data and cross-module regression expectations to match `master`.
+- Production build passed. The first wheel grep run timed out after exposing the stale no-write assertion; the assertion and seed-field defect are now fixed, and focused reruns are next.
+
+## 2026-08-03 - Master-to-Vue re-audit closeout
+
+- Rechecked the full master-only Materials and Wheel patch against Vue source, stores, tests, and live browser pages. Preserved existing dirty files and untracked preview artifacts.
+- Fixed Wheel default seed lifecycle, private/public seed field separation, selected-wheel/mode synchronization, stale list filter expectations, viewport-safe tag dropdown positioning, and missing Wheel management form/list styles.
+- Updated `tests/vue-smoke.spec.js` for the legacy seed contract, mode-first tag flow, expanded batch controls, and normal/tag-only list filtering.
+- Verification passed: `npm run build`; Wheel 34/34; Materials 5/5; full `npm test` 219/219; `git diff --check`; `npm run package:vue`.
+- Visual verification used the preview server at `http://127.0.0.1:5175`, with Wheel main/library/list and Materials screenshots plus desktop/mobile overflow checks. Artifact: `life-plan-site-vue-dist-20260803-175211.zip`.

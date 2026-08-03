@@ -284,12 +284,22 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 266. Status: complete - Implement confirmed Habit safe diagnostics repair for orphan/future check-ins, invalid ledger amounts, and empty currencies with a pre-repair snapshot, mirror rebuild, dirty state, tombstones, and ambiguous-ID protection.
 267. Status: complete - Complete final build technical cleanup with lazy route chunks and explicit ESM Vite config; verify every migrated route loads without page or request errors and update package/documentation evidence.
 268. Status: complete - Close the documented active Vue project scope at 100% after full smoke, production build, package, diff check, commit, and force-free remote verification.
+269. Status: complete - Re-audit the current master-only changes against Vue, with whole-module Wheel review and browser feature verification.
+270. Status: complete - Implement confirmed parity regressions without overwriting existing user changes, then add focused regression coverage.
+271. Status: complete - Run production/build/check and desktop/mobile browser verification, update parity evidence, and append dual-store memory.
 ## Decisions
 
 - Preserve all existing dirty work; do not revert or overwrite unrelated changes.
 - Use browser-local `localStorage` configuration for personal direct URL + key mode, with visible warnings that browser-stored keys are not safe for public deployment.
 - Keep AI optional and fail closed: no AI calls unless configured by the user.
 - Prefer a small, embedded assistant panel/action buttons over turning the app into a chat-first product.
+
+## 2026-08-03 master-to-Vue re-audit closeout
+
+- Compared the 13 master-only commits against both Vue modules: Materials already had the upgraded title/tag/random/detail behavior and passed its focused contracts; Wheel required runtime seed invocation, mode synchronization, and management-surface styling/positioning parity.
+- Implemented legacy-compatible empty Wheel seeding, ensured normal-wheel private items do not inherit public `tagIds`, synchronized selected-wheel mode filters, removed the stale `全部` list branch, and made the custom tag menu clamp/open upward near viewport edges.
+- Added Wheel form/list/history styles and responsive layout rules after live screenshots exposed missing Vue class coverage; preserved the existing data authority, tombstones, mirrors, snapshots, remote paths, and user-owned dirty files.
+- Focused validation passed: Wheel 34/34 and Materials 5/5. Final validation passed: `npm run build`, `npm test` 219/219, `git diff --check`, desktop/mobile browser screenshots and overflow checks, and `npm run package:vue`.
 - Historical stages used multi-agent read-only investigation, but all work from the 2026-08-02 documentation checkpoint onward must use one main agent serially; do not start subagents.
 - Every subsequent implementation slice must update the relevant checklist, plan, progress, or findings documentation in the same slice and report the whole-project completion percentage at both start and finish.
 - Continue improving Vue functionality, tests, documentation, and technical quality; switching the live deployment from legacy to Vue is outside scope and must not be tracked as a pending task.
@@ -335,6 +345,9 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 | First new-record visual pass showed structured textareas at their intrinsic narrow width | Desktop and mobile screenshots had no overflow but exposed an impractical editing width | Scoped template-field textareas inside the create modal to the full available width and reran responsive screenshots |
 | Planning session-catchup helper was unavailable in the local `.claude` skill path | Resume step looked for `C:\Users\lihao\.claude\skills\planning-with-files\scripts\session-catchup.py` | Logged the missing helper and continued from current planning files plus `git status` evidence |
 | First Materials random-review focused test timed out locating the tag group | The tag picker had `aria-label` but no `role=group`, so `getByRole('group')` could not resolve it | Added `role="group"` to the random tag picker and reran the Materials focused tests green |
+| PowerShell parse error while trying to use Unix process substitution for a `git show` search | Used `<(git show ...)`, which PowerShell does not support | Replaced it with a normal `git show ... | rg ...` pipeline; no project state changed |
+| First post-seed Wheel grep timed out after 300 seconds | A cross-module tag-center test still asserted that entering an empty Wheel never writes local data, while the audited master behavior seeds defaults | Updated that test to assert the seeded defaults and split later reruns into smaller focused groups |
+| A broad context patch removed an unrelated test-local `original` declaration | The patch anchor matched the first identical two-line pattern in the file | Restored the declaration and verified the targeted diff before continuing |
 | PTY dev-server start was rejected by Windows | `exec_command` with `tty: true` failed with access denied through the shell wrapper | Restarted the same `npm run dev` command as a normal non-interactive process |
 | First correct mobile Materials visual pass clipped the bottom save action | Long dialog content plus stacked mobile action buttons left the final button only partially visible | Added a Materials-scoped sticky modal action row and reran desktop/mobile overflow screenshots green |
 | First dev-server stop script failed on `$pid` | PowerShell reserves `$PID`/`$pid` as a read-only process ID variable | Renamed the loop variable to `$listenerId` and stopped the exact node listener on port 5174 |

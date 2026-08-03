@@ -1379,7 +1379,7 @@ test('search and tag center restore legacy read-only index navigation', async ({
     expect(persisted.mirror).toBeNull();
 });
 
-test('tag center opens wheel tag management when no wheel tag exists', async ({ page }) => {
+test('tag center opens wheel tag management and seeds the legacy defaults when wheel data is empty', async ({ page }) => {
     const source = emptyData({
         records: [{
             id: 'idea-tag-only', type: '灵感碎片', title: '只有灵感来源的标签', content: '',
@@ -1398,7 +1398,16 @@ test('tag center opens wheel tag management when no wheel tag exists', async ({ 
     await expect(management).toBeVisible();
     await expect(management).toHaveAttribute('data-management-panel', 'tags');
     await expect(page.getByPlaceholder('标签名称')).toHaveValue('');
-    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.wheels).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: '默认普通转盘', mode: 'normal' }),
+        expect.objectContaining({ name: '默认标签转盘', mode: 'tag' }),
+    ]));
+    expect(stored.data.wheels.find(wheel => wheel.name === '默认普通转盘').items[0]).not.toHaveProperty('tagIds');
+    expect(stored.syncState.dirty).toBe(true);
 });
 
 test('search record results open a read-only preview before editing', async ({ page }) => {
@@ -1520,6 +1529,7 @@ test('wheel canvas click drag and tag stage preserve interaction contracts', asy
     await page.mouse.up();
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).wheelHistory.length)).toBe(2);
 
+    await page.getByRole('button', { name: '标签转盘', exact: true }).click();
     await page.getByLabel('当前转盘', { exact: true }).selectOption('wheel-tag');
     await expect(page.locator('.wheel-mode-badge')).toContainText('标签转盘 · 两段抽取');
     await expect(page.locator('.wheel-result')).toContainText('2 个候选');
@@ -1648,6 +1658,7 @@ test('wheel stage hint follows the legacy three-branch wording', async ({ page }
     const hint = page.locator('.wheel-stage-hint');
     await expect(hint).toHaveText('点击转盘或按钮都可以开始，普通转盘会直接给出最终结果。');
 
+    await page.getByRole('button', { name: '标签转盘', exact: true }).click();
     await page.getByLabel('当前转盘', { exact: true }).selectOption('hint-tag');
     await expect(hint).toHaveText('标签转盘会先定标签，再抽具体内容；也可以直接点某个标签单独转。');
 
@@ -1690,6 +1701,7 @@ test('wheel public library batch actions preserve selection and tombstone contra
     await page.getByRole('checkbox', { name: '选择公共项 番茄牛肉面' }).check();
     await page.getByRole('checkbox', { name: '选择公共项 泡茶放空' }).check();
 
+    await library.locator('.library-batch-tools summary').click();
     await library.locator('.batch-tag-checks').getByRole('checkbox', { name: '活动' }).check();
     await page.getByRole('button', { name: '加标签', exact: true }).click();
     await expect(page.locator('.wheel-notice')).toContainText('已给 2 个公共项加上标签：活动');
@@ -2115,10 +2127,11 @@ test('wheel management list filters modes and exposes card actions', async ({ pa
     await page.locator('#wheel-action-menu-button').click();
     await page.locator('#wheel-action-menu').getByRole('button', { name: '转盘列表' }).click();
     const list = page.locator('.wheel-list-management');
-    await expect(list.locator('.wheel-list-card')).toHaveCount(2);
+    await expect(list.locator('.wheel-list-card')).toHaveCount(1);
+    await expect(list.locator('.wheel-list-card')).toContainText('普通列表盘');
     await list.getByRole('button', { name: '标签', exact: true }).click();
     await expect(list.locator('.wheel-list-card')).toHaveCount(1);
-    await list.getByRole('button', { name: '全部', exact: true }).click();
+    await list.getByRole('button', { name: '普通', exact: true }).click();
     const normalCard = list.locator('.wheel-list-card').filter({ hasText: '普通列表盘' });
     page.once('dialog', dialog => dialog.accept('重命名后的普通盘'));
     await normalCard.getByRole('button', { name: '重命名' }).click();
@@ -2190,7 +2203,8 @@ test('wheel backup restore remaps duplicate tags and assigns orphan public items
 test('wheel create editor adds weighted rows without textarea parsing', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/wheel');
-    await page.locator('.wheel-empty-shell').getByRole('button', { name: '新建转盘' }).click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '新建转盘' }).click();
     const form = page.locator('#wheel-create-panel');
     await form.getByLabel('名称').fill('动态选项盘');
     await form.getByLabel('选项 1').fill('阅读');
@@ -2206,22 +2220,26 @@ test('wheel create editor adds weighted rows without textarea parsing', async ({
     ]));
 });
 
-test('wheel empty state keeps a no-write canvas stage and create entry', async ({ page }) => {
+test('wheel empty data seeds the master default stage and persists the local baseline', async ({ page }) => {
     const source = emptyData();
     await page.addInitScript(data => {
         localStorage.setItem('lifePlanData', JSON.stringify(data));
-        window.__wheelEmptyBefore = localStorage.getItem('lifePlanData');
     }, source);
 
     await page.goto('/#/wheel');
-    const empty = page.locator('.wheel-empty-shell');
-    await expect(empty).toBeVisible();
-    await expect(empty).toContainText('还没有转盘');
-    await expect(empty.locator('.wheel-canvas-wrap')).toBeVisible();
-    await empty.getByRole('button', { name: '新建转盘' }).click();
-    await expect(page.locator('#wheel-create-panel')).toBeInViewport();
-    const unchanged = await page.evaluate(() => window.__wheelEmptyBefore === localStorage.getItem('lifePlanData'));
-    expect(unchanged).toBe(true);
+    await expect(page.locator('.wheel-stage-title')).toContainText('今天做什么');
+    await expect(page.locator('.wheel-mode-badge')).toContainText('普通转盘 · 一步出结果');
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        syncState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.wheels).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: '默认普通转盘', mode: 'normal' }),
+        expect.objectContaining({ name: '默认标签转盘', mode: 'tag' }),
+    ]));
+    expect(stored.data.wheelTags).toHaveLength(4);
+    expect(stored.data.wheelLibraryItems).toHaveLength(5);
+    expect(stored.syncState.dirty).toBe(true);
 });
 
 test('main import export keeps snapshots tombstones mirrors and dirty state compatible', async ({ page }) => {

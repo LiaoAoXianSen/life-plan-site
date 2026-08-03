@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
@@ -17,8 +17,8 @@ const notice = ref('');
 const showManagement = ref(false);
 const activeManagementPanel = ref<'create' | 'edit' | 'library' | 'tags' | 'history' | 'list'>('list');
 const menuOpen = ref(false);
-const modeFilter = ref<'all' | WheelMode>('all');
-const managementListMode = ref<'all' | WheelMode>('all');
+const modeFilter = ref<WheelMode>('normal');
+const managementListMode = ref<WheelMode>('normal');
 let spinTimer: number | undefined;
 let spinFrame: number | undefined;
 let dragState: {
@@ -38,10 +38,7 @@ const selectedWheelHeadline = computed(() => {
   return selectedWheel.value?.name || '未命名转盘';
 });
 const selectedWheelModeLabel = computed(() => selectedWheel.value?.mode === 'tag' ? '标签转盘 · 两段抽取' : '普通转盘 · 一步出结果');
-const modeWheels = computed(() => {
-  if (modeFilter.value === 'all') return wheelStore.wheels;
-  return wheelStore.wheels.filter(wheel => wheel.mode === modeFilter.value);
-});
+const modeWheels = computed(() => wheelStore.wheels.filter(wheel => wheel.mode === modeFilter.value));
 const selectedOptions = computed(() => selectedWheel.value ? wheelStore.candidates(selectedWheel.value, stageTag.value?.id || '') : []);
 const availableTags = computed(() => selectedWheel.value?.mode === 'tag' ? wheelStore.candidateTags(selectedWheel.value) : []);
 const currentResult = computed(() => wheelStore.history.find(item => item.id === resultId.value));
@@ -115,14 +112,20 @@ const managementStats = computed(() => {
   ];
 });
 const managementWheels = computed(() => wheelStore.wheels
-  .filter(wheel => managementListMode.value === 'all' || wheel.mode === managementListMode.value)
+  .filter(wheel => wheel.mode === managementListMode.value)
   .slice()
   .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt))));
 
 watch(() => wheelStore.wheels, wheels => {
   if (!wheels.some(wheel => wheel.id === selectedId.value)) selectedId.value = wheels[0]?.id || '';
 }, { immediate: true, deep: true });
-watch(selectedId, () => { stageTag.value = null; resultId.value = ''; notice.value = ''; });
+watch(selectedId, (wheelId) => {
+  const wheel = wheelStore.wheels.find(item => item.id === wheelId);
+  if (wheel) modeFilter.value = wheel.mode;
+  stageTag.value = null;
+  resultId.value = '';
+  notice.value = '';
+});
 watch(displayEntries, () => { void nextTick(drawWheelCanvas); }, { immediate: true, deep: true });
 onMounted(() => {
   drawWheelCanvas();
@@ -173,6 +176,11 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onWheelDocumentClick);
   window.removeEventListener('resize', updateLibraryTagDropdownPosition);
   window.removeEventListener('scroll', updateLibraryTagDropdownPosition, true);
+});
+
+onBeforeMount(() => {
+  wheelStore.ensureSeedData();
+  if (!selectedId.value) selectedId.value = wheelStore.wheels[0]?.id || '';
 });
 const copyableLibraryItems = computed(() => {
   if (!copyLibraryTagFilter.value) return wheelStore.libraryItems;
@@ -365,10 +373,20 @@ function updateLibraryTagDropdownPosition() {
   const trigger = libraryTagTriggerRef.value;
   if (!trigger) return;
   const rect = trigger.getBoundingClientRect();
+  const optionCount = libraryTagOptions().length;
+  const menuHeight = Math.min(252, 12 + optionCount * 38);
+  const viewportPadding = 10;
+  const belowTop = rect.bottom + 7;
+  const aboveTop = rect.top - menuHeight - 7;
+  const top = window.innerHeight - belowTop - menuHeight < viewportPadding && aboveTop >= viewportPadding
+    ? aboveTop
+    : Math.min(belowTop, Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding));
+  const width = Math.round(rect.width);
+  const maxLeft = Math.max(viewportPadding, window.innerWidth - width - viewportPadding);
   libraryTagDropdownStyle.value = {
-    top: `${Math.round(rect.bottom + 7)}px`,
-    left: `${Math.round(rect.left)}px`,
-    width: `${Math.round(rect.width)}px`,
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(Math.min(maxLeft, Math.max(viewportPadding, rect.left)))}px`,
+    width: `${width}px`,
   };
 }
 function setLibraryTagOptionRef(element: unknown, index: number) {
@@ -386,7 +404,10 @@ function toggleLibraryTagDropdown() {
   if (libraryTagDropdownOpen.value) {
     updateLibraryTagDropdownPosition();
     const currentIndex = libraryTagOptions().findIndex(tag => tag.id === libraryTagFilter.value);
-    focusLibraryTagOption(Math.max(0, currentIndex));
+    void nextTick(() => {
+      updateLibraryTagDropdownPosition();
+      focusLibraryTagOption(Math.max(0, currentIndex));
+    });
   } else {
     libraryTagDropdownStyle.value = {};
   }
@@ -794,12 +815,15 @@ function toggleTag(list: string[], id: string, checked: boolean) { const next = 
 function addWheelCreateItem() { wheelCreateItems.value.push({ name: '', weight: 1 }); }
 function removeWheelCreateItem(index: number) { if (wheelCreateItems.value.length <= 1) return; wheelCreateItems.value.splice(index, 1); }
 function setModeFilter(mode: WheelMode) {
-  modeFilter.value = mode;
   const match = wheelStore.wheels.find(wheel => wheel.mode === mode);
   if (match) {
+    modeFilter.value = mode;
     selectedId.value = match.id;
     stageTag.value = null;
     resultId.value = '';
+  } else if (selectedWheel.value) {
+    modeFilter.value = selectedWheel.value.mode;
+    say(`还没有${mode === 'tag' ? '标签' : '普通'}转盘，当前仍显示${selectedWheel.value.mode === 'tag' ? '标签' : '普通'}转盘。`);
   }
   showManagement.value = false;
   menuOpen.value = false;
@@ -892,8 +916,8 @@ function importJson(event: Event) {
     <section v-if="selectedWheel" class="wheel-stage wheel-focus-shell" aria-label="转盘主舞台">
       <div class="wheel-mode-bar wheel-focus-toolbar">
         <div class="wheel-mode-pills segmented" role="tablist" aria-label="转盘模式">
-          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'normal' || (modeFilter === 'all' && selectedWheel.mode !== 'tag') }" @click="setModeFilter('normal')">普通转盘</button>
-          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'tag' || (modeFilter === 'all' && selectedWheel.mode === 'tag') }" @click="setModeFilter('tag')">标签转盘</button>
+          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'normal' }" @click="setModeFilter('normal')">普通转盘</button>
+          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'tag' }" @click="setModeFilter('tag')">标签转盘</button>
         </div>
         <label class="form-group wheel-selector compact">
           <select id="wheel-selector" v-model="selectedId" :disabled="!modeWheels.length" aria-label="当前转盘">
@@ -1066,7 +1090,6 @@ function importJson(event: Event) {
           </div>
           <div v-if="activeManagementPanel === 'list'" class="wheel-list-management">
             <div class="segmented wheel-list-mode-filter" role="tablist" aria-label="转盘列表模式">
-              <button type="button" :class="{ active: managementListMode === 'all' }" @click="managementListMode = 'all'">全部</button>
               <button type="button" :class="{ active: managementListMode === 'normal' }" @click="managementListMode = 'normal'">普通</button>
               <button type="button" :class="{ active: managementListMode === 'tag' }" @click="managementListMode = 'tag'">标签</button>
             </div>
@@ -1212,11 +1235,13 @@ function importJson(event: Event) {
 .wheel-focus-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;width:100%;max-width:520px;padding:10px;border:1px solid rgba(223,231,239,.96);border-radius:22px;background:rgba(245,247,251,.94);box-shadow:inset 0 1px 0 rgba(255,255,255,.92)}
 .wheel-focus-actions .wheel-spin{flex:1 1 260px}
 .wheel-focus-actions .btn-secondary{min-width:92px}
-.wheel-batch-tools{display:grid;gap:8px;margin:12px 0;padding:10px 12px;border:1px solid rgba(223,231,239,.9);border-radius:12px;background:#fafbfd}.wheel-batch-tools summary{cursor:pointer;font-weight:850;color:#53625a}.wheel-batch-tools textarea{width:100%;resize:vertical;min-height:76px}
+.wheel-batch-tools{display:grid;gap:8px;margin:12px 0;padding:10px 12px;border:1px solid rgba(223,231,239,.9);border-radius:12px;background:#fafbfd}.wheel-batch-tools summary{cursor:pointer;font-weight:850;color:#53625a}.wheel-batch-tools textarea{width:100%;resize:vertical;min-height:76px;padding:9px 10px;border:1px solid rgba(220,228,236,.96);border-radius:10px;background:#fff;color:var(--text)}
+.management-form,.library-form{display:grid;gap:10px;align-items:end;margin:12px 0}.management-form .field-label,.library-form .field-label{display:grid;gap:5px;min-width:0;color:var(--muted);font-size:12px;font-weight:800}.management-form input:not([type="checkbox"]):not([type="color"]),.library-form input:not([type="checkbox"]):not([type="color"]){width:100%;min-width:0;min-height:38px;padding:8px 10px;border:1px solid rgba(220,228,236,.96);border-radius:10px;background:#fff;color:var(--text)}.management-form input:focus,.library-form input:focus{outline:none;border-color:rgba(33,110,78,.55);box-shadow:0 0 0 3px rgba(33,110,78,.09)}.management-form .check-label,.library-form .check-label{display:inline-flex;align-items:center;gap:6px;min-height:38px;white-space:nowrap;color:var(--muted);font-size:12px;font-weight:800}.management-form input[type="checkbox"],.library-form input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent)}.management-form .inline-actions,.library-form .inline-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.option-form{grid-template-columns:minmax(180px,1fr) 90px auto auto}.tag-form{grid-template-columns:minmax(170px,1fr) auto 90px auto auto}.library-form{grid-template-columns:minmax(170px,1fr) minmax(220px,1.35fr) 90px auto auto}.library-form .tag-checks,.library-form .library-ai-suggestions,.library-form .inline-actions{grid-column:1 / -1}.library-form .tag-checks,.library-batch-tools .batch-tag-checks{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;color:var(--muted);font-size:12px;font-weight:750}.library-form .tag-checks label,.library-batch-tools .batch-tag-checks label{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.color-field input[type="color"]{width:44px;height:38px;padding:4px;border:1px solid rgba(220,228,236,.96);border-radius:10px;background:#fff;cursor:pointer}.library-form .library-ai-suggestions{margin-top:0}.library-form .inline-actions{margin-top:0}
 .wheel-copy-row{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(180px,1.3fr) auto;gap:8px;align-items:center}.wheel-copy-row select{min-height:38px;min-width:0}
 .tag-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
 .library-batch-tools{margin-top:12px}
 .library-card-title-row{align-items:flex-end}.library-filter-result{display:block;margin-top:4px;color:#74817b;font-size:12px}.library-filter-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,.42fr);gap:10px;align-items:end;margin:12px 0;padding:12px;border:1px solid rgba(215,224,232,.95);border-radius:14px;background:#fafbfd}.library-filter-toolbar.active{border-color:rgba(33,110,78,.35);background:#f4faf6;box-shadow:0 0 0 2px rgba(33,110,78,.06)}.library-text-filter{display:grid;gap:6px;min-width:0}.library-text-filter span,.library-filter-label{color:#74817b;font-size:11px;font-weight:850}.library-text-filter input{min-width:0;width:100%}.library-tag-filter{position:relative;display:grid;gap:6px;min-width:0}.library-tag-trigger{display:flex;align-items:center;gap:8px;width:100%;min-height:42px;padding:9px 11px;border:1px solid rgba(205,216,225,.98);border-radius:10px;background:#fff;color:#2b3a33;cursor:pointer;font:inherit;font-size:13px;font-weight:800;text-align:left}.library-tag-trigger span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.library-tag-trigger b{color:#74817b}.library-tag-options{position:absolute;z-index:60;top:calc(100% + 7px);right:0;display:grid;width:max(220px,100%);max-height:270px;overflow:auto;padding:6px;border:1px solid rgba(215,224,232,.98);border-radius:13px;background:#fff;box-shadow:0 18px 42px rgba(35,60,45,.18)}.library-tag-options button{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;padding:8px 9px;border:0;border-radius:9px;background:transparent;color:#3c4b44;cursor:pointer;font:inherit;font-size:13px;text-align:left}.library-tag-options button:hover,.library-tag-options button:focus{outline:none;background:#f2f7f4}.library-tag-options button.selected{background:#e8f5ed;color:#216e4e;font-weight:850}.library-tag-options button span{flex:1}.library-note-field{grid-column:1 / -1}.library-item-note{display:block;margin-top:4px;color:#74817b;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.wheel-layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);gap:14px;align-items:start}.wheel-management-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}.wheel-management-grid>.library-card{grid-column:1 / -1}.wheel-stage-card,.management-card,.history-card{min-width:0;padding:18px}.wheel-toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}.wheel-toolbar .wheel-selector{flex:1 1 220px}.wheel-toolbar .btn{flex:0 0 auto}.page-actions{display:flex;flex-wrap:wrap;gap:8px}.import-button{position:relative;overflow:hidden;cursor:pointer}.import-button input{position:absolute;inset:0;width:100%;height:100%;cursor:pointer;opacity:0}.history-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid rgba(220,228,235,.9)}.history-row>div{display:grid;gap:4px;min-width:0}.history-row>div span{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.entity-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid rgba(220,228,235,.9)}.entity-row>span:first-child{display:grid;gap:4px;min-width:0}.entity-row strong{overflow-wrap:anywhere}.entity-row em{color:var(--muted);font-size:12px;font-style:normal;overflow-wrap:anywhere}.entity-row>span:last-child{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;flex:0 0 auto}.link-button{padding:4px 5px;border:0;border-radius:6px;background:transparent;color:#316c4a;cursor:pointer;font:inherit;font-size:12px;font-weight:750}.link-button:hover{background:#eef7f1}.link-button:disabled{cursor:not-allowed;opacity:.45}.danger-text{color:#b84f45}.library-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start}.library-row .library-select{padding-top:2px}.library-row.selected{padding-inline:8px;border-radius:10px;background:#f1f8f3}.library-row>span:nth-child(2){display:grid;gap:4px;min-width:0}.library-row>span:last-child{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}
 .wheel-list-management{display:grid;gap:12px;margin-top:16px}.wheel-list-mode-filter{display:flex;flex-wrap:wrap;gap:6px}.wheel-list-mode-filter button{min-height:34px;padding:7px 12px;border:1px solid rgba(215,224,232,.95);border-radius:10px;background:#fff;color:#53625a;cursor:pointer;font:inherit;font-size:12px;font-weight:800}.wheel-list-mode-filter button.active{background:#eaf5ee;border-color:#a6cdb3;color:#216e4e}.wheel-list-stack{display:grid;gap:10px}.wheel-list-empty{display:grid;gap:8px;justify-items:center;align-content:center;padding:28px 16px}.wheel-list-empty strong{font-size:14px;color:#2b3a33}.wheel-list-empty .wheel-hint{display:block}.wheel-list-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid rgba(220,228,235,.96);border-radius:14px;background:#fff}.wheel-list-card.selected{border-color:#a8cdb4;box-shadow:0 0 0 2px rgba(33,110,78,.08)}.wheel-list-card-main{display:grid;gap:7px;min-width:0}.wheel-list-card-title{display:flex;align-items:center;gap:8px;min-width:0}.wheel-list-card-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wheel-list-card-meta{display:flex;flex-wrap:wrap;gap:8px;color:#74817b;font-size:12px}.wheel-list-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#f3f6f4;color:#53625a;font-size:11px;font-weight:800}.wheel-list-badge.current{background:#e8f5ed;color:#216e4e}.wheel-list-card-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;flex-shrink:0}.wheel-mini-btn{min-height:32px;padding:6px 10px;border:1px solid rgba(215,224,232,.95);border-radius:9px;background:#fff;color:#53625a;cursor:pointer;font:inherit;font-size:12px;font-weight:800}.wheel-mini-btn.primary{background:#eef8f1;border-color:#afd1b8;color:#216e4e}.wheel-mini-btn.danger{color:#b64d47}
 .history-head-actions,.history-row-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}.history-done{color:#688276;font-size:12px}
 .wheel-create-items{display:grid;gap:8px}.wheel-create-item-row{display:grid;grid-template-columns:minmax(0,1fr) 84px auto;gap:8px;align-items:center}.wheel-create-item-row input{min-width:0}
@@ -1262,6 +1287,9 @@ function importJson(event: Event) {
 .wheel-library-tag-options{position:fixed;z-index:110;display:grid;overflow-y:auto;max-height:min(252px,38vh);padding:5px;border:1px solid rgba(207,218,211,.98);border-radius:12px;background:#fff;box-shadow:0 6px 8px rgba(29,54,41,.14)}.wheel-library-tag-option{display:flex;width:100%;min-height:38px;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;border:0;border-radius:8px;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer}.wheel-library-tag-option:hover,.wheel-library-tag-option:focus-visible{background:rgba(33,110,78,.07);outline:none}.wheel-library-tag-option.is-selected{background:rgba(33,110,78,.1);color:var(--accent);font-weight:850}.wheel-library-tag-check{color:var(--accent);font-size:13px;font-style:normal;font-weight:900;opacity:0}.wheel-library-tag-option.is-selected .wheel-library-tag-check{opacity:1}
 .wheel-library-bulk-actions{justify-content:flex-end;flex-wrap:wrap;gap:6px}.wheel-library-bulk-actions .wheel-mini-btn{min-height:32px;padding:0 10px}.wheel-select-all-row{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800}
 @media (max-width: 700px) {
+  .wheel-layout,.wheel-management-grid{grid-template-columns:minmax(0,1fr)}
+  .wheel-management-grid>.library-card{grid-column:auto}
+  .management-form,.library-form,.option-form,.tag-form{grid-template-columns:minmax(0,1fr)}
   .library-filter-toolbar{grid-template-columns:minmax(0,1fr)}
   .wheel-library-toolbar,.wheel-library-filter-group{grid-template-columns:1fr}
   .wheel-library-filter,.wheel-library-bulk-actions{align-items:stretch;flex-direction:column}

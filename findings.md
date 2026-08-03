@@ -282,3 +282,24 @@
 - Route smoke now records failed network requests in addition to page exceptions, so a missing lazy page chunk fails the acceptance gate.
 - Lazy navigation changed unmount timing enough to expose a real Records contract gap: URL assertions could complete before `onBeforeUnmount` persisted dirty editors/drafts. `onBeforeRouteLeave` now provides the synchronous pre-navigation save point, while unmount remains a fallback.
 - All known specialist follow-ups and planned technical cleanup are closed. The documented active Vue project scope is **100% complete**; live deployment switching remains excluded.
+
+## 2026-08-03 master-to-Vue re-audit started
+
+- Current branch is `migration/vue-app-v1`; `master` is 13 commits ahead and 307 commits behind by ancestry, so the migration branch is not a simple fast-forward view of current master.
+- Existing uncommitted user changes are present in `src/pages/WheelPage.vue` and `src/stores/wheelStore.ts`; untracked `.freebuff/`, `.workbuddy/`, `previews/`, `tmp-legacy.png`, and `tmp-vue.png` must be preserved.
+- The current documented 100% claim predates the new master-only commits and must be treated as stale until the master-only diff and live Vue behavior are rechecked.
+- The master-only Materials work covers title normalization, title-aware search, tag filtering/editor, random tag filtering, long-copy disclosure, and a detail modal; Vue has corresponding UI/state paths, but exact persisted-field and route behavior still needs contract verification.
+- The master-only Wheel work covers public-library text search, custom tag dropdown keyboard/viewport behavior, wheel-list mode filtering, and layout refinements; Vue contains corresponding controls, but current dirty defaults force `normal` mode and a new `ensureSeedData` helper is not yet proven safe or used.
+- Legacy `wheel-tool.js` calls `ensureSeedData()` during wheel-page rendering and current-wheel resolution. The dirty Vue Store contains an equivalent seed builder, but `WheelPage.vue` currently has no lifecycle call, so empty wheel data does not receive the legacy default stage.
+- The first browser run confirmed the seed behavior changes `lifePlanData` and marks `lifePlanSyncState.dirty`; this matches legacy persistence rather than the former Vue no-write empty shell.
+- The Vue seed implementation initially spread public seed items into private normal-wheel items, carrying `tagIds`; the corrected implementation copies only the legacy private fields and keeps public tags on `wheelLibraryItems`.
+- Mode state now synchronizes from `selectedId`, covering stage selection, management-list opening, creation, and restore; a missing target mode falls back to the current available mode instead of leaving an invalid stage/filter combination.
+
+## 2026-08-03 master-to-Vue re-audit closeout
+
+- The master-only Materials commits were already represented in Vue: explicit title fallback, title-aware search, tag editing/filtering, random tag filtering, long-copy disclosure, deep-link detail, and protected persistence all passed the five Materials contracts.
+- The Wheel parity gap was lifecycle-level: `wheelStore.ensureSeedData()` existed but was never called. Calling it before Wheel mount now creates the same default normal/tag wheels, four tags, and five public items as legacy; normal private entries intentionally omit public `tagIds`.
+- The Wheel stage/list mode is now derived from the selected wheel. Selecting a tag wheel through the mode pill, list, restore, or direct selector cannot leave a stale normal-mode filter; the removed `全部` branch is no longer asserted or rendered.
+- Live browser inspection found two additional migration regressions not covered by behavioral tests: the fixed custom tag menu could open below the viewport after list mutations, and Vue management classes lacked the legacy form/list styles. The menu now flips/clamps within the viewport, and Wheel forms, entity rows, list cards, history rows, imports, and mobile layouts have scoped styles.
+- Verification: `npm run build`; Wheel 34/34; Materials 5/5; full Vue smoke 219/219; `git diff --check`; `npm run package:vue` produced `life-plan-site-vue-dist-20260803-175211.zip`. Browser checks covered Wheel desktop, Wheel library/list management, Materials empty state, mobile layout, and document/page horizontal overflow.
+- A parallel Materials run once observed both expected list contents missing while four later tests passed; an isolated rerun passed 5/5, and the final serial full suite passed 219/219. No unresolved runtime failure remains.
