@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
 import RecordCreateModal from '../components/RecordCreateModal.vue';
@@ -455,6 +455,19 @@ function closeEditor(flush = true) {
   if (route.query.record) updateRecordQuery();
 }
 
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return;
+  if (previewDraft.value) {
+    closeRecordPreview();
+    return;
+  }
+  if (activeRecordId.value) {
+    closeEditor();
+    return;
+  }
+  if (showTemplateManager.value) showTemplateManager.value = false;
+}
+
 function getEditorUpdateInput() {
   const ideaFields = editForm.type === '灵感碎片'
     ? {
@@ -757,11 +770,14 @@ watch(() => editForm.type, type => {
   setTemplateValues();
 });
 
+onMounted(() => window.addEventListener('keydown', handleKeydown));
+
 onBeforeRouteLeave(() => {
   flushPendingEditorSave();
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown);
   flushPendingEditorSave();
   window.clearTimeout(recordAutoSaveTimer);
 });
@@ -887,16 +903,17 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <section v-if="activeRecord" class="card record-editor-panel" aria-labelledby="record-editor-title">
-      <div class="section-title-row">
-        <div>
-          <h2 id="record-editor-title">编辑记录</h2>
-          <p class="section-hint">保存会写入原有 records 字段；关联待办会同步重建 todoAppData 镜像。</p>
+    <div v-if="activeRecord && !previewDraft" class="modal-overlay active record-editor-overlay" role="presentation" @click.self="closeEditor()">
+      <section class="modal modal-lg record-editor-panel" role="dialog" aria-modal="true" aria-labelledby="record-editor-title">
+        <div class="section-title-row">
+          <div>
+            <h2 id="record-editor-title">编辑记录</h2>
+            <p class="section-hint">保存会写入原有 records 字段；关联待办会同步重建 todoAppData 镜像。</p>
+          </div>
+          <div class="page-actions"><button class="btn btn-secondary" type="button" @click="previewCurrentRecord">预览</button><button class="btn btn-secondary" type="button" @click="closeEditor()">关闭</button></div>
         </div>
-        <div class="page-actions"><button class="btn btn-secondary" type="button" @click="previewCurrentRecord">预览</button><button class="btn btn-secondary" type="button" @click="closeEditor()">关闭</button></div>
-      </div>
-      <p v-if="editorNotice" class="notice success" role="status">{{ editorNotice }}</p>
-      <div class="record-editor-grid">
+        <p v-if="editorNotice" class="notice success" role="status">{{ editorNotice }}</p>
+        <div class="record-editor-grid">
         <form class="record-edit-form" @submit.prevent="saveEditor">
           <div class="form-row">
             <label class="form-group"><span>标题</span><input v-model="editForm.title" required /></label>
@@ -1036,8 +1053,9 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </aside>
-      </div>
-    </section>
+        </div>
+      </section>
+    </div>
 
     <div id="all-records">
       <template v-if="view === 'list'">
@@ -1066,7 +1084,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.record-editor-panel { margin-bottom: 18px; }
+.record-editor-panel { margin-bottom: 0; }
+.record-editor-overlay { z-index: 105; }
 .record-preview-modal { max-width: 720px; }
 .record-preview-dialog-body { display: grid; gap: 14px; }
 #page-records .calendar-toolbar {

@@ -4973,6 +4973,8 @@ test('records list and editor expose a frozen legacy-style read-only preview', a
     await preview.getByRole('button', { name: '编辑', exact: true }).click();
 
     const editor = page.locator('.record-editor-panel');
+    await expect(page.locator('.record-editor-overlay')).toBeVisible();
+    await expect(page.locator('#all-records .record-row')).toHaveCount(1);
     await editor.getByLabel('标题').fill('尚未保存标题');
     await editor.getByRole('button', { name: '预览', exact: true }).click();
     await expect(preview).toContainText('尚未保存标题');
@@ -5005,6 +5007,26 @@ test('records saved editor preview does not claim unsaved changes', async ({ pag
     await expect(preview).not.toContainText('当前预览，尚未保存');
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.records[0].title).toBe('已经保存的标题');
+});
+
+test('records editor closes with Escape without changing saved data', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        records: [{
+            id: 'record-escape-close', type: '工作记录', title: 'Escape 关闭记录', content: '保持原文',
+            startDate: today, endDate: today, todoIds: [], createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records?record=record-escape-close');
+    await expect(page.locator('.record-editor-overlay')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+
+    await expect(page.locator('.record-editor-overlay')).toHaveCount(0);
+    await expect(page).toHaveURL(/#\/records$/);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
 test('records deletion keeps the legacy confirmation and exclusive todo cascade', async ({ page }) => {
