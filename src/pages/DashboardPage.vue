@@ -13,6 +13,24 @@ import type { DataEntity, Todo } from '../types/lifePlan';
 import { addDays, buildScheduleItems, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
 
 type MaterialEntity = DataEntity & { id?: string; title?: string; content?: string; type?: string; tags?: string[]; source?: string; note?: string; createdAt?: string };
+type RecordEntity = DataEntity & {
+  id: string;
+  title?: string;
+  content?: string;
+  type?: string;
+  startDate?: string;
+  endDate?: string;
+  recordTime?: string;
+  recordEndTime?: string;
+  updatedAt?: string;
+  createdAt?: string;
+  todoIds?: string[];
+  ideaStatus?: string;
+  ideaTags?: string[];
+  ideaNextAction?: string;
+  ideaTodoId?: string;
+  ideaConclusion?: string;
+};
 type FloatingMode = 'random' | 'newest' | 'oldest';
 
 const router = useRouter();
@@ -28,6 +46,7 @@ const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
 const floatingMode = ref<FloatingMode>('random');
 const expandedMaterialIds = ref<string[]>([]);
 const timelineRangeDays = ref(30);
+const dashboardPreviewRecord = ref<RecordEntity | null>(null);
 const periodTypes = ['周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
 const urgencyLabels: Record<Todo['urgency'], string> = { urgent: '紧急', high: '高', medium: '中', low: '低' };
 
@@ -140,12 +159,39 @@ function formatLongDate(value: string) {
   return `${match[1]}年${Number(match[2])}月${Number(match[3])}日`;
 }
 
+function recordTodoIds(record: DataEntity) {
+  return Array.isArray(record.todoIds) ? record.todoIds.map(String).filter(Boolean) : [];
+}
+
+const dashboardPreviewTodos = computed(() => {
+  if (!dashboardPreviewRecord.value) return [];
+  const todoIds = recordTodoIds(dashboardPreviewRecord.value);
+  return lifePlan.data.todos.filter(todo => todoIds.includes(todo.id));
+});
+const dashboardPreviewSections = computed(() => recordsStore.services.records.parseRecordContentSections(dashboardPreviewRecord.value?.content || ''));
+const dashboardPreviewIdeaTodoText = computed(() => {
+  const record = dashboardPreviewRecord.value;
+  if (!record?.ideaTodoId) return '未关联';
+  return dashboardPreviewTodos.value.find(todo => todo.id === record.ideaTodoId)?.text || '未关联';
+});
+
 function openTodo(todoId: string) {
   void router.push({ path: '/todos', query: { todo: todoId } });
 }
 
 function openRecord(recordId: string) {
-  void router.push({ path: '/records', query: { record: recordId, preview: '1' } });
+  const record = lifePlan.data.records.find(item => item.id === recordId);
+  dashboardPreviewRecord.value = record ? record as RecordEntity : null;
+}
+
+function closeDashboardPreview() {
+  dashboardPreviewRecord.value = null;
+}
+
+function editDashboardPreview() {
+  const recordId = dashboardPreviewRecord.value?.id;
+  closeDashboardPreview();
+  if (recordId) void router.push({ path: '/records', query: { record: recordId } });
 }
 
 function openScheduleItem(item: ScheduleItem) {
@@ -201,7 +247,7 @@ function createRecordOfType(type: string) {
 }
 
 function openExistingFromCreate(recordId: string) {
-  openRecord(recordId);
+  void router.push({ path: '/records', query: { record: recordId } });
 }
 
 function openAi(mode: string) {
@@ -709,6 +755,53 @@ const timelineGroups = computed(() => {
       <div v-else class="empty-state">当前范围暂无记录，换个范围或新建第一条吧</div>
     </article>
 
+    <div v-if="dashboardPreviewRecord" class="modal-overlay active" role="presentation" @click.self="closeDashboardPreview">
+      <section class="modal record-preview-modal" role="dialog" aria-modal="true" aria-labelledby="dashboard-record-preview-title">
+        <div class="modal-header">
+          <div class="modal-title" id="dashboard-record-preview-title">记录预览</div>
+          <button class="close-btn" type="button" aria-label="关闭记录预览" @click="closeDashboardPreview">×</button>
+        </div>
+        <div class="record-preview-dialog-body">
+          <div class="record-preview-top">
+            <span class="item-type">{{ dashboardPreviewRecord.type || '记录' }}</span>
+            <div class="record-preview-title">{{ dashboardPreviewRecord.title || '未命名记录' }}</div>
+            <div class="record-preview-meta">
+              <span>{{ recordsStore.services.records.getRecordDateRangeLabel(dashboardPreviewRecord) }}</span>
+              <span>时间 {{ dashboardPreviewRecord.recordTime || '全天' }}<template v-if="dashboardPreviewRecord.recordEndTime"> - {{ dashboardPreviewRecord.recordEndTime }}</template></span>
+              <span>待办 {{ dashboardPreviewTodos.filter(todo => todo.done).length }}/{{ dashboardPreviewTodos.length }}</span>
+              <span v-if="dashboardPreviewRecord.updatedAt || dashboardPreviewRecord.createdAt">更新于 {{ formatStoredDateTime(dashboardPreviewRecord.updatedAt || dashboardPreviewRecord.createdAt) }}</span>
+            </div>
+          </div>
+          <div class="record-preview-content">
+            <div class="record-preview-heading">内容</div>
+            <div v-if="dashboardPreviewSections.length">
+              <section v-for="section in dashboardPreviewSections" :key="section.title" class="record-preview-section">
+                <h4>{{ section.title }}</h4>
+                <div class="record-preview-text">{{ section.body.join('\n').trim() || '暂未填写' }}</div>
+              </section>
+            </div>
+            <div v-else class="record-preview-empty">还没有内容</div>
+          </div>
+          <div v-if="dashboardPreviewRecord.type === '灵感碎片'" class="record-preview-content">
+            <div class="record-preview-heading">灵感推进</div>
+            <div class="record-idea-badges"><span>{{ dashboardPreviewRecord.ideaStatus || '待整理' }}</span><span v-for="tag in recordsStore.services.records.getIdeaTags(dashboardPreviewRecord)" :key="tag">{{ tag }}</span></div>
+            <div class="record-idea-preview-grid">
+              <div><strong>下一步</strong><span>{{ dashboardPreviewRecord.ideaNextAction || '未设置' }}</span></div>
+              <div><strong>关联待办</strong><span>{{ dashboardPreviewIdeaTodoText }}</span></div>
+              <div><strong>结果结论</strong><span>{{ dashboardPreviewRecord.ideaConclusion || '还没有结论' }}</span></div>
+            </div>
+          </div>
+          <div v-if="dashboardPreviewTodos.length" class="record-preview-todos">
+            <div class="record-preview-heading">关联待办</div>
+            <div v-for="todo in dashboardPreviewTodos" :key="todo.id" class="record-preview-todo-item" :class="{ done: todo.done }">
+              <span class="record-preview-dot" /><span>{{ todo.text || '未命名待办' }}</span>
+            </div>
+          </div>
+          <div class="record-preview-actions"><button class="btn btn-secondary" type="button" @click="editDashboardPreview">编辑</button></div>
+        </div>
+      </section>
+    </div>
+
     <RecordCreateModal ref="createModal" v-model="showCreateRecord" @open-existing="openExistingFromCreate" />
   </section>
 </template>
@@ -793,6 +886,8 @@ const timelineGroups = computed(() => {
 .progress-bar { min-width: 0; }
 .timeline-item { width: 100%; min-width: 0; text-align: left; }
 .item-preview { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.record-preview-modal { max-width: 720px; }
+.record-preview-dialog-body { display: grid; gap: 14px; }
 @media (max-width: 980px) {
   .command-center { grid-template-columns: minmax(0, 1fr); }
   .today-grid { grid-template-columns: minmax(0, 1fr); }

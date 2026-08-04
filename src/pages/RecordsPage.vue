@@ -422,19 +422,29 @@ function previewCurrentRecord() {
 }
 
 function closeRecordPreview() {
+  const returnToEditor = previewFromEditor.value;
   previewDraft.value = null;
   previewFromEditor.value = false;
-  if (route.query.preview) {
+  if (route.query.preview || route.query.record) {
     const query = { ...route.query };
     delete query.preview;
+    if (!returnToEditor) delete query.record;
     void router.replace({ path: route.path, query });
   }
 }
 
 function editPreviewRecord() {
   const record = previewDraft.value;
-  closeRecordPreview();
-  if (record) openEditor(record);
+  const returnToEditor = previewFromEditor.value;
+  if (!record) return;
+  previewDraft.value = null;
+  previewFromEditor.value = false;
+  const query = { ...route.query };
+  delete query.preview;
+  if (!returnToEditor) query.record = record.id;
+  void router.replace({ path: route.path, query }).then(() => {
+    if (!returnToEditor && activeRecordId.value !== record.id) openEditor(record, false);
+  });
 }
 
 function openExistingFromCreate(recordId: string) {

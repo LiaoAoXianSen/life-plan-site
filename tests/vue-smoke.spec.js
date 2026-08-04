@@ -477,10 +477,20 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
 
     await page.goto('/#/dashboard');
     await page.locator('.period-item').filter({ hasText: '本周计划入口' }).click();
-    await expectHashRoute(page, '/records', { record: 'record-dashboard-period', preview: '1' });
-    await expect(page.getByRole('dialog', { name: '记录预览' })).toContainText('本周计划入口');
+    await expect(page).toHaveURL(/#\/dashboard$/);
+    const dashboardPreview = page.getByRole('dialog', { name: '记录预览' });
+    await expect(dashboardPreview).toContainText('本周计划入口');
     await expect(page.locator('.record-editor-panel')).toHaveCount(0);
     await expect(page.locator('#all-records .record-row-actions')).toHaveCount(0);
+    await dashboardPreview.getByRole('button', { name: '关闭记录预览' }).click();
+    await expect(page).toHaveURL(/#\/dashboard$/);
+    await expect(page.getByRole('dialog', { name: '记录预览' })).toHaveCount(0);
+
+    await page.locator('.dashboard-timeline').getByRole('button', { name: /Dashboard 日记记录/ }).click();
+    await expect(page).toHaveURL(/#\/dashboard$/);
+    await expect(dashboardPreview).toContainText('Dashboard 日记记录');
+    await dashboardPreview.getByRole('button', { name: '关闭记录预览' }).click();
+    await expect(page.getByRole('dialog', { name: '记录预览' })).toHaveCount(0);
 
     await page.goto('/#/dashboard');
     await page.getByRole('button', { name: /执行：执行入口待办/ }).click();
@@ -5009,6 +5019,26 @@ test('records saved editor preview does not claim unsaved changes', async ({ pag
     expect(stored.records[0].title).toBe('已经保存的标题');
 });
 
+test('records external preview closes back to the list without opening the editor', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        records: [{
+            id: 'record-external-preview', type: '日记', title: '外部预览记录', content: '列表预览内容',
+            startDate: today, endDate: today, todoIds: [], createdAt: `${today}T08:00:00`, updatedAt: `${today}T08:00:00`,
+        }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records?record=record-external-preview&preview=1');
+
+    const preview = page.getByRole('dialog', { name: '记录预览' });
+    await expect(preview).toContainText('外部预览记录');
+    await preview.getByRole('button', { name: '关闭记录预览' }).click();
+
+    await expect(page).toHaveURL(/#\/records$/);
+    await expect(page.locator('.record-editor-panel')).toHaveCount(0);
+    await expect(page.locator('#all-records .record-row')).toContainText('外部预览记录');
+});
+
 test('records editor closes with Escape without changing saved data', async ({ page }) => {
     const today = localDate();
     const source = emptyData({
@@ -6286,13 +6316,15 @@ test('record editor autosaves after three seconds and flushes before close switc
     await page.getByRole('button', { name: /关闭前刷新记录/ }).first().click();
     await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     await editor.getByLabel('内容').fill('切换记录前刷新');
+    await editor.getByRole('button', { name: '关闭', exact: true }).click();
     await page.getByRole('button', { name: /切换目标记录/ }).first().click();
     await page.getByRole('dialog', { name: '记录预览' }).getByRole('button', { name: '编辑', exact: true }).click();
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.records.find(item => item.id === 'record-autosave').content).toBe('切换记录前刷新');
 
     await editor.getByLabel('内容').fill('离开页面前刷新');
-    await page.getByRole('link', { name: '灵感池' }).click();
+    await page.evaluate(() => { window.location.hash = '#/ideas'; });
+    await expect(page).toHaveURL(/#\/ideas$/);
     stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
     expect(stored.records.find(item => item.id === 'record-switch').content).toBe('离开页面前刷新');
 });
@@ -6336,7 +6368,7 @@ test('new record modal keeps blank initialization read-only then autosaves and r
     await page.locator('#page-records').getByRole('button', { name: /新建记录/ }).click();
     modal = page.getByRole('dialog');
     await modal.getByRole('button', { name: '日记', exact: true }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('.record-create-modal')).toHaveCount(0);
     const editor = page.locator('.record-editor-panel');
     await expect(editor).toBeVisible();
     await expect(editor.getByRole('status')).toContainText('这个周期已经有一条了');
