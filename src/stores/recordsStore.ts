@@ -56,7 +56,7 @@ export const useRecordsStore = defineStore('records', () => {
   const lifePlan = useLifePlanStore();
   const ideas = computed(() => lifePlan.data.records.filter(record => record.type === '灵感碎片'));
   const materials = computed(() => lifePlan.data.materials);
-  const uniqueScopedRecordTypes = new Set(['日记', '日计划', '工作记录', '周复盘', '周计划', '月复盘', '月计划', '年复盘', '年度计划', '3年计划', '终身愿景']);
+  const uniqueScopedRecordTypes = new Set(['日记', '日计划', '工作记录', '健康日报', '周复盘', '周计划', '月复盘', '月计划', '年复盘', '年度计划', '3年计划', '终身愿景']);
 
   function findExistingScopedRecord(type: string, startDate: string, endDate: string, excludeId = '') {
     if (!uniqueScopedRecordTypes.has(type)) return null;
@@ -379,6 +379,54 @@ export const useRecordsStore = defineStore('records', () => {
     return result;
   }
 
+  function applyHealthReportRecord(input: { date: string; fields: Record<string, string> }): AiCaptureApplyResult | null {
+    const date = String(input.date || getTodayStr()).slice(0, 10);
+    const template = services.records.getBuiltInTemplate('builtin-health-daily');
+    if (!template) return null;
+    const cleanFields = Object.fromEntries(
+      template.fields.map((field: { id: string }) => [field.id, String(input.fields?.[field.id] || '').trim()]),
+    ) as Record<string, string>;
+    if (!Object.values(cleanFields).some(Boolean)) return null;
+    let result: AiCaptureApplyResult | null = null;
+    lifePlan.mutate('apply-health-report-record', data => {
+      const existing = data.records.find(record => record.type === '健康日报' && String(record.startDate || '') === date);
+      if (existing) {
+        const values = services.records.parseTemplateContent(template, String(existing.content || '')) as Record<string, string>;
+        Object.entries(cleanFields).forEach(([key, value]) => {
+          if (value) values[key] = value;
+        });
+        existing.templateId = template.id;
+        existing.content = services.records.composeTemplateContent(template, values);
+        existing.updatedAt = getNowLocal();
+        result = { id: String(existing.id), type: '健康日报', created: false };
+        return;
+      }
+      const now = getNowLocal();
+      const record: DataEntity = {
+        id: genId(),
+        type: '健康日报',
+        title: `${date} 健康日报`,
+        startDate: date,
+        endDate: date,
+        recordTime: new Date().toTimeString().slice(0, 5),
+        recordEndTime: '',
+        content: services.records.composeTemplateContent(template, cleanFields),
+        templateId: template.id,
+        todoIds: [],
+        ideaStatus: '',
+        ideaTags: [],
+        ideaNextAction: '',
+        ideaTodoId: '',
+        ideaConclusion: '',
+        createdAt: now,
+        updatedAt: now,
+      };
+      data.records.push(record);
+      result = { id: String(record.id), type: '健康日报', created: true };
+    });
+    return result;
+  }
+
   function addIdea(title: string, content = '') {
     const now = getNowLocal();
     lifePlan.data.records.unshift({ id: genId(), type: '灵感碎片', title, content, startDate: getTodayStr(), endDate: getTodayStr(), recordTime: '', recordEndTime: '', todoIds: [], ideaStatus: '待整理', ideaTags: [], ideaNextAction: '', ideaTodoId: '', ideaConclusion: '', createdAt: now, updatedAt: now });
@@ -514,5 +562,5 @@ export const useRecordsStore = defineStore('records', () => {
       data[collection] = data[collection].filter(entity => entity.id !== id) as never;
     });
   }
-  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, applyAiCaptureToDiary, applyAiCaptureRecord, addIdea, setIdeaStatus, applyIdeaNextAction, applyIdeaAiActions, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
+  return { ideas, materials, findExistingScopedRecord, addRecord, updateRecord, saveRecordDraft, addTemplate, deleteTemplate, replaceRecordTodosFromTemplate, linkExistingTodo, createExclusiveTodo, removeLinkedTodo, applyDiaryAiSections, createDiaryAiTodos, applyAiCaptureToDiary, applyAiCaptureRecord, applyHealthReportRecord, addIdea, setIdeaStatus, applyIdeaNextAction, applyIdeaAiActions, linkIdeaTodo, addMaterial, saveMaterial, deleteMaterial, remove, services };
 });

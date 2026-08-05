@@ -24,7 +24,7 @@ export interface ScheduleBuildOptions {
 
 const tones: Record<string, ScheduleTone> = {
   '日记': { bg: '#e7f1ff', border: '#5f9ee5', ink: '#163d67' }, '日计划': { bg: '#e7f1ff', border: '#5f9ee5', ink: '#163d67' },
-  '工作记录': { bg: '#e6f4ed', border: '#5f9b78', ink: '#183b2b' }, '灵感碎片': { bg: '#fff3d2', border: '#cfaf34', ink: '#5f4f11' },
+  '工作记录': { bg: '#e6f4ed', border: '#5f9b78', ink: '#183b2b' }, '健康日报': { bg: '#fdeef2', border: '#d98aa0', ink: '#6d2a3d' }, '灵感碎片': { bg: '#fff3d2', border: '#cfaf34', ink: '#5f4f11' },
   '待办计划': { bg: '#eef6f1', border: '#8db29b', ink: '#274335' }, '待办截止': { bg: '#fff3d2', border: '#cfaf34', ink: '#5f4f11' },
   '待办执行': { bg: '#ffe9df', border: '#d77f57', ink: '#743116' }, '习惯': { bg: '#e8f3eb', border: '#6ca07c', ink: '#244c33' },
   '习惯-全天': { bg: '#e8edf4', border: '#8a96a8', ink: '#344055' }, '习惯-晨间': { bg: '#fff1dd', border: '#d99138', ink: '#5e4214' },

@@ -99,6 +99,22 @@
                     { id: 'focusTime', label: '专注/用时', placeholder: '大概投入了多久？哪些时间最有效？' },
                     { id: 'tomorrow', label: '明日接续', placeholder: '明天打开电脑后第一件要接着做的是什么？', rows: 3 }
                 ]
+            },
+            {
+                id: 'builtin-health-daily',
+                builtIn: true,
+                name: '健康日报 · 每日身体数据',
+                type: '健康日报',
+                description: '把每天的体重、训练、饮食、睡眠整理成一条结构化记录，方便长期回看变化。',
+                fields: [
+                    { id: 'weight', label: '体重', placeholder: '例如 68.5kg，或直接写 68.5。' },
+                    { id: 'waist', label: '腰围/围度', placeholder: '可选：腰围、胸围等，单位 cm。' },
+                    { id: 'workout', label: '训练', placeholder: '今天练了什么？动作、时长、强度。', rows: 3 },
+                    { id: 'diet', label: '饮食', placeholder: '三餐、加餐、喝水情况。', rows: 3 },
+                    { id: 'sleep', label: '睡眠', placeholder: '几点睡、睡了几小时、状态如何。' },
+                    { id: 'note', label: '状态备注', placeholder: '身体感受、能量、疼痛或特殊情况。', rows: 3 },
+                    { id: 'coachNote', label: '教练小结', placeholder: 'AI 教练对今天的分析要点。', rows: 3 }
+                ]
             }
         ];
 

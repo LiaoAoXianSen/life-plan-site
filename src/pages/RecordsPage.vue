@@ -106,7 +106,7 @@ let diaryAiRequestToken = 0;
 const previewDraft = ref<RecordEntity | null>(null);
 const previewFromEditor = ref(false);
 
-const typeOptions = ['日记', '日计划', '工作记录', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
+const typeOptions = ['日记', '日计划', '工作记录', '健康日报', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
 const activeRecord = computed(() => lifePlan.data.records.find(record => record.id === activeRecordId.value) as RecordEntity | undefined);
 const openTodos = computed(() => lifePlan.data.todos
   .filter(todo => !todo.done || editForm.todoIds.includes(todo.id))

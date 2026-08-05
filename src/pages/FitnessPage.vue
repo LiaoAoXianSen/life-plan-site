@@ -4,6 +4,7 @@ import { computed, onUnmounted, reactive, ref } from 'vue';
 import AppSelect from '../components/common/AppSelect.vue';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
+import { useRecordsStore } from '../stores/recordsStore';
 
 type PlanSetDraft = { id?: string; weight?: unknown; reps?: unknown };
 type PlanExerciseDraft = {
@@ -761,8 +762,9 @@ function planExerciseDetail(exercise: Record<string, any>) {
 }
 
 // ---- AI 健身教练 ----
-type CoachMessage = { role: 'user' | 'coach'; title?: string; text: string; items?: string[]; time?: string };
+type CoachMessage = { role: 'user' | 'coach'; title?: string; text: string; items?: string[]; time?: string; fields?: Record<string, string> };
 const ai = createLegacyServices().ai;
+const records = useRecordsStore();
 const coachStorageKey = 'lifePlanFitnessCoach';
 const coachConfig = reactive(ai.normalizeConfig(readPersistedAiConfig()));
 const coachMessages = ref<CoachMessage[]>([]);
@@ -771,6 +773,18 @@ const coachInput = ref('');
 const coachRunning = ref(false);
 const coachStatus = ref('');
 const coachError = ref('');
+const healthDraft = reactive({
+  open: false,
+  date: getTodayStr(),
+  weight: '',
+  waist: '',
+  workout: '',
+  diet: '',
+  sleep: '',
+  note: '',
+  coachNote: '',
+  syncWeight: false,
+});
 
 function readPersistedAiConfig() {
   try {
@@ -788,6 +802,7 @@ function loadCoachStore() {
       title: String(message.title || ''),
       text: String(message.text || ''),
       items: Array.isArray(message.items) ? message.items.map(item => String(item || '')).filter(Boolean) : [],
+      fields: (message.fields && typeof message.fields === 'object') ? { ...message.fields } : undefined,
       time: String(message.time || ''),
     })) : [];
     coachMemory.value = (raw.memory && typeof raw.memory === 'object') ? { ...raw.memory } : {};
@@ -877,6 +892,7 @@ async function sendCoachMessage() {
       title: String(raw?.title || '教练分析'),
       text: String(raw?.summary || ''),
       items: Array.isArray(raw?.items) ? raw.items.map((item: any) => String(item?.text || item || '').trim()).filter(Boolean) : [],
+      fields: (raw?.fields && typeof raw.fields === 'object') ? { ...raw.fields } : undefined,
       time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
     });
     persistCoachStore();
@@ -886,6 +902,65 @@ async function sendCoachMessage() {
   } finally {
     coachRunning.value = false;
   }
+}
+
+function lastCoachMessage() {
+  return [...coachMessages.value].reverse().find(message => message.role === 'coach') || null;
+}
+
+function openHealthDraft() {
+  const coach = lastCoachMessage();
+  const fields = coach?.fields || {};
+  Object.assign(healthDraft, {
+    open: true,
+    date: getTodayStr(),
+    weight: String(fields.weight || '').trim().replace(/\s*(kg|公斤|千克)\s*$/i, ''),
+    waist: String(fields.waist || '').trim(),
+    workout: String(fields.workout || '').trim(),
+    diet: String(fields.diet || '').trim(),
+    sleep: String(fields.sleep || '').trim(),
+    note: String(fields.note || '').trim(),
+    coachNote: String(fields.coachNote || coach?.text || '').trim(),
+    syncWeight: false,
+  });
+}
+
+function closeHealthDraft() {
+  healthDraft.open = false;
+}
+
+function writeHealthReport() {
+  run(() => {
+    const result = records.applyHealthReportRecord({
+      date: healthDraft.date,
+      fields: {
+        weight: healthDraft.weight,
+        waist: healthDraft.waist,
+        workout: healthDraft.workout,
+        diet: healthDraft.diet,
+        sleep: healthDraft.sleep,
+        note: healthDraft.note,
+        coachNote: healthDraft.coachNote,
+      },
+    });
+    if (!result) {
+      formError.value = '没有可写入的内容';
+      return;
+    }
+    let metricMessage = '';
+    if (healthDraft.syncWeight && String(healthDraft.weight || '').trim()) {
+      const parsedWeight = fitness.services.fitness.parseMetricNumber(healthDraft.weight);
+      if (parsedWeight === null) {
+        formError.value = '体重格式无法解析，已写入记录但未同步到身材记录';
+      } else {
+        const sameDay = fitness.services.fitness.findSameDayMetrics(fitness.metrics, healthDraft.date, '');
+        fitness.saveMetric({ date: healthDraft.date, condition: 'unknown', weight: parsedWeight }, String(sameDay[0]?.id || ''));
+        metricMessage = '，并已同步体重到身材记录';
+      }
+    }
+    coachStatus.value = `${result.created ? '已创建今天的健康日报' : '已合并到今天的健康日报'}${metricMessage}`;
+    healthDraft.open = false;
+  });
 }
 
 loadCoachStore();
@@ -916,7 +991,7 @@ onUnmounted(stopRestTimer);
       <option v-for="item in fitness.library" :key="item.id" :value="item.name" />
     </datalist>
 
-    <article class="card fitness-coach-card" id="fitness-coach-section" aria-label="AI 健身教练">
+    <section class="card fitness-coach-card" id="fitness-coach-section" aria-label="AI 健身教练">
       <div class="section-title-row">
         <div>
           <div class="fitness-kicker">AI 健身教练</div>
@@ -924,6 +999,7 @@ onUnmounted(stopRestTimer);
           <p class="section-hint">告诉我每天的体重、运动和饮食，教练会结合你的身材与训练记录持续分析变化，只给食谱和训练建议，不修改任何数据。</p>
         </div>
         <div class="fitness-header-actions">
+          <button v-if="lastCoachMessage()" class="btn btn-primary" type="button" :disabled="coachRunning" @click="openHealthDraft">整理成健康日报</button>
           <button v-if="coachMessages.length" class="btn btn-secondary" type="button" :disabled="coachRunning" @click="clearCoachChat">清空对话</button>
         </div>
       </div>
@@ -968,6 +1044,34 @@ onUnmounted(stopRestTimer);
         <button class="btn btn-primary" type="button" :disabled="coachRunning || !coachInput.trim()" @click="sendCoachMessage">{{ coachRunning ? '分析中…' : '让教练分析' }}</button>
       </div>
 
+      <section v-if="healthDraft.open" class="fitness-health-draft" aria-label="健康日报草稿">
+        <div class="fitness-section-head">
+          <div>
+            <div class="section-title">健康日报草稿</div>
+            <p class="fitness-section-sub">确认后写入「记录」，可按需修改；只写你确认的内容。</p>
+          </div>
+          <button class="btn btn-secondary" type="button" @click="closeHealthDraft">取消</button>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label for="health-draft-date">日期</label><input id="health-draft-date" v-model="healthDraft.date" type="date" /></div>
+          <div class="form-group"><label for="health-draft-weight">体重 kg</label><input id="health-draft-weight" v-model="healthDraft.weight" placeholder="例如 68.5" /></div>
+          <div class="form-group"><label for="health-draft-waist">腰围/围度 cm</label><input id="health-draft-waist" v-model="healthDraft.waist" placeholder="可选" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label for="health-draft-workout">训练</label><textarea id="health-draft-workout" v-model="healthDraft.workout" rows="2" /></div>
+          <div class="form-group"><label for="health-draft-diet">饮食</label><textarea id="health-draft-diet" v-model="healthDraft.diet" rows="2" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label for="health-draft-sleep">睡眠</label><input id="health-draft-sleep" v-model="healthDraft.sleep" /></div>
+          <div class="form-group"><label for="health-draft-note">状态备注</label><input id="health-draft-note" v-model="healthDraft.note" /></div>
+        </div>
+        <div class="form-group"><label for="health-draft-coach-note">教练小结</label><textarea id="health-draft-coach-note" v-model="healthDraft.coachNote" rows="2" /></div>
+        <label class="fitness-inline-check"><input v-model="healthDraft.syncWeight" type="checkbox" :disabled="!String(healthDraft.weight || '').trim()" /> 同时把体重同步到身材记录（健身页趋势会自动更新）</label>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="button" @click="writeHealthReport">写入记录</button>
+        </div>
+      </section>
+
       <details class="fitness-form-disclosure fitness-coach-config">
         <summary><strong>AI 设置</strong><span>远程 AI 未配置时使用本地规则分析</span></summary>
         <div class="form-row">
@@ -978,7 +1082,7 @@ onUnmounted(stopRestTimer);
         </div>
         <button class="btn btn-secondary" type="button" @click="saveCoachConfig">保存设置</button>
       </details>
-    </article>
+    </section>
 
     <section v-if="!fitness.activeWorkout" class="card fitness-overview-hero" aria-label="今日健身状态">
       <div class="section-title-row">
@@ -1710,6 +1814,16 @@ onUnmounted(stopRestTimer);
 }
 .fitness-coach-config {
   margin-top: 12px;
+}
+.fitness-health-draft {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line, #dfe7e1);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface-soft, #f6f4ec);
+}
+.fitness-health-draft .form-actions {
+  margin-top: 10px;
 }
 @media (max-width: 560px) {
   .fitness-coach-input-row {

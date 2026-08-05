@@ -25,7 +25,7 @@ let hydrating = false;
 let autoSaveTimer: number | undefined;
 
 const typeGroups = [
-  { label: '日常记录', types: ['日记', '日计划', '工作记录', '灵感碎片'] },
+  { label: '日常记录', types: ['日记', '日计划', '工作记录', '健康日报', '灵感碎片'] },
   { label: '周期复盘', types: ['周复盘', '月复盘', '年复盘'] },
   { label: '周期规划', types: ['周计划', '月计划', '年度计划', '3年计划'] },
   { label: '长期愿景', types: ['终身愿景'] },
@@ -34,6 +34,7 @@ const typeIcons: Record<string, string> = {
   日记: '📔',
   日计划: '📅',
   工作记录: '💼',
+  健康日报: '🧬',
   灵感碎片: '💡',
   周复盘: '🔁',
   月复盘: '🌙',

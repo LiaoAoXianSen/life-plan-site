@@ -49,6 +49,13 @@
                 };
                 if (Object.values(memory).some(Boolean)) normalized.memory = memory;
             }
+            const fieldsSource = result?.fields || result?.structuredFields || {};
+            if (fieldsSource && typeof fieldsSource === 'object') {
+                const fields = Object.fromEntries(
+                    Object.entries(fieldsSource).map(([key, value]) => [String(key), normalizeText(value)])
+                );
+                if (Object.values(fields).some(Boolean)) normalized.fields = fields;
+            }
             const captureSource = result?.capture || result?.placement || result?.placements || {};
             normalized.capture = {
                 cleanText: normalizeText(captureSource.cleanText || captureSource.cleanedText || result?.cleanText || result?.correctedText),
@@ -147,7 +154,7 @@
                             'diary 可选字段：oneLine/review/tomorrow/improve/thinking/smallJoy，均为字符串。',
                             'capture 可选字段：cleanText、diaryText、workText、planText、ideaText、suggestedTargets。',
                             '当 mode 为 wheelTagSuggest 时：items 可为空；tags 返回 1-5 个推荐标签，字段 name/reason；name 必须来自 context.existingTags，禁止自造标签。',
-                            '当 mode 为 fitnessCoach 时：你是一名健身教练，只做分析和建议，绝不代用户修改任何数据，也不要假装已经修改。summary 写详细分析（可多行，结合 context 里的体重/训练历史与本次汇报），items 返回 3-5 条具体建议（text 为建议标题，note 为说明），可选 memory 对象（profile 用户画像、goals 目标、recentTrend 最近变化、plans 训练安排、notes 其他要点），memory 应持续累积用户历史信息，供下次对话参考。',
+                            '当 mode 为 fitnessCoach 时：你是一名健身教练，只做分析和建议，绝不代用户修改任何数据，也不要假装已经修改。summary 写详细分析（可多行，结合 context 里的体重/训练历史与本次汇报），items 返回 3-5 条具体建议（text 为建议标题，note 为说明），可选 memory 对象（profile 用户画像、goals 目标、recentTrend 最近变化、plans 训练安排、notes 其他要点），memory 应持续累积用户历史信息，供下次对话参考。另返回可选 fields 对象（weight 体重、waist 围度、workout 训练、diet 饮食、sleep 睡眠、note 状态备注、coachNote 教练小结），从用户汇报中提取，未提及的字段留空字符串，禁止编造，用于生成健康日报草稿。',
                             '建议必须具体、短、可执行；多个独立打算要拆成多条 items。'
                         ].join('\n')
                     },
@@ -618,6 +625,14 @@
             }
 
             const workoutHits = (userInput.match(/(跑步|快走|散步|游泳|骑行|骑车|椭圆机|跳绳|深蹲|卧推|硬拉|引体|俯卧撑|卷腹|平板支撑|力量|有氧|HIIT|瑜伽|普拉提|拉伸|哑铃|杠铃|划船|推举|弯举|臂屈伸|练腿|练背|练胸|练肩|训练|健身|锻炼|跑|走)/g) || []).slice(0, 4);
+            const mealSentences = getCaptureSentences(userInput)
+                .filter(sentence => /吃|早餐|午餐|晚餐|加餐|碳水|蛋白|热量|饮食|喝了|零食|外卖|补剂/.test(sentence))
+                .slice(0, 2)
+                .join('；');
+            const sleepSentences = getCaptureSentences(userInput)
+                .filter(sentence => /睡|睡眠|熬夜/.test(sentence))
+                .slice(0, 2)
+                .join('；');
             const mealHit = /吃|早餐|午餐|晚餐|加餐|碳水|蛋白|脂肪|热量|饮食|喝了|零食|外卖|补剂/.test(userInput);
             const sleepHit = /睡|睡眠|熬夜/.test(userInput);
             const goalHits = (userInput.match(/(减脂|增肌|减重|瘦|塑形|保持|维持)/g) || []).slice(0, 3);
@@ -658,6 +673,16 @@
             items.push({ text: '饮食按 4:4:2 分配', note: '碳水、蛋白、脂肪大致按热量占比分配；减脂期优先减少精制碳水，增肌期保证蛋白充足。' });
             items.push({ text: '每周末复盘一次', note: '把这一周的体重和训练记录汇总，再让我给下一周的具体调整。' });
 
+            const fields = {
+                weight: newWeight != null ? String(newWeight) : '',
+                waist: '',
+                workout: workoutHits.length ? Array.from(new Set(workoutHits)).join('、') : '',
+                diet: mealSentences,
+                sleep: sleepSentences,
+                note: '',
+                coachNote: [goalLabel ? `目标：${goalLabel}` : '', lines.slice(0, 3).join('\n')].filter(Boolean).join('\n')
+            };
+
             const plansText = activePlans.map(plan => plan.name).filter(Boolean).join('、');
             const previousTrend = String(memory.recentTrend || '');
             const memoryNext = {
@@ -674,7 +699,8 @@
                 title: '教练分析',
                 summary: lines.join('\n'),
                 items,
-                memory: memoryNext
+                memory: memoryNext,
+                fields
             });
         }
 

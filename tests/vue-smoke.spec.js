@@ -3772,6 +3772,77 @@ test('fitness coach memory persists across loads and clearing only removes its o
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('fitness coach converts a report into a health record and syncs weight', async ({ page }) => {
+    const source = emptyData({
+        bodyMetrics: [
+            { id: 'health-metric-old', date: '2026-07-29', weight: 70, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'health-metric-new', date: '2026-07-31', weight: 71.5, createdAt: '2026-07-31T08:00:00', updatedAt: '2026-07-31T08:00:00' },
+        ],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+
+    const coachCard = page.locator('#fitness-coach-section');
+    await page.locator('#fitness-coach-input').fill('今天体重 68.5kg，晚上跑了 5 公里，晚上 11 点睡，睡了 7 小时');
+    await coachCard.getByRole('button', { name: '让教练分析' }).click();
+    await expect(coachCard.locator('.fitness-coach-message.is-coach').last()).toContainText('68.5kg');
+
+    await coachCard.getByRole('button', { name: '整理成健康日报' }).click();
+    const draft = coachCard.locator('.fitness-health-draft');
+    await expect(draft).toBeVisible();
+    await expect(draft.getByLabel('体重 kg')).toHaveValue('68.5');
+    await expect(draft.getByLabel('训练')).toHaveValue(/跑/);
+    await expect(draft.getByLabel('睡眠')).toHaveValue(/睡/);
+    await draft.getByLabel('饮食').fill('早餐两个鸡蛋，午餐鸡胸肉糙米饭');
+    await draft.getByLabel('同时把体重同步到身材记录').check();
+    await draft.getByRole('button', { name: '写入记录' }).click();
+    await expect(coachCard.locator('.notice.success')).toContainText('已创建今天的健康日报');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    const health = stored.records.find(record => record.type === '健康日报');
+    expect(health).toBeTruthy();
+    expect(health.title).toContain('健康日报');
+    expect(health.templateId).toBe('builtin-health-daily');
+    expect(health.content).toContain('# 体重');
+    expect(health.content).toContain('68.5');
+    expect(health.content).toContain('早餐两个鸡蛋');
+    expect(stored.bodyMetrics).toEqual(expect.arrayContaining([
+        expect.objectContaining({ weight: 68.5, condition: 'unknown' }),
+    ]));
+    expect(stored.deletedItems).toEqual([]);
+});
+
+test('fitness coach health record merges into an existing same-day record', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        records: [{
+            id: 'health-existing', type: '健康日报', title: `${today} 健康日报`, startDate: today, endDate: today,
+            content: '# 体重\n70\n\n# 腰围/围度\n\n# 训练\n\n# 饮食\n\n# 睡眠\n\n# 状态备注\n\n# 教练小结\n',
+            templateId: 'builtin-health-daily', todoIds: [], createdAt: `${today}T07:00:00`, updatedAt: `${today}T07:00:00`,
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+
+    const coachCard = page.locator('#fitness-coach-section');
+    await page.locator('#fitness-coach-input').fill('今天跑步 30 分钟，早餐吃了燕麦');
+    await coachCard.getByRole('button', { name: '让教练分析' }).click();
+    await coachCard.getByRole('button', { name: '整理成健康日报' }).click();
+    const draft = coachCard.locator('.fitness-health-draft');
+    await expect(draft.getByLabel('训练')).toHaveValue(/跑/);
+    await draft.getByRole('button', { name: '写入记录' }).click();
+    await expect(coachCard.locator('.notice.success')).toContainText('已合并到今天的健康日报');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(stored.records.filter(record => record.type === '健康日报')).toHaveLength(1);
+    expect(stored.records[0].content).toContain('# 体重\n70');
+    expect(stored.records[0].content).toContain('# 训练\n跑');
+    expect(stored.records[0].updatedAt).not.toBe(`${today}T07:00:00`);
+    expect(stored.deletedItems).toEqual([]);
+});
+
 test('fitness body metrics edit every legacy field through the shared service', async ({ page }) => {
     const source = emptyData();
     await page.addInitScript(data => {
@@ -5296,7 +5367,7 @@ test('records legacy filters and operation events stay read-only', async ({ page
     await expect(results).toContainText('已打卡 2/2');
 
     const typeValues = await recordsPage.getByLabel('记录类型筛选').locator('option').evaluateAll(options => options.map(option => option.value));
-    expect(typeValues).toEqual(['all', '日记', '日计划', '工作记录', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景', '待办', '习惯']);
+    expect(typeValues).toEqual(['all', '日记', '日计划', '工作记录', '健康日报', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景', '待办', '习惯']);
 
     const todayGroup = results.locator('.timeline-group').filter({ hasText: '早间记录' });
     await expect(todayGroup.locator('.timeline-date')).toHaveText(/^\d{4}年\d{1,2}月\d{1,2}日$/);
@@ -5861,7 +5932,7 @@ test('idea filters deep-link to one Records editor and persist all legacy idea f
 
     await page.goto('/#/records?record=idea-needs-conclusion');
     const recordType = editor.getByLabel('类型');
-    await expect(recordType.locator('option')).toHaveCount(12);
+    await expect(recordType.locator('option')).toHaveCount(13);
     await recordType.selectOption('日记');
     await editor.getByRole('button', { name: '保存修改' }).click();
     const converted = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.find(item => item.id === 'idea-needs-conclusion'));
