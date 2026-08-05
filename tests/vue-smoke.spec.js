@@ -3695,6 +3695,83 @@ test('fitness same-day body metric creation keeps the legacy confirmation guard'
     expect(stored.syncState.dirty).toBe(true);
 });
 
+test('fitness coach analyzes a daily report without writing any data', async ({ page }) => {
+    const source = emptyData({
+        bodyMetrics: [
+            { id: 'coach-metric-old', date: '2026-07-29', weight: 70, createdAt: '2026-07-29T08:00:00', updatedAt: '2026-07-29T08:00:00' },
+            { id: 'coach-metric-new', date: '2026-07-31', weight: 71.5, createdAt: '2026-07-31T08:00:00', updatedAt: '2026-07-31T08:00:00' },
+        ],
+        fitnessPlans: [{ id: 'coach-plan', name: '推拉腿计划', goal: 'strength', status: 'active', exercises: [] }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+
+    const coachCard = page.locator('#fitness-coach-section');
+    await expect(coachCard).toBeVisible();
+    await expect(coachCard).toContainText('AI 健身教练');
+    await expect(coachCard).toContainText('教练记忆 暂无');
+
+    await page.locator('#fitness-coach-input').fill('今天体重 68.5kg，晚上跑了 5 公里，想减脂');
+    await coachCard.getByRole('button', { name: '让教练分析' }).click();
+    const bubble = coachCard.locator('.fitness-coach-message.is-coach').last().locator('.fitness-coach-bubble');
+    await expect(bubble).toContainText('教练分析');
+    await expect(bubble).toContainText('68.5kg');
+    await expect(bubble).toContainText('71.5kg');
+    await expect(bubble).toContainText('减脂');
+    await expect(bubble.locator('li').first()).toBeVisible();
+    await expect(coachCard).toContainText('教练记忆 已记录');
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanFitnessCoach')));
+    expect(stored.messages).toHaveLength(2);
+    expect(stored.messages[0]).toMatchObject({ role: 'user', text: '今天体重 68.5kg，晚上跑了 5 公里，想减脂' });
+    expect(stored.messages[1].role).toBe('coach');
+    expect(stored.memory.recentTrend).toContain('68.5');
+    expect(stored.memory.goals).toContain('减脂');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    expect(await page.evaluate(() => localStorage.getItem('fitnessAppData'))).toBeNull();
+});
+
+test('fitness coach memory persists across loads and clearing only removes its own storage', async ({ page }) => {
+    const source = emptyData({
+        bodyMetrics: [{ id: 'coach-metric-memory', date: '2026-07-31', weight: 68.5, createdAt: '2026-07-31T08:00:00', updatedAt: '2026-07-31T08:00:00' }],
+    });
+    const original = JSON.stringify(source);
+    const coachStore = {
+        memory: { profile: '目标：减脂', recentTrend: '最新体重 68.5kg', plans: '训练安排：推拉腿计划', notes: '历史备注' },
+        messages: [
+            { role: 'user', text: '今天体重 68.5kg', title: '', items: [], time: '08:00' },
+            { role: 'coach', title: '教练分析', text: '这次体重 68.5kg。', items: ['按「减脂」目标对齐安排'], time: '08:01' },
+        ],
+    };
+    await page.addInitScript(({ data, raw, coach }) => {
+        localStorage.setItem('lifePlanData', raw);
+        localStorage.setItem('lifePlanFitnessCoach', JSON.stringify(coach));
+    }, { data: source, raw: original, coach: coachStore });
+    await page.goto('/#/fitness');
+
+    const coachCard = page.locator('#fitness-coach-section');
+    await expect(coachCard).toContainText('教练记忆 已记录');
+    await expect(coachCard.locator('.fitness-coach-message')).toHaveCount(2);
+    await expect(coachCard).toContainText('这次体重 68.5kg。');
+
+    await page.locator('#fitness-coach-input').fill('今天跑步 30 分钟');
+    await coachCard.getByRole('button', { name: '让教练分析' }).click();
+    await expect(coachCard.locator('.fitness-coach-message')).toHaveCount(4);
+    await expect(coachCard.locator('.fitness-coach-message.is-coach').last()).toContainText('最新体重 68.5kg');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toContain('清空与教练的对话和记忆');
+        await dialog.accept();
+    });
+    await coachCard.getByRole('button', { name: '清空对话' }).click();
+    await expect(coachCard.locator('.fitness-coach-message')).toHaveCount(0);
+    await expect(coachCard).toContainText('教练记忆 暂无');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanFitnessCoach'))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('fitness body metrics edit every legacy field through the shared service', async ({ page }) => {
     const source = emptyData();
     await page.addInitScript(data => {

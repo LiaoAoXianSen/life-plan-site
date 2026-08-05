@@ -2,7 +2,7 @@
 import { computed, onUnmounted, reactive, ref } from 'vue';
 
 import AppSelect from '../components/common/AppSelect.vue';
-import { getTodayStr } from '../services/legacyServices';
+import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
 
 type PlanSetDraft = { id?: string; weight?: unknown; reps?: unknown };
@@ -760,6 +760,135 @@ function planExerciseDetail(exercise: Record<string, any>) {
   return `${setCount} 组`;
 }
 
+// ---- AI 健身教练 ----
+type CoachMessage = { role: 'user' | 'coach'; title?: string; text: string; items?: string[]; time?: string };
+const ai = createLegacyServices().ai;
+const coachStorageKey = 'lifePlanFitnessCoach';
+const coachConfig = reactive(ai.normalizeConfig(readPersistedAiConfig()));
+const coachMessages = ref<CoachMessage[]>([]);
+const coachMemory = ref<Record<string, string>>({});
+const coachInput = ref('');
+const coachRunning = ref(false);
+const coachStatus = ref('');
+const coachError = ref('');
+
+function readPersistedAiConfig() {
+  try {
+    return JSON.parse(localStorage.getItem('lifePlanAiConfig') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function loadCoachStore() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(coachStorageKey) || '{}');
+    coachMessages.value = Array.isArray(raw.messages) ? raw.messages.slice(-40).map((message: CoachMessage) => ({
+      role: message.role === 'user' ? 'user' : 'coach',
+      title: String(message.title || ''),
+      text: String(message.text || ''),
+      items: Array.isArray(message.items) ? message.items.map(item => String(item || '')).filter(Boolean) : [],
+      time: String(message.time || ''),
+    })) : [];
+    coachMemory.value = (raw.memory && typeof raw.memory === 'object') ? { ...raw.memory } : {};
+  } catch {
+    coachMessages.value = [];
+    coachMemory.value = {};
+  }
+}
+
+function persistCoachStore() {
+  localStorage.setItem(coachStorageKey, JSON.stringify({
+    memory: coachMemory.value,
+    messages: coachMessages.value.slice(-60),
+  }));
+}
+
+function saveCoachConfig() {
+  Object.assign(coachConfig, ai.normalizeConfig(coachConfig));
+  localStorage.setItem('lifePlanAiConfig', JSON.stringify(coachConfig));
+  coachStatus.value = 'AI 设置已保存';
+}
+
+function clearCoachChat() {
+  if (!coachMessages.value.length && !Object.keys(coachMemory.value).length) return;
+  if (!window.confirm('清空与教练的对话和记忆？只影响 AI 侧记录，不会改动你的健身数据。')) return;
+  coachMessages.value = [];
+  coachMemory.value = {};
+  localStorage.removeItem(coachStorageKey);
+  coachStatus.value = '已清空教练记忆';
+}
+
+const coachContext = computed(() => ({
+  bodyMetrics: fitness.metrics.slice(0, 10).map((metric: Record<string, any>) => ({
+    date: metric.date || '',
+    weight: metric.weight,
+    waist: metric.waist,
+  })),
+  workouts: fitness.workouts.slice(0, 10).map((workout: Record<string, any>) => ({
+    date: workout.date || '',
+    title: workout.title || '',
+    status: workout.status || '',
+    durationMin: workout.durationMin,
+  })),
+  activePlans: fitness.plans
+    .filter((plan: Record<string, any>) => plan.status === 'active')
+    .slice(0, 5)
+    .map((plan: Record<string, any>) => ({ name: plan.name || '', goal: plan.goal || '' })),
+  workoutSummary: fitnessOverview.value.workoutSummary,
+  latestMetric: fitness.metrics[0] || null,
+  coachMemory: coachMemory.value,
+  coachHistory: coachMessages.value.slice(-10).map(message => ({ role: message.role, text: message.text })),
+}));
+
+async function sendCoachMessage() {
+  const text = coachInput.value.trim();
+  if (!text || coachRunning.value) return;
+  coachInput.value = '';
+  coachError.value = '';
+  coachStatus.value = '';
+  coachMessages.value.push({ role: 'user', text });
+  persistCoachStore();
+  coachRunning.value = true;
+  try {
+    const payload = {
+      mode: 'fitnessCoach',
+      userInput: text,
+      today: getTodayStr(),
+      context: coachContext.value,
+    };
+    let remoteError = '';
+    let raw;
+    if (ai.isRemoteReady(coachConfig)) {
+      try {
+        raw = await ai.requestRemoteAi(coachConfig, payload);
+      } catch (err) {
+        remoteError = err instanceof Error ? err.message : String(err);
+        raw = ai.generateLocalAiResult(payload);
+      }
+    } else {
+      raw = ai.generateLocalAiResult(payload);
+    }
+    if (raw?.memory && typeof raw.memory === 'object') {
+      coachMemory.value = { ...coachMemory.value, ...raw.memory };
+    }
+    coachMessages.value.push({
+      role: 'coach',
+      title: String(raw?.title || '教练分析'),
+      text: String(raw?.summary || ''),
+      items: Array.isArray(raw?.items) ? raw.items.map((item: any) => String(item?.text || item || '').trim()).filter(Boolean) : [],
+      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    });
+    persistCoachStore();
+    if (remoteError) coachStatus.value = `远程 AI 报错：${remoteError}；已改用本地规则分析。`;
+  } catch (err) {
+    coachError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    coachRunning.value = false;
+  }
+}
+
+loadCoachStore();
 resetPlanForm();
 resetWorkoutForm();
 onUnmounted(stopRestTimer);
@@ -786,6 +915,70 @@ onUnmounted(stopRestTimer);
     <datalist id="fitness-exercise-datalist">
       <option v-for="item in fitness.library" :key="item.id" :value="item.name" />
     </datalist>
+
+    <article class="card fitness-coach-card" id="fitness-coach-section" aria-label="AI 健身教练">
+      <div class="section-title-row">
+        <div>
+          <div class="fitness-kicker">AI 健身教练</div>
+          <h2>每天汇报，持续分析</h2>
+          <p class="section-hint">告诉我每天的体重、运动和饮食，教练会结合你的身材与训练记录持续分析变化，只给食谱和训练建议，不修改任何数据。</p>
+        </div>
+        <div class="fitness-header-actions">
+          <button v-if="coachMessages.length" class="btn btn-secondary" type="button" :disabled="coachRunning" @click="clearCoachChat">清空对话</button>
+        </div>
+      </div>
+
+      <div class="fitness-coach-chips">
+        <span class="fitness-meta-pill">最新体重 {{ latestWeight }}</span>
+        <span class="fitness-meta-pill">近 30 天训练 {{ recentWorkoutCount }} 次</span>
+        <span class="fitness-meta-pill">教练记忆 {{ Object.keys(coachMemory).length ? '已记录' : '暂无' }}</span>
+      </div>
+
+      <div class="fitness-coach-chat" role="log" aria-live="polite">
+        <div v-if="!coachMessages.length" class="fitness-coach-empty">
+          <p>还没聊过。可以每天汇报一条，例如：</p>
+          <button class="btn btn-secondary todo-mini-btn" type="button" @click="coachInput = '今天体重 68.5kg，早餐吃了两个鸡蛋和牛奶，晚上跑了 5 公里。'">今天体重 68.5kg，早餐两个鸡蛋加牛奶，晚上跑了 5 公里</button>
+        </div>
+        <div v-for="(message, index) in coachMessages" :key="index" class="fitness-coach-message" :class="message.role === 'user' ? 'is-user' : 'is-coach'">
+          <div class="fitness-coach-bubble">
+            <strong v-if="message.title">{{ message.title }}</strong>
+            <p v-if="message.text">{{ message.text }}</p>
+            <ul v-if="message.items && message.items.length">
+              <li v-for="(item, itemIndex) in message.items" :key="itemIndex">{{ item }}</li>
+            </ul>
+            <span v-if="message.time" class="fitness-coach-time">{{ message.time }}</span>
+          </div>
+        </div>
+        <div v-if="coachRunning" class="fitness-coach-message is-coach">
+          <div class="fitness-coach-bubble fitness-coach-thinking">教练分析中…</div>
+        </div>
+      </div>
+
+      <p v-if="coachError" class="notice warning" role="alert">{{ coachError }}</p>
+      <p v-if="coachStatus" class="notice success" role="status">{{ coachStatus }}</p>
+
+      <div class="fitness-coach-input-row">
+        <textarea
+          id="fitness-coach-input"
+          v-model="coachInput"
+          rows="2"
+          placeholder="例如：今天体重 68.5kg，练了力量 45 分钟，午餐吃了鸡胸肉和糙米饭。想知道接下来怎么调整。"
+          @keydown.enter.exact.prevent="sendCoachMessage"
+        />
+        <button class="btn btn-primary" type="button" :disabled="coachRunning || !coachInput.trim()" @click="sendCoachMessage">{{ coachRunning ? '分析中…' : '让教练分析' }}</button>
+      </div>
+
+      <details class="fitness-form-disclosure fitness-coach-config">
+        <summary><strong>AI 设置</strong><span>远程 AI 未配置时使用本地规则分析</span></summary>
+        <div class="form-row">
+          <div class="form-group"><label for="fitness-ai-endpoint">接口地址</label><input id="fitness-ai-endpoint" v-model="coachConfig.endpointUrl" placeholder="https://.../v1" /></div>
+          <div class="form-group"><label for="fitness-ai-model">模型</label><input id="fitness-ai-model" v-model="coachConfig.model" /></div>
+          <div class="form-group"><label for="fitness-ai-key">API Key</label><input id="fitness-ai-key" v-model="coachConfig.apiKey" type="password" /></div>
+          <div class="form-group"><label><input v-model="coachConfig.remoteEnabled" type="checkbox" /> 启用远程 AI</label></div>
+        </div>
+        <button class="btn btn-secondary" type="button" @click="saveCoachConfig">保存设置</button>
+      </details>
+    </article>
 
     <section v-if="!fitness.activeWorkout" class="card fitness-overview-hero" aria-label="今日健身状态">
       <div class="section-title-row">
@@ -1434,6 +1627,97 @@ onUnmounted(stopRestTimer);
   }
   .fitness-trend-summary {
     grid-template-columns: 1fr;
+  }
+}
+.fitness-coach-card {
+  margin-bottom: 16px;
+}
+.fitness-coach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.fitness-coach-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--line, #dfe7e1);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface-soft, #f6f4ec);
+  margin-bottom: 12px;
+}
+.fitness-coach-message {
+  display: flex;
+}
+.fitness-coach-message.is-user {
+  justify-content: flex-end;
+}
+.fitness-coach-message.is-coach {
+  justify-content: flex-start;
+}
+.fitness-coach-bubble {
+  max-width: 82%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line, #dfe7e1);
+  background: var(--surface, #fff);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.fitness-coach-message.is-user .fitness-coach-bubble {
+  background: var(--accent-soft, #f3e7d3);
+  border-color: var(--accent, #c7923e);
+}
+.fitness-coach-bubble p {
+  margin: 4px 0 0;
+}
+.fitness-coach-bubble ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.fitness-coach-bubble li {
+  margin: 2px 0;
+}
+.fitness-coach-time {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--faint, #a8b2ab);
+}
+.fitness-coach-thinking {
+  color: var(--muted, #6f7a73);
+  font-style: italic;
+}
+.fitness-coach-empty {
+  color: var(--muted, #6f7a73);
+  font-size: 13px;
+}
+.fitness-coach-empty button {
+  margin-top: 6px;
+}
+.fitness-coach-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.fitness-coach-input-row textarea {
+  flex: 1;
+  resize: vertical;
+}
+.fitness-coach-config {
+  margin-top: 12px;
+}
+@media (max-width: 560px) {
+  .fitness-coach-input-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .fitness-coach-bubble {
+    max-width: 94%;
   }
 }
 </style>

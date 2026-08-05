@@ -38,6 +38,17 @@
                 summary: normalizeText(result?.summary),
                 items: Array.isArray(result?.items) ? result.items : []
             };
+            const memorySource = result?.memory || result?.coachMemory || {};
+            if (memorySource && typeof memorySource === 'object') {
+                const memory = {
+                    profile: normalizeText(memorySource.profile),
+                    goals: normalizeText(memorySource.goals),
+                    recentTrend: normalizeText(memorySource.recentTrend),
+                    plans: normalizeText(memorySource.plans),
+                    notes: normalizeText(memorySource.notes)
+                };
+                if (Object.values(memory).some(Boolean)) normalized.memory = memory;
+            }
             const captureSource = result?.capture || result?.placement || result?.placements || {};
             normalized.capture = {
                 cleanText: normalizeText(captureSource.cleanText || captureSource.cleanedText || result?.cleanText || result?.correctedText),
@@ -136,6 +147,7 @@
                             'diary 可选字段：oneLine/review/tomorrow/improve/thinking/smallJoy，均为字符串。',
                             'capture 可选字段：cleanText、diaryText、workText、planText、ideaText、suggestedTargets。',
                             '当 mode 为 wheelTagSuggest 时：items 可为空；tags 返回 1-5 个推荐标签，字段 name/reason；name 必须来自 context.existingTags，禁止自造标签。',
+                            '当 mode 为 fitnessCoach 时：你是一名健身教练，只做分析和建议，绝不代用户修改任何数据，也不要假装已经修改。summary 写详细分析（可多行，结合 context 里的体重/训练历史与本次汇报），items 返回 3-5 条具体建议（text 为建议标题，note 为说明），可选 memory 对象（profile 用户画像、goals 目标、recentTrend 最近变化、plans 训练安排、notes 其他要点），memory 应持续累积用户历史信息，供下次对话参考。',
                             '建议必须具体、短、可执行；多个独立打算要拆成多条 items。'
                         ].join('\n')
                     },
@@ -573,9 +585,103 @@
             });
         }
 
+        function generateLocalFitnessCoachResult(payload = {}) {
+            const today = payload.today || getTodayStr();
+            const userInput = String(payload.userInput || '').trim();
+            const ctx = payload.context || {};
+            const metrics = Array.isArray(ctx.bodyMetrics) ? ctx.bodyMetrics : [];
+            const workouts = Array.isArray(ctx.workouts) ? ctx.workouts : [];
+            const activePlans = Array.isArray(ctx.activePlans) ? ctx.activePlans : [];
+            const memory = (ctx.coachMemory && typeof ctx.coachMemory === 'object') ? ctx.coachMemory : {};
+
+            const parseNum = value => {
+                const num = Number(String(value == null ? '' : value).replace(/[^\d.]/g, ''));
+                return Number.isFinite(num) && num > 0 ? num : null;
+            };
+            const formatDelta = value => (value == null ? null : (value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1)));
+            const latestWeight = parseNum(metrics[0]?.weight);
+            const prevWeight = metrics.length > 1 ? parseNum(metrics[1]?.weight) : null;
+
+            let newWeight = null;
+            const kgMatch = userInput.match(/(\d+(?:\.\d+)?)\s*(?:kg|公斤|千克)/i);
+            if (kgMatch) newWeight = Number(kgMatch[1]);
+            else {
+                const jinMatch = userInput.match(/(\d+(?:\.\d+)?)\s*斤/);
+                if (jinMatch) newWeight = Number(jinMatch[1]) / 2;
+                else if (/体重|weight/i.test(userInput)) {
+                    const bare = userInput.match(/(\d+(?:\.\d+)?)/);
+                    if (bare) {
+                        const num = Number(bare[1]);
+                        if (num >= 30 && num <= 300) newWeight = num;
+                    }
+                }
+            }
+
+            const workoutHits = (userInput.match(/(跑步|快走|散步|游泳|骑行|骑车|椭圆机|跳绳|深蹲|卧推|硬拉|引体|俯卧撑|卷腹|平板支撑|力量|有氧|HIIT|瑜伽|普拉提|拉伸|哑铃|杠铃|划船|推举|弯举|臂屈伸|练腿|练背|练胸|练肩|训练|健身|锻炼|跑|走)/g) || []).slice(0, 4);
+            const mealHit = /吃|早餐|午餐|晚餐|加餐|碳水|蛋白|脂肪|热量|饮食|喝了|零食|外卖|补剂/.test(userInput);
+            const sleepHit = /睡|睡眠|熬夜/.test(userInput);
+            const goalHits = (userInput.match(/(减脂|增肌|减重|瘦|塑形|保持|维持)/g) || []).slice(0, 3);
+
+            const lines = [];
+            const baseWeight = newWeight ?? latestWeight;
+            if (newWeight != null) {
+                const reference = latestWeight ?? prevWeight;
+                if (reference != null) {
+                    const delta = newWeight - reference;
+                    lines.push(`这次体重 ${newWeight}kg，比上次记录（${reference}kg）${delta === 0 ? '持平' : `${formatDelta(delta)}kg`}。`);
+                } else {
+                    lines.push(`记下了本次体重 ${newWeight}kg。`);
+                }
+            } else if (latestWeight != null) {
+                const delta = prevWeight != null ? latestWeight - prevWeight : null;
+                lines.push(delta == null
+                    ? `目前最新体重记录是 ${latestWeight}kg。`
+                    : `最新体重 ${latestWeight}kg，较前次${delta === 0 ? '持平' : `${formatDelta(delta)}kg`}。`);
+            }
+            if (workoutHits.length) lines.push(`这次提到了：${Array.from(new Set(workoutHits)).join('、')}。`);
+            if (mealHit) lines.push('这次有饮食信息，会纳入热量与营养评估。');
+            if (sleepHit) lines.push('提到了睡眠情况，恢复状态会一并考虑。');
+            if (!lines.length) lines.push('这次没有识别出新的体重、训练或饮食信息，先按已有记录给建议。');
+            if (memory.profile) lines.push(`我对你的了解：${memory.profile}`);
+            if (memory.recentTrend && newWeight == null) lines.push(`近期变化：${memory.recentTrend}`);
+
+            const items = [];
+            const goalLabel = goalHits.length ? Array.from(new Set(goalHits)).join('、') : (memory.goals || '');
+            if (goalLabel) {
+                items.push({ text: `按「${goalLabel}」目标对齐安排`, note: '后续食谱与训练建议都会围绕这个目标展开。' });
+            }
+            if (newWeight != null && prevWeight != null && newWeight > prevWeight && /减|瘦/.test(userInput + memory.goals)) {
+                items.push({ text: '控制热量缺口', note: '体重连续上升时，先恢复三餐结构，减少高热量加餐和含糖饮料。' });
+            }
+            items.push({ text: baseWeight != null ? `保持每日体重记录：${baseWeight}kg 为基准` : '开始记录体重', note: '固定晨起空腹测量，和 app 里「记录身材」一起用，趋势会更准。' });
+            items.push({ text: workoutHits.length ? '训练后及时补充蛋白' : '安排每周力量 + 有氧组合', note: workoutHits.length ? '训练后 30 分钟内吃 20-30g 蛋白质，配合足量饮水。' : '例如每周 3 次力量、2 次有氧，动作和组数可以在训练计划里配置。' });
+            items.push({ text: '饮食按 4:4:2 分配', note: '碳水、蛋白、脂肪大致按热量占比分配；减脂期优先减少精制碳水，增肌期保证蛋白充足。' });
+            items.push({ text: '每周末复盘一次', note: '把这一周的体重和训练记录汇总，再让我给下一周的具体调整。' });
+
+            const plansText = activePlans.map(plan => plan.name).filter(Boolean).join('、');
+            const previousTrend = String(memory.recentTrend || '');
+            const memoryNext = {
+                profile: memory.profile || '',
+                goals: goalHits.length ? `减脂/增肌目标：${Array.from(new Set(goalHits)).join('、')}` : (memory.goals || ''),
+                recentTrend: newWeight != null
+                    ? `${previousTrend ? `${previousTrend.slice(-150)}；` : ''}最新体重 ${newWeight}kg（${today}）`.slice(-260)
+                    : (previousTrend || (latestWeight != null ? `最新体重 ${latestWeight}kg` : '')),
+                plans: plansText ? `训练安排：${plansText}` : (memory.plans || ''),
+                notes: [memory.notes, userInput].filter(Boolean).join(' | ').slice(-400)
+            };
+
+            return normalizeAiResult({
+                title: '教练分析',
+                summary: lines.join('\n'),
+                items,
+                memory: memoryNext
+            });
+        }
+
         function generateLocalAiResult(payload) {
             const today = payload.today || getTodayStr();
             if (payload.mode === 'wheelTagSuggest') return generateLocalWheelTagSuggest(payload);
+            if (payload.mode === 'fitnessCoach') return generateLocalFitnessCoachResult(payload);
             if (payload.mode === 'chatCapture') return generateLocalCaptureResult(payload);
             if (payload.mode === 'diaryReview') {
                 const diary = payload.context.selectedDiary;
@@ -718,6 +824,7 @@
             extractCaptureTodoItems,
             generateLocalCaptureResult,
             generateLocalWheelTagSuggest,
+            generateLocalFitnessCoachResult,
             generateLocalAiResult
         };
     }
