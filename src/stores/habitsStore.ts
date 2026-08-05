@@ -895,6 +895,24 @@ export const useHabitsStore = defineStore('habits', () => {
     }
   }
 
+  function addCurrency(value: string): boolean {
+    const name = normalizeCurrency(value);
+    if (!String(value || '').trim()) return false;
+    if (lifePlan.data.habitCurrencies.some(item => normalizeCurrency(item.name || item.currency || item.id) === name)) return false;
+    try {
+      lifePlan.mutate('vue-add-habit-currency', data => {
+        ensureHabitCurrency(data, name);
+      });
+      rebuildLocalMirror('vue-add-habit-currency');
+      lastAction.value = `已添加币种「${name}」`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
   function createReward(input: CreateHabitRewardInput): HabitReward {
     const name = String(input.name || '').trim();
     if (!name) throw new Error('请输入心愿名称');
@@ -1233,6 +1251,7 @@ export const useHabitsStore = defineStore('habits', () => {
     setHabitArchived,
     deleteHabit,
     createReward,
+    addCurrency,
     setRewardArchived,
     adjustPoints,
     redeemReward,

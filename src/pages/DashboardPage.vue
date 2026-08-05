@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import EmptyState from '../components/common/EmptyState.vue';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import RecordCreateModal from '../components/RecordCreateModal.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import AppSelect from '../components/common/AppSelect.vue';
+import ModalShell from '../components/common/ModalShell.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
 import { useHabitsStore } from '../stores/habitsStore';
@@ -476,10 +479,9 @@ const timelineGroups = computed(() => {
 
 <template>
   <section class="page active" id="page-dashboard">
-    <header class="page-header">
-      <div class="page-title">首页仪表盘</div>
-      <button class="btn btn-primary" type="button" @click="openCreateRecord">+ 新建记录</button>
-    </header>
+    <PageHeader title="首页仪表盘">
+      <template #actions><button class="btn btn-primary" type="button" @click="openCreateRecord">+ 新建记录</button></template>
+    </PageHeader>
 
     <div v-if="notice" class="notice" :class="noticeVariant" role="status">{{ notice }}</div>
 
@@ -535,7 +537,7 @@ const timelineGroups = computed(() => {
             <strong>{{ urgencyLabels[todo.urgency] }}</strong>
           </button>
         </div>
-        <div v-else class="empty-state compact-empty">暂时没有超期或高优先级待办</div>
+        <EmptyState v-else class="empty-state compact-empty">暂时没有超期或高优先级待办</EmptyState>
       </article>
 
       <article class="command-card command-card-fitness">
@@ -587,7 +589,7 @@ const timelineGroups = computed(() => {
             </div>
           </article>
         </div>
-        <div v-else class="empty-state compact-empty">素材库还没有内容</div>
+        <EmptyState v-else class="empty-state compact-empty">素材库还没有内容</EmptyState>
       </article>
 
       <article class="command-card">
@@ -604,7 +606,7 @@ const timelineGroups = computed(() => {
             <strong>{{ Number(goal.progress || 0) }}%</strong>
           </button>
         </div>
-        <div v-else class="empty-state compact-empty">暂无进行中的目标</div>
+        <EmptyState v-else class="empty-state compact-empty">暂无进行中的目标</EmptyState>
       </article>
     </section>
 
@@ -631,7 +633,7 @@ const timelineGroups = computed(() => {
               </span>
             </li>
           </ul>
-          <div v-else class="empty-state">今日暂无待办</div>
+          <EmptyState v-else class="empty-state">今日暂无待办</EmptyState>
         </section>
 
         <section class="dashboard-floating-todos" aria-label="无截止待办池">
@@ -662,7 +664,7 @@ const timelineGroups = computed(() => {
               </span>
             </li>
           </ul>
-          <div v-else class="empty-state">暂无无截止待办</div>
+          <EmptyState v-else class="empty-state">暂无无截止待办</EmptyState>
         </section>
 
         <section class="dashboard-today-habits" aria-label="今日习惯">
@@ -706,7 +708,7 @@ const timelineGroups = computed(() => {
               </span>
             </li>
           </ul>
-          <div v-else class="empty-state">今日暂无安排的习惯</div>
+          <EmptyState v-else class="empty-state">今日暂无安排的习惯</EmptyState>
         </section>
       </div>
     </div>
@@ -724,7 +726,7 @@ const timelineGroups = computed(() => {
           </div>
         </button>
       </div>
-      <div v-else class="empty-state">暂无进行中的周期记录</div>
+      <EmptyState v-else class="empty-state">暂无进行中的周期记录</EmptyState>
     </article>
 
     <article class="card dashboard-timeline">
@@ -758,15 +760,17 @@ const timelineGroups = computed(() => {
           </div>
         </section>
       </div>
-      <div v-else class="empty-state">当前范围暂无记录，换个范围或新建第一条吧</div>
+      <EmptyState v-else class="empty-state">当前范围暂无记录，换个范围或新建第一条吧</EmptyState>
     </article>
 
-    <div v-if="dashboardPreviewRecord" class="modal-overlay active" role="presentation" @click.self="closeDashboardPreview">
-      <section class="modal record-preview-modal" role="dialog" aria-modal="true" aria-labelledby="dashboard-record-preview-title">
-        <div class="modal-header">
-          <div class="modal-title" id="dashboard-record-preview-title">记录预览</div>
-          <button class="close-btn" type="button" aria-label="关闭记录预览" @click="closeDashboardPreview">×</button>
-        </div>
+    <ModalShell
+      v-if="dashboardPreviewRecord"
+      :model-value="Boolean(dashboardPreviewRecord)"
+      title="记录预览"
+      size="lg"
+      dialog-class="record-preview-modal"
+      @close="closeDashboardPreview"
+    >
         <div class="record-preview-dialog-body">
           <div class="record-preview-top">
             <span class="item-type">{{ dashboardPreviewRecord.type || '记录' }}</span>
@@ -805,8 +809,7 @@ const timelineGroups = computed(() => {
           </div>
           <div class="record-preview-actions"><button class="btn btn-secondary" type="button" @click="editDashboardPreview">编辑</button></div>
         </div>
-      </section>
-    </div>
+    </ModalShell>
 
     <RecordCreateModal ref="createModal" v-model="showCreateRecord" @open-existing="openExistingFromCreate" />
   </section>
@@ -892,7 +895,7 @@ const timelineGroups = computed(() => {
 .progress-bar { min-width: 0; }
 .timeline-item { width: 100%; min-width: 0; text-align: left; }
 .item-preview { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-.record-preview-modal { max-width: 720px; }
+.record-preview-modal { max-width: 880px; }
 .record-preview-dialog-body { display: grid; gap: 14px; }
 @media (max-width: 980px) {
   .command-center { grid-template-columns: minmax(0, 1fr); }

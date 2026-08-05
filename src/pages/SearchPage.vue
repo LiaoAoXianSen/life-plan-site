@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import EmptyState from '../components/common/EmptyState.vue';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 
 import { createLegacyServices } from '../services/legacyServices';
 import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import SearchInput from '../components/common/SearchInput.vue';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity } from '../types/lifePlan';
@@ -172,12 +174,7 @@ function search() {
 
 <template>
   <section class="page active" id="page-search">
-    <header class="page-header">
-      <div>
-        <div class="page-title">全局搜索</div>
-        <p class="page-subtitle">跨记录、待办、目标、素材、模板和转盘公共项搜索。</p>
-      </div>
-    </header>
+    <PageHeader title="全局搜索" subtitle="跨记录、待办、目标、素材、模板和转盘公共项搜索。" />
     <FilterBar as="form" layout="search-filter-action" class="global-search-panel search-panel" @submit.prevent="search">
       <SearchInput v-model="query" aria-label="全局搜索关键词" placeholder="搜索记录、待办、目标、素材、模板与转盘项" />
       <AppSelect
@@ -208,8 +205,8 @@ function search() {
           </article>
         </div>
       </section>
-      <div v-if="query && !results.length" class="empty-state">没有找到匹配内容</div>
-      <div v-if="!query" class="empty-state">输入关键词后开始搜索，或选择一个模块缩小范围。</div>
+      <EmptyState v-if="query && !results.length" class="empty-state">没有找到匹配内容</EmptyState>
+      <EmptyState v-if="!query" class="empty-state">输入关键词后开始搜索，或选择一个模块缩小范围。</EmptyState>
     </div>
   </section>
 </template>

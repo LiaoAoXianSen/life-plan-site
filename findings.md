@@ -295,7 +295,24 @@
 - The Vue seed implementation initially spread public seed items into private normal-wheel items, carrying `tagIds`; the corrected implementation copies only the legacy private fields and keeps public tags on `wheelLibraryItems`.
 - Mode state now synchronizes from `selectedId`, covering stage selection, management-list opening, creation, and restore; a missing target mode falls back to the current available mode instead of leaving an invalid stage/filter combination.
 
-## 2026-08-03 master-to-Vue re-audit closeout
+## 2026-08-05 Vue shared modal closeout
+
+- `ModalShell.vue` now provides shared dialog semantics, Escape/backdrop close, focus restoration, Tab cycling, and a valid `aria-label` when `showHeader=false`; Teleport-mounted dialogs focus their first control after mount.
+- AI settings are opened by `#/ai?settings=1`, keep configuration in `lifePlanAiConfig`, update saved-Key status reactively, clear only `apiKey`, and associate the current mode panel with its stable mode button without changing button role compatibility.
+- Habit currency management remains additive and store-backed: invalid empty/duplicate names are rejected with inline feedback; successful creation commits `lifePlanData`, rebuilds `habitAppData` with `remoteUploadEnabled=false`, and marks main sync dirty.
+- Todo Teleport migration required preserving explicit `close-label="关闭待办详情"` and using `#todo-create-panel` as the stable form target; old `#page-todos` ancestor selectors cannot cross the body Teleport boundary.
+- Fitness is intentionally not a ModalShell target. Its current browse-first native disclosure sections have existing service/persistence coverage; forcing modal conversion would be an IA change rather than parity repair.
+- Direct validation passed: popup/settings `6/6`, recovered Todo/sync regressions `7/7`, serial full Vue smoke `238/238`, `npm run build`, `node --check tests/vue-smoke.spec.js`, and `git diff --check`.
+- Browser evidence: AI settings desktop 1440px dialog had `699/699` content width and zero document overflow; mobile 390px dialog had `343/343` content width, right edge `372`, and zero document overflow. Later browser page switching timed out at the tool layer; Wheel mobile overflow is independently asserted by the passing Playwright test.
+- Do not touch or package `.freebuff/`, `.workbuddy/`, `previews/`, `playwright.preview.config.js`, `tmp-legacy.png`, or `tmp-vue.png`.
+- The completed 1440px/390px master comparison found no horizontal overflow in Habit, Todo, Wheel, or Fitness target states. The one actionable visual mismatch was Wheel mobile management: Vue's overview consumed most of the first viewport before the active workspace, while master starts the selected form immediately below its title.
+- The bounded repair keeps Vue's unified management modal but restores master-visible workspace titles and compacts the mobile overview/navigation so public-library and tag-management controls appear in the first viewport. Fitness remains the previously approved browse-first disclosure exception rather than being reverted to master's modal structure.
+- Full-project browser measurement confirmed three additional actionable issues: the mobile shell used a viewport-height sidebar plus nested viewport-height main scroller; the snapshot and hand-written Materials dialogs lacked the shared keyboard/focus lifecycle; and the 390px Fitness overview actions widened the document by 17px when plan editing opened.
+- These issues are repaired and directly remeasured. All 14 Vue route defaults and the completed major-state matrix now have zero document/dialog horizontal overflow at 1440px and 390px. The master 390px pages themselves retain some legacy overflow, so those old defects were not copied into Vue.
+- Static structure differences such as the Ideas inline creator, Vue page-form AI/Sync, and approved Fitness disclosure editors were not rewritten without runtime defect evidence. They remain intentional migration information architecture rather than unresolved bugs.
+- The shared-component audit found the main maintenance outliers were not generic cards/forms but three full sync-panel copies, six remaining custom modal shells, repeated page headers/status/empty states, segmented controls, Materials cards, and compatible disclosure sections.
+- These stable repetitions are now shared. `FormRow`, generic `Card`, and generic `DataTable` remain CSS/domain primitives because forcing them into universal components would add props without removing behavior or style maintenance.
+- Segmented controls require two semantic modes: ordinary grouped buttons for Records/Wheel and tablist/tab for Habits. AI remains a grouped-button compatibility case that also exposes its historical `aria-selected` state. The shared component now models this explicitly rather than forcing one role everywhere.
 
 - The master-only Materials commits were already represented in Vue: explicit title fallback, title-aware search, tag editing/filtering, random tag filtering, long-copy disclosure, deep-link detail, and protected persistence all passed the five Materials contracts.
 - The Wheel parity gap was lifecycle-level: `wheelStore.ensureSeedData()` existed but was never called. Calling it before Wheel mount now creates the same default normal/tag wheels, four tags, and five public items as legacy; normal private entries intentionally omit public `tagIds`.
@@ -325,3 +342,10 @@
 - The dashboard timeline itself remained read-only, but the destination Vue Records list rendered extra per-row `查看/预览` and `删除` controls that are absent from the legacy first-type flow.
 - The correct interaction is row selection to open the existing preview/editor path; deletion belongs in the editor action area, where the existing confirmation and linked exclusive-Todo cascade are already preserved.
 - The bounded fix removes only the list action container and keeps the editor delete button. Regression coverage now checks the absence of `.record-row-actions` after timeline navigation and uses row/editor controls for preview and deletion.
+
+## 2026-08-04 Dashboard record preview audit
+
+- Master `app.js` calls `openRecordPreview(recordId)` directly from Dashboard period/timeline items, so the modal opens without changing the current page.
+- Vue `DashboardPage.vue:147-153` instead pushes `/records` with `record` and `preview=1`, which changes the visible page to `所有记录`.
+- Vue `RecordsPage.vue:424-431` preserves `record` when closing an external preview. The existing route watcher then sees a record without `preview=1` and calls `openEditor`, causing the second editor modal shown by the user.
+- The fix must distinguish external previews from editor-origin previews: external close removes both `record` and `preview`; editor-origin close preserves the editor state.

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 
+import SyncResourcePanel from './common/SyncResourcePanel.vue';
+
 import { getHabitSyncConfig, saveHabitSyncConfig } from '../services/habitCloudSync';
 import { createLegacyServices, genId, getNowLocal, getTodayStr } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
@@ -677,93 +679,15 @@ async function uploadFirst() {
 </script>
 
 <template>
-  <article class="card habit-sync-card">
-    <div class="habit-sync-heading">
-      <div><div class="card-title">习惯独立同步</div><span>{{ remotePath }}</span></div>
-      <span class="habit-sync-mode">预览/应用/条件自动</span>
-    </div>
-
-    <div class="habit-sync-auto">
-      <label>
-        <input v-model="autoConfig.autoSync" type="checkbox" :disabled="busy || !endpointReady" @change="saveAutoSyncSetting" />
-        <span>启用 Habit 条件自动同步</span>
-      </label>
-      <button class="btn btn-secondary" type="button" :disabled="autoBusy || busy || !endpointReady" @click="runAutoSyncNow">立即自动同步一次</button>
-    </div>
-
-    <div class="page-actions habit-sync-actions">
-      <button class="btn btn-secondary" type="button" :disabled="busy || !endpointReady" @click="previewRemote">检查 Habit 云端</button>
-      <button v-if="preview.status === 'ready'" class="btn btn-secondary" type="button" :disabled="!canApply" @click="applyRemoteMerge">应用合并到本机</button>
-      <button v-if="preview.status === 'ready'" class="btn btn-primary" type="button" :disabled="!canUploadExisting" @click="uploadExisting">受保护上传</button>
-    </div>
-
-    <label v-if="preview.status === 'missing'" class="habit-sync-arm">
-      <input v-model="armed" type="checkbox" />
-      <span>本次会话允许首次创建</span>
-      <button class="btn btn-primary" type="button" :disabled="!armed || busy" @click.prevent="uploadFirst">首次创建</button>
-    </label>
-
-    <div v-if="preview.local" class="habit-sync-comparison">
-      <div v-for="item in [{ label: '本机', value: preview.local }, { label: '云端', value: preview.remote }, { label: '合并', value: preview.merged }]" :key="item.label" class="habit-sync-column">
-        <strong>{{ item.label }}</strong>
-        <template v-if="item.value">
-          <span>{{ item.value.counts.habits }} 习惯 · 记录 {{ item.value.counts.records }} · 流水 {{ item.value.counts.ledger }}</span>
-          <small>{{ item.value.hashShort }}</small>
-        </template>
-        <span v-else>{{ preview.status === 'missing' && item.label === '云端' ? '不存在' : '-' }}</span>
+  <SyncResourcePanel root-class="habit-sync-card" title="习惯独立同步" :remote-path="remotePath" :mode-label="'预览/应用/条件自动'" resource-label="Habit" auto-label="启用 Habit 条件自动同步" run-label="立即自动同步一次" :status="preview.status" :busy="busy" :auto-busy="autoBusy" :endpoint-ready="endpointReady" :auto-sync-enabled="autoConfig.autoSync" :armed="armed" :can-apply="canApply" :can-upload="canUploadExisting" :message="message" :message-tone="messageTone" @update:auto-sync-enabled="autoConfig.autoSync = $event" @update:armed="armed = $event" @save-auto-sync="saveAutoSyncSetting" @run-auto-sync="runAutoSyncNow" @preview="previewRemote" @apply="applyRemoteMerge" @upload="uploadExisting" @create="uploadFirst">
+    <template #preview>
+      <div v-if="preview.local" class="sync-resource-comparison">
+        <div v-for="item in [{ label: '本机', value: preview.local }, { label: '云端', value: preview.remote }, { label: '合并', value: preview.merged }]" :key="item.label" class="sync-resource-column">
+          <strong>{{ item.label }}</strong><template v-if="item.value"><span>{{ item.value.counts.habits }} 习惯 · 记录 {{ item.value.counts.records }} · 流水 {{ item.value.counts.ledger }}</span><small>{{ item.value.hashShort }}</small></template>
+          <span v-else>{{ preview.status === 'missing' && item.label === '云端' ? '不存在' : '-' }}</span>
+        </div>
       </div>
-    </div>
-
-    <div v-if="preview.risks.length" class="habit-sync-risks">
-      <p v-for="risk in preview.risks" :key="risk.message" :class="`is-${risk.severity}`">{{ risk.message }}</p>
-    </div>
-    <p v-if="message" class="sync-status active" :class="`is-${messageTone}`" role="status">{{ message }}</p>
-  </article>
+    </template>
+    <template #risks><div v-if="preview.risks.length" class="sync-resource-risks"><p v-for="risk in preview.risks" :key="risk.message" :class="`is-${risk.severity}`">{{ risk.message }}</p></div></template>
+  </SyncResourcePanel>
 </template>
-
-<style scoped>
-.habit-sync-card { margin-top: 18px; }
-.habit-sync-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.habit-sync-heading span { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; }
-.habit-sync-mode { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
-.habit-sync-auto {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 14px;
-  padding: 10px 0;
-  border-top: 1px solid var(--line);
-}
-.habit-sync-auto label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.habit-sync-actions { margin-top: 14px; }
-.habit-sync-arm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; margin-top: 14px; padding: 10px 0; border-top: 1px solid var(--line); }
-.habit-sync-comparison { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.habit-sync-column { display: grid; gap: 4px; min-width: 0; padding: 12px; border-right: 1px solid var(--line); }
-.habit-sync-column:last-child { border-right: 0; }
-.habit-sync-column strong { font-size: 13px; }
-.habit-sync-column span, .habit-sync-column small { color: var(--muted); overflow-wrap: anywhere; }
-.habit-sync-column small { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-.habit-sync-risks { margin-top: 12px; }
-.habit-sync-risks p { margin: 5px 0; color: var(--muted); }
-.habit-sync-risks .is-danger { color: var(--danger); }
-.sync-status.is-success { color: var(--accent); }
-.sync-status.is-danger { color: var(--danger); }
-@media (max-width: 560px) {
-  .habit-sync-heading { align-items: stretch; flex-direction: column; }
-  .habit-sync-mode { align-self: flex-start; }
-  .habit-sync-auto { align-items: stretch; flex-direction: column; }
-  .habit-sync-auto .btn { width: 100%; }
-  .habit-sync-comparison { grid-template-columns: 1fr; }
-  .habit-sync-column { border-right: 0; border-bottom: 1px solid var(--line); }
-  .habit-sync-column:last-child { border-bottom: 0; }
-  .habit-sync-arm { grid-template-columns: auto minmax(0, 1fr); }
-  .habit-sync-arm .btn { grid-column: 1 / -1; width: 100%; }
-}
-</style>

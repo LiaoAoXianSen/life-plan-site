@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import StatusBanner from '../components/common/StatusBanner.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
+import ModalShell from '../components/common/ModalShell.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import TodoTable from '../components/TodoTable.vue';
 import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import { getTodayStr } from '../services/legacyServices';
@@ -419,23 +422,25 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
 
 <template>
   <section class="page active" id="page-todos">
-    <header class="page-header">
-      <div>
-        <div class="page-title">待办总览</div>
-      </div>
-      <div class="page-actions">
+    <PageHeader title="待办总览">
+      <template #actions>
         <button class="btn btn-primary" type="button" :aria-expanded="showCreateForm" aria-controls="todo-create-panel" @click="toggleCreateForm">
           {{ showCreateForm ? '收起新建' : '+ 新建通用待办' }}
         </button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
-    <div v-if="showCreateForm" class="modal-overlay active" role="presentation" @click.self="closeCreateForm">
-      <form id="todo-create-panel" class="modal modal-sm todo-create-modal" role="dialog" aria-modal="true" aria-labelledby="todo-create-title" @submit.prevent="submit">
-        <div class="modal-header">
-          <div class="modal-title" id="todo-create-title">新建通用待办</div>
-          <button class="close-btn" type="button" aria-label="关闭新建待办" title="关闭" @click="closeCreateForm">×</button>
-        </div>
+    <ModalShell
+      v-if="showCreateForm"
+      v-model="showCreateForm"
+      title="新建通用待办"
+      size="sm"
+      dialog-class="todo-create-modal"
+      dialog-id="todo-create-panel"
+      close-label="关闭新建待办"
+      @close="closeCreateForm"
+    >
+      <form role="presentation" @submit.prevent="submit">
         <div class="form-row">
           <div class="form-group"><label for="todo-create-text">任务</label><input id="todo-create-text" v-model="form.text" required placeholder="下一步要推进什么？" /></div>
           <div class="form-group"><label for="todo-create-group">分组</label><input id="todo-create-group" v-model="form.group" /></div>
@@ -470,7 +475,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
           </div>
         </div>
       </form>
-    </div>
+    </ModalShell>
 
     <FilterBar class="todo-legacy-filters">
       <span class="todo-filter-label">日期：</span>
@@ -522,27 +527,23 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
       </div>
     </div>
 
-    <div v-if="showDetailPanel" class="modal-overlay active" role="presentation" @click.self="closeDetail">
-      <aside class="modal modal-sm todo-detail-panel todo-detail-modal" role="dialog" aria-modal="true" aria-labelledby="todo-detail-heading">
-        <div class="modal-header todo-detail-header">
-          <div>
-            <span :class="`todo-urgency todo-urgency-${isIdeaDraft ? detailForm.urgency : selectedTodo!.urgency}`">{{ todosStore.services.todos.getTodoUrgencyMeta(isIdeaDraft ? detailForm.urgency : selectedTodo!.urgency).label }}</span>
-            <h2 id="todo-detail-heading" class="modal-title">{{ isIdeaDraft ? '灵感转待办' : (editing ? '编辑待办' : selectedTodo!.text) }}</h2>
-            <p v-if="isIdeaDraft && draftIdea" class="todo-detail-copy">来源灵感：{{ draftIdea.title || '未命名灵感' }}</p>
-          </div>
-          <button class="close-btn" type="button" aria-label="关闭待办详情" title="关闭" @click="closeDetail">×</button>
-        </div>
+    <ModalShell
+      v-if="showDetailPanel"
+      :model-value="showDetailPanel"
+      :title="isIdeaDraft ? '灵感转待办' : (editing ? '编辑待办' : (selectedTodo?.text || '待办详情'))"
+      size="sm"
+      dialog-class="todo-detail-panel todo-detail-modal"
+      close-label="关闭待办详情"
+      @close="closeDetail"
+    >
+        <template v-if="!editing && !isIdeaDraft" #header-extra>
+          <span :class="`todo-urgency todo-urgency-${selectedTodo!.urgency}`">{{ todosStore.services.todos.getTodoUrgencyMeta(selectedTodo!.urgency).label }}</span>
+        </template>
+        <p v-if="isIdeaDraft && draftIdea" class="todo-detail-copy">来源灵感：{{ draftIdea.title || '未命名灵感' }}</p>
 
         <form v-if="editing || isIdeaDraft" class="todo-detail-form" @submit.prevent="saveDetail">
           <div class="form-group"><label for="todo-detail-text">任务</label><input id="todo-detail-text" v-model="detailForm.text" required /></div>
           <div class="form-group"><label for="todo-detail-note">备注</label><textarea id="todo-detail-note" v-model="detailForm.note" /></div>
-          <div class="todo-date-presets" aria-label="日期预设">
-            <button type="button" @click="applyDatePreset('today')">今天</button>
-            <button type="button" @click="applyDatePreset('tomorrow')">明天</button>
-            <button type="button" @click="applyDatePreset('this-week')">本周</button>
-            <button type="button" @click="applyDatePreset('next-week')">下周</button>
-            <button type="button" @click="applyDatePreset('no-date')">无日期</button>
-          </div>
           <div class="form-row">
             <div class="form-group"><label for="todo-detail-plan-start">计划开始</label><input id="todo-detail-plan-start" v-model="detailForm.planStartDate" type="date" /></div>
             <div class="form-group"><label for="todo-detail-plan-end">计划结束</label><input id="todo-detail-plan-end" v-model="detailForm.planEndDate" type="date" /></div>
@@ -550,6 +551,13 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
             <div class="form-group"><label for="todo-detail-urgency">紧急度</label><AppSelect id="todo-detail-urgency" v-model="detailForm.urgency" :options="[{ value: 'urgent', label: '紧急' }, { value: 'high', label: '高' }, { value: 'medium', label: '中' }, { value: 'low', label: '低' }]" /></div>
           </div>
           <div class="form-group"><label for="todo-detail-group">分组</label><input id="todo-detail-group" v-model="detailForm.group" /></div>
+          <div class="todo-date-presets" aria-label="日期预设">
+            <button type="button" @click="applyDatePreset('today')">今天</button>
+            <button type="button" @click="applyDatePreset('tomorrow')">明天</button>
+            <button type="button" @click="applyDatePreset('this-week')">本周</button>
+            <button type="button" @click="applyDatePreset('next-week')">下周</button>
+            <button type="button" @click="applyDatePreset('no-date')">无日期</button>
+          </div>
 
           <section class="todo-detail-section" aria-labelledby="todo-edit-subtasks">
             <h3 id="todo-edit-subtasks">子任务</h3>
@@ -562,7 +570,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
             <div class="todo-inline-add"><input v-model="newSubTodo" aria-label="新子任务" placeholder="添加一个可执行步骤" @keyup.enter.prevent="addSubTodo" /><button class="btn btn-secondary" type="button" @click="addSubTodo">添加</button></div>
           </section>
 
-          <p v-if="detailError" class="form-error" role="alert">{{ detailError }}</p>
+          <StatusBanner v-if="detailError" class="form-error" role="alert" tone="warning">{{ detailError }}</StatusBanner>
           <div class="modal-action-row todo-detail-actions">
             <button v-if="!isIdeaDraft" class="btn btn-danger" type="button" @click="deleteSelectedTodo">删除待办</button>
             <span v-else />
@@ -575,10 +583,6 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
             <span>{{ getTodoStatusText(selectedTodo) }}</span><span>{{ selectedTodo.group || '其他' }}</span><span>截止 {{ selectedTodo.dueDate || '未设置' }}</span><span>计划 {{ selectedTodo.planStartDate || '未设置' }}{{ selectedTodo.planEndDate ? ` 至 ${selectedTodo.planEndDate}` : '' }}</span>
           </div>
           <p v-if="selectedTodo.note" class="todo-detail-copy">{{ selectedTodo.note }}</p>
-          <div class="modal-action-row todo-detail-actions">
-            <button class="btn btn-danger" type="button" @click="deleteSelectedTodo">删除待办</button>
-            <div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="toggleSelectedTodo">{{ selectedTodo.done ? '恢复未完成' : '标记完成' }}</button><button class="btn btn-secondary" type="button" @click="quickSession">执行一次</button><button class="btn btn-primary" type="button" @click="startEditing">编辑待办</button></div>
-          </div>
 
           <section class="todo-detail-section" aria-labelledby="todo-view-subtasks">
             <div class="todo-section-heading"><h3 id="todo-view-subtasks">子任务</h3><span>{{ selectedTodo.subTodos.filter(item => item.done).length }}/{{ selectedTodo.subTodos.length }}</span></div>
@@ -607,11 +611,15 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
             <p v-if="!linkedRecords.length" class="todo-detail-empty">暂无关联记录</p>
           </section>
 
-          <p v-if="detailError" class="form-error" role="alert">{{ detailError }}</p>
-          <p v-if="detailStatus" class="todo-save-status" role="status">{{ detailStatus }}</p>
+          <div class="modal-action-row todo-detail-actions">
+            <button class="btn btn-danger" type="button" @click="deleteSelectedTodo">删除待办</button>
+            <div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="toggleSelectedTodo">{{ selectedTodo.done ? '恢复未完成' : '标记完成' }}</button><button class="btn btn-secondary" type="button" @click="quickSession">执行一次</button><button class="btn btn-primary" type="button" @click="startEditing">编辑待办</button></div>
+          </div>
+
+          <StatusBanner v-if="detailError" class="form-error" role="alert" tone="warning">{{ detailError }}</StatusBanner>
+          <StatusBanner v-if="detailStatus" class="todo-save-status" role="status" tone="info">{{ detailStatus }}</StatusBanner>
         </template>
-      </aside>
-    </div>
+    </ModalShell>
 
     <TodoSyncPanel :sync-config="syncConfig" />
   </section>

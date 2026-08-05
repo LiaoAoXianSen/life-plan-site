@@ -98,6 +98,23 @@ test('common select controls preserve numeric values and shared layout contracts
     await expect.poll(() => page.evaluate(() => ({ document: document.documentElement.scrollWidth <= innerWidth, page: document.querySelector('#page-search').scrollWidth <= document.querySelector('#page-search').clientWidth }))).toEqual({ document: true, page: true });
 });
 
+test('shared segmented control preserves button and tab keyboard semantics', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/records');
+    const viewGroup = page.getByRole('group', { name: '记录视图' });
+    const listButton = viewGroup.getByRole('button', { name: '列表', exact: true });
+    await expect(listButton).not.toHaveAttribute('aria-selected');
+    await listButton.focus();
+    await listButton.press('ArrowRight');
+    await expect(viewGroup.getByRole('button', { name: '日视图', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.goto('/#/habits');
+    const tablist = page.getByRole('tablist', { name: '习惯中心分区' });
+    const todayTab = tablist.getByRole('tab', { name: '今日', exact: true });
+    await todayTab.focus();
+    await todayTab.press('End');
+    await expect(tablist.getByRole('tab', { name: '云同步', exact: true })).toHaveAttribute('aria-selected', 'true');
+});
+
 test('Vue shell navigates through migrated pages without browser errors', async ({ page }) => {
     const errors = [];
     const failedRequests = [];
@@ -110,7 +127,9 @@ test('Vue shell navigates through migrated pages without browser errors', async 
             ? page.getByRole('button', { name: label })
             : page.getByRole('link', { name: label });
         await entry.click();
-        await expect(page.locator('.page-title')).toHaveText(title);
+        const header = page.locator('.page-header');
+        await expect(header).toHaveCount(1);
+        await expect(header.locator('.page-title')).toHaveText(title);
     }
     expect(errors).toEqual([]);
     expect(failedRequests).toEqual([]);
@@ -120,7 +139,7 @@ test('todo writes main data and the compatible todo mirror', async ({ page }) =>
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/todos');
     await page.getByRole('button', { name: /新建.*待办/ }).click();
-    await page.locator('#page-todos input[required]').fill('Vue 待办');
+    await page.locator('#todo-create-panel input[required]').fill('Vue 待办');
     await page.getByRole('button', { name: '保存待办' }).click();
     await expect(page.locator('.todo-table')).toContainText('Vue 待办');
     const stored = await page.evaluate(() => ({ data: JSON.parse(localStorage.getItem('lifePlanData')), mirror: JSON.parse(localStorage.getItem('todoAppData')) }));
@@ -620,6 +639,20 @@ test('dashboard command center restores the legacy fitness card', async ({ page 
     await expect(fitnessCard).toContainText('今日力量计划');
     await expect(fitnessCard).toContainText('近30天训练');
     await expect(fitnessCard.getByRole('button', { name: '按计划开练' })).toBeVisible();
+});
+
+test('sidebar snapshot closes with Escape without changing data', async ({ page }) => {
+    const source = emptyData();
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+    const trigger = page.getByRole('button', { name: /本地快照/ });
+    await trigger.click();
+    await expect(page.getByRole('dialog', { name: '本地快照' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: '本地快照' })).toBeHidden();
+    await expect(trigger).toBeFocused();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
 test('sidebar snapshot list keeps the legacy timestamp format', async ({ page }) => {
@@ -2981,6 +3014,37 @@ test('fitness workout log deletion keeps the legacy confirmation guard', async (
         expect.objectContaining({ collection: 'fitnessWorkouts', id: 'fitness-workout-delete', reason: 'manual-delete' }),
     ]));
     await expect(titleInput).toHaveValue('');
+});
+
+test('fitness plan editor keeps the mobile page within the viewport', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/#/fitness');
+    await page.getByRole('button', { name: '新建计划', exact: true }).click();
+    await expect(page.locator('form.card').filter({ hasText: '创建训练计划' })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
+
+test('shared disclosure keeps native open behavior in fitness and wheel', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/fitness');
+    const fitnessDisclosure = page.locator('.fitness-form-disclosure').filter({ hasText: '自由训练设置' });
+    await fitnessDisclosure.locator('summary').click();
+    await expect(fitnessDisclosure).toHaveAttribute('open', '');
+    await fitnessDisclosure.locator('summary').click();
+    await expect(fitnessDisclosure).not.toHaveAttribute('open', '');
+    await page.goto('/#/wheel');
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '新建转盘' }).click();
+    const createPanel = page.locator('#wheel-create-panel');
+    await createPanel.getByRole('textbox', { name: '名称' }).fill('公共展开测试');
+    await createPanel.getByRole('button', { name: '创建转盘', exact: true }).click();
+    await page.getByRole('dialog').locator('.close-btn').click();
+    await page.locator('#wheel-action-menu-button').click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '修改当前盘' }).click();
+    const wheelDisclosure = page.locator('.wheel-batch-tools').filter({ hasText: '批量导入选项' });
+    await wheelDisclosure.locator('summary').click();
+    await expect(wheelDisclosure).toHaveAttribute('open', '');
 });
 
 test('fitness plan browse content opens the legacy editor entry point', async ({ page }) => {
@@ -5529,6 +5593,21 @@ test('materials create edit filter and delete preserve the legacy data contract'
     expect(stored.materials.find(item => item.id === 'material-old').content).toBe('较早素材');
 });
 
+test('materials editor closes with Escape without changing data', async ({ page }) => {
+    const source = emptyData({ materials: [{ id: 'material-escape', type: '摘抄', content: 'Escape 素材', tags: [], source: '', note: '' }] });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/materials');
+    const materialsPage = page.locator('#page-materials');
+    const trigger = materialsPage.getByRole('button', { name: '编辑素材 Escape 素材' });
+    await trigger.click();
+    await expect(materialsPage.getByRole('dialog', { name: '编辑素材' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(materialsPage.getByRole('dialog', { name: '编辑素材' })).toBeHidden();
+    await expect(trigger).toBeFocused();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
 test('materials direct editor open and close keep URL unchanged', async ({ page }) => {
     const source = emptyData({
         materials: [{ id: 'material-direct-editor', type: '摘抄', content: '直接编辑素材', tags: ['阅读'], source: '旧书', note: '只读检查' }],
@@ -6091,12 +6170,126 @@ test('AI page falls back when persisted config is malformed', async ({ page }) =
         localStorage.setItem('lifePlanAiConfig', malformed);
     }, { data: source, malformed: malformedConfig });
 
-    await page.goto('/#/ai');
+    await page.goto('/#/ai?settings=1');
     await expect(page.locator('#page-ai .page-title')).toHaveText('AI 助手');
+    await expect(page.getByRole('dialog', { name: 'AI 设置' })).toBeVisible();
     await expect(page.getByLabel('接口地址')).toBeVisible();
     expect(errors).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanAiConfig'))).toBe(malformedConfig);
+});
+
+test('AI settings use the shared modal contract and clear only their own API key', async ({ page }) => {
+    const source = emptyData({ records: [{ id: 'ai-settings-record', type: '日记', title: '设置隔离记录', content: '保持不变', todoIds: [] }] });
+    const originalData = JSON.stringify(source);
+    const originalConfig = { remoteEnabled: true, endpointUrl: 'https://ai-settings.example.test/v1', model: 'settings-model', apiKey: 'secret-key', userStyle: '短句、具体' };
+    await page.addInitScript(({ data, config }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify(config));
+    }, { data: source, config: originalConfig });
+
+    await page.goto('/#/ai');
+    const trigger = page.locator('#page-ai').getByRole('button', { name: 'AI 设置', exact: true });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'AI 设置' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: '关闭AI 设置' })).toBeFocused();
+    await expect(page.locator('#ai-mode-panel')).toHaveAttribute('aria-labelledby', 'ai-mode-chatCapture');
+    await expect(page.locator('#ai-mode-chatCapture')).toHaveAttribute('aria-selected', 'true');
+
+    await dialog.getByRole('button', { name: '清除 Key' }).click();
+    await expect(dialog).toContainText('API Key 已清除');
+    await expect(dialog).toContainText('未保存 API Key');
+    expect(await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), config: JSON.parse(localStorage.getItem('lifePlanAiConfig')) }))).toEqual({
+        data: originalData,
+        config: { ...originalConfig, apiKey: '' },
+    });
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+});
+
+test('AI settings restore from settings query and preserve preferences on save', async ({ page }) => {
+    const source = emptyData();
+    const original = JSON.stringify(source);
+    await page.addInitScript(({ data }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
+    }, { data: source });
+    await page.goto('/#/ai?settings=1');
+
+    const dialog = page.getByRole('dialog', { name: 'AI 设置' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('接口地址').fill('https://saved.example.test/v1');
+    await dialog.getByLabel('模型').fill('saved-model');
+    await dialog.getByLabel('API Key').fill('saved-key');
+    await dialog.getByLabel('偏好说明').fill('只给三步');
+    await dialog.getByRole('checkbox', { name: '启用远程 AI' }).check();
+    await dialog.getByRole('button', { name: '保存设置' }).click();
+    await expect(dialog).toContainText('AI 设置已保存');
+    await expect(dialog).toContainText('已保存 API Key');
+    expect(await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), config: JSON.parse(localStorage.getItem('lifePlanAiConfig')) }))).toEqual({
+        data: original,
+        config: { remoteEnabled: true, endpointUrl: 'https://saved.example.test/v1', model: 'saved-model', apiKey: 'saved-key', userStyle: '只给三步' },
+    });
+});
+
+test('habit currency manager persists a new currency and rejects empty or duplicate names', async ({ page }) => {
+    const source = emptyData({ habitCurrencies: [{ id: 'currency-coin', name: '金币' }] });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/habits');
+    await page.getByRole('button', { name: '币种管理', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '币种管理' });
+    const input = dialog.getByLabel('新增币种');
+    await dialog.getByRole('button', { name: '添加', exact: true }).click();
+    await expect(dialog).toContainText('请输入币种名称');
+    await input.fill('金币');
+    await dialog.getByRole('button', { name: '添加', exact: true }).click();
+    await expect(dialog).toContainText('这个币种已经存在');
+    await input.fill('学习币');
+    await dialog.getByRole('button', { name: '添加', exact: true }).click();
+    await expect(dialog.getByText('学习币', { exact: true })).toBeVisible();
+
+    const stored = await page.evaluate(() => ({
+        data: JSON.parse(localStorage.getItem('lifePlanData')),
+        mirror: JSON.parse(localStorage.getItem('habitAppData')),
+        sync: JSON.parse(localStorage.getItem('lifePlanSyncState')),
+    }));
+    expect(stored.data.habitCurrencies).toEqual(expect.arrayContaining([expect.objectContaining({ name: '学习币' })]));
+    expect(stored.mirror.habitCurrencies).toEqual(expect.arrayContaining([expect.objectContaining({ name: '学习币' })]));
+    expect(stored.mirror.remoteUploadEnabled).toBe(false);
+    expect(stored.sync.dirty).toBe(true);
+});
+
+test('todo title Space key opens the shared detail modal without writing data', async ({ page }) => {
+    const source = emptyData({ todos: [todoFixture('todo-space', 'Space 打开详情')] });
+    const original = JSON.stringify(source);
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/todos');
+    const title = page.locator('.todo-title-cell').filter({ hasText: 'Space 打开详情' });
+    await title.focus();
+    await title.press('Space');
+    await expect(page.getByRole('dialog', { name: 'Space 打开详情' })).toBeVisible();
+    await expect(page).toHaveURL(/#\/todos\?todo=todo-space$/);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('wheel management modal closes with Escape and stays within mobile width', async ({ page }) => {
+    const source = emptyData({ wheels: [{ id: 'wheel-modal', name: '管理弹窗转盘', mode: 'normal', items: [{ id: 'wheel-item', name: '管理项', weight: 1, enabled: true }] }] });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/wheel');
+    const trigger = page.locator('#wheel-action-menu-button').first();
+    await trigger.click();
+    await page.locator('#wheel-action-menu').getByRole('button', { name: '公共项库' }).click();
+    const dialog = page.getByRole('dialog', { name: '公共项库' });
+    await expect(dialog).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.evaluate(() => ({ document: document.documentElement.scrollWidth <= innerWidth, dialog: document.querySelector('[role="dialog"]')?.scrollWidth <= document.querySelector('[role="dialog"]')?.clientWidth }))).toEqual({ document: true, dialog: true });
+    const libraryPanel = dialog.locator('#wheel-library-panel');
+    await expect.poll(() => libraryPanel.evaluate(element => element.getBoundingClientRect().top < innerHeight * 0.58)).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
 });
 
 test('AI ideaNext keeps drafts read-only until confirmed writeback', async ({ page }) => {
@@ -8306,7 +8499,7 @@ test('todo independent auto sync stays idle for stale unsafe config', async ({ p
     await page.clock.install();
     await page.goto('/#/todos');
     await page.getByRole('button', { name: /新建.*待办/ }).click();
-    await page.locator('#page-todos input[required]').fill('禁用状态编辑');
+    await page.locator('#todo-create-panel input[required]').fill('禁用状态编辑');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(25000);
     await page.waitForTimeout(100);
@@ -8408,7 +8601,7 @@ test('todo independent auto sync uploads local dirty data with If-Match and veri
         }));
     }, hashes);
     await page.getByRole('button', { name: /新建.*待办/ }).click();
-    await page.locator('#page-todos input[required]').fill('自动同步新增待办');
+    await page.locator('#todo-create-panel input[required]').fill('自动同步新增待办');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.goto('/#/sync');
     await page.locator('.todo-sync-card').getByRole('button', { name: '立即同步一次' }).click();
@@ -8485,7 +8678,7 @@ test('todo independent auto sync never creates a missing remote file', async ({ 
     await page.clock.install();
     await page.goto('/#/todos');
     await page.getByRole('button', { name: /新建.*待办/ }).click();
-    await page.locator('#page-todos input[required]').fill('缺失云端后仍不创建');
+    await page.locator('#todo-create-panel input[required]').fill('缺失云端后仍不创建');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(20000);
     await expect.poll(() => requests.filter(item => item.path === '/apps/todo-app/data.json').length).toBe(1);
@@ -8615,7 +8808,7 @@ test('main auto sync uploads local dirty data after the debounce window', async 
     await page.waitForTimeout(200);
     const putsBeforeEdit = calls.filter(item => item.method === 'PUT').length;
     await page.getByRole('button', { name: /新建.*待办/ }).click();
-    await page.locator('#page-todos input[required]').fill('触发自动同步');
+    await page.locator('#todo-create-panel input[required]').fill('触发自动同步');
     await page.getByRole('button', { name: '保存待办' }).click();
     await expect(page.locator('.todo-table')).toContainText('触发自动同步');
     expect(calls.filter(item => item.method === 'PUT')).toHaveLength(putsBeforeEdit);
@@ -8743,7 +8936,7 @@ test('main auto sync stays idle when autoSync is disabled', async ({ page }) => 
     await page.clock.install();
     await page.goto('/#/todos');
     await page.getByRole('button', { name: /新建.*待办/ }).click();
-    await page.locator('#page-todos input[required]').fill('关闭自动同步后编辑');
+    await page.locator('#todo-create-panel input[required]').fill('关闭自动同步后编辑');
     await page.getByRole('button', { name: '保存待办' }).click();
     await page.clock.fastForward(25000);
     await page.waitForTimeout(100);

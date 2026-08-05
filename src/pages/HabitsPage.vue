@@ -1,7 +1,12 @@
 <script setup lang="ts">
+import EmptyState from '../components/common/EmptyState.vue';
+import StatusBanner from '../components/common/StatusBanner.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppSelect from '../components/common/AppSelect.vue';
+import ModalShell from '../components/common/ModalShell.vue';
+import PageHeader from '../components/common/PageHeader.vue';
+import SegmentedTabs from '../components/common/SegmentedTabs.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -29,6 +34,9 @@ const matrixDays = ref(30);
 const actionDrafts = reactive<Record<string, { date: string; note: string }>>({});
 const checkinNoteDrafts = reactive<Record<string, string>>({});
 const rewardForm = reactive({ name: '', cost: 10, currency: '金币', stock: 0, note: '' });
+const currencyForm = reactive({ name: '' });
+const currencyError = ref('');
+const showCurrencyManager = ref(false);
 const showPointAdjust = ref(false);
 const pointAdjustForm = reactive({
   direction: 'add' as 'add' | 'subtract',
@@ -308,6 +316,30 @@ function openCreateHabit() {
 
 function openCreateWish() {
   activeTab.value = 'wallet';
+}
+
+function openCurrencyManager() {
+  currencyForm.name = '';
+  currencyError.value = '';
+  showCurrencyManager.value = true;
+}
+
+function addCurrency() {
+  const name = currencyForm.name.trim();
+  if (!name) {
+    currencyError.value = '请输入币种名称';
+    return;
+  }
+  if (currencyOptions.value.includes(name)) {
+    currencyError.value = '这个币种已经存在';
+    return;
+  }
+  if (habits.addCurrency(name)) {
+    currencyForm.name = '';
+    currencyError.value = '';
+    return;
+  }
+  currencyError.value = habits.lastError || '币种添加失败';
 }
 
 function openPointAdjust() {
@@ -688,18 +720,14 @@ watch(focusedHabitId, value => {
 
 <template>
   <section class="page active" id="page-habits">
-    <header class="page-header">
-      <div>
-        <div class="page-title">习惯中心</div>
-        <p class="page-subtitle">PC 端负责执行、补卡审计、习惯库、钱包和分析；数据仍沿用 life 旧字段。</p>
-      </div>
-      <div class="habit-header-actions">
-        <button class="btn btn-secondary" type="button" @click="openTab('wallet')">币种管理</button>
+    <PageHeader title="习惯中心" subtitle="PC 端负责执行、补卡审计、习惯库、钱包和分析；数据仍沿用 life 旧字段。" actions-class="habit-header-actions">
+      <template #actions>
+            <button class="btn btn-secondary" type="button" @click="openCurrencyManager">币种管理</button>
         <button class="btn btn-secondary" type="button" @click="openPointAdjust">调整积分</button>
         <button class="btn btn-secondary" type="button" @click="openCreateWish">新增心愿</button>
         <button class="btn btn-primary" type="button" @click="openCreateHabit">+ 新建习惯</button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <article class="card habit-center-hero">
       <div>
@@ -714,11 +742,11 @@ watch(focusedHabitId, value => {
       </div>
     </article>
 
-    <div v-if="habits.lastAction" class="notice success" role="status">{{ habits.lastAction }}</div>
-    <div v-if="habits.lastError" class="notice warning" role="alert">{{ habits.lastError }}</div>
+    <StatusBanner v-if="habits.lastAction" class="notice success" role="status" tone="success">{{ habits.lastAction }}</StatusBanner>
+    <StatusBanner v-if="habits.lastError" class="notice warning" role="alert" tone="warning">{{ habits.lastError }}</StatusBanner>
 
     <div class="habit-kpi-grid habit-center-kpis">
-      <article v-for="item in centerKpis" :key="item.label" class="habit-kpi-card">
+      <article v-for="item in centerKpis" :key="item.label" class="habit-kpi-card metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
         <em>{{ item.hint }}</em>
@@ -726,18 +754,15 @@ watch(focusedHabitId, value => {
     </div>
 
     <div class="habit-center-toolbar">
-      <div class="habit-center-tabs" role="tablist" aria-label="习惯中心分区">
-        <button
-          v-for="tab in tabItems"
-          :key="tab.id"
-          type="button"
-          role="tab"
-          class="habit-center-tab"
-          :class="{ active: activeTab === tab.id }"
-          :aria-selected="activeTab === tab.id"
-          @click="openTab(tab.id)"
-        >{{ tab.label }}</button>
-      </div>
+      <SegmentedTabs
+        class="habit-center-tabs"
+        tab-class="habit-center-tab"
+        :ariaLabel="'习惯中心分区'"
+        semantics="tabs"
+        :model-value="activeTab"
+        :items="tabItems.map(tab => ({ value: tab.id, label: tab.label }))"
+        @update:model-value="value => openTab(value as typeof activeTab)"
+      />
       <div class="habit-center-toolbar-actions">
         <input
           v-show="activeTab === 'backfill'"
@@ -797,7 +822,7 @@ watch(focusedHabitId, value => {
               <button class="btn btn-secondary" type="button" @click="archiveReward(reward.id, !reward.archived)">{{ reward.archived ? '恢复心愿' : '归档心愿' }}</button>
             </div>
           </article>
-          <div v-if="!rewardItems.length" class="empty-state">还没有心愿，先添加一个能让你真的想兑换的奖励</div>
+          <EmptyState v-if="!rewardItems.length" class="empty-state">还没有心愿，先添加一个能让你真的想兑换的奖励</EmptyState>
         </div>
         <div class="habit-ledger-panel">
           <h3>近期流水</h3>
@@ -805,7 +830,7 @@ watch(focusedHabitId, value => {
             <span>{{ entry.note || entry.type || '积分调整' }}</span>
             <strong>{{ Number(entry.amount || 0) > 0 ? '+' : '' }}{{ Number(entry.amount || 0) }} {{ entry.currency || '金币' }}</strong>
           </div>
-          <div v-if="!habits.latestLedger.length" class="empty-state">暂无积分流水</div>
+          <EmptyState v-if="!habits.latestLedger.length" class="empty-state">暂无积分流水</EmptyState>
         </div>
       </div>
     </section>
@@ -873,7 +898,7 @@ watch(focusedHabitId, value => {
             </template>
           </div>
         </div>
-        <div v-else class="empty-state">暂无习惯，先新建一个习惯</div>
+        <EmptyState v-else class="empty-state">暂无习惯，先新建一个习惯</EmptyState>
       </div>
 
       <div class="habit-analysis-summary" aria-label="习惯统计摘要">
@@ -896,7 +921,7 @@ watch(focusedHabitId, value => {
             </div>
           </article>
         </div>
-        <div v-else class="empty-state">暂无可统计的习惯。</div>
+        <EmptyState v-else class="empty-state">暂无可统计的习惯。</EmptyState>
       </div>
 
       <div class="habit-annual-analysis" aria-label="单习惯年度热力图">
@@ -980,10 +1005,10 @@ watch(focusedHabitId, value => {
                 <button class="btn btn-secondary habit-history-action" type="button" @click="openAnalysisCheckin(checkin)">{{ String(checkin.note || '').trim() ? '编辑' : '补备注' }}</button>
               </div>
             </div>
-            <div v-else class="empty-state">这条习惯还没有打卡记录</div>
+            <EmptyState v-else class="empty-state">这条习惯还没有打卡记录</EmptyState>
           </div>
         </template>
-        <div v-else class="empty-state">暂无可分析的习惯。</div>
+        <EmptyState v-else class="empty-state">暂无可分析的习惯。</EmptyState>
       </div>
 
       <div class="habit-repair-preview" aria-label="Habit 安全修复预览">
@@ -1004,7 +1029,7 @@ watch(focusedHabitId, value => {
           <strong>{{ issue.label || issue.title || issue.type || issue.id }}</strong>
           <span>{{ issue.hint || issue.message || '需要复核这类旧数据。' }}</span>
         </article>
-        <div v-if="!diagnosticIssues.length" class="empty-state">当前没有发现重复 ID、孤儿引用、异常金额或未来打卡。</div>
+        <EmptyState v-if="!diagnosticIssues.length" class="empty-state">当前没有发现重复 ID、孤儿引用、异常金额或未来打卡。</EmptyState>
       </div>
       <details class="habit-diagnostics-details">
         <summary>迁移 / 诊断详情</summary>
@@ -1050,7 +1075,7 @@ watch(focusedHabitId, value => {
           <p class="section-hint">{{ activeTab === 'backfill' ? '选择日期后可备注打卡、补卡或撤销最近一次。' : '保留原来的快速打卡、备注、再记一次、撤销和减少次数。' }}</p>
         </div>
       </div>
-      <div v-if="backfillDateIsFuture" class="empty-state">不能补未来日期，换一个日期看看。</div>
+      <EmptyState v-if="backfillDateIsFuture" class="empty-state">不能补未来日期，换一个日期看看。</EmptyState>
       <div v-else class="habit-quick-list">
         <article v-for="item in activeHabitItems" :key="item.habit.id" class="habit-quick-card compact" :class="{ done: item.count > 0, multi: item.target > 1, 'is-target': focusedHabitId === item.habit.id }" :aria-current="focusedHabitId === item.habit.id ? 'true' : undefined">
           <div class="habit-quick-head">
@@ -1096,7 +1121,7 @@ watch(focusedHabitId, value => {
             </div>
           </div>
         </article>
-        <div v-if="!activeHabitItems.length" class="empty-state">{{ activeTab === 'backfill' ? '这一天没有按规则应完成的习惯。' : '今日暂无安排的习惯' }}</div>
+        <EmptyState v-if="!activeHabitItems.length" class="empty-state">{{ activeTab === 'backfill' ? '这一天没有按规则应完成的习惯。' : '今日暂无安排的习惯' }}</EmptyState>
       </div>
     </section>
 
@@ -1147,7 +1172,7 @@ watch(focusedHabitId, value => {
         </details>
         <div class="form-actions"><button class="btn btn-primary" type="submit">{{ editingHabit ? '保存习惯' : '添加习惯' }}</button></div>
       </form>
-      <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
+      <StatusBanner v-if="formError" class="form-error" role="alert" tone="warning">{{ formError }}</StatusBanner>
       <p class="section-hint">新建和编辑会保留旧版规则、积分、断签扣分、里程碑与本地镜像结构；远端同步仍在云同步页面维护。</p>
 
       <div class="habit-library-table habit-management-table">
@@ -1166,7 +1191,7 @@ watch(focusedHabitId, value => {
             <button class="btn btn-danger" type="button" @click="deleteHabit(row.habit.id)">删除</button>
           </span>
         </div>
-        <div v-if="!habits.habits.length" class="empty-state">暂无习惯，先新建一个习惯。</div>
+        <EmptyState v-if="!habits.habits.length" class="empty-state">暂无习惯，先新建一个习惯。</EmptyState>
       </div>
     </section>
 
@@ -1185,13 +1210,41 @@ watch(focusedHabitId, value => {
       </div>
     </section>
 
-    <div v-if="showPointAdjust" class="modal-overlay active" role="presentation" @click.self="showPointAdjust = false">
-      <section class="modal modal-sm habit-point-adjust-modal" role="dialog" aria-modal="true" aria-labelledby="habit-point-adjust-title">
-        <div class="modal-header">
-          <div id="habit-point-adjust-title" class="modal-title">调整积分</div>
-          <button class="close-btn" type="button" aria-label="关闭调整积分" @click="showPointAdjust = false">×</button>
+    <ModalShell
+      v-if="showCurrencyManager"
+      :model-value="showCurrencyManager"
+      title="币种管理"
+      size="sm"
+      dialog-class="habit-currency-modal"
+      @close="showCurrencyManager = false"
+    >
+      <form class="habit-currency-form" @submit.prevent="addCurrency">
+        <div class="form-group">
+          <label for="habit-currency-new-name">新增币种</label>
+          <div class="habit-currency-add-row">
+            <input id="habit-currency-new-name" v-model="currencyForm.name" maxlength="24" placeholder="例如：学习币、运动币" />
+            <button class="btn btn-secondary" type="submit">添加</button>
+          </div>
+          <StatusBanner v-if="currencyError" class="form-error" role="alert" tone="warning">{{ currencyError }}</StatusBanner>
         </div>
-        <form @submit.prevent="savePointAdjust">
+      </form>
+      <div class="habit-currency-list" aria-label="已有币种">
+        <span v-for="currency in currencyOptions" :key="currency" class="habit-currency-pill app-badge app-badge--bordered">{{ currency }}</span>
+      </div>
+      <datalist id="habit-currency-options">
+        <option v-for="currency in currencyOptions" :key="currency" :value="currency" />
+      </datalist>
+    </ModalShell>
+
+    <ModalShell
+      v-if="showPointAdjust"
+      :model-value="showPointAdjust"
+      title="调整积分"
+      size="sm"
+      dialog-class="habit-point-adjust-modal"
+      @close="showPointAdjust = false"
+    >
+      <form @submit.prevent="savePointAdjust">
           <div class="form-row">
             <div class="form-group">
               <label for="habit-point-adjust-type">类型</label>
@@ -1226,22 +1279,15 @@ watch(focusedHabitId, value => {
             <button class="btn btn-secondary" type="button" @click="showPointAdjust = false">取消</button>
             <button class="btn btn-primary" type="submit">保存调整</button>
           </div>
-        </form>
-        <datalist id="habit-currency-options">
-          <option v-for="currency in currencyOptions" :key="currency" :value="currency" />
-        </datalist>
-      </section>
-    </div>
+      </form>
+    </ModalShell>
   </section>
 </template>
 
 <style scoped>
-.habit-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
+.habit-currency-modal { width: min(520px, calc(100vw - 28px)); }
+.habit-currency-add-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.habit-currency-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .habit-matrix-block {
   margin: 14px 0 18px;
 }
@@ -1325,20 +1371,6 @@ watch(focusedHabitId, value => {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
-}
-.habit-center-kpis .habit-kpi-card {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(33, 110, 78, 0.05);
-  border: 1px solid rgba(33, 110, 78, 0.1);
-}
-.habit-center-kpis em {
-  color: var(--faint, #7a8b80);
-  font-size: 12px;
-  font-style: normal;
 }
 .habit-center-tabs {
   display: flex;

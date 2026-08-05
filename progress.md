@@ -706,3 +706,49 @@
 - Verification passed: targeted `3/3`, full Vue smoke `223/223`, production build, `git diff --check`, and `npm run package:vue`.
 - Generated artifact: `life-plan-site-vue-dist-20260803-222647.zip`.
 - Release complete: code/test slice committed as `28e5eaa` and pushed to `origin/migration/vue-app-v1`.
+
+## 2026-08-05 - Vue shared modal closeout
+
+- Continued the previous session from `migration/vue-app-v1` without touching user-owned `.freebuff/`, `.workbuddy/`, `previews/`, `playwright.preview.config.js`, `tmp-legacy.png`, or `tmp-vue.png`.
+- Confirmed Fitness intentionally remains browse-first with native `details/summary` editor sections; no ModalShell migration is needed there.
+- Hardened `ModalShell.vue` with a valid accessible name when the header is hidden and stable first-control focus after Teleport mount; retained Escape, backdrop close, focus restoration, and Tab cycling.
+- Updated AI settings with reactive saved-key status, settings-query restoration, dynamic mode-panel labelling, and clear-only-key behavior. Empty/duplicate Habit currencies now show inline validation feedback.
+- Added direct Vue smoke coverage for shared-modal focus/Escape, AI settings save/clear and data isolation, Habit currency persistence/mirror/dirty state, Todo Space activation, and Wheel management mobile overflow/Escape behavior.
+- Restored legacy Todo locator contracts after Teleport migration: stable `#todo-create-panel` test target and `关闭待办详情` close-button label.
+- Validation passed: focused popup/settings suite `6/6`, recovery suite `7/7`, serial full Vue smoke `238/238`, `npm run build`, `node --check tests/vue-smoke.spec.js`, and `git diff --check`.
+- Browser visual verification passed for AI settings at 1440px and 390px: desktop dialog width 699px with no overflow; mobile dialog width 343px, page overflow 0, dialog overflow 0. Browser control timed out while switching to later pages; Wheel mobile overflow remains covered by the passing Playwright contract.
+- Generated the Vue dist package after this closeout; no commit or push was performed.
+- Completed the remaining browser comparison directly against a read-only `master` export at 1440px and 390px for Habit currency management, Todo create/detail, Wheel list/library/tags, and Fitness plan editing.
+- Confirmed zero page/dialog horizontal overflow for every checked modal state; Escape and backdrop close worked for the Vue modal surfaces, and mobile footer/content remained reachable through dialog scrolling.
+- Found one concrete Wheel mobile parity issue: the Vue-only management overview pushed the active library/tag form below the first viewport, unlike master. The responsive layout now removes redundant overview copy, uses a compact horizontal workspace strip, and titles the dialog after the active master workspace (`转盘列表`, `公共项库`, `标签管理`, and related panels).
+- Added a regression that requires the 390px public-library form to begin in the upper 58% of the viewport while preserving zero horizontal overflow and Escape close.
+- Final validation passed again: full Vue smoke `238/238`, `npm run build`, `node --check tests/vue-smoke.spec.js`, and focused `git diff --check`.
+- Repackaged the verified build as `life-plan-site-vue-dist-20260805-203121.zip`; the existing package retention script also removed the older `life-plan-site-vue-dist-20260803-233235.zip` while retaining the current closeout packages.
+
+## 2026-08-05 - Full project master/Vue audit
+
+- Expanded the audit to all 14 Vue routes, the 11 master page sections, global record/snapshot entry points, and major modal/tab/disclosure states at 1440px and 390px.
+- Default Vue states for all routes and 70 major non-default state captures completed with zero document/dialog horizontal overflow after repairs; Records preview/editor were also probed separately at both widths.
+- Fixed the global 390px shell from a full-viewport sidebar plus nested `100vh` main scroller to master-compatible document flow. The horizontal route strip now scrolls internally without widening the document.
+- Added Escape close and focus restoration to the snapshot dialog, and completed Escape, Tab-loop, and focus-restoration behavior for the hand-written Materials detail/editor dialogs.
+- Fixed the final 390px Fitness overflow caused by the overview action column being full-width while right-aligned; the plan editor now keeps the document width at 390px.
+- Added regression coverage for snapshot Escape/data safety/focus restoration, Materials editor Escape/data safety/focus restoration, and Fitness plan-editor mobile width.
+- Independent adversarial browser verification passed the shell flow, nav scroll range, snapshot behavior, and Materials detail/editor focus loop. Final complete Vue smoke passed `241/241`; production build, test syntax, and `git diff --check` passed.
+- Packaged the fully audited build as `life-plan-site-vue-dist-20260805-214203.zip`; package retention removed the older `life-plan-site-vue-dist-20260804-180121.zip`.
+
+## 2026-08-05 - Shared component consolidation
+
+- Added shared `PageHeader`, `StatusBanner`, `EmptyState`, `SegmentedTabs`, `SyncResourcePanel`, `DisclosurePanel`, and domain `MaterialCard` components.
+- Extended `ModalShell` with dynamic element/size, header/footer slots, initial focus, overlay class compatibility, optional Teleport, and form-submit support; migrated the remaining snapshot, record-create, Materials, and Records custom modal shells.
+- Replaced the duplicated Todo/Habit/Wheel sync-panel templates and responsive CSS with `SyncResourcePanel` while retaining resource-specific logic, old root classes, button labels, and safety flows.
+- Migrated all route page headers, stable status/empty states, Records/Wheel/Habits/AI segmented controls, Materials cards, and the compatible Fitness/Wheel native disclosure sections.
+- Added shared action, metric-card, badge, sticky-footer, empty-state, and mobile page-header styles, then removed page-scoped copies where the shared class fully owns the presentation.
+- Preserved both segmented semantics: Records/Wheel remain ordinary buttons, Habits uses tablist/tab, and AI retains its historical button plus `aria-selected` contract. Added direct keyboard/ARIA, PageHeader route, and DisclosurePanel tests.
+- Final validation passed: common-component contracts `4/4`, complete Vue smoke `243/243`, production build, test syntax, `git diff --check`, and 1440px/390px route/modal visual overflow probes.
+- Packaged the shared-component build as `life-plan-site-vue-dist-20260805-235615.zip`; package retention removed `life-plan-site-vue-dist-20260804-223226.zip`.
+
+## 2026-08-04 - Dashboard record preview audit
+
+- Reproduced the reported lifecycle from source: Dashboard record clicks route to `所有记录`, and closing the external preview leaves `record` in the hash, which reopens the editor through the Records route watcher.
+- Confirmed master keeps the preview modal on the current Dashboard page.
+- Implementation and focused regression coverage are pending.

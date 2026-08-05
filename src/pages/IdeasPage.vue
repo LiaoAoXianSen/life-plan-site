@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import EmptyState from '../components/common/EmptyState.vue';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import SearchInput from '../components/common/SearchInput.vue';
 import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
@@ -101,17 +103,13 @@ watch(() => route.query.status, value => {
 
 <template>
   <section class="page active" id="page-ideas">
-    <header class="page-header">
-      <div>
-        <div class="page-title">灵感池</div>
-        <p class="page-subtitle">灵感仍然是时间轴记录，这里只负责状态、标签和下一步。</p>
-      </div>
-      <div class="page-actions">
+    <PageHeader title="灵感池" subtitle="灵感仍然是时间轴记录，这里只负责状态、标签和下一步。">
+      <template #actions>
         <button class="btn btn-primary" type="button" :aria-expanded="showCreate" @click="showCreate = !showCreate">
           {{ showCreate ? '收起' : '+ 记录灵感' }}
         </button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <form v-if="showCreate" class="card idea-create-card" @submit.prevent="add">
       <div class="form-row">
@@ -179,7 +177,7 @@ watch(() => route.query.status, value => {
         </div>
       </article>
     </div>
-    <div v-else class="empty-state idea-empty">暂无匹配的灵感</div>
+    <EmptyState v-else class="empty-state idea-empty">暂无匹配的灵感</EmptyState>
   </section>
 </template>
 

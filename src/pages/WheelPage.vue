@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import EmptyState from '../components/common/EmptyState.vue';
 import { computed, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import AppSelect from '../components/common/AppSelect.vue';
+import DisclosurePanel from '../components/common/DisclosurePanel.vue';
+import ModalShell from '../components/common/ModalShell.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import SearchInput from '../components/common/SearchInput.vue';
+import SegmentedTabs from '../components/common/SegmentedTabs.vue';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useWheelStore, type WheelItem, type WheelMode, type WheelTag } from '../stores/wheelStore';
 
@@ -19,6 +24,21 @@ const notice = ref('');
 const showManagement = ref(false);
 const activeManagementPanel = ref<'create' | 'edit' | 'library' | 'tags' | 'history' | 'list'>('list');
 const menuOpen = ref(false);
+const managementDialogOpen = computed({
+  get: () => showManagement.value,
+  set: value => {
+    showManagement.value = value;
+    if (!value) menuOpen.value = false;
+  },
+});
+const managementDialogTitle = computed(() => ({
+  list: '转盘列表',
+  create: '新建转盘',
+  edit: '修改当前盘',
+  library: '公共项库',
+  tags: '标签管理',
+  history: '记录/备份',
+}[activeManagementPanel.value]));
 const modeFilter = ref<WheelMode>('normal');
 const managementListMode = ref<WheelMode>('normal');
 let spinTimer: number | undefined;
@@ -880,22 +900,21 @@ function importJson(event: Event) {
 
 <template>
   <section id="page-wheel" class="page active">
-    <header class="page-header wheel-header">
-      <div>
-        <div class="page-title">工具转盘</div>
-        <p class="wheel-subtitle">普通转盘、标签二段抽取、公共项库和抽取历史都在这里。</p>
-      </div>
-      <div class="wheel-header-actions">
+    <PageHeader class="wheel-header" title="工具转盘" actions-class="wheel-header-actions">
+      <p class="wheel-subtitle">普通转盘、标签二段抽取、公共项库和抽取历史都在这里。</p>
+      <template #actions>
         <div v-if="!selectedWheel" class="wheel-action-menu-wrap">
           <button
             id="wheel-action-menu-button"
             class="btn btn-secondary wheel-action-menu-button"
             type="button"
+            aria-haspopup="menu"
             :aria-expanded="menuOpen"
             aria-controls="wheel-action-menu"
             @click="toggleManageMenu"
+            @keydown.escape.prevent="menuOpen = false"
           >管理</button>
-          <div v-show="menuOpen" id="wheel-action-menu" class="wheel-action-menu">
+          <div v-show="menuOpen" id="wheel-action-menu" class="wheel-action-menu" role="menu" aria-label="转盘管理菜单">
             <button type="button" @click="openManagement('list')">转盘列表</button>
             <button type="button" @click="openManagement('create')">新建转盘</button>
             <button type="button" @click="openManagement('edit')">修改当前盘</button>
@@ -910,17 +929,21 @@ function importJson(event: Event) {
           type="button"
           @click="collapseManagement"
         >收起管理</button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <p v-if="notice" class="wheel-notice" role="status">{{ notice }}</p>
 
     <section v-if="selectedWheel" class="wheel-stage wheel-focus-shell" aria-label="转盘主舞台">
       <div class="wheel-mode-bar wheel-focus-toolbar">
-        <div class="wheel-mode-pills segmented" role="tablist" aria-label="转盘模式">
-          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'normal' }" @click="setModeFilter('normal')">普通转盘</button>
-          <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'tag' }" @click="setModeFilter('tag')">标签转盘</button>
-        </div>
+            <SegmentedTabs
+              class="wheel-mode-pills"
+              tab-class="wheel-mode-pill"
+              :ariaLabel="'转盘模式'"
+              :model-value="modeFilter"
+              :items="[{ value: 'normal', label: '普通转盘' }, { value: 'tag', label: '标签转盘' }]"
+              @update:model-value="value => setModeFilter(value as WheelMode)"
+            />
         <label class="form-group wheel-selector compact">
           <AppSelect
             id="wheel-selector"
@@ -936,11 +959,13 @@ function importJson(event: Event) {
             id="wheel-action-menu-button"
             class="btn btn-secondary wheel-action-menu-button"
             type="button"
+            aria-haspopup="menu"
             :aria-expanded="menuOpen"
             aria-controls="wheel-action-menu"
             @click="toggleManageMenu"
+            @keydown.escape.prevent="menuOpen = false"
           >管理</button>
-          <div v-show="menuOpen" id="wheel-action-menu" class="wheel-action-menu">
+          <div v-show="menuOpen" id="wheel-action-menu" class="wheel-action-menu" role="menu" aria-label="转盘管理菜单">
             <button type="button" @click="openManagement('list')">转盘列表</button>
             <button type="button" @click="openManagement('create')">新建转盘</button>
             <button type="button" :disabled="!selectedWheel" @click="openManagement('edit')">修改当前盘</button>
@@ -1062,7 +1087,15 @@ function importJson(event: Event) {
       </div>
     </section>
 
-    <div v-show="showManagement" id="wheel-management-block" class="wheel-management-block" :data-management-panel="activeManagementPanel">
+    <ModalShell
+      v-if="showManagement"
+      :model-value="managementDialogOpen"
+      :title="managementDialogTitle"
+      size="lg"
+      dialog-class="wheel-manage-modal"
+      @close="collapseManagement"
+    >
+      <div id="wheel-management-block" class="wheel-management-block" :data-management-panel="activeManagementPanel">
       <section class="wheel-management-landing" aria-label="转盘管理入口">
         <div class="wheel-management-landing-head">
           <div>
@@ -1096,23 +1129,25 @@ function importJson(event: Event) {
             <button class="btn btn-secondary" type="button" @click="exportCsv">导出 CSV</button>
           </div>
           <div v-if="activeManagementPanel === 'list'" class="wheel-list-management">
-            <div class="segmented wheel-list-mode-filter" role="tablist" aria-label="转盘列表模式">
-              <button type="button" :class="{ active: managementListMode === 'normal' }" @click="managementListMode = 'normal'">普通</button>
-              <button type="button" :class="{ active: managementListMode === 'tag' }" @click="managementListMode = 'tag'">标签</button>
-            </div>
+            <SegmentedTabs
+              v-model="managementListMode"
+              class="wheel-list-mode-filter"
+              :ariaLabel="'转盘列表模式'"
+              :items="[{ value: 'normal', label: '普通' }, { value: 'tag', label: '标签' }]"
+            />
             <div class="wheel-list-stack">
               <article v-for="wheel in managementWheels" :key="wheel.id" class="wheel-list-card" :class="{ selected: wheel.id === selectedWheel?.id }">
                 <div class="wheel-list-card-main"><div class="wheel-list-card-title"><strong>{{ wheel.name }}</strong><span v-if="wheel.id === selectedWheel?.id" class="wheel-list-badge current">当前</span></div><div class="wheel-list-card-meta"><span class="wheel-list-badge">{{ wheel.mode === 'tag' ? '标签' : '普通' }}</span><span>{{ wheel.mode === 'tag' ? `${wheelStore.candidateTags(wheel).length} 个标签` : `${wheel.items.filter(item => item.enabled !== false).length} 个选项` }}</span><span>{{ wheelStore.history.filter(entry => entry.wheelId === wheel.id).length }} 条记录</span></div></div>
                 <div class="wheel-list-card-actions"><button class="wheel-mini-btn primary" type="button" @click="openWheelFromList(wheel)">打开</button><button class="wheel-mini-btn" type="button" @click="editWheelFromList(wheel)">修改</button><button class="wheel-mini-btn" type="button" @click="renameWheelFromList(wheel)">重命名</button><button class="wheel-mini-btn danger" type="button" @click="removeWheelFromList(wheel)">删除</button></div>
               </article>
-              <div v-if="!managementWheels.length" class="empty-state wheel-list-empty"><strong>这一类还没有转盘</strong><span class="wheel-hint">{{ managementListMode === 'tag' ? '先新建一个标签盘。' : '先新建一个普通盘。' }}</span><button class="btn btn-primary" type="button" @click="openManagement('create')">新建转盘</button></div>
+              <EmptyState v-if="!managementWheels.length" class="wheel-list-empty" title="这一类还没有转盘" :description="managementListMode === 'tag' ? '先新建一个标签盘。' : '先新建一个普通盘。'"><template #actions><button class="btn btn-primary" type="button" @click="openManagement('create')">新建转盘</button></template></EmptyState>
             </div>
           </div>
         </article>
 
         <aside class="wheel-side-stack">
           <form id="wheel-create-panel" class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式</label><AppSelect v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)" :options="[{ value: 'normal', label: '普通转盘' }, { value: 'tag', label: '标签转盘（两段抽取）' }]" /></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><span class="field-label">选项</span><div class="wheel-create-items"><div v-for="(item, index) in wheelCreateItems" :key="index" class="wheel-create-item-row"><input v-model="item.name" :aria-label="`选项 ${index + 1}`" placeholder="选项名称" /><input v-model.number="item.weight" type="number" min="1" aria-label="选项权重" /><button v-if="wheelCreateItems.length > 1" class="link-button danger-text" type="button" :aria-label="`删除选项 ${index + 1}`" @click="removeWheelCreateItem(index)">删除</button></div><button class="btn btn-secondary" type="button" @click="addWheelCreateItem">添加选项</button></div></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
-          <article id="wheel-history-panel" class="card history-card"><div class="card-title-row"><div class="card-title">抽取记录</div><div class="history-head-actions"><button type="button" class="link-button" @click="exportCsv">导出 CSV</button><button type="button" class="link-button" @click="exportJson">导出 JSON</button><label class="link-button import-button">恢复 JSON<input type="file" accept=".json,application/json" @change="importJson" /></label><button type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div></div><div v-for="entry in sortedHistory" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ formatStoredDateTime(entry.createdAt) }}<template v-if="entry.mode === 'tag'"> · 标签 {{ entry.tagName || '-' }}</template></span></div><span class="history-row-actions"><button v-if="!entry.convertedTodoId" type="button" class="link-button" @click="handle(() => wheelStore.convertHistoryToTodo(entry.id), '已转入今日待办')">转入待办</button><span v-else class="history-done">已转待办</span><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></span></div><p v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</p></article>
+          <article id="wheel-history-panel" class="card history-card"><div class="card-title-row"><div class="card-title">抽取记录</div><div class="history-head-actions"><button type="button" class="link-button" @click="exportCsv">导出 CSV</button><button type="button" class="link-button" @click="exportJson">导出 JSON</button><label class="link-button import-button">恢复 JSON<input type="file" accept=".json,application/json" @change="importJson" /></label><button type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div></div><div v-for="entry in sortedHistory" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ formatStoredDateTime(entry.createdAt) }}<template v-if="entry.mode === 'tag'"> · 标签 {{ entry.tagName || '-' }}</template></span></div><span class="history-row-actions"><button v-if="!entry.convertedTodoId" type="button" class="link-button" @click="handle(() => wheelStore.convertHistoryToTodo(entry.id), '已转入今日待办')">转入待办</button><span v-else class="history-done">已转待办</span><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></span></div><EmptyState v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</EmptyState></article>
         </aside>
       </div>
 
@@ -1126,13 +1161,11 @@ function importJson(event: Event) {
           <div class="inline-actions"><button class="btn btn-primary">{{ optionForm.id ? '保存' : '添加' }}</button><button v-if="optionForm.id" type="button" class="btn btn-secondary" @click="resetOptionForm">取消</button></div>
         </form>
         <p v-else class="hint">标签转盘从公共项按标签抽取，不维护私有选项。</p>
-        <details v-if="selectedWheel?.mode === 'normal'" class="wheel-batch-tools">
-          <summary>批量导入选项</summary>
+        <DisclosurePanel v-if="selectedWheel?.mode === 'normal'" class="wheel-batch-tools" title="批量导入选项">
           <textarea v-model="optionBatchText" rows="4" placeholder="每行一个选项，也可写成：散步,2" />
           <button class="btn btn-secondary" type="button" @click="submitBatchOptions">导入到当前转盘</button>
-        </details>
-        <details v-if="selectedWheel?.mode === 'normal'" class="wheel-batch-tools wheel-copy-tools">
-          <summary>从公共项复制</summary>
+        </DisclosurePanel>
+        <DisclosurePanel v-if="selectedWheel?.mode === 'normal'" class="wheel-batch-tools wheel-copy-tools" title="从公共项复制">
           <div class="wheel-copy-row">
             <AppSelect
               v-model="copyLibraryTagFilter"
@@ -1152,7 +1185,7 @@ function importJson(event: Event) {
             />
             <button class="btn btn-secondary" type="button" @click="copyLibraryItem">复制到当前转盘</button>
           </div>
-        </details>
+        </DisclosurePanel>
         <div v-for="item in selectedWheel?.mode === 'normal' ? selectedWheel.items : []" :key="item.id" class="entity-row"><span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }}</em></span><span><button class="link-button" @click="editOption(item)">编辑</button><button class="link-button danger-text" @click="confirmAction(`删除选项“${item.name}”吗？`, () => wheelStore.deleteOption(selectedWheel!.id, item.id), '已删除选项')">删除</button></span></div>
       </article>
       <article id="wheel-tags-panel" class="card management-card">
@@ -1193,12 +1226,11 @@ function importJson(event: Event) {
           </div>
           <div class="inline-actions"><button class="btn btn-primary">{{ libraryForm.id ? '保存公共项' : '添加公共项' }}</button><button v-if="libraryForm.id" type="button" class="btn btn-secondary" @click="resetLibraryForm">取消</button></div>
         </form>
-        <details class="wheel-batch-tools library-batch-tools">
-          <summary>批量导入公共项</summary>
+        <DisclosurePanel class="wheel-batch-tools library-batch-tools" title="批量导入公共项">
           <textarea v-model="libraryBatchText" rows="4" placeholder="每行一个公共项，也可写成：周末晨跑,2" />
           <div class="batch-tag-checks" role="group" aria-label="批量导入标签"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="batchLibraryTagIds.includes(tag.id)" @change="batchLibraryTagIds = toggleTag(batchLibraryTagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label></div>
           <button class="btn btn-secondary" type="button" @click="submitBatchLibrary">导入公共项</button>
-        </details>
+        </DisclosurePanel>
         <div class="wheel-library-toolbar" :class="{ active: libraryFilterActive }">
           <div class="wheel-library-filter-group">
             <label class="wheel-library-filter">
@@ -1230,10 +1262,11 @@ function importJson(event: Event) {
           <span><strong>{{ item.name }}</strong><em>权重 {{ item.weight }} · {{ item.enabled ? '启用' : '停用' }} · {{ libraryTagNames(item) }}</em><small v-if="item.note" class="library-item-note">{{ item.note }}</small></span>
           <span><button class="link-button" @click="editLibrary(item)">编辑</button><button class="link-button" @click="toggleLibraryEnabled(item)">{{ item.enabled ? '停用' : '启用' }}</button><button class="link-button danger-text" @click="confirmAction(`删除公共项“${item.name}”吗？`, () => wheelStore.deleteLibraryItem(item.id), '已删除公共项')">删除</button></span>
         </div>
-        <p v-if="!filteredLibraryItems.length" class="empty-state">当前筛选下没有公共项。</p>
+        <EmptyState v-if="!filteredLibraryItems.length" class="empty-state">当前筛选下没有公共项。</EmptyState>
       </article>
     </div>
     </div>
+    </ModalShell>
   </section>
 </template>
 
@@ -1312,4 +1345,24 @@ function importJson(event: Event) {
   .wheel-library-bulk-actions .wheel-mini-btn{width:100%}
   .library-tag-options{position:fixed;left:10px;right:10px;top:auto;bottom:10px;width:auto;max-height:min(52vh,360px);border-radius:18px;padding:10px}
 }
+@media (max-width: 700px) {
+  .wheel-focus-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .wheel-action-menu-wrap { width: 100%; }
+  .wheel-action-menu-button { width: 100%; }
+  .wheel-focus-actions { max-width: none; }
+  .wheel-focus-actions .btn { flex: 1 1 100%; width: 100%; }
+  .wheel-manage-modal { width: min(100%, calc(100vw - 18px)); }
+}
+@media (max-width: 640px) {
+  .wheel-manage-modal { max-height: 94vh; padding: 18px 14px; }
+  .wheel-management-landing { padding: 10px 12px; }
+  .wheel-management-landing-head, .wheel-layout, .wheel-management-grid { grid-template-columns: 1fr; display: grid; }
+  .wheel-management-landing-head > div:first-child { display: none; }
+  .wheel-management-nav { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+  .wheel-management-nav .btn { flex: 0 0 auto; width: auto; min-height: 32px; padding: 6px 10px; }
+  .wheel-management-landing .wheel-management-summary { margin-top: 8px; }
+  .wheel-toolbar, .wheel-copy-row { display: grid; grid-template-columns: 1fr; }
+  .wheel-toolbar .btn, .wheel-copy-row .btn { width: 100%; }
+}
+
 </style>

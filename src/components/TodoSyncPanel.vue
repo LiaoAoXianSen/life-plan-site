@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 
+import SyncResourcePanel from './common/SyncResourcePanel.vue';
+
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
 import { getTodoSyncConfig, runTodoCloudSyncBoth, saveTodoSyncConfig } from '../services/todoCloudSync';
@@ -395,79 +397,15 @@ async function uploadFirst() {
 </script>
 
 <template>
-  <article class="card todo-sync-card">
-    <div class="todo-sync-heading">
-      <div><div class="card-title">待办独立同步</div><span>{{ remotePath }}</span></div>
-      <span class="todo-sync-mode">{{ autoConfig.autoSync ? '自动同步开启' : '自动同步关闭' }}</span>
-    </div>
-
-    <div class="todo-sync-auto">
-      <label>
-        <input v-model="autoConfig.autoSync" type="checkbox" :disabled="busy || !endpointReady" @change="saveAutoSyncConfig" />
-        <span>启用待办自动同步</span>
-      </label>
-      <button class="btn btn-secondary" type="button" :disabled="busy || !endpointReady" @click="runAutoSyncNow">立即同步一次</button>
-    </div>
-
-    <div class="page-actions todo-sync-actions">
-      <button class="btn btn-secondary" type="button" :disabled="busy || !endpointReady" @click="previewRemote">检查 Todo 云端</button>
-      <button v-if="preview.status === 'ready'" class="btn btn-secondary" type="button" :disabled="!canApply" @click="applyRemoteMerge">应用合并到本机</button>
-      <button v-if="preview.status === 'ready'" class="btn btn-primary" type="button" :disabled="!canUploadExisting" @click="uploadExisting">受保护上传</button>
-    </div>
-
-    <label v-if="preview.status === 'missing'" class="todo-sync-arm">
-      <input v-model="armed" type="checkbox" />
-      <span>本次会话允许首次创建</span>
-      <button class="btn btn-primary" type="button" :disabled="!armed || busy" @click.prevent="uploadFirst">首次创建</button>
-    </label>
-
-    <div v-if="preview.local" class="todo-sync-comparison">
-      <div v-for="item in [{ label: '本机', value: preview.local }, { label: '云端', value: preview.remote }, { label: '合并', value: preview.merged }]" :key="item.label" class="todo-sync-column">
-        <strong>{{ item.label }}</strong>
-        <template v-if="item.value">
-          <span>{{ item.value.counts.todos }} 条 · 未完成 {{ item.value.counts.openTodos }}</span>
-          <small>{{ item.value.hashShort }}</small>
-        </template>
-        <span v-else>{{ preview.status === 'missing' && item.label === '云端' ? '不存在' : '-' }}</span>
+  <SyncResourcePanel root-class="todo-sync-card" title="待办独立同步" :remote-path="remotePath" :mode-label="autoConfig.autoSync ? '自动同步开启' : '自动同步关闭'" resource-label="Todo" auto-label="启用待办自动同步" run-label="立即同步一次" :status="preview.status" :busy="busy" :auto-busy="busy" :endpoint-ready="endpointReady" :auto-sync-enabled="autoConfig.autoSync" :armed="armed" :can-apply="canApply" :can-upload="canUploadExisting" :message="message" :message-tone="messageTone" @update:auto-sync-enabled="autoConfig.autoSync = $event" @update:armed="armed = $event" @save-auto-sync="saveAutoSyncConfig" @run-auto-sync="runAutoSyncNow" @preview="previewRemote" @apply="applyRemoteMerge" @upload="uploadExisting" @create="uploadFirst">
+    <template #preview>
+      <div v-if="preview.local" class="sync-resource-comparison">
+        <div v-for="item in [{ label: '本机', value: preview.local }, { label: '云端', value: preview.remote }, { label: '合并', value: preview.merged }]" :key="item.label" class="sync-resource-column">
+          <strong>{{ item.label }}</strong><template v-if="item.value"><span>{{ item.value.counts.todos }} 条 · 未完成 {{ item.value.counts.openTodos }}</span><small>{{ item.value.hashShort }}</small></template>
+          <span v-else>{{ preview.status === 'missing' && item.label === '云端' ? '不存在' : '-' }}</span>
+        </div>
       </div>
-    </div>
-
-    <div v-if="preview.risks.length" class="todo-sync-risks">
-      <p v-for="risk in preview.risks" :key="risk.message" :class="`is-${risk.severity}`">{{ risk.message }}</p>
-    </div>
-    <p v-if="message" class="sync-status active" :class="`is-${messageTone}`" role="status">{{ message }}</p>
-  </article>
+    </template>
+    <template #risks><div v-if="preview.risks.length" class="sync-resource-risks"><p v-for="risk in preview.risks" :key="risk.message" :class="`is-${risk.severity}`">{{ risk.message }}</p></div></template>
+  </SyncResourcePanel>
 </template>
-
-<style scoped>
-.todo-sync-card { margin-top: 18px; }
-.todo-sync-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.todo-sync-heading span { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; }
-.todo-sync-mode { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
-.todo-sync-auto { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 10px 0; border-top: 1px solid var(--line); }
-.todo-sync-auto label { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
-.todo-sync-actions { margin-top: 14px; }
-.todo-sync-arm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; margin-top: 14px; padding: 10px 0; border-top: 1px solid var(--line); }
-.todo-sync-comparison { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.todo-sync-column { display: grid; gap: 4px; min-width: 0; padding: 12px; border-right: 1px solid var(--line); }
-.todo-sync-column:last-child { border-right: 0; }
-.todo-sync-column strong { font-size: 13px; }
-.todo-sync-column span, .todo-sync-column small { color: var(--muted); overflow-wrap: anywhere; }
-.todo-sync-column small { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-.todo-sync-risks { margin-top: 12px; }
-.todo-sync-risks p { margin: 5px 0; color: var(--muted); }
-.todo-sync-risks .is-danger { color: var(--danger); }
-.sync-status.is-success { color: var(--accent); }
-.sync-status.is-danger { color: var(--danger); }
-@media (max-width: 560px) {
-  .todo-sync-heading { align-items: stretch; flex-direction: column; }
-  .todo-sync-mode { align-self: flex-start; }
-  .todo-sync-auto { align-items: stretch; flex-direction: column; }
-  .todo-sync-auto .btn { width: 100%; }
-  .todo-sync-comparison { grid-template-columns: 1fr; }
-  .todo-sync-column { border-right: 0; border-bottom: 1px solid var(--line); }
-  .todo-sync-column:last-child { border-bottom: 0; }
-  .todo-sync-arm { grid-template-columns: auto minmax(0, 1fr); }
-  .todo-sync-arm .btn { grid-column: 1 / -1; width: 100%; }
-}
-</style>

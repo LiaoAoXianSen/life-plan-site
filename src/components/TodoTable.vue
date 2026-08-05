@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import EmptyState from './common/EmptyState.vue';
 import { createLegacyServices } from '../services/legacyServices';
 import type { DataEntity, Todo } from '../types/lifePlan';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -84,6 +85,7 @@ const rows = computed(() => props.todos.map(todo => ({
             tabindex="0"
             @click="emit('select', row.todo.id)"
             @keydown.enter.prevent="emit('select', row.todo.id)"
+            @keydown.space.prevent="emit('select', row.todo.id)"
           >
             {{ row.todo.text }}
             <span v-if="row.todo.subTodos?.length" class="todo-subtodo-count">
@@ -102,5 +104,5 @@ const rows = computed(() => props.todos.map(todo => ({
       </tbody>
     </table>
   </div>
-  <div v-else class="empty-state">暂无符合条件的待办</div>
+  <EmptyState v-else>暂无符合条件的待办</EmptyState>
 </template>

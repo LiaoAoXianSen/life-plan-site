@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import StatusBanner from '../components/common/StatusBanner.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
 import AppSelect from '../components/common/AppSelect.vue';
+import ModalShell from '../components/common/ModalShell.vue';
+import PageHeader from '../components/common/PageHeader.vue';
+import SegmentedTabs from '../components/common/SegmentedTabs.vue';
 import FilterBar from '../components/common/FilterBar.vue';
 import SearchInput from '../components/common/SearchInput.vue';
 import RecordCreateModal from '../components/RecordCreateModal.vue';
@@ -436,6 +440,13 @@ function closeRecordPreview() {
   }
 }
 
+function openDiaryAiFromPreview() {
+  const diaryId = previewDraft.value?.id;
+  if (!diaryId) return;
+  closeRecordPreview();
+  void router.push({ path: '/ai', query: { mode: 'diaryReview', diary: diaryId } });
+}
+
 function editPreviewRecord() {
   const record = previewDraft.value;
   const returnToEditor = previewFromEditor.value;
@@ -798,22 +809,23 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page active" id="page-records">
-    <header class="page-header">
-      <div class="page-title">所有记录</div>
-      <div class="page-actions">
+    <PageHeader title="所有记录">
+      <template #actions>
         <button class="btn btn-secondary" type="button" @click="showTemplateManager = true">📋 模板管理</button>
         <button class="btn btn-primary" type="button" @click="showRecordCreate = true">+ 新建记录</button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <RecordCreateModal v-model="showRecordCreate" @open-existing="openExistingFromCreate" />
 
-    <div v-if="previewDraft" class="modal-overlay active" role="presentation" @click.self="closeRecordPreview">
-      <section class="modal record-preview-modal" role="dialog" aria-modal="true" aria-labelledby="record-preview-modal-title">
-        <div class="modal-header">
-          <div class="modal-title" id="record-preview-modal-title">记录预览</div>
-          <button class="close-btn" type="button" aria-label="关闭记录预览" @click="closeRecordPreview">×</button>
-        </div>
+    <ModalShell
+      v-if="previewDraft"
+      :model-value="Boolean(previewDraft)"
+      title="记录预览"
+      size="lg"
+      dialog-class="record-preview-modal"
+      @close="closeRecordPreview"
+    >
         <div class="record-preview-dialog-body">
           <div class="record-preview-top">
             <span class="item-type">{{ previewDraft.type || '记录' }}</span>
@@ -838,7 +850,7 @@ onBeforeUnmount(() => {
           </div>
           <div v-if="previewDraft.type === '灵感碎片'" class="record-preview-content">
             <div class="record-preview-heading">灵感推进</div>
-            <div class="record-idea-badges"><span>{{ previewDraft.ideaStatus || '待整理' }}</span><span v-for="tag in records.services.records.getIdeaTags(previewDraft)" :key="tag">{{ tag }}</span></div>
+            <div class="record-idea-badges"><span class="app-badge">{{ previewDraft.ideaStatus || '待整理' }}</span><span v-for="tag in records.services.records.getIdeaTags(previewDraft)" :key="tag" class="app-badge">{{ tag }}</span></div>
             <div class="record-idea-preview-grid">
               <div><strong>下一步</strong><span>{{ previewDraft.ideaNextAction || '未设置' }}</span></div>
               <div><strong>关联待办</strong><span>{{ previewIdeaTodoText }}</span></div>
@@ -852,19 +864,14 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="record-preview-actions">
+            <button v-if="!previewFromEditor && previewDraft.type === '日记'" class="btn btn-secondary" type="button" @click="openDiaryAiFromPreview">AI 分析日记</button>
             <button v-if="previewFromEditor" class="btn btn-secondary" type="button" @click="closeRecordPreview">返回继续编辑</button>
             <button v-else class="btn btn-secondary" type="button" @click="editPreviewRecord">编辑</button>
           </div>
         </div>
-      </section>
-    </div>
+    </ModalShell>
 
-    <div v-if="showTemplateManager && !activeRecord" class="modal-overlay active" role="presentation" @click.self="showTemplateManager = false">
-      <section class="modal modal-sm record-template-modal" role="dialog" aria-modal="true" aria-labelledby="record-template-modal-title">
-        <div class="modal-header">
-          <div class="modal-title" id="record-template-modal-title">模板管理</div>
-          <button class="close-btn" type="button" aria-label="关闭模板管理" @click="showTemplateManager = false">×</button>
-        </div>
+    <ModalShell v-model="showTemplateManager" title="模板管理" size="sm" dialog-class="record-template-modal" close-label="关闭模板管理">
         <div class="record-template-manager" aria-label="自定义模板管理">
           <div v-if="lifePlan.data.templates.length" class="record-template-list">
             <div v-for="template in lifePlan.data.templates" :key="String(template.id)" class="record-template-row">
@@ -872,10 +879,9 @@ onBeforeUnmount(() => {
               <button class="link-button danger-text" type="button" :aria-label="`删除模板 ${template.name}`" @click="deleteTemplate(String(template.id))">删除</button>
             </div>
           </div>
-          <p v-else class="empty-state">暂无自定义模板。内置模板会直接出现在对应记录类型的模板下拉里。</p>
+          <EmptyState v-else class="empty-state">暂无自定义模板。内置模板会直接出现在对应记录类型的模板下拉里。</EmptyState>
         </div>
-      </section>
-    </div>
+    </ModalShell>
 
     <FilterBar class="record-filter-bar" :class="{ 'record-filter-bar--list': view === 'list' }">
       <SearchInput v-model="keyword" aria-label="搜索记录" placeholder="搜索标题、内容、类型" />
@@ -922,9 +928,16 @@ onBeforeUnmount(() => {
     </FilterBar>
 
     <div class="calendar-toolbar">
-      <div class="segmented">
-        <button v-for="item in ['list','day','week','month'] as const" :key="item" :class="{ active: view === item }" type="button" @click="view = item">{{ ({ list: '列表', day: '日视图', week: '周视图', month: '月视图' })[item] }}</button>
-      </div>
+      <SegmentedTabs
+        v-model="view"
+        :ariaLabel="'记录视图'"
+        :items="[
+          { value: 'list', label: '列表' },
+          { value: 'day', label: '日视图' },
+          { value: 'week', label: '周视图' },
+          { value: 'month', label: '月视图' },
+        ]"
+      />
       <div class="record-view-nav page-actions">
         <button class="btn btn-secondary" type="button" aria-label="上一段时间" @click="shift(-1)">‹</button>
         <strong id="record-view-title">{{ viewTitle }}</strong>
@@ -933,8 +946,16 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="activeRecord && !previewDraft" class="modal-overlay active record-editor-overlay" role="presentation" @click.self="closeEditor()">
-      <section class="modal modal-lg record-editor-panel" role="dialog" aria-modal="true" aria-labelledby="record-editor-title">
+    <ModalShell
+      :model-value="Boolean(activeRecord && !previewDraft)"
+      title="编辑记录"
+      size="lg"
+      dialog-class="record-editor-panel"
+      overlay-class="record-editor-overlay"
+      close-label="关闭编辑记录"
+      :show-header="false"
+      @update:model-value="value => { if (!value) closeEditor(); }"
+    >
         <div class="section-title-row">
           <div>
             <h2 id="record-editor-title">编辑记录</h2>
@@ -942,7 +963,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="page-actions"><button class="btn btn-secondary" type="button" @click="previewCurrentRecord">预览</button><button class="btn btn-secondary" type="button" @click="closeEditor()">关闭</button></div>
         </div>
-        <p v-if="editorNotice" class="notice success" role="status">{{ editorNotice }}</p>
+        <StatusBanner v-if="editorNotice" class="notice success" role="status" tone="success">{{ editorNotice }}</StatusBanner>
         <div class="record-editor-grid">
         <form class="record-edit-form" @submit.prevent="saveEditor">
           <div class="form-row">
@@ -968,7 +989,7 @@ onBeforeUnmount(() => {
                 <button class="link-button danger-text" type="button" :aria-label="`删除模板 ${template.name}`" @click="deleteTemplate(String(template.id))">删除</button>
               </div>
             </div>
-            <p v-else class="empty-state">暂无自定义模板。内置模板会直接出现在对应记录类型的模板下拉里。</p>
+            <EmptyState v-else class="empty-state">暂无自定义模板。内置模板会直接出现在对应记录类型的模板下拉里。</EmptyState>
           </section>
           <section v-if="activeBuiltInTemplate" ref="templateEditorRef" class="record-template-editor" :aria-label="`${activeBuiltInTemplate.name}结构化字段`">
             <div class="record-template-editor-head">
@@ -1046,7 +1067,7 @@ onBeforeUnmount(() => {
                 <button class="link-button danger-text" type="button" @click="unlinkTodo(todo)">{{ todo.isExclusive ? '删除' : '取消关联' }}</button>
               </div>
             </div>
-            <p v-else class="empty-state">还没有关联待办。</p>
+            <EmptyState v-else class="empty-state">还没有关联待办。</EmptyState>
           </div>
           <div class="form-actions">
             <button v-if="editForm.id" class="btn btn-danger" type="button" aria-label="删除记录" @click="removeRecord(editForm.id)">删除</button>
@@ -1075,7 +1096,7 @@ onBeforeUnmount(() => {
           </div>
           <div v-if="editForm.type === '灵感碎片'" class="record-preview-content">
             <div class="record-preview-heading">灵感推进</div>
-            <div class="record-idea-badges"><span>{{ editForm.ideaStatus || '待整理' }}</span><span v-for="tag in records.services.records.getIdeaTags({ ideaTags: editForm.ideaTagsInput })" :key="tag">{{ tag }}</span></div>
+            <div class="record-idea-badges"><span class="app-badge">{{ editForm.ideaStatus || '待整理' }}</span><span v-for="tag in records.services.records.getIdeaTags({ ideaTags: editForm.ideaTagsInput })" :key="tag" class="app-badge">{{ tag }}</span></div>
             <div class="record-idea-preview-grid">
               <div><strong>下一步</strong><span>{{ editForm.ideaNextAction || '未设置' }}</span></div>
               <div><strong>关联待办</strong><button v-if="ideaLinkedTodo" class="link-button" type="button" @click="openIdeaTodo">{{ ideaLinkedTodo.text }}</button><span v-else>未关联</span></div>
@@ -1084,8 +1105,7 @@ onBeforeUnmount(() => {
           </div>
         </aside>
         </div>
-      </section>
-    </div>
+    </ModalShell>
 
     <div id="all-records">
       <template v-if="view === 'list'">
@@ -1106,7 +1126,7 @@ onBeforeUnmount(() => {
             </article>
           </section>
         </div>
-        <div v-else class="empty-state">{{ recordEmptyState }}</div>
+        <EmptyState v-else class="empty-state">{{ recordEmptyState }}</EmptyState>
       </template>
       <CalendarViews v-else :mode="view" :cursor="cursor" :items="calendarItems" :order="dayOrder" @select="selectCalendarItem" />
     </div>
@@ -1116,7 +1136,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .record-editor-panel { margin-bottom: 0; }
 .record-editor-overlay { z-index: 105; }
-.record-preview-modal { max-width: 720px; }
+.record-preview-modal { max-width: 880px; }
 .record-preview-dialog-body { display: grid; gap: 14px; }
 #page-records .calendar-toolbar {
   display: flex;
@@ -1159,7 +1179,6 @@ onBeforeUnmount(() => {
 .is-preview { background: #f7f9f7; color: var(--muted); }
 .record-idea-fields { display: grid; gap: 10px; padding-block: 12px; border-block: 1px solid rgba(42, 75, 56, .13); }
 .record-idea-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.record-idea-badges span { padding: 3px 7px; border-radius: 999px; background: var(--surface-soft); color: var(--muted); font-size: 12px; font-weight: 700; }
 .record-idea-preview-grid { display: grid; gap: 10px; }
 .record-idea-preview-grid > div { display: grid; gap: 3px; }
 .record-idea-preview-grid strong { font-size: 12px; }

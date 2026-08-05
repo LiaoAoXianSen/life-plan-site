@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import EmptyState from '../components/common/EmptyState.vue';
+import StatusBanner from '../components/common/StatusBanner.vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
+import PageHeader from '../components/common/PageHeader.vue';
+import ModalShell from '../components/common/ModalShell.vue';
 import SearchInput from '../components/common/SearchInput.vue';
+import MaterialCard from '../components/MaterialCard.vue';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import type { Material } from '../types/lifePlan';
@@ -23,7 +28,6 @@ const detailMaterialId = ref('');
 const editorOpen = ref(false);
 const activeMaterialId = ref('');
 const formError = ref('');
-const materialTitleRef = ref<HTMLInputElement | null>(null);
 const newTag = ref('');
 const batchTags = ref('');
 const form = reactive({ title: '', type: '摘抄', content: '', tags: [] as string[], source: '', note: '' });
@@ -121,7 +125,6 @@ function openEditor(material?: Material) {
   detailMaterialId.value = '';
   formError.value = '';
   editorOpen.value = true;
-  void nextTick(() => materialTitleRef.value?.focus());
 }
 
 function closeEditor(syncRoute = true) {
@@ -205,12 +208,6 @@ function formatStoredDateTime(value: unknown) {
   return `${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${match[4]}:${match[5]}:${match[6] || '00'}`;
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape') return;
-  if (editorOpen.value) closeEditor();
-  else if (detailMaterialId.value) closeDetail();
-}
-
 watch(allTags, tags => {
   selectedRandomTags.value = selectedRandomTags.value.filter(tag => tags.includes(tag));
   if (!randomTagsInitialized && tags.length) {
@@ -240,19 +237,13 @@ watch(() => route.query.material, value => {
   removeMaterialQuery();
 }, { immediate: true });
 
-onMounted(() => window.addEventListener('keydown', onKeydown));
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 </script>
 
 <template>
   <section class="page active" id="page-materials">
-    <header class="page-header">
-      <div>
-        <div class="page-title">素材库</div>
-        <p class="page-subtitle">金句、提示词、摘抄和方法，都可以按标签收纳与随机展示。</p>
-      </div>
-      <button class="btn btn-primary" type="button" @click="openEditor()">+ 新增素材</button>
-    </header>
+    <PageHeader title="素材库" subtitle="金句、提示词、摘抄和方法，都可以按标签收纳与随机展示。">
+      <template #actions><button class="btn btn-primary" type="button" @click="openEditor()">+ 新增素材</button></template>
+    </PageHeader>
 
     <section class="material-random-panel" aria-labelledby="material-random-title">
       <div class="section-title-row">
@@ -265,20 +256,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
           <span>{{ tag }}</span>
         </label>
       </div>
-      <div v-else class="empty-state">先给素材添加标签后，这里会出现随机展示筛选。</div>
+      <EmptyState v-else class="empty-state">先给素材添加标签后，这里会出现随机展示筛选。</EmptyState>
       <div class="material-grid material-random-list">
-        <article v-for="material in randomMaterials" :key="material.id" class="material-card compact">
-          <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredDateTime(material.createdAt) }}</span></div>
-          <h3 class="material-title">{{ materialTitle(material) }}</h3>
-          <div class="material-card-copy">
-            <div class="material-content">{{ material.content || '空素材' }}</div>
-            <div v-if="material.source" class="material-meta material-source">来源：{{ material.source }}</div>
-            <div v-if="material.note" class="material-meta material-note">备注：{{ material.note }}</div>
-          </div>
-          <div v-if="normalizeTags(material.tags).length" class="idea-badge-row"><span v-for="tag in normalizeTags(material.tags)" :key="tag" class="tag-pill">{{ tag }}</span></div>
-          <div class="idea-card-actions material-card-actions"><button class="btn btn-secondary todo-mini-btn" type="button" @click="openDetail(material)">查看详情</button></div>
-        </article>
-        <div v-if="!randomMaterials.length" class="empty-state">当前标签下没有可展示素材</div>
+        <MaterialCard v-for="material in randomMaterials" :key="material.id" :material="material" compact @view="openDetail" />
+        <EmptyState v-if="!randomMaterials.length" class="empty-state">当前标签下没有可展示素材</EmptyState>
       </div>
     </section>
 
@@ -294,40 +275,52 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
     </FilterBar>
 
     <div class="material-grid material-list">
-      <article v-for="material in filteredMaterials" :key="material.id" class="material-card" :class="{ 'is-expanded': isExpanded(material.id) }">
-        <div class="material-card-head"><span class="material-type">{{ material.type || '素材' }}</span><span>{{ formatStoredDateTime(material.createdAt) }}</span></div>
-        <h3 class="material-title">{{ materialTitle(material) }}</h3>
-        <div class="material-card-copy">
-          <div class="material-content">{{ material.content || '空素材' }}</div>
-          <div v-if="material.source" class="material-meta material-source">来源：{{ material.source }}</div>
-          <div v-if="material.note" class="material-meta material-note">备注：{{ material.note }}</div>
-        </div>
-        <div v-if="normalizeTags(material.tags).length" class="idea-badge-row"><span v-for="tag in normalizeTags(material.tags)" :key="tag" class="tag-pill">{{ tag }}</span></div>
-        <div class="idea-card-actions material-card-actions">
-          <button v-if="isLongMaterial(material)" class="mini-link material-expand-btn" type="button" :aria-expanded="isExpanded(material.id)" @click="toggleMaterialCard(material.id)">{{ isExpanded(material.id) ? '收起内容' : '展开内容' }}</button>
-          <button class="btn btn-secondary todo-mini-btn" type="button" @click="openDetail(material)">查看详情</button>
-          <button class="btn btn-secondary todo-mini-btn" type="button" :aria-label="`编辑素材 ${materialTitle(material)}`" @click="openEditor(material)">编辑</button>
-        </div>
-      </article>
-      <div v-if="!filteredMaterials.length" class="empty-state">暂无匹配素材</div>
+      <MaterialCard
+        v-for="material in filteredMaterials"
+        :key="material.id"
+        :material="material"
+        :expanded="isExpanded(material.id)"
+        :expandable="isLongMaterial(material)"
+        editable
+        @toggle="item => toggleMaterialCard(item.id)"
+        @view="openDetail"
+        @edit="openEditor"
+      />
+      <EmptyState v-if="!filteredMaterials.length" class="empty-state">暂无匹配素材</EmptyState>
     </div>
 
-    <div v-if="detailMaterial" class="modal-overlay active" role="presentation">
-      <article class="modal modal-md material-detail-modal" role="dialog" aria-modal="true" aria-labelledby="material-detail-title">
-        <div class="modal-header"><div class="modal-title" id="material-detail-title">{{ materialTitle(detailMaterial) }}</div><button class="close-btn" type="button" aria-label="关闭素材详情" @click="closeDetail()">×</button></div>
+    <ModalShell
+      :model-value="Boolean(detailMaterial)"
+      :title="detailMaterial ? materialTitle(detailMaterial) : '素材详情'"
+      size="md"
+      dialog-class="material-detail-modal"
+      close-label="关闭素材详情"
+      :teleport="false"
+      @update:model-value="value => { if (!value) closeDetail(); }"
+    >
+      <template v-if="detailMaterial">
         <div class="material-detail-meta"><span class="material-type">{{ detailMaterial.type || '素材' }}</span><span>{{ formatStoredDateTime(detailMaterial.createdAt) }}</span></div>
         <div class="material-detail-content">{{ detailMaterial.content || '空素材' }}</div>
         <div v-if="normalizeTags(detailMaterial.tags).length" class="idea-badge-row"><span v-for="tag in normalizeTags(detailMaterial.tags)" :key="tag" class="tag-pill">{{ tag }}</span></div>
         <section v-if="detailMaterial.source" class="material-detail-section"><strong>来源</strong><p>{{ detailMaterial.source }}</p></section>
         <section v-if="detailMaterial.note" class="material-detail-section"><strong>备注</strong><p>{{ detailMaterial.note }}</p></section>
         <div class="modal-action-row"><span /><div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="closeDetail()">关闭</button><button class="btn btn-primary" type="button" @click="editDetailMaterial">编辑素材</button></div></div>
-      </article>
-    </div>
+      </template>
+    </ModalShell>
 
-    <div v-if="editorOpen" class="modal-overlay active" role="presentation">
-      <form class="modal modal-sm material-editor" role="dialog" aria-modal="true" aria-labelledby="material-editor-title" @submit.prevent="saveMaterial">
-        <div class="modal-header"><div class="modal-title" id="material-editor-title">{{ activeMaterialId ? '编辑素材' : '新增素材' }}</div><button class="close-btn" type="button" aria-label="关闭素材编辑" @click="closeEditor()">×</button></div>
-        <label class="form-group"><span>标题</span><input ref="materialTitleRef" v-model="form.title" placeholder="给这条素材一个方便回看的标题" /></label>
+    <ModalShell
+      :model-value="editorOpen"
+      as="form"
+      :title="activeMaterialId ? '编辑素材' : '新增素材'"
+      size="sm"
+      dialog-class="material-editor"
+      close-label="关闭素材编辑"
+      initial-focus="input"
+      :teleport="false"
+      @update:model-value="value => { if (!value) closeEditor(); }"
+      @submit="saveMaterial"
+    >
+        <label class="form-group"><span>标题</span><input v-model="form.title" placeholder="给这条素材一个方便回看的标题" /></label>
         <label class="form-group"><span>类型</span><AppSelect v-model="form.type" :options="materialTypes.map(type => ({ value: type, label: type }))" /></label>
         <label class="form-group"><span>内容</span><textarea v-model="form.content" required rows="8" placeholder="粘贴金句、提示词或摘抄内容" /></label>
         <div class="form-group material-tag-editor">
@@ -341,13 +334,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
         </div>
         <label class="form-group"><span>来源</span><input v-model="form.source" placeholder="书名、链接、作者或看到的位置" /></label>
         <label class="form-group"><span>备注</span><textarea v-model="form.note" rows="3" placeholder="为什么留下它，适合什么时候用" /></label>
-        <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
-        <div class="modal-action-row">
+        <StatusBanner v-if="formError" class="form-error" role="alert" tone="warning">{{ formError }}</StatusBanner>
+        <div class="modal-action-row modal-action-row--sticky">
           <button v-if="activeMaterialId" class="btn btn-danger" type="button" @click="deleteMaterial">删除</button>
           <div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="closeEditor()">取消</button><button class="btn btn-primary" type="submit">保存</button></div>
         </div>
-      </form>
-    </div>
+    </ModalShell>
   </section>
 </template>
 
@@ -356,19 +348,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 .material-random-panel { margin-bottom: 18px; }
 .material-random-panel .section-title-row { margin-bottom: 10px; }
 .material-random-list { margin-top: 12px; }
-.material-card { min-width: 0; display: flex; flex-direction: column; }
-.material-card.compact { background: #fbfdfb; }
-.material-title { margin: 0 0 8px; color: var(--text); font-size: 16px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.material-card-copy { min-width: 0; }
-.material-content { color: var(--text); font-size: 13px; font-weight: 650; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
-.material-card.compact .material-content { -webkit-line-clamp: 2; line-clamp: 2; }
-.material-meta { margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.material-source { -webkit-line-clamp: 1; line-clamp: 1; }
-.material-card.is-expanded .material-title,
-.material-card.is-expanded .material-content,
-.material-card.is-expanded .material-meta { display: block; max-height: none; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
-.material-card-actions { margin-top: auto; padding-top: 12px; align-items: center; }
-.material-expand-btn { margin: 0 auto 0 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; }
 .material-detail-modal { width: min(720px, calc(100vw - 28px)); max-height: min(86vh, 820px); overflow: auto; }
 .material-detail-modal .modal-title { overflow-wrap: anywhere; }
 .material-detail-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; color: var(--faint); font-size: 12px; font-weight: 700; }
@@ -377,7 +356,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 .material-detail-section strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 13px; }
 .material-detail-section p { margin: 0; color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; white-space: pre-wrap; }
 .material-editor .form-group > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; font-weight: 800; }
-.material-editor .modal-action-row { position: sticky; bottom: 0; padding-top: 14px; background: var(--surface); }
 .material-tag-editor { min-width: 0; }
 .material-existing-tags { max-height: 132px; overflow-y: auto; padding: 2px; }
 .material-tag-option:has(input:checked) { border-color: #a9cdb7; background: var(--accent-soft); color: var(--accent); }

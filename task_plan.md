@@ -397,3 +397,29 @@ Create the first remote habit snapshot safely: add a session-only upload arm, re
 - Verification: focused checks passed `3/3`; full Vue smoke passed `223/223`; production build, `git diff --check`, and packaging passed.
 - Artifact: `life-plan-site-vue-dist-20260803-222647.zip`.
 - Release: code/test slice committed as `28e5eaa` and pushed to `origin/migration/vue-app-v1`.
+
+## Current task - Dashboard record preview and close lifecycle
+
+- Status: complete - Keep Dashboard record clicks on the Dashboard with a legacy-style read-only preview and prevent closing an external preview from reopening the editor.
+- Root causes: `src/pages/DashboardPage.vue` routes record clicks to `/records?record=...&preview=1`; `src/pages/RecordsPage.vue:424-431` removes only `preview`, so its route watcher reopens the editor from the remaining `record` query.
+- Acceptance: Dashboard period/timeline record clicks keep the `/dashboard` route, show a record preview, close without an editor overlay, and leave `lifePlanData` unchanged; Records-page preview-from-editor still returns to the editor.
+- Implementation and focused regression coverage are complete in the existing Dashboard/Records slice; the current shared-modal batch preserved that lifecycle and its read-only contract.
+- Current closeout validation: serial full Vue smoke `238/238`, production build, `git diff --check`, and popup/settings focused coverage `6/6` plus Todo recovery coverage `7/7`.
+
+## Current task - Vue shared modal closeout
+
+- Status: complete - Shared `ModalShell` migration, AI settings, Habit currency manager feedback, Todo keyboard compatibility, and Wheel management responsive behavior are implemented and directly covered.
+- Status: complete - Compared Habit, Todo, Wheel, and Fitness target states against a read-only master export at 1440px and 390px without switching branches.
+- Status: complete - Measured page/dialog overflow, title/footer visibility, and Escape/backdrop close behavior across the remaining visual-check matrix.
+- Status: complete - Restored master-visible Wheel workspace titles and compacted the 390px overview/navigation so the active library/tag form is visible in the first viewport.
+- Status: complete - Added mobile Wheel visibility coverage and reran the full `238/238` Vue smoke plus production build.
+- Status: complete - Refreshed the Vue distribution package and completed final Git/diff checks without committing.
+- Status: complete - Expanded browser coverage to every Vue route, every master page section, global entry points, and major tab/modal/disclosure states at 1440px and 390px.
+- Status: complete - Restored mobile single-document shell flow and internal route-strip scrolling without document overflow.
+- Status: complete - Added snapshot and Materials keyboard/focus lifecycles and repaired the final 390px Fitness overview overflow.
+- Status: complete - Added three direct regressions and completed independent adversarial verification plus final `241/241` Vue smoke.
+- Status: complete - Consolidated the remaining stable UI repetitions into shared PageHeader, StatusBanner, EmptyState, SegmentedTabs, SyncResourcePanel, MaterialCard, DisclosurePanel, and enhanced ModalShell components.
+- Status: complete - Migrated the remaining custom modal shells, three resource sync panels, route page headers, stable feedback/empty states, segmented controls, Materials cards, and compatible native disclosures.
+- Status: complete - Added direct public-component keyboard/ARIA, route-header, and disclosure contracts; final complete Vue smoke passes `243/243` with production build and dual-width visual probes.
+- Fitness remains intentionally browse-first with native disclosure editors; it does not need ModalShell migration.
+- No commit or push was performed in this continuation; user-owned generated files remain outside the source change set.

@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import EmptyState from './common/EmptyState.vue';
+import StatusBanner from './common/StatusBanner.vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import RecordCreateModal from './RecordCreateModal.vue';
+import ModalShell from './common/ModalShell.vue';
 import { lifePlanRepository } from '../services/lifePlanRepository';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 
@@ -297,6 +300,11 @@ function openSnapshotModal() {
   showSnapshots.value = true;
 }
 
+function closeSnapshotModal() {
+  showSnapshots.value = false;
+  previewSnapshotId.value = null;
+}
+
 function toggleSnapshotPreview(item: SnapshotItem) {
   const id = String(item.id || '');
   previewSnapshotId.value = previewSnapshotId.value === id ? null : id;
@@ -374,7 +382,7 @@ function restoreSnapshot(item: SnapshotItem) {
       </div>
       <div class="sidebar-button-row sidebar-button-row-compact sidebar-ai-row">
         <button class="btn btn-secondary sync-btn" type="button" @click="router.push({ path: '/ai', query: { mode: 'todayPlan' } })">AI 助手</button>
-        <button class="btn btn-secondary sync-btn" type="button" @click="router.push('/ai')">AI 设置</button>
+        <button class="btn btn-secondary sync-btn" type="button" @click="router.push({ path: '/ai', query: { settings: '1' } })">AI 设置</button>
       </div>
       <div v-if="lifePlan.lastError" class="local-save-warning active" role="alert">
         <span class="local-save-warning-text">{{ lifePlan.lastError }}</span>
@@ -392,13 +400,7 @@ function restoreSnapshot(item: SnapshotItem) {
     <input ref="importInput" hidden type="file" accept="application/json,.json" @change="importBackup">
     <RecordCreateModal v-model="showCreateRecord" />
 
-    <Teleport to="body">
-      <div v-if="showSnapshots" class="modal-overlay active" role="presentation" @click.self="showSnapshots = false">
-        <section class="modal snapshot-modal" role="dialog" aria-modal="true" aria-labelledby="snapshot-modal-title">
-          <div class="modal-header">
-            <div id="snapshot-modal-title" class="modal-title">本地快照</div>
-            <button class="close-btn" type="button" aria-label="关闭本地快照" @click="showSnapshots = false">×</button>
-          </div>
+    <ModalShell v-model="showSnapshots" title="本地快照" dialog-class="snapshot-modal" close-label="关闭本地快照" @close="previewSnapshotId = null">
           <p class="section-hint">自动保留最近 20 份；可预览、下载、恢复。恢复前会再自动存一份当前数据。</p>
           <div class="snapshot-storage-notice" :class="{ risky: snapshotStats.isRisky }">
             共 {{ snapshotStats.count || 0 }} 份 · 占用 {{ formatBytes(Number(snapshotStats.totalBytes || 0)) }}
@@ -408,7 +410,7 @@ function restoreSnapshot(item: SnapshotItem) {
             <button class="btn btn-primary" type="button" @click="createSnapshotNow">立即创建快照</button>
             <button class="btn btn-secondary" type="button" @click="exportBackup">导出备份</button>
           </div>
-          <p v-if="snapshotNotice" class="notice success" role="status">{{ snapshotNotice }}</p>
+          <StatusBanner v-if="snapshotNotice" class="notice success" role="status" tone="success">{{ snapshotNotice }}</StatusBanner>
           <div class="snapshot-list">
             <article v-for="item in snapshots" :key="String(item.id)" class="snapshot-item card">
               <div>
@@ -451,11 +453,9 @@ function restoreSnapshot(item: SnapshotItem) {
                 </div>
               </div>
             </article>
-            <div v-if="!snapshots.length" class="empty-state">还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。</div>
+            <EmptyState v-if="!snapshots.length">还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。</EmptyState>
           </div>
-        </section>
-      </div>
-    </Teleport>
+    </ModalShell>
   </aside>
 </template>
 
@@ -476,6 +476,17 @@ function restoreSnapshot(item: SnapshotItem) {
 }
 .sidebar-ai-row {
   margin-bottom: 4px;
+}
+@media (max-width: 980px) {
+  .sidebar {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .nav-list {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
 }
 .snapshot-modal {
   width: min(720px, calc(100vw - 32px));

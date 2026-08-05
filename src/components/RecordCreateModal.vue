@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import AppSelect from './common/AppSelect.vue';
+import ModalShell from './common/ModalShell.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -209,10 +210,6 @@ function flushDraftBeforeRouteLeave() {
   if (props.modelValue && step.value === 'edit' && draftDirty.value) persistDraft('silent');
 }
 
-function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && props.modelValue) closeModal();
-}
-
 function applySelectedTemplate() {
   const key = selectedTemplateKey.value;
   if (!key) {
@@ -301,24 +298,24 @@ function openWithType(type: string) {
 
 defineExpose({ openWithType, selectType });
 
-onMounted(() => window.addEventListener('keydown', handleKeydown));
 onBeforeRouteLeave(flushDraftBeforeRouteLeave);
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeydown);
   window.clearTimeout(autoSaveTimer);
   if (props.modelValue && step.value === 'edit' && draftDirty.value) persistDraft('silent');
 });
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="modelValue" class="modal-overlay active record-create-overlay" role="presentation" @click.self="closeModal">
-      <section class="modal record-create-modal" :class="step === 'type' ? 'modal-sm' : 'modal-lg'" role="dialog" aria-modal="true" :aria-labelledby="step === 'type' ? 'record-create-type-title' : 'record-create-editor-title'">
-        <div class="modal-header">
-          <div class="modal-title" :id="step === 'type' ? 'record-create-type-title' : 'record-create-editor-title'">{{ step === 'type' ? '新建记录' : `新建${draft.type}` }}</div>
-          <button class="close-btn" type="button" aria-label="关闭新建记录" @click="closeModal">×</button>
-        </div>
+  <ModalShell
+    :model-value="modelValue"
+    :title="step === 'type' ? '新建记录' : `新建${draft.type}`"
+    :size="step === 'type' ? 'sm' : 'lg'"
+    dialog-class="record-create-modal"
+    overlay-class="record-create-overlay"
+    close-label="关闭新建记录"
+    @update:model-value="value => { if (!value) closeModal(); }"
+  >
 
         <section v-if="step === 'type'" class="record-create-type-groups">
           <section v-for="group in typeGroups" :key="group.label" class="record-create-type-group type-section" :aria-labelledby="`record-type-${group.label}`">
@@ -386,7 +383,5 @@ onBeforeUnmount(() => {
             <div class="form-actions"><button class="btn btn-secondary" type="button" @click="closeModal">关闭</button><button class="btn btn-primary" type="submit">保存记录</button></div>
           </div>
         </form>
-      </section>
-    </div>
-  </Teleport>
+  </ModalShell>
 </template>

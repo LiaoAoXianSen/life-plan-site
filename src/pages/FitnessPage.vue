@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import EmptyState from '../components/common/EmptyState.vue';
+import StatusBanner from '../components/common/StatusBanner.vue';
 import { computed, onUnmounted, reactive, ref } from 'vue';
 
 import AppSelect from '../components/common/AppSelect.vue';
+import DisclosurePanel from '../components/common/DisclosurePanel.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -971,22 +975,18 @@ onUnmounted(stopRestTimer);
 
 <template>
   <section class="page active" id="page-fitness">
-    <header class="page-header fitness-page-header">
-      <div>
-        <div class="page-title">运动健身</div>
-        <p class="page-subtitle">选计划开练，顺手记身材与训练结果。</p>
-      </div>
-      <div class="fitness-header-actions">
+    <PageHeader class="fitness-page-header" title="运动健身" subtitle="选计划开练，顺手记身材与训练结果。" actions-class="fitness-header-actions">
+      <template #actions>
         <button class="btn btn-secondary" type="button" @click="openLibrarySection">动作库</button>
         <button class="btn btn-secondary" type="button" @click="openPlanCreate">新建计划</button>
         <button class="btn btn-secondary" type="button" @click="openBodySection">记录身材</button>
         <button class="btn btn-secondary" type="button" @click="openWorkoutCreate">补记训练</button>
         <button class="btn btn-primary" type="button" @click="jumpToFreeWorkout">自由开练</button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
-    <p v-if="fitness.lastAction" class="notice success" role="status">{{ fitness.lastAction }}</p>
-    <p v-if="formError || fitness.lastError" class="notice warning" role="alert">{{ formError || fitness.lastError }}</p>
+    <StatusBanner v-if="fitness.lastAction" class="notice success" role="status" tone="success">{{ fitness.lastAction }}</StatusBanner>
+    <StatusBanner v-if="formError || fitness.lastError" class="notice warning" role="alert" tone="warning">{{ formError || fitness.lastError }}</StatusBanner>
     <datalist id="fitness-exercise-datalist">
       <option v-for="item in fitness.library" :key="item.id" :value="item.name" />
     </datalist>
@@ -1030,8 +1030,8 @@ onUnmounted(stopRestTimer);
         </div>
       </div>
 
-      <p v-if="coachError" class="notice warning" role="alert">{{ coachError }}</p>
-      <p v-if="coachStatus" class="notice success" role="status">{{ coachStatus }}</p>
+      <StatusBanner v-if="coachError" class="notice warning" role="alert" tone="warning">{{ coachError }}</StatusBanner>
+      <StatusBanner v-if="coachStatus" class="notice success" role="status" tone="success">{{ coachStatus }}</StatusBanner>
 
       <div class="fitness-coach-input-row">
         <textarea
@@ -1072,8 +1072,7 @@ onUnmounted(stopRestTimer);
         </div>
       </section>
 
-      <details class="fitness-form-disclosure fitness-coach-config">
-        <summary><strong>AI 设置</strong><span>远程 AI 未配置时使用本地规则分析</span></summary>
+      <DisclosurePanel class="fitness-form-disclosure fitness-coach-config" title="AI 设置" description="远程 AI 未配置时使用本地规则分析">
         <div class="form-row">
           <div class="form-group"><label for="fitness-ai-endpoint">接口地址</label><input id="fitness-ai-endpoint" v-model="coachConfig.endpointUrl" placeholder="https://.../v1" /></div>
           <div class="form-group"><label for="fitness-ai-model">模型</label><input id="fitness-ai-model" v-model="coachConfig.model" /></div>
@@ -1081,7 +1080,7 @@ onUnmounted(stopRestTimer);
           <div class="form-group"><label><input v-model="coachConfig.remoteEnabled" type="checkbox" /> 启用远程 AI</label></div>
         </div>
         <button class="btn btn-secondary" type="button" @click="saveCoachConfig">保存设置</button>
-      </details>
+      </DisclosurePanel>
     </section>
 
     <section v-if="!fitness.activeWorkout" class="card fitness-overview-hero" aria-label="今日健身状态">
@@ -1115,7 +1114,7 @@ onUnmounted(stopRestTimer);
         </div>
       </div>
       <div class="fitness-kpi-grid">
-        <article v-for="item in overviewKpis" :key="item.label" class="fitness-kpi-card">
+        <article v-for="item in overviewKpis" :key="item.label" class="fitness-kpi-card metric-card">
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
           <em>{{ item.hint }}</em>
@@ -1250,8 +1249,7 @@ onUnmounted(stopRestTimer);
     </article>
 
     <div v-else class="form-row" id="fitness-plan-section">
-      <details id="fitness-free-start" class="fitness-form-disclosure" :open="freeSectionOpen">
-        <summary><strong>自由训练设置</strong><span>选择动作和名称后开始</span></summary>
+      <DisclosurePanel id="fitness-free-start" class="fitness-form-disclosure" :open="freeSectionOpen" title="自由训练设置" description="选择动作和名称后开始">
         <form class="card" @submit.prevent="startFreeWorkout">
           <div class="fitness-section-head">
             <div>
@@ -1261,14 +1259,14 @@ onUnmounted(stopRestTimer);
             <button class="btn btn-secondary todo-mini-btn" type="button" @click="openPlanCreate">新建</button>
           </div>
           <div class="card-title">开始自由训练</div>
-          <div v-if="!fitness.library.length" class="empty-state">请先初始化或添加动作库。</div>
+          <EmptyState v-if="!fitness.library.length" class="empty-state">请先初始化或添加动作库。</EmptyState>
           <div v-else class="form-row">
             <div class="form-group"><label>训练名称</label><input v-model="freeForm.title" maxlength="80" /></div>
             <div class="form-group"><label>第一个动作</label><AppSelect v-model="freeForm.exerciseId" required :options="[{ value: '', label: '选择动作', disabled: true }, ...fitness.library.map(item => ({ value: item.id, label: item.name }))]" /></div>
           </div>
           <button class="btn btn-primary" type="submit" :disabled="!fitness.library.length">开始训练</button>
         </form>
-      </details>
+      </DisclosurePanel>
       <article class="card">
         <div class="card-title">开始计划训练</div>
         <div v-if="fitness.plans.length" class="fitness-metric-list">
@@ -1300,12 +1298,11 @@ onUnmounted(stopRestTimer);
             </div>
           </article>
         </div>
-        <div v-else class="empty-state">还没有训练计划。</div>
+        <EmptyState v-else class="empty-state">还没有训练计划。</EmptyState>
       </article>
     </div>
 
-    <details id="fitness-body-section" class="fitness-form-disclosure" :open="bodySectionOpen">
-      <summary><strong>身材记录</strong><span>记录或查看最近身材数据</span></summary>
+    <DisclosurePanel id="fitness-body-section" class="fitness-form-disclosure" :open="bodySectionOpen" title="身材记录" description="记录或查看最近身材数据">
       <div class="form-row">
         <form class="card" @submit.prevent="saveMetric">
         <div class="section-title-row">
@@ -1335,21 +1332,20 @@ onUnmounted(stopRestTimer);
           <div v-for="item in fitness.metrics" :key="item.id" class="fitness-metric-row fitness-body-metric-row">
             <div>
               <strong>{{ item.date }} · {{ fitness.services.fitness.getConditionLabel(item.condition) }}</strong>
-              <span class="fitness-metric-chip-row"><span v-for="chip in metricChips(item)" :key="chip.key">{{ chip.label }} {{ chip.value }}</span></span>
+              <span class="fitness-metric-chip-row"><span v-for="chip in metricChips(item)" :key="chip.key" class="app-badge">{{ chip.label }} {{ chip.value }}</span></span>
               <span v-if="item.note">{{ item.note }}</span>
             </div>
             <button class="btn btn-secondary" type="button" @click="editMetric(item)">{{ metricForm.id === item.id ? '正在编辑' : '编辑' }}</button>
             <button class="btn btn-danger" type="button" @click="deleteMetric(item.id)">删除</button>
           </div>
         </div>
-        <div v-else class="empty-state">还没有身材记录。</div>
+        <EmptyState v-else class="empty-state">还没有身材记录。</EmptyState>
         </article>
       </div>
-    </details>
+    </DisclosurePanel>
 
     <div class="form-row" id="fitness-library-section">
-      <details class="fitness-form-disclosure" :open="librarySectionOpen">
-        <summary><strong>动作库管理</strong><span>初始化或添加常用动作</span></summary>
+      <DisclosurePanel class="fitness-form-disclosure" :open="librarySectionOpen" title="动作库管理" description="初始化或添加常用动作">
         <form class="card" @submit.prevent="saveLibraryItem">
           <div class="section-title-row"><div><h2>动作库</h2><p class="section-hint">初始化会按旧版默认动作创建可编辑副本。</p></div><button class="btn btn-secondary" type="button" @click="seedLibrary">初始化默认动作</button></div>
           <div class="form-row">
@@ -1369,10 +1365,9 @@ onUnmounted(stopRestTimer);
             <div v-for="item in fitness.library" :key="item.id" class="fitness-metric-row"><strong>{{ item.name }}</strong><span>{{ fitness.services.fitness.getMuscleLabel(item.muscle) }} · {{ item.defaultSets }} 组 × {{ item.defaultReps }}<template v-if="item.defaultWeight != null"> · 重量 {{ item.defaultWeight }}kg</template> · 休息 {{ item.restSec || 0 }}s</span><button class="btn btn-secondary" type="button" @click="editLibraryItem(item)">{{ libraryEditingId === item.id ? '正在编辑' : '编辑' }}</button><button class="btn btn-danger" type="button" @click="deleteLibraryItem(item.id)">删除</button></div>
           </div>
         </form>
-      </details>
+      </DisclosurePanel>
 
-      <details class="fitness-form-disclosure" :open="planEditorOpen">
-        <summary><strong>{{ planEditingId ? '编辑训练计划' : '创建训练计划' }}</strong><span>设置动作和每组处方</span></summary>
+      <DisclosurePanel class="fitness-form-disclosure" :open="planEditorOpen" :title="planEditingId ? '编辑训练计划' : '创建训练计划'" description="设置动作和每组处方">
         <form class="card" @submit.prevent="savePlan">
           <div class="section-title-row">
             <div>
@@ -1436,11 +1431,10 @@ onUnmounted(stopRestTimer);
             <button class="btn btn-primary">{{ planEditingId ? '保存计划' : '创建计划' }}</button>
           </div>
         </form>
-      </details>
+      </DisclosurePanel>
     </div>
 
-    <details id="fitness-workout-section" class="fitness-form-disclosure" :open="workoutSectionOpen">
-      <summary><strong>训练日志</strong><span>补记或编辑已完成训练</span></summary>
+    <DisclosurePanel id="fitness-workout-section" class="fitness-form-disclosure" :open="workoutSectionOpen" title="训练日志" description="补记或编辑已完成训练">
       <form class="card" @submit.prevent="saveWorkoutLog">
       <div class="section-title-row">
         <div>
@@ -1524,7 +1518,7 @@ onUnmounted(stopRestTimer);
         <button class="btn btn-primary">{{ workoutEditingId ? '保存训练日志' : '保存训练日志' }}</button>
       </div>
       </form>
-    </details>
+    </DisclosurePanel>
 
     <article class="card">
       <div class="card-title">训练历史</div>
@@ -1535,18 +1529,12 @@ onUnmounted(stopRestTimer);
           <button class="btn btn-danger" type="button" @click="deleteWorkout(workout.id)">删除</button>
         </div>
       </div>
-      <div v-else class="empty-state">还没有训练日志。可以从训练计划一键开练，也可以直接自由开练。</div>
+      <EmptyState v-else class="empty-state">还没有训练日志。可以从训练计划一键开练，也可以直接自由开练。</EmptyState>
     </article>
   </section>
 </template>
 
 <style scoped>
-.fitness-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
 .fitness-overview-actions {
   display: flex;
   flex-direction: column;
@@ -1602,42 +1590,6 @@ onUnmounted(stopRestTimer);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fitness-form-disclosure {
-  margin-bottom: 16px;
-}
-.fitness-form-disclosure > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--line, #dfe7e1);
-  border-radius: 10px;
-  background: var(--surface, #fff);
-  color: var(--text, #17211b);
-  cursor: pointer;
-  list-style: none;
-}
-.fitness-form-disclosure > summary::-webkit-details-marker {
-  display: none;
-}
-.fitness-form-disclosure > summary::after {
-  content: '展开';
-  flex: 0 0 auto;
-  color: var(--muted, #647269);
-  font-size: 12px;
-}
-.fitness-form-disclosure[open] > summary::after {
-  content: '收起';
-}
-.fitness-form-disclosure > summary span {
-  color: var(--muted, #647269);
-  font-size: 12px;
-}
-.fitness-form-disclosure > .form-row,
-.fitness-form-disclosure > form {
-  margin-top: 12px;
-}
 .fitness-section-head {
   display: flex;
   justify-content: space-between;
@@ -1663,25 +1615,6 @@ onUnmounted(stopRestTimer);
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-top: 14px;
-}
-.fitness-kpi-card {
-  min-width: 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(33, 110, 78, 0.05);
-  border: 1px solid rgba(33, 110, 78, 0.1);
-  display: grid;
-  gap: 4px;
-}
-.fitness-kpi-card span,
-.fitness-kpi-card em {
-  color: var(--faint, #7a8b80);
-  font-size: 12px;
-  font-style: normal;
-}
-.fitness-kpi-card strong {
-  font-size: 1.35rem;
-  color: #216e4e;
 }
 .fitness-trend-summary {
   display: grid;
@@ -1715,13 +1648,18 @@ onUnmounted(stopRestTimer);
   }
 }
 @media (max-width: 560px) {
-  .fitness-header-actions {
-    width: 100%;
+  .fitness-overview-hero .section-title-row {
+    align-items: stretch;
   }
   .fitness-overview-actions,
   .fitness-overview-secondary {
+    width: auto;
     align-items: stretch;
     justify-content: stretch;
+  }
+  .fitness-overview-actions .btn,
+  .fitness-overview-secondary .btn {
+    width: 100%;
   }
   .fitness-kpi-grid {
     grid-template-columns: 1fr;

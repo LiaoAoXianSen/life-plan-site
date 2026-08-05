@@ -145,7 +145,77 @@
   align-self: stretch;
 }
 
+.page-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(33, 110, 78, .1);
+  border-radius: 14px;
+  background: rgba(33, 110, 78, .05);
+}
+
+.metric-card > span,
+.metric-card > em {
+  color: var(--faint, #7a8b80);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.metric-card > strong {
+  color: #216e4e;
+  font-size: 1.35rem;
+}
+
+.app-badge {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-badge--bordered {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+}
+
+.modal-action-row--sticky {
+  position: sticky;
+  bottom: 0;
+  padding-top: 14px;
+  background: var(--surface);
+}
+
+.empty-state-title,
+.empty-state-description {
+  display: block;
+}
+
+.empty-state-description {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.empty-state-actions {
+  margin-top: 12px;
+}
+
 @media (max-width: 700px) {
+  .page-header-actions {
+    width: 100%;
+  }
+
   .app-filter-bar--search-filter,
   .app-filter-bar--search-filter-action {
     grid-template-columns: minmax(0, 1fr);

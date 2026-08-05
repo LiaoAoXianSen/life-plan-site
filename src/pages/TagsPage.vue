@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import EmptyState from '../components/common/EmptyState.vue';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import SearchInput from '../components/common/SearchInput.vue';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity } from '../types/lifePlan';
@@ -90,12 +92,7 @@ function materialPreview(material: DataEntity) {
 
 <template>
   <section class="page active" id="page-tags">
-    <header class="page-header">
-      <div>
-        <div class="page-title">标签中心</div>
-        <p class="page-subtitle">先统一查看灵感、素材和转盘标签，避免标签体系越用越散。</p>
-      </div>
-    </header>
+    <PageHeader title="标签中心" subtitle="先统一查看灵感、素材和转盘标签，避免标签体系越用越散。" />
 
     <FilterBar layout="search-filter" class="tag-filter-bar">
       <SearchInput v-model="keyword" aria-label="搜索标签" placeholder="搜索标签，例如 AI / 工作 / 学习" />
@@ -142,7 +139,7 @@ function materialPreview(material: DataEntity) {
           <span v-if="item.wheelItems[0]">转盘：{{ item.wheelItems[0].name || '未命名公共项' }}</span>
         </div>
       </article>
-      <div v-if="!filteredItems.length" class="empty-state">暂无匹配标签</div>
+      <EmptyState v-if="!filteredItems.length" class="empty-state">暂无匹配标签</EmptyState>
     </div>
   </section>
 </template>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import StatusBanner from '../components/common/StatusBanner.vue';
 import { reactive, ref } from 'vue';
 
 import HabitSyncPanel from '../components/HabitSyncPanel.vue';
 import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import WheelSyncPanel from '../components/WheelSyncPanel.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import { bindHabitCloudSync, runHabitCloudSyncBoth, startHabitAutoSyncEngine } from '../services/habitCloudSync';
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
@@ -308,7 +310,7 @@ async function importFile(event: Event) {
 
 <template>
   <section class="page active">
-    <header class="page-header"><div class="page-title">云同步</div></header>
+    <PageHeader title="云同步" />
 
     <article class="card">
       <div class="card-title">主数据 WebDAV 配置</div>
@@ -322,7 +324,7 @@ async function importFile(event: Event) {
         <button class="btn btn-secondary" type="button" @click="saveConfig">保存配置</button>
         <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="runAutoNow">立即自动同步一次</button>
       </div>
-      <p v-if="autoStatus" class="sync-modal-status sync-status active">{{ autoStatus }}</p>
+      <StatusBanner v-if="autoStatus" class="sync-modal-status sync-status active" role="status" tone="info">{{ autoStatus }}</StatusBanner>
     </article>
 
     <article class="card">
@@ -341,7 +343,7 @@ async function importFile(event: Event) {
         <button class="btn btn-secondary" :disabled="busy || !config.webdavUrl" @click="pullAndMerge">下载并合并</button>
         <button class="btn btn-primary" :disabled="busy || !config.webdavUrl" @click="push">上传主数据</button>
       </div>
-      <p v-if="status" class="sync-status active">{{ status }}</p>
+      <StatusBanner v-if="status" class="sync-status active" role="status" tone="info">{{ status }}</StatusBanner>
     </article>
 
     <TodoSyncPanel :sync-config="config" />

@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import StatusBanner from '../components/common/StatusBanner.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import AppSelect from '../components/common/AppSelect.vue';
+import ModalShell from '../components/common/ModalShell.vue';
+import PageHeader from '../components/common/PageHeader.vue';
+import SegmentedTabs from '../components/common/SegmentedTabs.vue';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -41,6 +45,15 @@ function readPersistedAiConfig() {
 
 const config = reactive(ai.normalizeConfig(readPersistedAiConfig()));
 const mode = ref<AiMode>('chatCapture');
+const settingsOpen = computed({
+  get: () => String(route.query.settings || '') === '1',
+  set: value => {
+    const query = { ...route.query };
+    if (value) query.settings = '1';
+    else delete query.settings;
+    void router.replace({ path: '/ai', query });
+  },
+});
 const input = ref('');
 const selectedIdeaId = ref('');
 const selectedTodoId = ref('');
@@ -51,6 +64,14 @@ const diarySections = ref<DiaryAiSectionDraft[]>([]);
 const running = ref(false);
 const error = ref('');
 const status = ref('');
+const settingsNotice = ref('');
+const apiKeyStored = ref(false);
+
+function refreshApiKeyStored() {
+  apiKeyStored.value = Boolean(String(config.apiKey || '').trim());
+}
+
+refreshApiKeyStored();
 const captureDraft = reactive<Record<CaptureDraftKey, string>>({
   diaryText: '',
   workText: '',
@@ -235,7 +256,31 @@ const context = computed(() => ({
 function saveConfig() {
   Object.assign(config, ai.normalizeConfig(config));
   localStorage.setItem('lifePlanAiConfig', JSON.stringify(config));
+  refreshApiKeyStored();
+  settingsNotice.value = 'AI 设置已保存';
   status.value = 'AI 设置已保存';
+}
+
+function clearApiKey() {
+  config.apiKey = '';
+  Object.assign(config, ai.normalizeConfig(config));
+  localStorage.setItem('lifePlanAiConfig', JSON.stringify(config));
+  refreshApiKeyStored();
+  settingsNotice.value = 'API Key 已清除';
+}
+
+async function testConfig() {
+  if (!ai.isRemoteReady(config)) {
+    settingsNotice.value = '请先填写完整的远程 AI 配置';
+    return;
+  }
+  settingsNotice.value = '正在测试接口…';
+  try {
+    await ai.requestRemoteAi(config, { mode: 'chatCapture', userInput: '只回复测试成功', today: getTodayStr(), context: {} });
+    settingsNotice.value = '接口测试成功';
+  } catch (error) {
+    settingsNotice.value = `接口测试失败：${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
 function resetResult() {
@@ -538,34 +583,39 @@ watch(() => route.query.diary, value => {
 
 <template>
   <section class="page active" id="page-ai">
-    <header class="page-header">
-      <div>
-        <div class="page-title">AI 助手</div>
-        <p class="todo-page-summary">生成结果默认只是草稿，确认后才写入 lifePlanData。</p>
-      </div>
-    </header>
+    <PageHeader title="AI 助手">
+      <p class="todo-page-summary">生成结果默认只是草稿，确认后才写入 lifePlanData。</p>
+      <template #actions><button class="btn btn-secondary" type="button" @click="settingsOpen = true">AI 设置</button></template>
+    </PageHeader>
 
-    <article class="card">
-      <div class="card-title">AI 设置</div>
-      <div class="form-row">
-        <div class="form-group"><label for="ai-endpoint">接口地址</label><input id="ai-endpoint" v-model="config.endpointUrl" placeholder="https://.../v1" /></div>
-        <div class="form-group"><label for="ai-model">模型</label><input id="ai-model" v-model="config.model" /></div>
-        <div class="form-group"><label for="ai-key">API Key</label><input id="ai-key" v-model="config.apiKey" type="password" /></div>
-        <div class="form-group"><label><input v-model="config.remoteEnabled" type="checkbox" /> 启用远程 AI</label></div>
-      </div>
-      <button class="btn btn-secondary" type="button" @click="saveConfig">保存设置</button>
-    </article>
+    <ModalShell v-model="settingsOpen" title="AI 设置" size="md" dialog-class="ai-settings-modal">
+      <div class="ai-settings-note">AI 配置只保存在当前浏览器本地，不会写入主数据或云同步。API Key 会保存在浏览器本地；共用设备请用完后清除。</div>
+      <div class="form-group"><label><input v-model="config.remoteEnabled" type="checkbox" /> 启用远程 AI</label></div>
+      <div class="form-group"><label for="ai-endpoint">接口地址</label><input id="ai-endpoint" v-model="config.endpointUrl" placeholder="https://.../v1" /></div>
+      <div class="form-group"><label for="ai-key">API Key</label><input id="ai-key" v-model="config.apiKey" type="password" /><div class="ai-key-row"><span>{{ apiKeyStored ? '已保存 API Key' : '未保存 API Key' }}</span><button class="btn btn-secondary todo-mini-btn" type="button" @click="clearApiKey">清除 Key</button></div></div>
+      <div class="form-group"><label for="ai-model">模型</label><input id="ai-model" v-model="config.model" /></div>
+      <div class="form-group"><label for="ai-user-style">偏好说明</label><textarea id="ai-user-style" v-model="config.userStyle" rows="3" placeholder="例如：建议要短、具体、偏行动；不要鸡汤。" /></div>
+      <p v-if="settingsNotice" class="sync-modal-status" role="status">{{ settingsNotice }}</p>
+      <div class="modal-action-row"><span /><div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="testConfig">测试接口</button><button class="btn btn-primary" type="button" @click="saveConfig">保存设置</button></div></div>
+    </ModalShell>
 
-    <article class="card">
+    <article id="ai-mode-panel" class="card" role="tabpanel" :aria-labelledby="`ai-mode-${mode}`" aria-live="polite">
       <div class="card-title">模式</div>
-      <div class="ai-mode-tabs" role="tablist" aria-label="AI mode">
-        <button type="button" :class="{ active: mode === 'chatCapture' }" @click="setMode('chatCapture')">对话整理</button>
-        <button type="button" :class="{ active: mode === 'todayPlan' }" @click="setMode('todayPlan')">今日计划</button>
-        <button type="button" :class="{ active: mode === 'backlogTriage' }" @click="setMode('backlogTriage')">待办整理</button>
-        <button type="button" :class="{ active: mode === 'ideaNext' }" @click="setMode('ideaNext')">灵感下一步</button>
-        <button type="button" :class="{ active: mode === 'todoBreakdown' }" @click="setMode('todoBreakdown')">待办拆解</button>
-        <button type="button" :class="{ active: mode === 'diaryReview' }" @click="setMode('diaryReview')">日记分析</button>
-      </div>
+      <SegmentedTabs
+        class="ai-mode-tabs"
+        :ariaLabel="'AI mode'"
+        button-aria-selected
+        :model-value="mode"
+        :items="[
+          { value: 'chatCapture', label: '对话整理', id: 'ai-mode-chatCapture', controls: 'ai-mode-panel' },
+          { value: 'todayPlan', label: '今日计划', id: 'ai-mode-todayPlan', controls: 'ai-mode-panel' },
+          { value: 'backlogTriage', label: '待办整理', id: 'ai-mode-backlogTriage', controls: 'ai-mode-panel' },
+          { value: 'ideaNext', label: '灵感下一步', id: 'ai-mode-ideaNext', controls: 'ai-mode-panel' },
+          { value: 'todoBreakdown', label: '待办拆解', id: 'ai-mode-todoBreakdown', controls: 'ai-mode-panel' },
+          { value: 'diaryReview', label: '日记分析', id: 'ai-mode-diaryReview', controls: 'ai-mode-panel' },
+        ]"
+        @update:model-value="value => setMode(value as AiMode)"
+      />
       <p class="todo-page-summary">{{ modeMeta[mode].subtitle }}</p>
 
       <div v-if="mode === 'ideaNext'" class="form-group">
@@ -588,11 +638,11 @@ watch(() => route.query.diary, value => {
         <textarea id="ai-user-input" v-model="input" :placeholder="modeMeta[mode].placeholder" />
       </div>
       <button class="btn btn-primary" type="button" :disabled="running" @click="run">{{ running ? '生成中…' : modeMeta[mode].action }}</button>
-      <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-      <p v-if="status" class="todo-save-status" role="status">{{ status }}</p>
+      <StatusBanner v-if="error" class="form-error" role="alert" tone="warning">{{ error }}</StatusBanner>
+      <StatusBanner v-if="status" class="todo-save-status" role="status" tone="info">{{ status }}</StatusBanner>
     </article>
 
-    <article v-if="result" class="card">
+    <article v-if="result" class="card" aria-live="polite">
       <div class="card-title">{{ result.title || 'AI' }}</div>
       <p>{{ result.summary }}</p>
       <div v-if="mode === 'chatCapture'" class="ai-capture-section-list">

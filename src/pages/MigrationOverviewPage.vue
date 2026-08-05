@@ -1,12 +1,13 @@
+<script setup lang="ts">
+import PageHeader from '../components/common/PageHeader.vue';
+</script>
+
 <template>
   <section class="page active migration-page">
-    <header class="page-header">
-      <div>
-        <p class="migration-kicker">Vite · Vue 3 · TypeScript</p>
-        <h1 class="page-title">正式迁移壳已就绪</h1>
-      </div>
-      <span class="migration-stage">第 0 步</span>
-    </header>
+    <PageHeader title="正式迁移壳已就绪" title-as="h1" actions-class="migration-stage">
+      <template #pretitle><p class="migration-kicker">Vite · Vue 3 · TypeScript</p></template>
+      <template #actions>第 0 步</template>
+    </PageHeader>
 
     <article class="card migration-card">
       <h2 class="card-title">本阶段范围</h2>

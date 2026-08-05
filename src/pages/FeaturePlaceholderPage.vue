@@ -2,6 +2,8 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 
+import PageHeader from '../components/common/PageHeader.vue';
+
 const route = useRoute();
 const title = computed(() => String(route.meta.title ?? '功能页面'));
 const phase = computed(() => String(route.meta.phase ?? '后续阶段'));
@@ -9,12 +11,9 @@ const phase = computed(() => String(route.meta.phase ?? '后续阶段'));
 
 <template>
   <section class="page active migration-page">
-    <header class="page-header">
-      <div>
-        <p class="migration-kicker">{{ phase }}</p>
-        <h1 class="page-title">{{ title }}</h1>
-      </div>
-    </header>
+    <PageHeader :title="title" title-as="h1">
+      <template #pretitle><p class="migration-kicker">{{ phase }}</p></template>
+    </PageHeader>
 
     <article class="card migration-card">
       <h2 class="card-title">尚未迁移</h2>

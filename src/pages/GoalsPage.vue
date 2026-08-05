@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import EmptyState from '../components/common/EmptyState.vue';
+import StatusBanner from '../components/common/StatusBanner.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import AppSelect from '../components/common/AppSelect.vue';
+import ModalShell from '../components/common/ModalShell.vue';
+import PageHeader from '../components/common/PageHeader.vue';
 import { createLegacyServices, genId, getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity } from '../types/lifePlan';
@@ -132,10 +136,9 @@ watch(() => route.query.goal, value => {
 
 <template>
   <section class="page active" id="page-goals">
-    <header class="page-header">
-      <div class="page-title">目标管理</div>
-      <button class="btn btn-primary" type="button" @click="openNewGoal()">+ 新建目标</button>
-    </header>
+    <PageHeader title="目标管理">
+      <template #actions><button class="btn btn-primary" type="button" @click="openNewGoal()">+ 新建目标</button></template>
+    </PageHeader>
 
     <div class="summary-grid goal-summary-grid">
       <div class="summary-card"><strong class="summary-value">{{ activeGoals.length }}</strong><span class="summary-label">进行中</span></div>
@@ -154,14 +157,18 @@ watch(() => route.query.goal, value => {
         <strong class="goal-progress">{{ normalizeProgress(goal) }}%</strong>
       </button>
     </div>
-    <div v-if="!goals.length" class="empty-state">暂无目标，点击右上角新建</div>
+    <EmptyState v-if="!goals.length" class="empty-state">暂无目标，点击右上角新建</EmptyState>
 
-    <div v-if="editorOpen" class="modal-overlay active" role="presentation">
-      <form class="modal modal-sm goal-editor" role="dialog" aria-modal="true" aria-labelledby="goal-editor-title" @submit.prevent="saveGoal">
-        <div class="modal-header">
-          <div class="modal-title" id="goal-editor-title">{{ activeGoalId ? '编辑目标' : '新建目标' }}</div>
-          <button class="close-btn" type="button" aria-label="关闭目标编辑" @click="closeGoal()">×</button>
-        </div>
+    <ModalShell
+      v-if="editorOpen"
+      v-model="editorOpen"
+      :title="activeGoalId ? '编辑目标' : '新建目标'"
+      size="sm"
+      dialog-class="goal-editor"
+      close-label="关闭目标编辑"
+      @close="closeGoal()"
+    >
+      <form role="presentation" @submit.prevent="saveGoal">
         <label class="form-group"><span>目标</span><input ref="nameInput" v-model="form.name" required /></label>
         <label class="form-group"><span>周期</span><AppSelect v-model="form.period" :options="[{ value: '', label: '未设置' }, ...periodOptions.map(period => ({ value: period, label: period }))]" /></label>
         <label class="form-group"><span>目标描述</span><textarea v-model="form.target" rows="4" /></label>
@@ -170,16 +177,17 @@ watch(() => route.query.goal, value => {
           <span>进度 {{ form.progress }}%</span>
           <input v-model.number="form.progress" type="range" min="0" max="100" />
         </label>
-        <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
-        <div class="modal-action-row">
+        <StatusBanner v-if="formError" class="form-error" role="alert" tone="warning">{{ formError }}</StatusBanner>
+        <div class="modal-action-row modal-action-row--sticky">
           <button v-if="activeGoalId" class="btn btn-danger" type="button" @click="deleteGoal">删除</button>
+          <span v-else />
           <div class="modal-action-right">
             <button class="btn btn-secondary" type="button" @click="closeGoal()">取消</button>
             <button class="btn btn-primary" type="submit">保存</button>
           </div>
         </div>
       </form>
-    </div>
+    </ModalShell>
   </section>
 </template>
 
@@ -226,11 +234,5 @@ watch(() => route.query.goal, value => {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
-}
-.goal-editor .modal-action-row {
-  position: sticky;
-  bottom: 0;
-  padding-top: 14px;
-  background: var(--surface);
 }
 </style>
