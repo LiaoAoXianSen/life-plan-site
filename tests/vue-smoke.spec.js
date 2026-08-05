@@ -6381,8 +6381,15 @@ test('new record modal keeps blank initialization read-only then autosaves and r
 
     await page.locator('#page-records').getByRole('button', { name: /新建记录/ }).click();
     let modal = page.getByRole('dialog');
+    await expect(modal).toHaveClass(/modal-sm/);
     await modal.getByRole('button', { name: '日记', exact: true }).click();
+    await expect(modal).toHaveClass(/modal-lg/);
+    await expect(modal.locator('form .record-create-template-toolbar')).toBeVisible();
+    await expect(modal.getByRole('button', { name: '全部展开' })).toBeVisible();
+    await expect(modal.getByRole('button', { name: '全部收起' })).toBeVisible();
+    await expect(modal.getByRole('button', { name: '清空' })).toBeVisible();
     await expect(modal.getByLabel('标题')).toHaveValue(/^\d{4}年\d{1,2}月\d{1,2}日 星期[一二三四五六日]$/);
+    await expect(modal.getByText('正文内容', { exact: true })).toBeVisible();
     await expect(modal.getByLabel('记录模板')).toHaveValue('builtin:builtin-diary-daily-review');
     await page.keyboard.press('Escape');
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records)).toEqual([]);

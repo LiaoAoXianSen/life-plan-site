@@ -18,6 +18,7 @@ const step = ref<'type' | 'edit'>('type');
 const draftId = ref('');
 const selectedTemplateKey = ref('');
 const templateValues = reactive<Record<string, string>>({});
+const templateEditorRef = ref<HTMLElement | null>(null);
 const draftDirty = ref(false);
 const draftStatus = ref('');
 let hydrating = false;
@@ -233,6 +234,29 @@ function applySelectedTemplate() {
   }
 }
 
+function toggleTemplateFields(open: boolean) {
+  templateEditorRef.value?.querySelectorAll('details').forEach(item => { item.open = open; });
+}
+
+function clearStructuredFields() {
+  if (!activeBuiltInTemplate.value || !window.confirm('清空当前模板里已填写的内容吗？')) return;
+  setTemplateValues();
+  updateStructuredContent();
+}
+
+function saveAsTemplate() {
+  const name = window.prompt('请输入模板名称：');
+  if (!name?.trim()) return;
+  const template = records.addTemplate({
+    name,
+    type: draft.type || '记录',
+    content: draft.content,
+  });
+  if (!template) return;
+  selectedTemplateKey.value = String(template.id);
+  draftStatus.value = '模板已保存';
+}
+
 function updateStructuredContent() {
   if (!activeBuiltInTemplate.value) return;
   draft.content = records.services.records.composeTemplateContent(activeBuiltInTemplate.value, templateValues);
@@ -289,13 +313,13 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div v-if="modelValue" class="modal-overlay active record-create-overlay" role="presentation" @click.self="closeModal">
-      <section class="modal record-create-modal" role="dialog" aria-modal="true" :aria-labelledby="step === 'type' ? 'record-create-type-title' : 'record-create-editor-title'">
+      <section class="modal record-create-modal" :class="step === 'type' ? 'modal-sm' : 'modal-lg'" role="dialog" aria-modal="true" :aria-labelledby="step === 'type' ? 'record-create-type-title' : 'record-create-editor-title'">
         <div class="modal-header">
           <div class="modal-title" :id="step === 'type' ? 'record-create-type-title' : 'record-create-editor-title'">{{ step === 'type' ? '新建记录' : `新建${draft.type}` }}</div>
           <button class="close-btn" type="button" aria-label="关闭新建记录" @click="closeModal">×</button>
         </div>
 
-        <div v-if="step === 'type'" class="record-create-type-groups">
+        <section v-if="step === 'type'" class="record-create-type-groups">
           <section v-for="group in typeGroups" :key="group.label" class="record-create-type-group type-section" :aria-labelledby="`record-type-${group.label}`">
             <h3 :id="`record-type-${group.label}`">{{ group.label }}</h3>
             <div class="type-cards">
@@ -312,9 +336,26 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </section>
-        </div>
+        </section>
 
         <form v-else class="record-create-form" @submit.prevent="saveManual">
+          <div class="record-create-template-toolbar">
+            <label class="form-group"><span>选择模板</span><select v-model="selectedTemplateKey" aria-label="记录模板" @change="applySelectedTemplate"><option value="">空白</option><optgroup v-if="builtInTemplates.length" label="内置模板"><option v-for="template in builtInTemplates" :key="template.id" :value="`builtin:${template.id}`">{{ template.name }}</option></optgroup><optgroup v-if="customTemplates.length" label="我的模板"><option v-for="template in customTemplates" :key="String(template.id)" :value="String(template.id)">{{ template.name }}</option></optgroup></select></label>
+            <div class="record-template-actions">
+              <button class="btn btn-secondary" type="button" :disabled="!selectedTemplateKey" @click="applySelectedTemplate">应用模板</button>
+              <button class="btn btn-secondary" type="button" @click="saveAsTemplate">保存为模板</button>
+            </div>
+          </div>
+          <section v-if="activeBuiltInTemplate" ref="templateEditorRef" class="record-template-editor" :aria-label="`${activeBuiltInTemplate.name}新记录字段`">
+            <div class="record-template-editor-head">
+              <div><strong>{{ activeBuiltInTemplate.name }}</strong><p>{{ activeBuiltInTemplate.description }}</p></div>
+              <div class="record-template-actions"><button class="link-button" type="button" @click="toggleTemplateFields(true)">全部展开</button><button class="link-button" type="button" @click="toggleTemplateFields(false)">全部收起</button><button class="link-button danger-text" type="button" @click="clearStructuredFields">清空</button></div>
+            </div>
+            <details v-for="field in activeBuiltInTemplate.fields" :key="field.id" class="record-template-field">
+              <summary>{{ field.label }}</summary>
+              <textarea v-model="templateValues[field.id]" :aria-label="`新记录${field.label}`" :placeholder="field.placeholder" :rows="field.rows || 3" @input="updateStructuredContent" />
+            </details>
+          </section>
           <div class="form-row">
             <label class="form-group"><span>记录类型</span><AppSelect v-model="draft.type" :options="allTypes.map(type => ({ value: type, label: type }))" @change="handleTypeChange" /></label>
             <label class="form-group"><span>标题</span><input v-model="draft.title" placeholder="输入记录标题" /></label>
@@ -322,28 +363,22 @@ onBeforeUnmount(() => {
           <div class="form-row">
             <label class="form-group"><span>开始日期</span><input v-model="draft.startDate" type="date" @change="handleStartDateChange" /></label>
             <label class="form-group"><span>结束日期</span><input v-model="draft.endDate" type="date" /></label>
+          </div>
+          <div class="form-row">
             <label class="form-group"><span>开始时间</span><input v-model="draft.recordTime" type="time" /></label>
             <label class="form-group"><span>结束时间</span><input v-model="draft.recordEndTime" type="time" /></label>
           </div>
-          <div class="record-create-template-row">
-            <label class="form-group"><span>记录模板</span><select v-model="selectedTemplateKey" @change="applySelectedTemplate"><option value="">空白</option><optgroup v-if="builtInTemplates.length" label="内置模板"><option v-for="template in builtInTemplates" :key="template.id" :value="`builtin:${template.id}`">{{ template.name }}</option></optgroup><optgroup v-if="customTemplates.length" label="我的模板"><option v-for="template in customTemplates" :key="String(template.id)" :value="String(template.id)">{{ template.name }}</option></optgroup></select></label>
-          </div>
-          <section v-if="activeBuiltInTemplate" class="record-template-editor" :aria-label="`${activeBuiltInTemplate.name}新记录字段`">
-            <div class="record-template-editor-head"><div><strong>{{ activeBuiltInTemplate.name }}</strong><p>{{ activeBuiltInTemplate.description }}</p></div></div>
-            <details v-for="field in activeBuiltInTemplate.fields" :key="field.id" class="record-template-field">
-              <summary>{{ field.label }}</summary>
-              <textarea v-model="templateValues[field.id]" :aria-label="`新记录${field.label}`" :placeholder="field.placeholder" :rows="field.rows || 3" @input="updateStructuredContent" />
-            </details>
-          </section>
-          <label class="form-group"><span>内容</span><textarea v-model="draft.content" rows="7" :readonly="Boolean(activeBuiltInTemplate)" :class="{ 'is-preview': activeBuiltInTemplate }" /></label>
+          <label class="form-group"><span>正文内容</span><textarea v-model="draft.content" rows="7" placeholder="记录详细内容..." aria-label="正文内容" :readonly="Boolean(activeBuiltInTemplate)" :class="{ 'is-preview': activeBuiltInTemplate }" /></label>
           <section v-if="draft.type === '灵感碎片'" class="record-idea-fields" aria-label="新记录灵感推进">
             <div class="form-row">
-              <label class="form-group"><span>状态</span><AppSelect v-model="draft.ideaStatus" :options="['待整理', '待实践', '实践中', '已验证', '已放弃'].map(item => ({ value: item, label: item }))" /></label>
-              <label class="form-group"><span>标签</span><input v-model="draft.ideaTagsInput" placeholder="例如：写作, 产品, 实验" /></label>
+              <label class="form-group"><span>灵感状态</span><AppSelect v-model="draft.ideaStatus" :options="['待整理', '待实践', '实践中', '已验证', '已放弃'].map(item => ({ value: item, label: item }))" /></label>
+              <label class="form-group"><span>灵感标签</span><input v-model="draft.ideaTagsInput" placeholder="用逗号分隔，例如 AI, 工作" /></label>
             </div>
-            <label class="form-group"><span>下一步</span><textarea v-model="draft.ideaNextAction" rows="3" /></label>
-            <label class="form-group"><span>关联待办</span><AppSelect v-model="draft.ideaTodoId" :options="[{ value: '', label: '不关联' }, ...ideaTodoOptions.map(todo => ({ value: todo.id, label: todo.text }))]" /></label>
-            <label class="form-group"><span>结果结论</span><textarea v-model="draft.ideaConclusion" rows="3" /></label>
+            <div class="form-row">
+              <label class="form-group"><span>下一步动作</span><input v-model="draft.ideaNextAction" placeholder="这条灵感下一步怎么实践" /></label>
+              <label class="form-group"><span>关联待办</span><AppSelect v-model="draft.ideaTodoId" :options="[{ value: '', label: '不关联' }, ...ideaTodoOptions.map(todo => ({ value: todo.id, label: String(todo.text) }))]" /></label>
+            </div>
+            <label class="form-group"><span>结果结论</span><textarea v-model="draft.ideaConclusion" rows="3" placeholder="实践之后补一句：有用、一般、放弃原因..." /></label>
           </section>
           <div class="record-create-footer">
             <span class="record-create-status" role="status">{{ draftStatus }}</span>
