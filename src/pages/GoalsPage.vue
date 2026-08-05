@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import AppSelect from '../components/common/AppSelect.vue';
 import { createLegacyServices, genId, getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity } from '../types/lifePlan';
@@ -162,9 +163,9 @@ watch(() => route.query.goal, value => {
           <button class="close-btn" type="button" aria-label="关闭目标编辑" @click="closeGoal()">×</button>
         </div>
         <label class="form-group"><span>目标</span><input ref="nameInput" v-model="form.name" required /></label>
-        <label class="form-group"><span>周期</span><select v-model="form.period"><option value="">未设置</option><option v-for="period in periodOptions" :key="period" :value="period">{{ period }}</option></select></label>
+        <label class="form-group"><span>周期</span><AppSelect v-model="form.period" :options="[{ value: '', label: '未设置' }, ...periodOptions.map(period => ({ value: period, label: period }))]" /></label>
         <label class="form-group"><span>目标描述</span><textarea v-model="form.target" rows="4" /></label>
-        <label class="form-group"><span>状态</span><select v-model="form.status"><option v-for="status in statusOptions" :key="status" :value="status">{{ status }}</option></select></label>
+        <label class="form-group"><span>状态</span><AppSelect v-model="form.status" :options="statusOptions.map(status => ({ value: status, label: status }))" /></label>
         <label class="form-group">
           <span>进度 {{ form.progress }}%</span>
           <input v-model.number="form.progress" type="range" min="0" max="100" />

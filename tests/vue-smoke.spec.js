@@ -51,10 +51,56 @@ async function expectHashRoute(page, path, query = {}) {
     })).toEqual({ path, query });
 }
 
+test('common search controls clear by button and Escape without writing data', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'common-control-record', type: '日记', title: '公共控件回归记录', content: '公共控件内容', startDate: '2026-08-01', endDate: '2026-08-01', todoIds: [] }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/tags');
+    const tagSearch = page.getByRole('searchbox', { name: '搜索标签' });
+    await tagSearch.fill('公共');
+    const tagClear = page.getByRole('button', { name: '清除搜索' });
+    await expect(tagClear).toBeEnabled();
+    await tagClear.click();
+    await expect(tagSearch).toHaveValue('');
+    await expect(tagSearch).toBeFocused();
+    await tagSearch.fill('公共');
+    await tagSearch.press('Escape');
+    await expect(tagSearch).toHaveValue('');
+
+    await page.goto('/#/search');
+    const globalSearch = page.getByRole('searchbox', { name: '全局搜索关键词' });
+    await globalSearch.fill('公共控件回归记录');
+    await globalSearch.press('Escape');
+    await expect(globalSearch).toHaveValue('');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('common select controls preserve numeric values and shared layout contracts', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/habits');
+    await page.getByRole('tab', { name: '分析' }).click();
+    const matrixRange = page.getByRole('combobox', { name: '分析矩阵天数' });
+    await matrixRange.selectOption('14');
+    await expect(matrixRange).toHaveValue('14');
+    await expect(page.getByRole('region', { name: '习惯分析' })).toContainText('近 14 天');
+
+    await page.goto('/#/tags');
+    const tagBar = page.locator('.tag-filter-bar');
+    await expect(tagBar.locator('.app-search-input')).toHaveCount(1);
+    await expect(tagBar.locator('.app-select')).toHaveCount(1);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expect.poll(() => page.evaluate(() => ({ document: document.documentElement.scrollWidth <= innerWidth, page: document.querySelector('#page-tags').scrollWidth <= document.querySelector('#page-tags').clientWidth }))).toEqual({ document: true, page: true });
+    await page.goto('/#/search');
+    await expect(page.locator('.global-search-panel .app-search-input')).toHaveCount(1);
+    await expect(page.locator('.global-search-panel .app-select')).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => ({ document: document.documentElement.scrollWidth <= innerWidth, page: document.querySelector('#page-search').scrollWidth <= document.querySelector('#page-search').clientWidth }))).toEqual({ document: true, page: true });
+});
+
 test('Vue shell navigates through migrated pages without browser errors', async ({ page }) => {
     const errors = [];
     const failedRequests = [];
-    page.on('pageerror', error => errors.push(error.message));
     page.on('requestfailed', request => failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`));
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/');

@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
+import AppSelect from '../components/common/AppSelect.vue';
+import SearchInput from '../components/common/SearchInput.vue';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useWheelStore, type WheelItem, type WheelMode, type WheelTag } from '../stores/wheelStore';
 
@@ -920,9 +922,14 @@ function importJson(event: Event) {
           <button type="button" class="wheel-mode-pill" :class="{ active: modeFilter === 'tag' }" @click="setModeFilter('tag')">标签转盘</button>
         </div>
         <label class="form-group wheel-selector compact">
-          <select id="wheel-selector" v-model="selectedId" :disabled="!modeWheels.length" aria-label="当前转盘">
-            <option v-for="wheel in modeWheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }}{{ wheel.mode === 'tag' ? ' · 标签' : '' }}</option>
-          </select>
+          <AppSelect
+            id="wheel-selector"
+            v-model="selectedId"
+            size="compact"
+            :disabled="!modeWheels.length"
+            aria-label="当前转盘"
+            :options="modeWheels.map(wheel => ({ value: wheel.id, label: `${wheel.name}${wheel.mode === 'tag' ? ' · 标签' : ''}` }))"
+          />
         </label>
         <div class="wheel-action-menu-wrap">
           <button
@@ -1078,7 +1085,7 @@ function importJson(event: Event) {
       <div class="wheel-layout">
         <article v-show="['list', 'edit', 'history'].includes(activeManagementPanel)" class="card wheel-stage-card">
           <div class="wheel-toolbar">
-            <label class="form-group wheel-selector"><span>当前转盘</span><select v-model="selectedId" :disabled="!wheelStore.wheels.length"><option v-for="wheel in wheelStore.wheels" :key="wheel.id" :value="wheel.id">{{ wheel.name }} · {{ wheel.mode === 'tag' ? '标签' : '普通' }}</option></select></label>
+            <label class="form-group wheel-selector"><span>当前转盘</span><AppSelect v-model="selectedId" :disabled="!wheelStore.wheels.length" :options="wheelStore.wheels.map(wheel => ({ value: wheel.id, label: `${wheel.name} · ${wheel.mode === 'tag' ? '标签' : '普通'}` }))" /></label>
             <button class="btn btn-secondary" type="button" @click="editWheel" :disabled="!selectedWheel">编辑当前</button>
             <button class="btn btn-danger" type="button" @click="removeWheel" :disabled="!selectedWheel">删除</button>
           </div>
@@ -1104,7 +1111,7 @@ function importJson(event: Event) {
         </article>
 
         <aside class="wheel-side-stack">
-          <form id="wheel-create-panel" class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式<select v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)"><option value="normal">普通转盘</option><option value="tag">标签转盘（两段抽取）</option></select></label></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><span class="field-label">选项</span><div class="wheel-create-items"><div v-for="(item, index) in wheelCreateItems" :key="index" class="wheel-create-item-row"><input v-model="item.name" :aria-label="`选项 ${index + 1}`" placeholder="选项名称" /><input v-model.number="item.weight" type="number" min="1" aria-label="选项权重" /><button v-if="wheelCreateItems.length > 1" class="link-button danger-text" type="button" :aria-label="`删除选项 ${index + 1}`" @click="removeWheelCreateItem(index)">删除</button></div><button class="btn btn-secondary" type="button" @click="addWheelCreateItem">添加选项</button></div></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
+          <form id="wheel-create-panel" class="card compact-form" @submit.prevent="submitWheel"><div class="card-title">{{ wheelForm.id ? '编辑转盘' : '新建转盘' }}</div><div class="form-group"><label>名称<input v-model="wheelForm.name" required placeholder="例如：今晚吃什么" /></label></div><div class="form-group"><label>模式</label><AppSelect v-model="wheelForm.mode" :disabled="Boolean(wheelForm.id)" :options="[{ value: 'normal', label: '普通转盘' }, { value: 'tag', label: '标签转盘（两段抽取）' }]" /></div><div v-if="wheelForm.mode === 'normal'" class="form-group"><span class="field-label">选项</span><div class="wheel-create-items"><div v-for="(item, index) in wheelCreateItems" :key="index" class="wheel-create-item-row"><input v-model="item.name" :aria-label="`选项 ${index + 1}`" placeholder="选项名称" /><input v-model.number="item.weight" type="number" min="1" aria-label="选项权重" /><button v-if="wheelCreateItems.length > 1" class="link-button danger-text" type="button" :aria-label="`删除选项 ${index + 1}`" @click="removeWheelCreateItem(index)">删除</button></div><button class="btn btn-secondary" type="button" @click="addWheelCreateItem">添加选项</button></div></div><div v-else class="tag-checks"><label v-for="tag in wheelStore.tags" :key="tag.id"><input type="checkbox" :checked="wheelForm.tagIds.includes(tag.id)" @change="wheelForm.tagIds = toggleTag(wheelForm.tagIds, tag.id, ($event.target as HTMLInputElement).checked)" />{{ tag.name }}</label><span v-if="!wheelStore.tags.length" class="hint">先在标签管理中添加标签。</span></div><div class="inline-actions"><button class="btn btn-primary">{{ wheelForm.id ? '保存修改' : '创建转盘' }}</button><button v-if="wheelForm.id" class="btn btn-secondary" type="button" @click="resetWheelForm">取消</button></div></form>
           <article id="wheel-history-panel" class="card history-card"><div class="card-title-row"><div class="card-title">抽取记录</div><div class="history-head-actions"><button type="button" class="link-button" @click="exportCsv">导出 CSV</button><button type="button" class="link-button" @click="exportJson">导出 JSON</button><label class="link-button import-button">恢复 JSON<input type="file" accept=".json,application/json" @change="importJson" /></label><button type="button" class="link-button danger-text" @click="confirmAction('清空全部抽取记录吗？', () => wheelStore.clearHistory(), '已清空历史')">清空</button></div></div><div v-for="entry in sortedHistory" :key="entry.id" class="history-row"><div><strong>{{ entry.resultName }}</strong><span>{{ entry.wheelName }} · {{ formatStoredDateTime(entry.createdAt) }}<template v-if="entry.mode === 'tag'"> · 标签 {{ entry.tagName || '-' }}</template></span></div><span class="history-row-actions"><button v-if="!entry.convertedTodoId" type="button" class="link-button" @click="handle(() => wheelStore.convertHistoryToTodo(entry.id), '已转入今日待办')">转入待办</button><span v-else class="history-done">已转待办</span><button type="button" class="link-button danger-text" @click="confirmAction('删除这条记录吗？', () => wheelStore.deleteHistory(entry.id), '已删除记录')">删除</button></span></div><p v-if="!wheelStore.history.length" class="empty-state">还没有抽取记录。</p></article>
         </aside>
       </div>
@@ -1127,14 +1134,22 @@ function importJson(event: Event) {
         <details v-if="selectedWheel?.mode === 'normal'" class="wheel-batch-tools wheel-copy-tools">
           <summary>从公共项复制</summary>
           <div class="wheel-copy-row">
-            <select v-model="copyLibraryTagFilter" aria-label="复制公共项标签筛选">
-              <option value="">全部标签</option>
-              <option v-for="tag in wheelStore.tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-            </select>
-            <select v-model="copyLibraryId" aria-label="复制公共项">
-              <option value="">选择公共项</option>
-              <option v-for="item in copyableLibraryItems" :key="item.id" :value="item.id">{{ item.name }} · 权重 {{ item.weight }}</option>
-            </select>
+            <AppSelect
+              v-model="copyLibraryTagFilter"
+              aria-label="复制公共项标签筛选"
+              :options="[
+                { value: '', label: '全部标签' },
+                ...wheelStore.tags.map(tag => ({ value: tag.id, label: tag.name })),
+              ]"
+            />
+            <AppSelect
+              v-model="copyLibraryId"
+              aria-label="复制公共项"
+              :options="[
+                { value: '', label: '选择公共项' },
+                ...copyableLibraryItems.map(item => ({ value: item.id, label: `${item.name} · 权重 ${item.weight}` })),
+              ]"
+            />
             <button class="btn btn-secondary" type="button" @click="copyLibraryItem">复制到当前转盘</button>
           </div>
         </details>
@@ -1197,7 +1212,7 @@ function importJson(event: Event) {
                 </div>
               </div>
             </label>
-            <label class="wheel-library-filter wheel-library-text-search"><span>文本筛选</span><input v-model="libraryTextFilter" type="search" aria-label="公共项文本筛选" placeholder="搜索名称或备注" /></label>
+            <label class="wheel-library-filter wheel-library-text-search"><span>文本筛选</span><SearchInput v-model="libraryTextFilter" aria-label="公共项文本筛选" placeholder="搜索名称或备注" /></label>
           </div>
           <div class="wheel-library-bulk-actions">
             <label class="check-label wheel-select-all-row"><input type="checkbox" :checked="allVisibleLibrarySelected" :disabled="!filteredLibraryItems.length" @change="setAllVisibleLibrarySelection(($event.target as HTMLInputElement).checked)" /><span>{{ librarySelectionSummary }}</span></label>
@@ -1281,8 +1296,8 @@ function importJson(event: Event) {
 .wheel-library-toolbar{display:grid;grid-template-columns:minmax(360px,1fr) minmax(0,1.35fr);gap:10px;align-items:center;margin:12px 0;padding:10px;border:1px solid rgba(224,231,239,.96);border-radius:18px;background:rgba(248,250,253,.92)}
 .wheel-library-toolbar.active{border-color:rgba(33,110,78,.3);background:rgba(244,250,246,.94)}
 .wheel-library-filter-group{display:grid;grid-template-columns:minmax(150px,.8fr) minmax(190px,1.2fr);gap:8px;min-width:0}
-.wheel-library-filter,.wheel-library-bulk-actions{display:flex;align-items:center;gap:8px;min-width:0}.wheel-library-filter>span,.wheel-select-all-row span{color:var(--muted);font-size:12px;font-weight:850;white-space:nowrap}.wheel-library-filter input,.wheel-library-tag-trigger{min-width:0;width:100%;padding:8px 10px;border:1px solid rgba(220,228,236,.96);border-radius:13px;background:#fff;color:var(--text)}
-.wheel-library-tag-select{position:relative;min-width:0;width:100%}.wheel-library-tag-trigger{display:flex;min-height:37px;align-items:center;justify-content:space-between;gap:10px;font:inherit;text-align:left;cursor:pointer}.wheel-library-tag-trigger:hover,.wheel-library-tag-trigger:focus-visible{border-color:rgba(113,147,130,.88);outline:none}.wheel-library-tag-trigger:focus-visible{box-shadow:0 0 0 3px rgba(33,110,78,.1)}
+.wheel-library-filter,.wheel-library-bulk-actions{display:flex;align-items:center;gap:8px;min-width:0}.wheel-library-filter>span,.wheel-select-all-row span{color:var(--muted);font-size:12px;font-weight:850;white-space:nowrap}.wheel-library-filter .app-search-input{flex:1;min-width:0}.wheel-library-filter .app-search-control,.wheel-library-tag-trigger{min-height:40px;padding:9px 11px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;color:var(--text)}
+.wheel-library-tag-select{position:relative;min-width:0;width:100%}.wheel-library-tag-trigger{display:flex;min-height:40px;align-items:center;justify-content:space-between;gap:10px;font:inherit;text-align:left;cursor:pointer}.wheel-library-tag-trigger:hover{border-color:#c9c4b3}.wheel-library-tag-trigger:focus-visible{border-color:var(--accent-2)}
 .wheel-library-tag-value,.wheel-library-tag-option-label{display:flex;min-width:0;align-items:center;gap:9px}.wheel-library-tag-value span,.wheel-library-tag-option-label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wheel-library-tag-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.09)}.wheel-library-tag-dot.is-all{background:#fff;border:2px solid #8b9991;box-shadow:none}.wheel-library-tag-chevron{width:7px;height:7px;border-right:2px solid #7a8981;border-bottom:2px solid #7a8981;transform:rotate(45deg) translateY(-2px);transition:transform .18s cubic-bezier(.22,1,.36,1);flex:0 0 auto}.wheel-library-tag-select.is-open .wheel-library-tag-chevron{transform:rotate(225deg) translate(-1px,-1px)}
 .wheel-library-tag-options{position:fixed;z-index:110;display:grid;overflow-y:auto;max-height:min(252px,38vh);padding:5px;border:1px solid rgba(207,218,211,.98);border-radius:12px;background:#fff;box-shadow:0 6px 8px rgba(29,54,41,.14)}.wheel-library-tag-option{display:flex;width:100%;min-height:38px;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;border:0;border-radius:8px;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer}.wheel-library-tag-option:hover,.wheel-library-tag-option:focus-visible{background:rgba(33,110,78,.07);outline:none}.wheel-library-tag-option.is-selected{background:rgba(33,110,78,.1);color:var(--accent);font-weight:850}.wheel-library-tag-check{color:var(--accent);font-size:13px;font-style:normal;font-weight:900;opacity:0}.wheel-library-tag-option.is-selected .wheel-library-tag-check{opacity:1}
 .wheel-library-bulk-actions{justify-content:flex-end;flex-wrap:wrap;gap:6px}.wheel-library-bulk-actions .wheel-mini-btn{min-height:32px;padding:0 10px}.wheel-select-all-row{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800}

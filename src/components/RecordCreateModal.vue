@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
+import AppSelect from './common/AppSelect.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -315,7 +316,7 @@ onBeforeUnmount(() => {
 
         <form v-else class="record-create-form" @submit.prevent="saveManual">
           <div class="form-row">
-            <label class="form-group"><span>记录类型</span><select v-model="draft.type" @change="handleTypeChange"><option v-for="type in allTypes" :key="type" :value="type">{{ type }}</option></select></label>
+            <label class="form-group"><span>记录类型</span><AppSelect v-model="draft.type" :options="allTypes.map(type => ({ value: type, label: type }))" @change="handleTypeChange" /></label>
             <label class="form-group"><span>标题</span><input v-model="draft.title" placeholder="输入记录标题" /></label>
           </div>
           <div class="form-row">
@@ -337,11 +338,11 @@ onBeforeUnmount(() => {
           <label class="form-group"><span>内容</span><textarea v-model="draft.content" rows="7" :readonly="Boolean(activeBuiltInTemplate)" :class="{ 'is-preview': activeBuiltInTemplate }" /></label>
           <section v-if="draft.type === '灵感碎片'" class="record-idea-fields" aria-label="新记录灵感推进">
             <div class="form-row">
-              <label class="form-group"><span>状态</span><select v-model="draft.ideaStatus"><option v-for="item in ['待整理','待实践','实践中','已验证','已放弃']" :key="item" :value="item">{{ item }}</option></select></label>
+              <label class="form-group"><span>状态</span><AppSelect v-model="draft.ideaStatus" :options="['待整理', '待实践', '实践中', '已验证', '已放弃'].map(item => ({ value: item, label: item }))" /></label>
               <label class="form-group"><span>标签</span><input v-model="draft.ideaTagsInput" placeholder="例如：写作, 产品, 实验" /></label>
             </div>
             <label class="form-group"><span>下一步</span><textarea v-model="draft.ideaNextAction" rows="3" /></label>
-            <label class="form-group"><span>关联待办</span><select v-model="draft.ideaTodoId"><option value="">不关联</option><option v-for="todo in ideaTodoOptions" :key="todo.id" :value="todo.id">{{ todo.text }}</option></select></label>
+            <label class="form-group"><span>关联待办</span><AppSelect v-model="draft.ideaTodoId" :options="[{ value: '', label: '不关联' }, ...ideaTodoOptions.map(todo => ({ value: todo.id, label: todo.text }))]" /></label>
             <label class="form-group"><span>结果结论</span><textarea v-model="draft.ideaConclusion" rows="3" /></label>
           </section>
           <div class="record-create-footer">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref } from 'vue';
 
+import AppSelect from '../components/common/AppSelect.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
 
@@ -217,6 +218,11 @@ const planStatusOptions = computed(() => fitness.services.fitness.PLAN_STATUS_OP
 const workoutStatusOptions = computed(() => fitness.services.fitness.WORKOUT_STATUS_OPTIONS.filter((option: Record<string, string>) => option.value !== 'inProgress'));
 const metricFields = computed(() => fitness.services.fitness.METRIC_FIELDS);
 const conditionOptions = computed(() => fitness.services.fitness.CONDITION_OPTIONS);
+const conditionSelectOptions = computed(() => conditionOptions.value.map((option: Record<string, unknown>) => ({ value: String(option.value || ''), label: String(option.label || '') })));
+const muscleSelectOptions = computed(() => muscleOptions.value.map((option: Record<string, unknown>) => ({ value: String(option.value || ''), label: String(option.label || '') })));
+const goalSelectOptions = computed(() => goalOptions.value.map((option: Record<string, unknown>) => ({ value: String(option.value || ''), label: String(option.label || '') })));
+const planStatusSelectOptions = computed(() => planStatusOptions.value.map((option: Record<string, unknown>) => ({ value: String(option.value || ''), label: String(option.label || '') })));
+const workoutStatusSelectOptions = computed(() => workoutStatusOptions.value.map((option: Record<string, unknown>) => ({ value: String(option.value || ''), label: String(option.label || '') })));
 
 function workoutHistoryExerciseSummary(workout: Record<string, any>) {
   const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
@@ -874,10 +880,14 @@ onUnmounted(stopRestTimer);
           </label>
         </div>
         <div class="fitness-header-actions">
-          <select v-model="activePlanStartId" aria-label="新开计划训练">
-            <option value="">选择其他计划</option>
-            <option v-for="plan in fitness.plans" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
-          </select>
+          <AppSelect
+            v-model="activePlanStartId"
+            aria-label="新开计划训练"
+            :options="[
+              { value: '', label: '选择其他计划' },
+              ...fitness.plans.map(plan => ({ value: plan.id, label: plan.name })),
+            ]"
+          />
           <button class="btn btn-secondary" type="button" :disabled="!activePlanStartId" @click="startPlanFromFitness(activePlanStartId)">新开计划训练</button>
           <button class="btn btn-secondary" type="button" @click="pauseActiveWorkout">暂停训练</button>
           <button class="btn btn-primary" type="button" @click="finishActiveWorkout">结束训练</button>
@@ -957,7 +967,7 @@ onUnmounted(stopRestTimer);
           <div v-if="!fitness.library.length" class="empty-state">请先初始化或添加动作库。</div>
           <div v-else class="form-row">
             <div class="form-group"><label>训练名称</label><input v-model="freeForm.title" maxlength="80" /></div>
-            <div class="form-group"><label>第一个动作</label><select v-model="freeForm.exerciseId" required><option disabled value="">选择动作</option><option v-for="item in fitness.library" :key="item.id" :value="item.id">{{ item.name }}</option></select></div>
+            <div class="form-group"><label>第一个动作</label><AppSelect v-model="freeForm.exerciseId" required :options="[{ value: '', label: '选择动作', disabled: true }, ...fitness.library.map(item => ({ value: item.id, label: item.name }))]" /></div>
           </div>
           <button class="btn btn-primary" type="submit" :disabled="!fitness.library.length">开始训练</button>
         </form>
@@ -1011,7 +1021,7 @@ onUnmounted(stopRestTimer);
         </div>
         <div class="form-row">
           <div class="form-group"><label>日期</label><input v-model="metricForm.date" type="date" /></div>
-          <div class="form-group"><label>测量状态</label><select v-model="metricForm.condition"><option v-for="option in conditionOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+          <div class="form-group"><label>测量状态</label><AppSelect v-model="metricForm.condition" :options="conditionSelectOptions" /></div>
         </div>
         <div class="form-row fitness-body-field-grid">
           <div v-for="field in metricFields" :key="field.key" class="form-group">
@@ -1047,7 +1057,7 @@ onUnmounted(stopRestTimer);
           <div class="section-title-row"><div><h2>动作库</h2><p class="section-hint">初始化会按旧版默认动作创建可编辑副本。</p></div><button class="btn btn-secondary" type="button" @click="seedLibrary">初始化默认动作</button></div>
           <div class="form-row">
             <div class="form-group"><label>动作名称</label><input v-model="libraryForm.name" required maxlength="80" /></div>
-            <div class="form-group"><label>肌群</label><select v-model="libraryForm.muscle"><option v-for="option in muscleOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+            <div class="form-group"><label>肌群</label><AppSelect v-model="libraryForm.muscle" :options="muscleSelectOptions" /></div>
             <div class="form-group"><label>默认组数</label><input v-model.number="libraryForm.defaultSets" type="number" min="1" max="99" /></div>
             <div class="form-group"><label>默认次数</label><input v-model="libraryForm.defaultReps" placeholder="8-12" /></div>
             <div class="form-group"><label>默认重量 kg</label><input v-model="libraryForm.defaultWeight" inputmode="decimal" /></div>
@@ -1076,8 +1086,8 @@ onUnmounted(stopRestTimer);
           </div>
           <div class="form-row">
             <div class="form-group"><label>计划名称</label><input v-model="planForm.name" required maxlength="80" /></div>
-            <div class="form-group"><label>目标</label><select v-model="planForm.goal"><option v-for="option in goalOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
-            <div class="form-group"><label>状态</label><select v-model="planForm.status"><option v-for="option in planStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+            <div class="form-group"><label>目标</label><AppSelect v-model="planForm.goal" :options="goalSelectOptions" /></div>
+            <div class="form-group"><label>状态</label><AppSelect v-model="planForm.status" :options="planStatusSelectOptions" /></div>
           </div>
           <div class="form-group"><label>备注</label><input v-model="planForm.notes" /></div>
           <div class="fitness-plan-exercise-list">
@@ -1089,10 +1099,13 @@ onUnmounted(stopRestTimer);
               <div class="form-row">
                 <div class="form-group">
                   <label>套用动作库</label>
-                  <select @change="applyLibraryToPlanExercise(exerciseIndex, ($event.target as HTMLSelectElement).value)">
-                    <option value="">手动输入</option>
-                    <option v-for="item in fitness.library" :key="item.id" :value="item.id">{{ item.name }}</option>
-                  </select>
+                  <AppSelect
+                    :options="[
+                      { value: '', label: '手动输入' },
+                      ...fitness.library.map(item => ({ value: item.id, label: item.name })),
+                    ]"
+                    @change="applyLibraryToPlanExercise(exerciseIndex, (($event.target as HTMLSelectElement).value))"
+                  />
                 </div>
                 <div class="form-group"><label>动作备注</label><input v-model="exercise.note" placeholder="角度、节奏或注意事项" /></div>
               </div>
@@ -1146,15 +1159,19 @@ onUnmounted(stopRestTimer);
       </div>
       <div class="form-row">
         <div class="form-group"><label>训练日期</label><input v-model="workoutForm.date" type="date" required /></div>
-        <div class="form-group"><label>状态</label><select v-model="workoutForm.status"><option v-for="option in workoutStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+        <div class="form-group"><label>状态</label><AppSelect v-model="workoutForm.status" :options="workoutStatusSelectOptions" /></div>
         <div class="form-group"><label>训练标题</label><input v-model="workoutForm.title" maxlength="80" placeholder="例如 下肢力量" /></div>
         <div class="form-group"><label>时长 分钟</label><input v-model="workoutForm.durationMin" type="number" min="1" step="1" /></div>
         <div class="form-group">
           <label>关联计划</label>
-          <select v-model="workoutForm.planId" @change="applyPlanToWorkout(($event.target as HTMLSelectElement).value)">
-            <option value="">不关联计划</option>
-            <option v-for="plan in fitness.plans" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
-          </select>
+          <AppSelect
+            v-model="workoutForm.planId"
+            :options="[
+              { value: '', label: '不关联计划' },
+              ...fitness.plans.map(plan => ({ value: plan.id, label: plan.name })),
+            ]"
+            @change="applyPlanToWorkout(($event.target as HTMLSelectElement).value)"
+          />
         </div>
       </div>
       <div class="form-group"><label>训练备注</label><input v-model="workoutForm.notes" /></div>
@@ -1167,10 +1184,13 @@ onUnmounted(stopRestTimer);
           <div class="form-row">
             <div class="form-group">
               <label>套用动作库</label>
-              <select @change="applyLibraryToWorkoutExercise(exerciseIndex, ($event.target as HTMLSelectElement).value)">
-                <option value="">手动输入</option>
-                <option v-for="item in fitness.library" :key="item.id" :value="item.id">{{ item.name }}</option>
-              </select>
+              <AppSelect
+                :options="[
+                  { value: '', label: '手动输入' },
+                  ...fitness.library.map(item => ({ value: item.id, label: item.name })),
+                ]"
+                @change="applyLibraryToWorkoutExercise(exerciseIndex, (($event.target as HTMLSelectElement).value))"
+              />
             </div>
             <div class="form-group"><label>动作备注</label><input v-model="exercise.note" placeholder="动作备注" /></div>
           </div>

@@ -224,22 +224,7 @@
         line-height: 1.65;
     }
     #page-ideas .filter-bar {
-        display: grid;
-        grid-template-columns: minmax(220px, 1.2fr) minmax(150px, .7fr) minmax(190px, .9fr);
-        gap: 9px;
         margin-bottom: 14px;
-        align-items: center;
-        background: rgba(255,255,255,.78);
-        border: 1px solid var(--line);
-        border-radius: var(--radius-lg);
-        padding: 12px;
-        box-shadow: 0 2px 8px rgba(60,55,40,.05);
-    }
-    #page-ideas .filter-bar input,
-    #page-ideas .filter-bar select {
-        width: 100%;
-        min-width: 0;
-        background: rgba(255,255,255,.86);
     }
     #page-ideas .mini-summary-grid {
         grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
@@ -359,8 +344,7 @@
         background: linear-gradient(135deg, rgba(255,255,255,.84), rgba(250,248,242,.72));
         color: var(--muted);
     }
-    .material-random-panel,
-    .global-search-panel {
+    .material-random-panel {
         margin-bottom: 14px;
         padding: 14px;
         border: 1px solid var(--line);
@@ -404,20 +388,6 @@
         font-size: 12px;
         line-height: 1.55;
         overflow-wrap: anywhere;
-    }
-    .global-search-panel {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 180px;
-        gap: 10px;
-    }
-    .global-search-panel input,
-    .global-search-panel select {
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        background: #fff;
-        color: var(--text);
     }
     .search-group { margin-bottom: 18px; }
     .search-group-title {

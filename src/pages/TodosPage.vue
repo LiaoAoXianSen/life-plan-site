@@ -2,6 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import AppSelect from '../components/common/AppSelect.vue';
+import FilterBar from '../components/common/FilterBar.vue';
 import TodoTable from '../components/TodoTable.vue';
 import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import { getTodayStr } from '../services/legacyServices';
@@ -440,7 +442,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
           <div class="form-group"><label for="todo-create-plan-start">计划开始</label><input id="todo-create-plan-start" v-model="form.planStartDate" type="date" /></div>
           <div class="form-group"><label for="todo-create-plan-end">计划结束</label><input id="todo-create-plan-end" v-model="form.planEndDate" type="date" /></div>
           <div class="form-group"><label for="todo-create-date">截止日期</label><input id="todo-create-date" v-model="form.dueDate" type="date" /></div>
-          <div class="form-group"><label for="todo-create-urgency">紧急度</label><select id="todo-create-urgency" v-model="form.urgency"><option value="urgent">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></div>
+          <div class="form-group"><label for="todo-create-urgency">紧急度</label><AppSelect id="todo-create-urgency" v-model="form.urgency" :options="[{ value: 'urgent', label: '紧急' }, { value: 'high', label: '高' }, { value: 'medium', label: '中' }, { value: 'low', label: '低' }]" /></div>
         </div>
         <div class="todo-date-presets" aria-label="新建待办日期预设">
           <button type="button" @click="applyCreateDatePreset('today')">今天</button>
@@ -470,33 +472,49 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
       </form>
     </div>
 
-    <div class="filter-bar todo-legacy-filters">
+    <FilterBar class="todo-legacy-filters">
       <span class="todo-filter-label">日期：</span>
       <input v-model="startDate" type="date" aria-label="筛选开始日期">
       <span class="todo-filter-sep">至</span>
       <input v-model="endDate" type="date" aria-label="筛选结束日期">
-      <select v-model="status" aria-label="待办状态">
-        <option value="all">全部状态</option>
-        <option value="open">待办</option>
-        <option value="done">已完成</option>
-      </select>
-      <select v-model="urgency" aria-label="待办紧急度">
-        <option value="all">全部紧急度</option>
-        <option value="urgent">紧急</option>
-        <option value="high">高</option>
-        <option value="medium">中</option>
-        <option value="low">低</option>
-      </select>
-      <select v-model="group" aria-label="待办分组">
-        <option value="all">全部分组</option>
-        <option v-for="item in groupOptions" :key="item" :value="item">{{ item }}</option>
-      </select>
-      <select v-model="mode" aria-label="待办模式">
-        <option value="all">全部模式</option>
-        <option value="exclusive">专属</option>
-        <option value="shared">通用</option>
-      </select>
-    </div>
+      <AppSelect
+        v-model="status"
+        aria-label="待办状态"
+        :options="[
+          { value: 'all', label: '全部状态' },
+          { value: 'open', label: '待办' },
+          { value: 'done', label: '已完成' },
+        ]"
+      />
+      <AppSelect
+        v-model="urgency"
+        aria-label="待办紧急度"
+        :options="[
+          { value: 'all', label: '全部紧急度' },
+          { value: 'urgent', label: '紧急' },
+          { value: 'high', label: '高' },
+          { value: 'medium', label: '中' },
+          { value: 'low', label: '低' },
+        ]"
+      />
+      <AppSelect
+        v-model="group"
+        aria-label="待办分组"
+        :options="[
+          { value: 'all', label: '全部分组' },
+          ...groupOptions.map(item => ({ value: item, label: item })),
+        ]"
+      />
+      <AppSelect
+        v-model="mode"
+        aria-label="待办模式"
+        :options="[
+          { value: 'all', label: '全部模式' },
+          { value: 'exclusive', label: '专属' },
+          { value: 'shared', label: '通用' },
+        ]"
+      />
+    </FilterBar>
 
     <div class="todo-workspace">
       <div class="todo-list-pane">
@@ -529,7 +547,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
             <div class="form-group"><label for="todo-detail-plan-start">计划开始</label><input id="todo-detail-plan-start" v-model="detailForm.planStartDate" type="date" /></div>
             <div class="form-group"><label for="todo-detail-plan-end">计划结束</label><input id="todo-detail-plan-end" v-model="detailForm.planEndDate" type="date" /></div>
             <div class="form-group"><label for="todo-detail-due">截止日期</label><input id="todo-detail-due" v-model="detailForm.dueDate" type="date" /></div>
-            <div class="form-group"><label for="todo-detail-urgency">紧急度</label><select id="todo-detail-urgency" v-model="detailForm.urgency"><option value="urgent">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></div>
+            <div class="form-group"><label for="todo-detail-urgency">紧急度</label><AppSelect id="todo-detail-urgency" v-model="detailForm.urgency" :options="[{ value: 'urgent', label: '紧急' }, { value: 'high', label: '高' }, { value: 'medium', label: '中' }, { value: 'low', label: '低' }]" /></div>
           </div>
           <div class="form-group"><label for="todo-detail-group">分组</label><input id="todo-detail-group" v-model="detailForm.group" /></div>
 
@@ -578,7 +596,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
           <section class="todo-detail-section" aria-labelledby="todo-records-heading">
             <div class="todo-section-heading"><h3 id="todo-records-heading">关联记录</h3><span>{{ linkedRecords.length }} 条</span></div>
             <div class="todo-record-link-tools">
-              <select v-model="recordLinkId" aria-label="选择要关联的记录"><option value="">选择记录</option><option v-for="record in availableRecords" :key="String(record.id)" :value="String(record.id)">{{ record.title || record.type || '未命名记录' }}</option></select>
+              <AppSelect v-model="recordLinkId" aria-label="选择要关联的记录" :options="[{ value: '', label: '选择记录' }, ...availableRecords.map(record => ({ value: String(record.id), label: String(record.title || record.type || '未命名记录') }))]" />
               <button class="btn btn-secondary" type="button" :disabled="!recordLinkId" @click="linkSelectedRecord">关联</button>
             </div>
             <div v-for="record in linkedRecords" :key="String(record.id)" class="todo-record-row">

@@ -2,6 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
+import AppSelect from '../components/common/AppSelect.vue';
+import FilterBar from '../components/common/FilterBar.vue';
+import SearchInput from '../components/common/SearchInput.vue';
 import RecordCreateModal from '../components/RecordCreateModal.vue';
 import { buildScheduleItems, addDays, getMonthStart, getWeekStart, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
 import { getTodayStr } from '../services/legacyServices';
@@ -874,32 +877,49 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div class="filter-bar record-filter-bar">
-      <input v-model="keyword" type="search" aria-label="搜索记录" placeholder="搜索标题、内容、类型" />
-      <select v-model="typeFilter" aria-label="记录类型筛选">
-        <option value="all">全部类型</option>
-        <option v-for="type in typeOptions" :key="type" :value="type">{{ type }}</option>
-        <option value="待办">待办完成/执行</option>
-        <option value="习惯">习惯打卡</option>
-      </select>
-      <select v-model="dayOrder" aria-label="当日顺序">
-        <option value="desc">当日倒序</option>
-        <option value="asc">当日正序</option>
-      </select>
-      <select v-model="ideaStatusFilter" aria-label="记录灵感状态筛选">
-        <option value="all">全部灵感状态</option>
-        <option v-for="status in ['待整理','待实践','实践中','已验证','已放弃']" :key="status" :value="status">{{ status }}</option>
-        <option value="unprocessed">未处理灵感</option>
-        <option value="needsConclusion">已实践未写结论</option>
-      </select>
-      <input v-model="ideaTagFilter" type="search" aria-label="记录灵感标签筛选" placeholder="灵感标签筛选" />
-      <select v-if="view === 'list'" v-model="listRange" aria-label="记录日期范围">
-        <option value="7">最近7天</option>
-        <option value="30">最近30天</option>
-        <option value="90">最近90天</option>
-        <option value="all">全部历史</option>
-      </select>
-    </div>
+    <FilterBar class="record-filter-bar" :class="{ 'record-filter-bar--list': view === 'list' }">
+      <SearchInput v-model="keyword" aria-label="搜索记录" placeholder="搜索标题、内容、类型" />
+      <AppSelect
+        v-model="typeFilter"
+        aria-label="记录类型筛选"
+        all-label="全部类型"
+        :options="[
+          ...typeOptions.map(type => ({ value: type, label: type })),
+          { value: '待办', label: '待办完成/执行' },
+          { value: '习惯', label: '习惯打卡' },
+        ]"
+      />
+      <AppSelect
+        v-model="dayOrder"
+        aria-label="当日顺序"
+        :options="[
+          { value: 'desc', label: '当日倒序' },
+          { value: 'asc', label: '当日正序' },
+        ]"
+      />
+      <AppSelect
+        v-model="ideaStatusFilter"
+        aria-label="记录灵感状态筛选"
+        :options="[
+          { value: 'all', label: '全部灵感状态' },
+          ...['待整理', '待实践', '实践中', '已验证', '已放弃'].map(status => ({ value: status, label: status })),
+          { value: 'unprocessed', label: '未处理灵感' },
+          { value: 'needsConclusion', label: '已实践未写结论' },
+        ]"
+      />
+      <SearchInput v-model="ideaTagFilter" aria-label="记录灵感标签筛选" placeholder="灵感标签筛选" />
+      <AppSelect
+        v-if="view === 'list'"
+        v-model="listRange"
+        aria-label="记录日期范围"
+        :options="[
+          { value: '7', label: '最近7天' },
+          { value: '30', label: '最近30天' },
+          { value: '90', label: '最近90天' },
+          { value: 'all', label: '全部历史' },
+        ]"
+      />
+    </FilterBar>
 
     <div class="calendar-toolbar">
       <div class="segmented">
@@ -927,7 +947,7 @@ onBeforeUnmount(() => {
         <form class="record-edit-form" @submit.prevent="saveEditor">
           <div class="form-row">
             <label class="form-group"><span>标题</span><input v-model="editForm.title" required /></label>
-            <label class="form-group"><span>类型</span><select v-model="editForm.type"><option v-for="type in typeOptions" :key="type" :value="type">{{ type }}</option><option v-if="editForm.type && !typeOptions.includes(editForm.type)" :value="editForm.type">{{ editForm.type }}（旧类型）</option></select></label>
+            <label class="form-group"><span>类型</span><AppSelect v-model="editForm.type" :options="[...typeOptions.map(type => ({ value: type, label: type })), ...(editForm.type && !typeOptions.includes(editForm.type) ? [{ value: editForm.type, label: `${editForm.type}（旧类型）` }] : [])]" /></label>
             <label class="form-group"><span>开始日期</span><input v-model="editForm.startDate" type="date" /></label>
             <label class="form-group"><span>结束日期</span><input v-model="editForm.endDate" type="date" /></label>
             <label class="form-group"><span>开始时间</span><input v-model="editForm.recordTime" type="time" /></label>
@@ -1000,15 +1020,15 @@ onBeforeUnmount(() => {
           <section v-if="editForm.type === '灵感碎片'" class="record-idea-fields" aria-labelledby="record-idea-fields-title">
             <div class="record-preview-heading" id="record-idea-fields-title">灵感推进</div>
             <div class="form-row">
-              <label class="form-group"><span>状态</span><select v-model="editForm.ideaStatus"><option v-for="item in ['待整理','待实践','实践中','已验证','已放弃']" :key="item" :value="item">{{ item }}</option></select></label>
+              <label class="form-group"><span>状态</span><AppSelect v-model="editForm.ideaStatus" :options="['待整理', '待实践', '实践中', '已验证', '已放弃'].map(item => ({ value: item, label: item }))" /></label>
               <label class="form-group"><span>标签</span><input v-model="editForm.ideaTagsInput" placeholder="例如：写作, 产品, 实验" /></label>
             </div>
             <label class="form-group"><span>下一步</span><textarea v-model="editForm.ideaNextAction" rows="3" /></label>
-            <label class="form-group"><span>关联待办</span><select v-model="editForm.ideaTodoId"><option value="">不关联</option><option v-for="todo in ideaTodoOptions" :key="todo.id" :value="todo.id">{{ todo.text }}</option></select></label>
+            <label class="form-group"><span>关联待办</span><AppSelect v-model="editForm.ideaTodoId" :options="[{ value: '', label: '不关联' }, ...ideaTodoOptions.map(todo => ({ value: todo.id, label: todo.text }))]" /></label>
             <label class="form-group"><span>结果结论</span><textarea v-model="editForm.ideaConclusion" rows="4" /></label>
           </section>
           <div class="record-link-tools">
-            <label class="form-group"><span>关联已有待办</span><select v-model="editForm.linkedTodoId"><option value="">选择待办</option><option v-for="todo in openTodos" :key="todo.id" :value="todo.id">{{ todo.text }}</option></select></label>
+            <label class="form-group"><span>关联已有待办</span><AppSelect v-model="editForm.linkedTodoId" :options="[{ value: '', label: '选择待办' }, ...openTodos.map(todo => ({ value: todo.id, label: todo.text }))]" /></label>
             <button class="btn btn-secondary" type="button" @click="linkExistingTodo">关联待办</button>
           </div>
           <div class="record-link-tools">
@@ -1116,7 +1136,8 @@ onBeforeUnmount(() => {
   min-width: 120px;
   text-align: center;
 }
-#page-records .record-filter-bar { grid-template-columns: minmax(200px, 1.4fr) minmax(145px, .8fr) minmax(120px, .65fr) minmax(155px, .9fr) minmax(150px, .9fr) minmax(120px, .65fr); }
+#page-records .record-filter-bar { grid-template-columns: minmax(200px, 1.4fr) minmax(145px, .8fr) minmax(120px, .65fr) minmax(155px, .9fr) minmax(150px, .9fr); }
+#page-records .record-filter-bar--list { grid-template-columns: minmax(200px, 1.4fr) minmax(145px, .8fr) minmax(120px, .65fr) minmax(155px, .9fr) minmax(150px, .9fr) minmax(120px, .65fr); }
 .record-editor-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
 .record-edit-form { display: grid; gap: 13px; }
 .record-template-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 10px; align-items: end; }
@@ -1154,7 +1175,7 @@ onBeforeUnmount(() => {
 .record-preview-todo-item em { margin-left: auto; color: var(--faint); font-style: normal; font-size: 12px; }
 .link-button { border: 0; background: transparent; color: #316c4a; cursor: pointer; padding: 3px; }
 .danger-text { color: #b84f45; }
-@media (max-width: 900px) {
+@media (max-width: 1180px) {
   #page-records .record-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .record-editor-grid,
   .record-link-tools,

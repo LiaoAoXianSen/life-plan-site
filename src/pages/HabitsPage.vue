@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import AppSelect from '../components/common/AppSelect.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -744,17 +745,18 @@ watch(focusedHabitId, value => {
           type="date"
           aria-label="补卡日期"
         >
-        <select
+        <AppSelect
           v-show="activeTab === 'diagnostics'"
-          v-model.number="matrixDays"
-          class="year-select"
+          v-model="matrixDays"
+          size="compact"
           aria-label="分析矩阵天数"
           style="max-width:150px;"
-        >
-          <option :value="14">近14天</option>
-          <option :value="30">近30天</option>
-          <option :value="60">近60天</option>
-        </select>
+          :options="[
+            { value: 14, label: '近14天' },
+            { value: 30, label: '近30天' },
+            { value: 60, label: '近60天' },
+          ]"
+        />
       </div>
     </div>
 
@@ -904,13 +906,19 @@ watch(focusedHabitId, value => {
             <p class="section-hint">沿用旧版年度热力图，只读展示每天打卡次数与年度完成率。</p>
           </div>
           <div class="habit-annual-controls">
-            <select v-model="analysisHabitId" aria-label="选择分析习惯">
-              <option value="" disabled>选择习惯</option>
-              <option v-for="habit in habits.habits.filter(item => !item.archived)" :key="habit.id" :value="habit.id">{{ habit.name || '未命名习惯' }}</option>
-            </select>
-            <select v-model.number="analysisYear" aria-label="选择分析年份">
-              <option v-for="year in analysisYears" :key="year" :value="year">{{ year }} 年</option>
-            </select>
+            <AppSelect
+              v-model="analysisHabitId"
+              aria-label="选择分析习惯"
+              :options="[
+                { value: '', label: '选择习惯', disabled: true },
+                ...habits.habits.filter(item => !item.archived).map(habit => ({ value: habit.id, label: habit.name || '未命名习惯' })),
+              ]"
+            />
+            <AppSelect
+              v-model="analysisYear"
+              aria-label="选择分析年份"
+              :options="analysisYears.map(year => ({ value: year, label: `${year} 年` }))"
+            />
             </div>
           </div>
           <div class="habit-annual-habit-pills" role="tablist" aria-label="年度分析习惯">
@@ -1103,11 +1111,11 @@ watch(focusedHabitId, value => {
       <form class="habit-editor-form" @submit.prevent="saveHabit">
         <label class="form-field"><span>习惯名称</span><input v-model="habitForm.name" required maxlength="80" placeholder="例如：晨间阅读" /></label>
         <label class="form-field"><span>分组标签</span><input v-model="habitForm.tag" maxlength="40" placeholder="例如：学习" /></label>
-        <label class="form-field"><span>规则</span><select v-model="habitForm.rule"><option value="daily">每天</option><option value="weekly-fixed">固定周几</option><option value="weekly-count">每周次数</option><option value="monthly-count">每月次数</option><option value="interval">间隔天数</option></select></label>
+        <label class="form-field"><span>规则</span><AppSelect v-model="habitForm.rule" :options="[{ value: 'daily', label: '每天' }, { value: 'weekly-fixed', label: '固定周几' }, { value: 'weekly-count', label: '每周次数' }, { value: 'monthly-count', label: '每月次数' }, { value: 'interval', label: '间隔天数' }]" /></label>
         <label class="form-field"><span>每天次数</span><input v-model.number="habitForm.timesPerDay" type="number" min="1" max="99" /></label>
         <label v-if="['weekly-count', 'monthly-count', 'interval'].includes(habitForm.rule)" class="form-field"><span>{{ habitForm.rule === 'interval' ? '间隔天数' : '目标次数' }}</span><input v-model.number="habitForm.count" type="number" min="1" max="99" /></label>
         <label class="form-field"><span>总目标次数</span><input v-model.number="habitForm.goalCount" type="number" min="0" max="99999" /></label>
-        <label class="form-field"><span>备注模式</span><select v-model="habitForm.noteMode"><option value="ask">打卡时询问</option><option value="never">不询问</option></select></label>
+        <label class="form-field"><span>备注模式</span><AppSelect v-model="habitForm.noteMode" :options="[{ value: 'ask', label: '打卡时询问' }, { value: 'never', label: '不询问' }]" /></label>
         <div v-if="habitForm.rule === 'weekly-fixed'" class="habit-weekday-field">
           <span>执行星期</span>
           <label v-for="day in weekdayOptions" :key="day.value"><input v-model="habitForm.weekdays" type="checkbox" :value="day.value" />{{ day.label }}</label>
@@ -1122,7 +1130,7 @@ watch(focusedHabitId, value => {
             <label class="habit-check-field"><input v-model="habitForm.randomReward" type="checkbox" /><span>使用随机奖励区间</span></label>
             <label v-if="habitForm.randomReward" class="form-field"><span>奖励下限</span><input v-model.number="habitForm.rewardMin" type="number" min="0" max="99999" /></label>
             <label v-if="habitForm.randomReward" class="form-field"><span>奖励上限</span><input v-model.number="habitForm.rewardMax" type="number" min="0" max="99999" /></label>
-            <label class="form-field"><span>断签扣分</span><select v-model="habitForm.breakPenaltyMode"><option value="none">不扣分</option><option value="fixed">固定扣分</option><option value="stage">按阶段扣分</option></select></label>
+            <label class="form-field"><span>断签扣分</span><AppSelect v-model="habitForm.breakPenaltyMode" :options="[{ value: 'none', label: '不扣分' }, { value: 'fixed', label: '固定扣分' }, { value: 'stage', label: '按阶段扣分' }]" /></label>
             <label v-if="habitForm.breakPenaltyMode === 'fixed'" class="form-field"><span>断签扣分值</span><input v-model.number="habitForm.breakPenaltyPoints" type="number" min="0" max="99999" /></label>
             <label v-if="habitForm.breakPenaltyMode === 'fixed'" class="form-field"><span>断签币种</span><input v-model="habitForm.breakPenaltyCurrency" maxlength="24" /></label>
           </div>
@@ -1187,10 +1195,7 @@ watch(focusedHabitId, value => {
           <div class="form-row">
             <div class="form-group">
               <label for="habit-point-adjust-type">类型</label>
-              <select id="habit-point-adjust-type" v-model="pointAdjustForm.direction">
-                <option value="add">加金币</option>
-                <option value="subtract">扣金币</option>
-              </select>
+              <AppSelect id="habit-point-adjust-type" v-model="pointAdjustForm.direction" :options="[{ value: 'add', label: '加金币' }, { value: 'subtract', label: '扣金币' }]" />
             </div>
             <div class="form-group">
               <label for="habit-point-adjust-amount">数量</label>

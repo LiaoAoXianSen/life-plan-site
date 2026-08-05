@@ -2,6 +2,9 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import AppSelect from '../components/common/AppSelect.vue';
+import FilterBar from '../components/common/FilterBar.vue';
+import SearchInput from '../components/common/SearchInput.vue';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity } from '../types/lifePlan';
 
@@ -94,15 +97,19 @@ function materialPreview(material: DataEntity) {
       </div>
     </header>
 
-    <div class="filter-bar tag-filter-bar">
-      <input v-model="keyword" type="search" aria-label="搜索标签" placeholder="搜索标签，例如 AI / 工作 / 学习" />
-      <select v-model="scope" aria-label="标签范围">
-        <option value="all">全部来源</option>
-        <option value="ideas">灵感</option>
-        <option value="materials">素材</option>
-        <option value="wheel">转盘</option>
-      </select>
-    </div>
+    <FilterBar layout="search-filter" class="tag-filter-bar">
+      <SearchInput v-model="keyword" aria-label="搜索标签" placeholder="搜索标签，例如 AI / 工作 / 学习" />
+      <AppSelect
+        v-model="scope"
+        aria-label="标签范围"
+        :options="[
+          { value: 'all', label: '全部来源' },
+          { value: 'ideas', label: '灵感' },
+          { value: 'materials', label: '素材' },
+          { value: 'wheel', label: '转盘' },
+        ]"
+      />
+    </FilterBar>
 
     <div class="mini-summary-grid tag-summary" aria-label="标签摘要">
       <div class="mini-summary-card"><strong>{{ summary.all }}</strong><span>全部标签</span></div>
@@ -142,10 +149,6 @@ function materialPreview(material: DataEntity) {
 
 <style scoped>
 .tag-summary { margin-bottom: 14px; }
-.tag-filter-bar {
-  grid-template-columns: minmax(0, 1fr) minmax(150px, .28fr);
-  margin-bottom: 14px;
-}
 .tag-center-card,
 .tag-center-head,
 .tag-center-preview,
@@ -175,8 +178,5 @@ function materialPreview(material: DataEntity) {
 #page-tags .tag-center-preview {
   margin-top: 8px;
   gap: 4px;
-}
-@media (max-width: 640px) {
-  .tag-filter-bar { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

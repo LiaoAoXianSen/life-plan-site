@@ -3,6 +3,9 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 
 import { createLegacyServices } from '../services/legacyServices';
+import AppSelect from '../components/common/AppSelect.vue';
+import FilterBar from '../components/common/FilterBar.vue';
+import SearchInput from '../components/common/SearchInput.vue';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity } from '../types/lifePlan';
 
@@ -175,14 +178,18 @@ function search() {
         <p class="page-subtitle">跨记录、待办、目标、素材、模板和转盘公共项搜索。</p>
       </div>
     </header>
-    <form class="global-search-panel search-panel" @submit.prevent="search">
-      <input v-model="query" type="search" aria-label="全局搜索关键词" placeholder="搜索记录、待办、目标、素材、模板与转盘项" />
-      <select v-model="scope" aria-label="搜索范围">
-        <option value="all">全部模块</option>
-        <option v-for="(label, key) in moduleLabels" :key="key" :value="key">{{ label }}</option>
-      </select>
+    <FilterBar as="form" layout="search-filter-action" class="global-search-panel search-panel" @submit.prevent="search">
+      <SearchInput v-model="query" aria-label="全局搜索关键词" placeholder="搜索记录、待办、目标、素材、模板与转盘项" />
+      <AppSelect
+        v-model="scope"
+        aria-label="搜索范围"
+        :options="[
+          { value: 'all', label: '全部模块' },
+          ...Object.entries(moduleLabels).map(([value, label]) => ({ value, label })),
+        ]"
+      />
       <button class="btn btn-primary">搜索</button>
-    </form>
+    </FilterBar>
     <div v-if="query" class="mini-summary-row search-summary" aria-label="搜索结果摘要">
       <div v-for="(label, key) in moduleLabels" :key="key" class="mini-summary-card"><strong>{{ results.filter(item => item.module === key).length }}</strong><span>{{ label }}</span></div>
     </div>
@@ -208,15 +215,11 @@ function search() {
 </template>
 
 <style scoped>
-.search-panel { grid-template-columns: minmax(0, 1fr) minmax(150px, .32fr) auto; }
 .search-summary { margin: 14px 0; }
 .search-result-main { min-width: 0; }
 .search-result-main strong,
 .search-result-main span,
 .search-result-main p {
   overflow-wrap: anywhere;
-}
-@media (max-width: 700px) {
-  .search-panel { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

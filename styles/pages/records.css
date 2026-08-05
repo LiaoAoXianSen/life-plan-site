@@ -8,22 +8,7 @@
         letter-spacing: -0.02em;
     }
     #page-records .filter-bar {
-        display: grid;
-        grid-template-columns: minmax(210px, 1.3fr) repeat(4, minmax(128px, 1fr)) minmax(128px, .8fr);
-        gap: 9px;
         margin-bottom: 12px;
-        align-items: center;
-        background: rgba(255,255,255,.78);
-        border: 1px solid var(--line);
-        border-radius: var(--radius-lg);
-        padding: 12px;
-        box-shadow: 0 2px 8px rgba(60,55,40,.05);
-    }
-    #page-records .filter-bar input,
-    #page-records .filter-bar select {
-        width: 100%;
-        min-width: 0;
-        background: rgba(255,255,255,.86);
     }
     #page-records .calendar-toolbar {
         margin-bottom: 16px;

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import RecordCreateModal from '../components/RecordCreateModal.vue';
+import AppSelect from '../components/common/AppSelect.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
 import { useHabitsStore } from '../stores/habitsStore';
@@ -729,11 +730,16 @@ const timelineGroups = computed(() => {
     <article class="card dashboard-timeline">
       <div class="section-title-row timeline-title-row">
         <h2 class="card-title">近期记录时间轴</h2>
-        <select v-model.number="timelineRangeDays" class="compact-select" aria-label="时间轴范围">
-          <option :value="7">最近7天</option>
-          <option :value="30">最近30天</option>
-          <option :value="90">最近90天</option>
-        </select>
+        <AppSelect
+          v-model="timelineRangeDays"
+          size="compact"
+          aria-label="时间轴范围"
+          :options="[
+            { value: 7, label: '最近7天' },
+            { value: 30, label: '最近30天' },
+            { value: 90, label: '最近90天' },
+          ]"
+        />
       </div>
       <div v-if="timelineGroups.length">
         <section v-for="group in timelineGroups" :key="group.date" class="timeline-group">

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import AppSelect from '../components/common/AppSelect.vue';
+import FilterBar from '../components/common/FilterBar.vue';
+import SearchInput from '../components/common/SearchInput.vue';
 import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
 
@@ -121,16 +124,20 @@ watch(() => route.query.status, value => {
       </div>
     </form>
 
-    <div class="filter-bar idea-filter-bar">
-      <input v-model="query" type="search" placeholder="搜索灵感标题、内容、标签" />
-      <select v-model="status" aria-label="灵感状态筛选">
-        <option value="all">全部状态</option>
-        <option value="unprocessed">未处理</option>
-        <option value="needsConclusion">已实践未写结论</option>
-        <option v-for="item in statusOptions" :key="item" :value="item">{{ item }}</option>
-      </select>
-      <input v-model="tag" aria-label="灵感标签筛选" placeholder="按标签，例如 AI / 工作" />
-    </div>
+    <FilterBar class="idea-filter-bar">
+      <SearchInput v-model="query" aria-label="搜索灵感" placeholder="搜索灵感标题、内容、标签" />
+      <AppSelect
+        v-model="status"
+        aria-label="灵感状态筛选"
+        :options="[
+          { value: 'all', label: '全部状态' },
+          { value: 'unprocessed', label: '未处理' },
+          { value: 'needsConclusion', label: '已实践未写结论' },
+          ...statusOptions.map(item => ({ value: item, label: item })),
+        ]"
+      />
+      <SearchInput v-model="tag" aria-label="灵感标签筛选" placeholder="按标签，例如 AI / 工作" />
+    </FilterBar>
 
     <div class="mini-summary-grid idea-summary-grid" aria-label="灵感统计">
       <button

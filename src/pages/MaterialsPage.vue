@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import AppSelect from '../components/common/AppSelect.vue';
+import FilterBar from '../components/common/FilterBar.vue';
+import SearchInput from '../components/common/SearchInput.vue';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
 import type { Material } from '../types/lifePlan';
@@ -279,11 +282,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
       </div>
     </section>
 
-    <div class="filter-bar material-filter-bar">
-      <input v-model="keyword" type="search" aria-label="搜索素材" placeholder="搜索标题、内容、来源、备注、标签" />
-      <select v-model="typeFilter" aria-label="素材类型筛选"><option value="all">全部类型</option><option v-for="type in materialTypes" :key="type" :value="type">{{ type }}</option></select>
-      <input v-model="tagFilter" type="search" aria-label="素材标签筛选" placeholder="按标签筛选" />
-    </div>
+    <FilterBar class="material-filter-bar">
+      <SearchInput v-model="keyword" aria-label="搜索素材" placeholder="搜索标题、内容、来源、备注、标签" />
+      <AppSelect
+        v-model="typeFilter"
+        aria-label="素材类型筛选"
+        all-label="全部类型"
+        :options="materialTypes.map(type => ({ value: type, label: type }))"
+      />
+      <SearchInput v-model="tagFilter" aria-label="素材标签筛选" placeholder="按标签筛选" />
+    </FilterBar>
 
     <div class="material-grid material-list">
       <article v-for="material in filteredMaterials" :key="material.id" class="material-card" :class="{ 'is-expanded': isExpanded(material.id) }">
@@ -320,7 +328,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
       <form class="modal modal-sm material-editor" role="dialog" aria-modal="true" aria-labelledby="material-editor-title" @submit.prevent="saveMaterial">
         <div class="modal-header"><div class="modal-title" id="material-editor-title">{{ activeMaterialId ? '编辑素材' : '新增素材' }}</div><button class="close-btn" type="button" aria-label="关闭素材编辑" @click="closeEditor()">×</button></div>
         <label class="form-group"><span>标题</span><input ref="materialTitleRef" v-model="form.title" placeholder="给这条素材一个方便回看的标题" /></label>
-        <label class="form-group"><span>类型</span><select v-model="form.type"><option v-for="type in materialTypes" :key="type" :value="type">{{ type }}</option></select></label>
+        <label class="form-group"><span>类型</span><AppSelect v-model="form.type" :options="materialTypes.map(type => ({ value: type, label: type }))" /></label>
         <label class="form-group"><span>内容</span><textarea v-model="form.content" required rows="8" placeholder="粘贴金句、提示词或摘抄内容" /></label>
         <div class="form-group material-tag-editor">
           <span>标签</span>

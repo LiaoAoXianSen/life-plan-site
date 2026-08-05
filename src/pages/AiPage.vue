@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import AppSelect from '../components/common/AppSelect.vue';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -569,26 +570,17 @@ watch(() => route.query.diary, value => {
 
       <div v-if="mode === 'ideaNext'" class="form-group">
         <label for="ai-idea-select">选择灵感</label>
-        <select id="ai-idea-select" v-model="selectedIdeaId">
-          <option value="">选择一条待处理灵感</option>
-          <option v-for="idea in ideaOptions" :key="String(idea.id)" :value="String(idea.id)">{{ idea.title || idea.content || '未命名灵感' }}</option>
-        </select>
+        <AppSelect id="ai-idea-select" v-model="selectedIdeaId" :options="[{ value: '', label: '选择一条待处理灵感' }, ...ideaOptions.map(idea => ({ value: String(idea.id), label: String(idea.title || idea.content || '未命名灵感') }))]" />
       </div>
 
       <div v-if="mode === 'todoBreakdown'" class="form-group">
         <label for="ai-todo-select">选择待办</label>
-        <select id="ai-todo-select" v-model="selectedTodoId">
-          <option value="">选择一个待办</option>
-          <option v-for="todo in todoOptions" :key="todo.id" :value="todo.id">{{ todo.text }}</option>
-        </select>
+        <AppSelect id="ai-todo-select" v-model="selectedTodoId" :options="[{ value: '', label: '选择一个待办' }, ...todoOptions.map(todo => ({ value: String(todo.id), label: String(todo.text || '') }))]" />
       </div>
 
       <div v-if="mode === 'diaryReview'" class="form-group">
         <label for="ai-diary-select">选择日记</label>
-        <select id="ai-diary-select" v-model="selectedDiaryId">
-          <option value="">选择一篇有内容的日记</option>
-          <option v-for="diary in diaryOptions" :key="String(diary.id)" :value="String(diary.id)">{{ diary.title || diary.startDate || '未命名日记' }}</option>
-        </select>
+        <AppSelect id="ai-diary-select" v-model="selectedDiaryId" :options="[{ value: '', label: '选择一篇有内容的日记' }, ...diaryOptions.map(diary => ({ value: String(diary.id), label: String(diary.title || diary.startDate || '未命名日记') }))]" />
       </div>
 
       <div class="form-group">
