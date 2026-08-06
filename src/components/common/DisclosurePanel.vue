@@ -16,7 +16,7 @@ const emit = defineEmits<{
 
 const internalOpen = ref(props.open ?? false);
 watch(() => props.open, value => {
-  if (value !== undefined) internalOpen.value = value;
+  if (value !== undefined && value !== internalOpen.value) internalOpen.value = value;
 });
 
 function handleToggle(event: Event) {

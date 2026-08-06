@@ -313,6 +313,56 @@ test('todo writes main data and the compatible todo mirror', async ({ page }) =>
     expect(stored.mirror.todos[0].text).toBe('Vue 待办');
 });
 
+test('todo route create opens automatically, returns on close, and preserves invalid date forms', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/todos?create=1&returnTo=/ideas%3Fstatus%3Dunprocessed');
+
+    const create = page.getByRole('dialog', { name: '新建通用待办' });
+    await expect(create).toBeVisible();
+    await create.getByLabel('任务', { exact: true }).fill('非法日期待办');
+    await create.getByLabel('计划开始').fill('2026-08-10');
+    await create.getByLabel('计划结束').fill('2026-08-09');
+    await create.getByRole('button', { name: '保存待办' }).click();
+    await expect(create.getByRole('alert')).toContainText('计划结束日期不能早于计划开始日期');
+    await expect(create.getByLabel('任务', { exact: true })).toHaveValue('非法日期待办');
+    await expect(create.getByLabel('计划开始')).toHaveValue('2026-08-10');
+    await expect(create.getByLabel('计划结束')).toHaveValue('2026-08-09');
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).todos)).toHaveLength(0);
+    expect(errors).toEqual([]);
+
+    await create.getByRole('button', { name: '取消' }).click();
+    await expectHashRoute(page, '/ideas', { status: 'unprocessed' });
+});
+
+test('todo fixed groups normalize legacy values and detail errors retain edits', async ({ page }) => {
+    const source = emptyData({ todos: [todoFixture('todo-legacy-group', '旧分组待办', { group: '项目A', planStartDate: '2026-08-01', planEndDate: '2026-08-02' })] });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/todos?todo=todo-legacy-group');
+
+    await expect(page.getByLabel('待办分组').locator('option')).toHaveText(['全部分组', '其他', '健身', '学习', '工作', '生活']);
+    const detail = page.locator('.todo-detail-panel');
+    await expect(detail).toContainText('项目A');
+    await detail.getByRole('button', { name: '编辑待办' }).click();
+    await expect(detail.getByLabel('分组').locator('option')).toHaveText(['其他', '健身', '学习', '工作', '生活']);
+    await expect(detail.getByLabel('分组')).toHaveValue('其他');
+    await detail.getByLabel('任务', { exact: true }).fill('保留中的编辑');
+    await detail.getByLabel('计划开始').fill('2026-08-10');
+    await detail.getByLabel('计划结束').fill('2026-08-09');
+    await detail.getByRole('button', { name: '保存修改' }).click();
+    await expect(detail.getByRole('alert')).toContainText('计划结束日期不能早于计划开始日期');
+    await expect(detail.getByLabel('任务', { exact: true })).toHaveValue('保留中的编辑');
+    expect((await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).todos[0])).text).toBe('旧分组待办');
+
+    await detail.getByRole('button', { name: '取消' }).click();
+    await expect(detail.getByRole('heading', { name: '旧分组待办' })).toBeVisible();
+    await detail.getByRole('button', { name: '编辑待办' }).click();
+    await detail.getByRole('button', { name: '保存修改' }).click();
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).todos[0]);
+    expect(saved.group).toBe('其他');
+});
+
 test('todo create form exposes legacy date range presets', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/todos');
@@ -402,7 +452,7 @@ test('todo detail preserves subtasks sessions relationships tombstones and mirro
     await detail.getByLabel('计划结束').fill('2026-07-29');
     await detail.getByLabel('截止日期').fill('2026-07-31');
     await detail.getByLabel('紧急度').selectOption('high');
-    await detail.getByLabel('分组').fill('工作');
+    await detail.getByLabel('分组').selectOption('工作');
     await detail.getByLabel('新子任务').fill('新增步骤');
     await detail.getByRole('button', { name: '添加', exact: true }).click();
     await detail.getByRole('button', { name: '保存修改' }).click();
@@ -3888,6 +3938,41 @@ test('fitness history editor saves edits through the legacy workout contract', a
     expect(afterDelete.deletedItems).toEqual(expect.arrayContaining([
         expect.objectContaining({ collection: 'fitnessWorkouts', id: workoutId, reason: 'manual-delete' }),
     ]));
+});
+
+test('fitness workout editor preserves in-progress status and cancel or escape drafts', async ({ page }) => {
+    const source = emptyData({
+        fitnessWorkouts: [{
+            id: 'fitness-editor-guard', date: '2026-08-01', status: 'inProgress', title: '进行中旧训练',
+            planId: '', planName: '', notes: '原始备注', exercises: [{
+                id: 'fitness-editor-exercise', name: '深蹲', targetSets: 1, targetReps: '5', targetWeight: 20,
+                sets: [{ id: 'fitness-editor-set', weight: 20, reps: 5, done: false }],
+            }], createdAt: '2026-08-01T08:00:00', updatedAt: '2026-08-01T08:00:00',
+        }],
+    });
+    const original = JSON.stringify(source);
+    await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
+    await page.goto('/#/fitness');
+
+    const history = page.locator('article.card').filter({ hasText: '训练历史' });
+    await history.locator('.fitness-metric-row').filter({ hasText: '进行中旧训练' }).getByRole('button', { name: '编辑' }).click();
+    const dialog = page.getByRole('dialog', { name: '训练日志' });
+    await expect(dialog).toBeVisible();
+    const statusSelect = dialog.locator('.form-group').filter({ hasText: '状态' }).locator('select');
+    await expect(statusSelect.locator('option')).toHaveText(['计划中', '训练中', '已完成', '已跳过']);
+    await expect(statusSelect).toHaveValue('inProgress');
+    await dialog.locator('.form-group').filter({ hasText: '训练标题' }).locator('input').fill('不应写入的编辑');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+
+    await page.getByRole('button', { name: '补记训练' }).click();
+    const createDialog = page.getByRole('dialog', { name: '训练日志' });
+    await expect(createDialog).toBeVisible();
+    await createDialog.locator('.form-group').filter({ hasText: '训练标题' }).locator('input').fill('不应写入的补记');
+    await createDialog.getByRole('button', { name: '取消' }).click();
+    await expect(createDialog).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
 test('fitness workout plan changes confirm before replacing manual exercises', async ({ page }) => {

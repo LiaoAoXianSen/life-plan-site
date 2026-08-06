@@ -320,7 +320,7 @@ export async function runWheelCloudSyncBoth(options: { source?: string; force?: 
     if (localChanged && !remoteChanged) {
       if (!remote.etag && !state.lastRemoteEtag) throw new Error('Wheel 云端响应没有 ETag，无法自动条件上传。');
       const response = await pushWithEtag(mainConfig, localSnapshot, remote.etag || String(state.lastRemoteEtag || ''));
-      const verification = await verifyUpload(mainConfig, localHash);
+      const verification = await verifyUpload(mainConfig, localHash, remotePath);
       updateAfterPush(localHash, response, verification.etag || remote.etag || '');
       emitStatus('发现 Wheel 本地更新，已条件上传');
       return { uploaded: true };
@@ -344,7 +344,7 @@ export async function runWheelCloudSyncBoth(options: { source?: string; force?: 
     if (!remote.etag) throw new Error('Wheel 云端响应没有 ETag，无法自动合并后上传。');
     try {
       const response = await pushWithEtag(mainConfig, mergedSnapshot, remote.etag);
-      const verification = await verifyUpload(mainConfig, mergedHash);
+      const verification = await verifyUpload(mainConfig, mergedHash, remotePath);
       updateAfterPush(mergedHash, response, verification.etag || remote.etag);
       emitStatus('Wheel 两端都有变化，已保守合并并回写云端');
       return { merged: true, uploaded: true, conflict: true };
@@ -358,7 +358,7 @@ export async function runWheelCloudSyncBoth(options: { source?: string; force?: 
       const retrySnapshot = snapshotFromData(dataProvider!());
       const retryHash = wheelHash(retrySnapshot);
       const response = await pushWithEtag(mainConfig, retrySnapshot, latestRemote.etag);
-      const verification = await verifyUpload(mainConfig, retryHash);
+      const verification = await verifyUpload(mainConfig, retryHash, remotePath);
       updateAfterPush(retryHash, response, verification.etag || latestRemote.etag);
       emitStatus('Wheel 云端版本变化，已合并后重新上传');
       return { merged: true, uploaded: true, conflict: true };

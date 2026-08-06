@@ -33,6 +33,7 @@ const mode = ref<'all' | 'exclusive' | 'shared'>('all');
 const selectedId = ref('');
 const ideaDraftId = ref('');
 const editing = ref(false);
+const createError = ref('');
 const detailError = ref('');
 const detailStatus = ref('');
 const newSubTodo = ref('');
@@ -62,6 +63,13 @@ function getTodoStatusText(todo: Todo) {
 
 const TODO_GROUP_OPTIONS = [...TODO_GROUPS];
 const groupOptions = TODO_GROUP_OPTIONS;
+const filteredTodos = computed(() => todosStore.todos
+  .filter(todo => (!startDate.value && !endDate.value) || todosStore.services.todos.isTodoInDateRange(todo, startDate.value, endDate.value))
+  .filter(todo => status.value === 'all' || (status.value === 'done' ? todo.done : !todo.done))
+  .filter(todo => urgency.value === 'all' || (todo.urgency || 'medium') === urgency.value)
+  .filter(todo => group.value === 'all' || normalizeTodoGroup(todo.group) === group.value)
+  .filter(todo => mode.value === 'all' || (mode.value === 'exclusive' ? !!todo.isExclusive : !todo.isExclusive))
+  .slice().sort(todosStore.services.todos.compareTodosForFocus));
 const selectedTodo = computed(() => todosStore.todos.find(todo => todo.id === selectedId.value) ?? null);
 const draftIdea = computed(() => ideaDraftId.value
   ? lifePlan.data.records.find(record => record.id === ideaDraftId.value && record.type === '灵感碎片') ?? null
@@ -93,21 +101,33 @@ function toggleCreateForm() {
   Object.assign(form, { text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他' });
   createSubTodos.value = [];
   newCreateSubTodo.value = '';
+  createError.value = '';
   showCreateForm.value = true;
 }
 
-function closeCreateForm() {
+function resetCreateForm(shouldReturn = true) {
   showCreateForm.value = false;
+  createError.value = '';
   Object.assign(form, { text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium', group: '其他' });
   createSubTodos.value = [];
   newCreateSubTodo.value = '';
+  if (shouldReturn && route.query.create) closeRouteOverlay(router, route, ['create']);
+}
+
+function closeCreateForm() {
+  resetCreateForm();
 }
 
 function submit() {
   if (!form.text.trim()) return;
-  const todo = todosStore.create({ ...form, text: form.text.trim(), subTodos: createSubTodos.value });
-  closeCreateForm();
-  selectTodo(todo.id);
+  try {
+    const todo = todosStore.create({ ...form, text: form.text.trim(), group: normalizeTodoGroup(form.group), subTodos: createSubTodos.value });
+    const routeBackedCreate = !!route.query.create;
+    resetCreateForm(routeBackedCreate);
+    if (!routeBackedCreate) selectTodo(todo.id);
+  } catch (error) {
+    createError.value = error instanceof Error ? error.message : String(error);
+  }
 }
 
 function loadDetailForm(todo: Todo) {
@@ -118,7 +138,7 @@ function loadDetailForm(todo: Todo) {
     planStartDate: todo.planStartDate,
     planEndDate: todo.planEndDate,
     urgency: todo.urgency,
-    group: todo.group,
+    group: normalizeTodoGroup(todo.group),
     subTodos: todo.subTodos.map(item => ({ ...item })),
   });
 }
@@ -386,7 +406,13 @@ function unlinkRecord(record: DataEntity) {
   }
 }
 
-watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.todos.length, () => lifePlan.data.records.length], () => {
+watch([() => route.query.create, () => route.query.todo, () => route.query.ideaDraft, () => todosStore.todos.length, () => lifePlan.data.records.length], () => {
+  const createValue = route.query.create;
+  if (createValue === '1' || (Array.isArray(createValue) && createValue[0] === '1')) {
+    if (!showCreateForm.value) toggleCreateForm();
+    return;
+  }
+  if (showCreateForm.value && !route.query.create) resetCreateForm(false);
   const draftValue = route.query.ideaDraft;
   const draftId = Array.isArray(draftValue) ? draftValue[0] : draftValue;
   if (draftId) {
@@ -425,7 +451,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
       <form role="presentation" @submit.prevent="submit">
         <div class="form-row">
           <div class="form-group"><label for="todo-create-text">任务</label><input id="todo-create-text" v-model="form.text" required placeholder="下一步要推进什么？" /></div>
-          <div class="form-group"><label for="todo-create-group">分组</label><input id="todo-create-group" v-model="form.group" /></div>
+          <div class="form-group"><label for="todo-create-group">分组</label><AppSelect id="todo-create-group" v-model="form.group" :options="groupOptions.map(item => ({ value: item, label: item }))" /></div>
           <div class="form-group"><label for="todo-create-plan-start">计划开始</label><input id="todo-create-plan-start" v-model="form.planStartDate" type="date" /></div>
           <div class="form-group"><label for="todo-create-plan-end">计划结束</label><input id="todo-create-plan-end" v-model="form.planEndDate" type="date" /></div>
           <div class="form-group"><label for="todo-create-date">截止日期</label><input id="todo-create-date" v-model="form.dueDate" type="date" /></div>
@@ -449,10 +475,11 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
           </div>
           <div class="todo-inline-add"><input v-model="newCreateSubTodo" aria-label="添加步骤" placeholder="添加一个可执行步骤" @keyup.enter.prevent="addCreateSubTodo" /><button class="btn btn-secondary" type="button" @click="addCreateSubTodo">添加</button></div>
         </section>
+        <StatusBanner v-if="createError" class="form-error" role="alert" tone="warning">{{ createError }}</StatusBanner>
         <div class="modal-action-row todo-create-actions">
           <span />
           <div class="modal-action-right">
-            <button class="btn btn-secondary" type="button" @click="closeCreateForm">取消</button>
+            <button class="btn btn-secondary" type="button" @click="closeCreateForm()">取消</button>
             <button class="btn btn-primary" type="submit">保存待办</button>
           </div>
         </div>
@@ -532,7 +559,7 @@ watch([() => route.query.todo, () => route.query.ideaDraft, () => todosStore.tod
             <div class="form-group"><label for="todo-detail-due">截止日期</label><input id="todo-detail-due" v-model="detailForm.dueDate" type="date" /></div>
             <div class="form-group"><label for="todo-detail-urgency">紧急度</label><AppSelect id="todo-detail-urgency" v-model="detailForm.urgency" :options="[{ value: 'urgent', label: '紧急' }, { value: 'high', label: '高' }, { value: 'medium', label: '中' }, { value: 'low', label: '低' }]" /></div>
           </div>
-          <div class="form-group"><label for="todo-detail-group">分组</label><input id="todo-detail-group" v-model="detailForm.group" /></div>
+          <div class="form-group"><label for="todo-detail-group">分组</label><AppSelect id="todo-detail-group" v-model="detailForm.group" :options="groupOptions.map(item => ({ value: item, label: item }))" /></div>
           <div class="todo-date-presets" aria-label="日期预设">
             <button type="button" @click="applyDatePreset('today')">今天</button>
             <button type="button" @click="applyDatePreset('tomorrow')">明天</button>

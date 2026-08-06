@@ -1255,7 +1255,7 @@ onUnmounted(stopRestTimer);
     </article>
 
     <div v-else class="form-row" id="fitness-plan-section">
-      <DisclosurePanel id="fitness-free-start" class="fitness-form-disclosure" :open="freeSectionOpen" title="自由训练设置" description="选择动作和名称后开始">
+      <DisclosurePanel id="fitness-free-start" v-model:open="freeSectionOpen" class="fitness-form-disclosure" title="自由训练设置" description="选择动作和名称后开始">
         <form class="card" @submit.prevent="startFreeWorkout">
           <div class="fitness-section-head">
             <div>
@@ -1308,7 +1308,7 @@ onUnmounted(stopRestTimer);
       </article>
     </div>
 
-    <DisclosurePanel id="fitness-body-section" class="fitness-form-disclosure" :open="bodySectionOpen" title="身材记录" description="记录或查看最近身材数据">
+    <DisclosurePanel id="fitness-body-section" v-model:open="bodySectionOpen" class="fitness-form-disclosure" title="身材记录" description="记录或查看最近身材数据">
       <div class="form-row">
         <form class="card" @submit.prevent="saveMetric">
         <div class="section-title-row">
@@ -1351,7 +1351,7 @@ onUnmounted(stopRestTimer);
     </DisclosurePanel>
 
     <div class="form-row" id="fitness-library-section">
-      <DisclosurePanel class="fitness-form-disclosure" :open="librarySectionOpen" title="动作库管理" description="初始化或添加常用动作">
+      <DisclosurePanel v-model:open="librarySectionOpen" class="fitness-form-disclosure" title="动作库管理" description="初始化或添加常用动作">
         <form class="card" @submit.prevent="saveLibraryItem">
           <div class="section-title-row"><div><h2>动作库</h2><p class="section-hint">初始化会按旧版默认动作创建可编辑副本。</p></div><button class="btn btn-secondary" type="button" @click="seedLibrary">初始化默认动作</button></div>
           <div class="form-row">
@@ -1373,7 +1373,7 @@ onUnmounted(stopRestTimer);
         </form>
       </DisclosurePanel>
 
-      <DisclosurePanel class="fitness-form-disclosure" :open="planEditorOpen" :title="planEditingId ? '编辑训练计划' : '创建训练计划'" description="设置动作和每组处方">
+      <DisclosurePanel v-model:open="planEditorOpen" class="fitness-form-disclosure" :title="planEditingId ? '编辑训练计划' : '创建训练计划'" description="设置动作和每组处方">
         <form class="card" @submit.prevent="savePlan">
           <div class="section-title-row">
             <div>
@@ -1532,7 +1532,7 @@ onUnmounted(stopRestTimer);
         <button class="btn btn-primary">{{ workoutEditingId ? '保存训练日志' : '保存训练日志' }}</button>
       </div>
       </form>
-    </DisclosurePanel>
+    </ModalShell>
 
     <article class="card">
       <div class="card-title">训练历史</div>
