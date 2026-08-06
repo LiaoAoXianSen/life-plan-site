@@ -145,6 +145,12 @@ const selectedIdea = computed(() => store.data.records.find(record => record.id 
 const selectedTodo = computed(() => store.data.todos.find(todo => todo.id === selectedTodoId.value) ?? null);
 const selectedDiary = computed(() => diaryOptions.value.find(record => record.id === selectedDiaryId.value) ?? diaryOptions.value[0] ?? null);
 const selectedDrafts = computed(() => drafts.value.filter(item => item.selected && item.text.trim()));
+const urgencyOptions = [
+  { value: 'urgent', label: '紧急' },
+  { value: 'high', label: '高' },
+  { value: 'medium', label: '中' },
+  { value: 'low', label: '低' },
+];
 const today = computed(() => getTodayStr());
 
 function isTodoPlannedToday(todo: { planStartDate?: string; planEndDate?: string }) {
@@ -303,7 +309,13 @@ function setMode(next: AiMode) {
   if (next === 'ideaNext' && selectedIdeaId.value) query.idea = selectedIdeaId.value;
   if (next === 'todoBreakdown' && selectedTodoId.value) query.todo = selectedTodoId.value;
   if (next === 'diaryReview' && selectedDiaryId.value) query.diary = selectedDiaryId.value;
+  const returnTo = currentReturnTo(route);
+  if (returnTo) query.returnTo = returnTo;
   void router.replace({ path: '/ai', query });
+}
+
+function closeAiPage() {
+  closeRouteOverlay(router, route, ['settings', 'mode', 'idea', 'todo', 'diary']);
 }
 
 function toDrafts(items: any[] = []): AiDraftItem[] {
@@ -393,6 +405,7 @@ function applyChatItem(item: AiDraftItem, sourceType = 'ai-capture') {
     group: item.group || '其他',
     subTodos: item.subTodos.map(sub => ({ text: sub.text, done: false })),
     sourceType,
+    allowCustomGroup: true,
   });
   status.value = '已创建待办';
 }
@@ -559,6 +572,30 @@ function applySelected() {
   applyChatTodos();
 }
 
+watch(ideaOptions, options => {
+  if (!options.length) {
+    selectedIdeaId.value = '';
+    return;
+  }
+  if (!options.some(item => item.id === selectedIdeaId.value)) selectedIdeaId.value = String(options[0].id || '');
+}, { immediate: true });
+
+watch(todoOptions, options => {
+  if (!options.length) {
+    selectedTodoId.value = '';
+    return;
+  }
+  if (!options.some(item => item.id === selectedTodoId.value)) selectedTodoId.value = String(options[0].id || '');
+}, { immediate: true });
+
+watch(diaryOptions, options => {
+  if (!options.length) {
+    selectedDiaryId.value = '';
+    return;
+  }
+  if (!options.some(item => item.id === selectedDiaryId.value)) selectedDiaryId.value = String(options[0].id || '');
+}, { immediate: true });
+
 watch(() => route.query.mode, value => {
   const next = String(Array.isArray(value) ? value[0] : value || 'chatCapture');
     if (next === 'ideaNext' || next === 'todoBreakdown' || next === 'diaryReview' || next === 'chatCapture' || next === 'todayPlan' || next === 'backlogTriage') {
@@ -568,17 +605,17 @@ watch(() => route.query.mode, value => {
 
 watch(() => route.query.idea, value => {
   const id = String(Array.isArray(value) ? value[0] : value || '');
-  if (id) selectedIdeaId.value = id;
+  selectedIdeaId.value = ideaOptions.value.some(item => item.id === id) ? id : String(ideaOptions.value[0]?.id || '');
 }, { immediate: true });
 
 watch(() => route.query.todo, value => {
   const id = String(Array.isArray(value) ? value[0] : value || '');
-  if (id) selectedTodoId.value = id;
+  selectedTodoId.value = todoOptions.value.some(item => item.id === id) ? id : String(todoOptions.value[0]?.id || '');
 }, { immediate: true });
 
 watch(() => route.query.diary, value => {
   const id = String(Array.isArray(value) ? value[0] : value || '');
-  if (id) selectedDiaryId.value = id;
+  selectedDiaryId.value = diaryOptions.value.some(item => item.id === id) ? id : String(diaryOptions.value[0]?.id || '');
 }, { immediate: true });
 </script>
 
@@ -586,7 +623,10 @@ watch(() => route.query.diary, value => {
   <section class="page active" id="page-ai">
     <PageHeader title="AI 助手">
       <p class="todo-page-summary">生成结果默认只是草稿，确认后才写入 lifePlanData。</p>
-      <template #actions><button class="btn btn-secondary" type="button" @click="settingsOpen = true">AI 设置</button></template>
+      <template #actions>
+        <button v-if="currentReturnTo(route)" class="btn btn-secondary" type="button" @click="closeAiPage">返回原页面</button>
+        <button class="btn btn-secondary" type="button" @click="settingsOpen = true">AI 设置</button>
+      </template>
     </PageHeader>
 
     <ModalShell v-model="settingsOpen" title="AI 设置" size="md" dialog-class="ai-settings-modal">
@@ -696,6 +736,7 @@ watch(() => route.query.diary, value => {
             <div class="form-group"><label :for="`ai-draft-plan-start-${index}`">计划开始</label><input :id="`ai-draft-plan-start-${index}`" v-model="item.planStartDate" type="date" /></div>
             <div class="form-group"><label :for="`ai-draft-plan-end-${index}`">计划结束</label><input :id="`ai-draft-plan-end-${index}`" v-model="item.planEndDate" type="date" /></div>
             <div class="form-group"><label :for="`ai-draft-group-${index}`">分组</label><input :id="`ai-draft-group-${index}`" v-model="item.group" /></div>
+            <div class="form-group"><label :for="`ai-draft-urgency-${index}`">优先级</label><AppSelect :id="`ai-draft-urgency-${index}`" v-model="item.urgency" :options="urgencyOptions" /></div>
           </div>
           <p v-if="item.subTodos.length" class="todo-detail-copy">建议子任务：{{ item.subTodos.map(sub => sub.text).join(' / ') }}</p>
           <button v-if="mode === 'chatCapture'" class="btn btn-secondary" type="button" @click="applyChatItem(item)">创建待办</button>

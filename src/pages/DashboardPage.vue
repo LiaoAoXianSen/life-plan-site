@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import EmptyState from '../components/common/EmptyState.vue';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import RecordCreateModal from '../components/RecordCreateModal.vue';
@@ -53,6 +53,13 @@ const floatingMode = ref<FloatingMode>('random');
 const expandedMaterialIds = ref<string[]>([]);
 const timelineRangeDays = ref(30);
 const dashboardPreviewRecord = ref<RecordEntity | null>(null);
+const showHabitCheckinNote = ref(false);
+const habitCheckinNoteForm = reactive({
+  habitId: '',
+  habitName: '',
+  note: '',
+  disableFuturePrompt: false,
+});
 const periodTypes = ['周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
 const urgencyLabels: Record<Todo['urgency'], string> = { urgent: '紧急', high: '高', medium: '中', low: '低' };
 
@@ -257,7 +264,7 @@ function openExistingFromCreate(recordId: string) {
 }
 
 function openAi(mode: string) {
-  void router.push({ path: '/ai', query: { mode } });
+  void router.push(withReturnTo(route, { path: '/ai', query: { mode } }));
 }
 
 function createTodo() {
@@ -329,7 +336,54 @@ function openHabit(habitId: string) {
   void router.push(withReturnTo(route, { path: '/habits', query: { habit: habitId } }));
 }
 
+function completeDashboardHabitCheckin(habitId: string, note = '') {
+  if (!habitsStore.quickCheckin(habitId, note)) {
+    announce(habitsStore.lastError || '打卡失败', 'warning');
+    return false;
+  }
+  announce(habitsStore.lastAction || '已打卡');
+  return true;
+}
+
+function openHabitCheckinNote(habitId: string) {
+  const habit = habitsStore.habits.find(item => item.id === habitId);
+  if (!habit) {
+    announce('未找到该习惯，未打卡', 'warning');
+    return;
+  }
+  habitCheckinNoteForm.habitId = habit.id;
+  habitCheckinNoteForm.habitName = habit.name || '未命名习惯';
+  habitCheckinNoteForm.note = '';
+  habitCheckinNoteForm.disableFuturePrompt = false;
+  showHabitCheckinNote.value = true;
+}
+
+function closeHabitCheckinNote() {
+  showHabitCheckinNote.value = false;
+  habitCheckinNoteForm.habitId = '';
+  habitCheckinNoteForm.habitName = '';
+  habitCheckinNoteForm.note = '';
+  habitCheckinNoteForm.disableFuturePrompt = false;
+}
+
+function submitHabitCheckinNote(saveNote: boolean) {
+  const habitId = habitCheckinNoteForm.habitId;
+  if (!habitId) return;
+  if (!completeDashboardHabitCheckin(habitId, saveNote ? habitCheckinNoteForm.note : '')) return;
+  if (habitCheckinNoteForm.disableFuturePrompt) habitsStore.setHabitNoteMode(habitId, 'never');
+  closeHabitCheckinNote();
+}
+
 function quickHabitCheckin(habitId: string) {
+  const habit = habitsStore.habits.find(item => item.id === habitId);
+  if (!habit) {
+    announce('未找到该习惯，未打卡', 'warning');
+    return;
+  }
+  if (habit.noteMode !== 'never') {
+    openHabitCheckinNote(habitId);
+    return;
+  }
   if (!habitsStore.quickCheckin(habitId)) {
     announce(habitsStore.lastError || '打卡失败', 'warning');
     return;
@@ -338,13 +392,7 @@ function quickHabitCheckin(habitId: string) {
 }
 
 function quickHabitCheckinWithNote(habitId: string) {
-  const note = window.prompt('打卡备注', '');
-  if (note === null) return;
-  if (!habitsStore.quickCheckin(habitId, note)) {
-    announce(habitsStore.lastError || '打卡失败', 'warning');
-    return;
-  }
-  announce(habitsStore.lastAction || '已打卡');
+  openHabitCheckinNote(habitId);
 }
 
 function editLatestHabitNote(habitId: string) {
@@ -771,6 +819,34 @@ const timelineGroups = computed(() => {
     </article>
 
     <ModalShell
+      v-if="showHabitCheckinNote"
+      :model-value="showHabitCheckinNote"
+      :title="`备注 · ${habitCheckinNoteForm.habitName}`"
+      size="sm"
+      dialog-class="habit-note-modal"
+      initial-focus="#dashboard-habit-checkin-note"
+      @close="closeHabitCheckinNote"
+    >
+      <textarea
+        id="dashboard-habit-checkin-note"
+        v-model="habitCheckinNoteForm.note"
+        rows="3"
+        maxlength="120"
+        placeholder="这次做了什么？可留空"
+      />
+      <div class="habit-note-foot">
+        <label class="habit-note-toggle">
+          <input v-model="habitCheckinNoteForm.disableFuturePrompt" type="checkbox">
+          <span>以后不提醒</span>
+        </label>
+        <div class="habit-note-actions">
+          <button class="btn btn-secondary" type="button" @click="submitHabitCheckinNote(false)">本次不填</button>
+          <button class="btn btn-primary" type="button" @click="submitHabitCheckinNote(true)">保存</button>
+        </div>
+      </div>
+    </ModalShell>
+
+    <ModalShell
       v-if="dashboardPreviewRecord"
       :model-value="Boolean(dashboardPreviewRecord)"
       title="记录预览"
@@ -903,6 +979,10 @@ const timelineGroups = computed(() => {
 .progress-bar { min-width: 0; }
 .timeline-item { width: 100%; min-width: 0; text-align: left; }
 .item-preview { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.habit-note-modal textarea { width: 100%; min-height: 96px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+.habit-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.habit-note-toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.habit-note-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .record-preview-modal { max-width: 880px; }
 .record-preview-dialog-body { display: grid; gap: 14px; }
 @media (max-width: 980px) {

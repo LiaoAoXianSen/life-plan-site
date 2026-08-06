@@ -7,7 +7,7 @@ import AppSelect from '../components/common/AppSelect.vue';
 import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import SegmentedTabs from '../components/common/SegmentedTabs.vue';
-import { closeRouteOverlay } from '../router/returnTo';
+import { closeRouteOverlay, withReturnTo } from '../router/returnTo';
 import { getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -1254,7 +1254,7 @@ watch(focusedHabitId, value => {
           <h2 id="habit-sync-title">习惯云同步</h2>
           <p class="section-hint">独立文件 <code>/apps/habit-app/data.json</code>。手动合并与受保护上传在全局云同步页维护，不在此页自动触发。</p>
         </div>
-        <button class="btn btn-primary" type="button" @click="router.push('/sync')">打开云同步</button>
+        <button class="btn btn-primary" type="button" @click="router.push(withReturnTo(route, { path: '/sync' }))">打开云同步</button>
       </div>
       <div class="habit-sync-points">
         <article><strong>本地权威</strong><span>lifePlanData 习惯字段优先</span></article>

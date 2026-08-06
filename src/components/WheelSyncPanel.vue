@@ -49,7 +49,7 @@ type WheelSyncState = Record<string, unknown> & {
 const props = defineProps<{ syncConfig: SyncConfig; runAutoSync?: RunAutoSync; restartAutoSync?: () => void }>();
 const store = useLifePlanStore();
 const sync = createLegacyServices().sync;
-const remotePath = '/apps/wheel-app/data.json';
+const remotePath = ref(getWheelSyncConfig().remotePath);
 const busy = ref(false);
 const autoBusy = ref(false);
 const armed = ref(false);
@@ -58,6 +58,12 @@ const message = ref('');
 const messageTone = ref<'info' | 'success' | 'danger'>('info');
 const preview = reactive<PreviewState>({ status: 'idle', local: null, remote: null, merged: null, hashesMatch: false, risks: [] });
 const syncState = reactive<WheelSyncState>(readJson('lifePlanWheelSyncState'));
+
+function refreshSyncStateForPath() {
+  const current = readJson('lifePlanWheelSyncState');
+  Object.keys(syncState).forEach(key => delete syncState[key]);
+  Object.assign(syncState, current);
+}
 
 persistConfig();
 
@@ -76,7 +82,9 @@ function readJson(key: string): Record<string, unknown> {
 }
 
 function persistConfig() {
-  saveWheelSyncConfig({ autoSync: autoSyncEnabled.value });
+  const saved = saveWheelSyncConfig({ remotePath: remotePath.value, autoSync: autoSyncEnabled.value });
+  remotePath.value = saved.remotePath;
+  refreshSyncStateForPath();
 }
 
 function updateSyncState(patch: WheelSyncState) {
@@ -157,8 +165,8 @@ function prepareLocal() {
 
 async function pullRemote(): Promise<RemotePayload | null> {
   return await sync.pullJson(
-    { ...props.syncConfig, remotePath },
-    remotePath,
+    { ...props.syncConfig, remotePath: remotePath.value },
+    remotePath.value,
     (value: unknown) => canonical(value),
     (value: unknown) => wheelHash(value),
   ) as RemotePayload | null;
@@ -337,7 +345,7 @@ async function uploadExisting() {
     if (!verifyLocalUnchanged(local.hash)) throw new Error('确认期间本机 Wheel 数据已变化，请重新检查。');
     putAttempted = true;
     const result = await sync.pushJson(
-      { ...props.syncConfig, remotePath }, remotePath, local.snapshot, 'wheel-app', { ifMatch: remote.etag },
+      { ...props.syncConfig, remotePath: remotePath.value }, remotePath.value, local.snapshot, 'wheel-app', { ifMatch: remote.etag },
     ) as { etag?: string };
     const verification = await verifyUpload(local);
     finishUpload(local, verification, result.etag || remote.etag);
@@ -372,14 +380,14 @@ async function uploadFirst() {
       setReadyPreview(local, remotePayload);
       throw new Error('最终复查发现云端文件已存在，已停止首次创建。');
     }
-    if (!window.confirm(`以 create-only 条件创建 ${remotePath}，包含 ${local.counts.wheels} 个转盘和 ${local.counts.libraryItems} 个公共项。确认继续吗？`)) {
+    if (!window.confirm(`以 create-only 条件创建 ${remotePath.value}，包含 ${local.counts.wheels} 个转盘和 ${local.counts.libraryItems} 个公共项。确认继续吗？`)) {
       setMessage('已取消首次创建；云端未改变。');
       return;
     }
     if (!verifyLocalUnchanged(local.hash)) throw new Error('确认期间本机 Wheel 数据已变化，请重新检查。');
     putAttempted = true;
     const result = await sync.pushJson(
-      { ...props.syncConfig, remotePath }, remotePath, local.snapshot, 'wheel-app', { ifNoneMatch: '*' },
+      { ...props.syncConfig, remotePath: remotePath.value }, remotePath.value, local.snapshot, 'wheel-app', { ifNoneMatch: '*' },
     ) as { etag?: string };
     const verification = await verifyUpload(local);
     finishUpload(local, verification, result.etag || '');

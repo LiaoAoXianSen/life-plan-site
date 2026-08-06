@@ -96,7 +96,8 @@ export class LifePlanRepository {
 
   commit(sourceData: LifePlanData, reason: string, source: CommitSource = 'user'): LifePlanData {
     const next = normalizePersistedData(clone(sourceData), this.services);
-    const previous = localStorage.getItem(mainDataKey);
+    const transactionKeys = [mainDataKey, todoMirrorKey, habitMirrorKey, syncStateKey] as const;
+    const previous = new Map(transactionKeys.map(key => [key, localStorage.getItem(key)]));
     try {
       localStorage.setItem(mainDataKey, JSON.stringify(next));
       this.rebuildTodoMirror(next, reason);
@@ -104,9 +105,31 @@ export class LifePlanRepository {
       this.updateMainSyncState(next, source);
       return next;
     } catch (error) {
-      if (previous === null) localStorage.removeItem(mainDataKey);
-      else localStorage.setItem(mainDataKey, previous);
-      throw error;
+      const commitError = this.toError(error, '本地数据写入失败');
+      const rollbackFailures: string[] = [];
+      [...transactionKeys].reverse().forEach(key => {
+        try {
+          const value = previous.get(key);
+          if (value === null || value === undefined) localStorage.removeItem(key);
+          else localStorage.setItem(key, value);
+        } catch (rollbackError) {
+          rollbackFailures.push(`${key}: ${this.toError(rollbackError, '未知回滚错误').message}`);
+        }
+      });
+      try {
+        const previousMain = previous.get(mainDataKey);
+        const restored = normalizePersistedData(previousMain ? JSON.parse(previousMain) : {}, this.services);
+        const reactiveTarget = sourceData as unknown as Record<string, unknown>;
+        Object.keys(reactiveTarget).forEach(key => delete reactiveTarget[key]);
+        Object.assign(reactiveTarget, restored);
+      } catch (reactiveRollbackError) {
+        rollbackFailures.push(`响应式数据: ${this.toError(reactiveRollbackError, '未知回滚错误').message}`);
+      }
+      if (rollbackFailures.length) {
+        throw new Error(`${commitError.message}；回滚未完整完成（${rollbackFailures.join('；')}）`);
+      }
+
+      throw commitError;
     }
   }
 
@@ -178,7 +201,10 @@ export class LifePlanRepository {
     } catch (error) {
       const restoreError = this.toError(error, '恢复后的数据未能写入本地存储');
       this.recordCriticalFailure('恢复本地快照失败', restoreError, 'restore-snapshot');
-      throw new Error(`恢复失败：${restoreError.message}。当前数据已保持不变。`);
+      if (restoreError.message.includes('回滚未完整完成')) {
+        throw new Error(`恢复失败：${restoreError.message}。本地存储可能只恢复了一部分，请勿继续修改并立即导出当前数据。`);
+      }
+      throw new Error(`恢复失败：${restoreError.message}。主数据、待办镜像、习惯镜像和同步状态均已恢复为操作前内容，当前页面数据未改变。`);
     }
   }
 

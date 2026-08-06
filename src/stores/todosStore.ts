@@ -9,8 +9,9 @@ const services = createLegacyServices();
 
 export const TODO_GROUPS = ['其他', '健身', '学习', '工作', '生活'] as const;
 
-export function normalizeTodoGroup(value: unknown) {
+export function normalizeTodoGroup(value: unknown, allowCustom = false) {
   const group = String(value || '').trim();
+  if (allowCustom && group) return group;
   return (TODO_GROUPS as readonly string[]).includes(group) ? group : '其他';
 }
 
@@ -35,6 +36,7 @@ export const useTodosStore = defineStore('todos', () => {
     subTodos?: TodoSubTodo[];
     sourceType?: string;
     sourceRecordId?: string;
+    allowCustomGroup?: boolean;
   };
 
   function create(input: TodoCreateInput) {
@@ -42,7 +44,7 @@ export const useTodosStore = defineStore('todos', () => {
     if (!range.isValid) throw new Error('计划结束日期不能早于计划开始日期');
     const todo = services.todos.createTodoFromAiItem({
       ...input,
-      group: normalizeTodoGroup(input.group),
+      group: normalizeTodoGroup(input.group, input.allowCustomGroup),
       ...range,
       subTodos: (input.subTodos || [])
         .map(item => ({ text: String(item.text || '').trim(), done: !!item.done }))

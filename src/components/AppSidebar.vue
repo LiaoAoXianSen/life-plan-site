@@ -356,7 +356,13 @@ function openSyncPage() {
 
 function openAiAssistant() {
   if (route.path === '/ai') {
-    void router.push({ path: '/ai', query: { mode: 'todayPlan', ...(route.query.returnTo ? { returnTo: route.query.returnTo } : {}) } });
+    void router.push({
+      path: '/ai',
+      query: {
+        mode: 'todayPlan',
+        ...(route.query.returnTo ? { returnTo: route.query.returnTo } : {}),
+      },
+    });
     return;
   }
   void router.push(withReturnTo(route, { path: '/ai', query: { mode: 'todayPlan' } }));
@@ -364,7 +370,13 @@ function openAiAssistant() {
 
 function openAiSettings() {
   if (route.path === '/ai') {
-    void router.push({ path: '/ai', query: { ...route.query, settings: '1' } });
+    const query: Record<string, string | string[]> = { settings: '1' };
+    ['mode', 'idea', 'todo', 'diary', 'returnTo'].forEach(key => {
+      const value = route.query[key];
+      if (typeof value === 'string') query[key] = value;
+      else if (Array.isArray(value)) query[key] = value.filter((entry): entry is string => typeof entry === 'string');
+    });
+    void router.push({ path: '/ai', query });
     return;
   }
   void router.push(withReturnTo(route, { path: '/ai', query: { settings: '1' } }));

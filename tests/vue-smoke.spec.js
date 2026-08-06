@@ -162,6 +162,144 @@ test('route-backed overlays clear stale query and sidebar actions preserve conte
     await expectHashRoute(page, '/ideas', { status: 'unprocessed' });
 });
 
+test('multi-page overlays keep the original return route', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'return-idea', type: '灵感碎片', title: '跨页返回灵感', content: '验证最初来源', todoIds: ['return-todo'], ideaTodoId: 'return-todo', ideaStatus: '待整理' }],
+        todos: [todoFixture('return-todo', '跨页返回待办')],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/ideas?status=unprocessed');
+    await page.locator('.idea-card').filter({ hasText: '跨页返回灵感' }).getByRole('button', { name: '编辑推进' }).click();
+    await expectHashRoute(page, '/records', {
+        record: 'return-idea',
+        returnTo: '/ideas?status=unprocessed',
+    });
+
+    const editor = page.getByRole('dialog', { name: '编辑记录' });
+    await editor.getByRole('button', { name: /跨页返回待办/ }).click();
+    await expectHashRoute(page, '/todos', {
+        todo: 'return-todo',
+        returnTo: '/ideas?status=unprocessed',
+    });
+    await page.getByRole('button', { name: '关闭待办详情' }).click();
+    await expectHashRoute(page, '/ideas', { status: 'unprocessed' });
+
+    // Closing the route-backed chain must consume its one transient history slot.
+    // Back may leave the app entry, but it must never revive Records or Todos.
+    await page.goBack();
+    await expect.poll(() => page.evaluate(() => location.hash)).not.toMatch(/^#\/(records|todos)(?:\?|$)/);
+});
+
+test('record preview keeps its original return route when opening AI diary review', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'return-diary', type: '日记', title: '跨页日记分析', content: '保留最初来源。', startDate: '2026-08-05', endDate: '2026-08-05', todoIds: [] }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/records?record=return-diary&preview=1&returnTo=/search%3Fq%3D%E8%B7%A8%E9%A1%B5%E6%97%A5%E8%AE%B0');
+    const preview = page.getByRole('dialog', { name: '记录预览' });
+    await preview.getByRole('button', { name: 'AI 分析日记' }).click();
+    await expectHashRoute(page, '/ai', {
+        mode: 'diaryReview',
+        diary: 'return-diary',
+        returnTo: '/search?q=跨页日记',
+    });
+});
+
+test('habits cloud sync entry keeps the current habits route as return context', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/habits');
+    await page.getByRole('tab', { name: '云同步', exact: true }).click();
+    await page.getByRole('region', { name: '习惯云同步' }).getByRole('button', { name: '打开云同步' }).click();
+    await expectHashRoute(page, '/sync', { returnTo: '/habits' });
+});
+
+test('AI source return survives mode switches and closes back to the original page', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'return-ai-idea', type: '灵感碎片', title: '返回来源灵感', content: '验证 AI 来源返回', todoIds: [], ideaStatus: '待整理' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/ai?mode=todayPlan&returnTo=/ideas');
+    const aiPage = page.locator('#page-ai');
+    await aiPage.getByRole('button', { name: '灵感下一步', exact: true }).click();
+    await expectHashRoute(page, '/ai', { mode: 'ideaNext', idea: 'return-ai-idea', returnTo: '/ideas' });
+    await aiPage.getByRole('button', { name: '对话整理', exact: true }).click();
+    await expectHashRoute(page, '/ai', { mode: 'chatCapture', returnTo: '/ideas' });
+    await aiPage.getByRole('button', { name: '返回原页面' }).click();
+    await expectHashRoute(page, '/ideas');
+});
+
+test('AI selectors default to the first valid source and expose invalid diary fallback', async ({ page }) => {
+    const source = emptyData({
+        records: [
+            { id: 'idea-ai-default', type: '灵感碎片', title: '默认灵感', content: '先选这条灵感', todoIds: [], ideaStatus: '待整理', updatedAt: '2026-08-05T10:00:00' },
+            { id: 'diary-ai-default', type: '日记', title: '默认日记', content: '有内容的日记', todoIds: [], startDate: '2026-08-05', endDate: '2026-08-05', updatedAt: '2026-08-05T21:00:00' },
+        ],
+        todos: [todoFixture('todo-ai-default', '默认待办', { updatedAt: '2026-08-05T12:00:00' })],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/ai?mode=ideaNext');
+    const aiPage = page.locator('#page-ai');
+    await expect(aiPage.getByLabel('选择灵感')).toHaveValue('idea-ai-default');
+
+    await aiPage.getByRole('button', { name: '待办拆解', exact: true }).click();
+    await expect(aiPage.getByLabel('选择待办')).toHaveValue('todo-ai-default');
+
+    await page.goto('/#/ai?mode=diaryReview&diary=missing-diary');
+    await expect(aiPage.getByLabel('选择日记')).toHaveValue('diary-ai-default');
+});
+
+test('dashboard AI actions retain their exact source route', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/dashboard?focus=today');
+    await page.getByRole('button', { name: 'AI 今日计划' }).click();
+    await expectHashRoute(page, '/ai', { mode: 'todayPlan', returnTo: '/dashboard?focus=today' });
+    await page.getByRole('button', { name: '返回原页面' }).click();
+    await expectHashRoute(page, '/dashboard', { focus: 'today' });
+});
+
+test('dashboard habits honor ask, always and never note modes through ModalShell', async ({ page }) => {
+    const source = emptyData({
+        habits: [
+            { id: 'dashboard-habit-ask', name: '仪表盘询问习惯', rule: 'daily', timesPerDay: 1, noteMode: 'ask', startDate: localDate() },
+            { id: 'dashboard-habit-always', name: '仪表盘强制备注', rule: 'daily', timesPerDay: 1, noteMode: 'always', startDate: localDate() },
+            { id: 'dashboard-habit-never', name: '仪表盘直接打卡', rule: 'daily', timesPerDay: 1, noteMode: 'never', startDate: localDate() },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+
+    const askCard = page.locator('.dashboard-habit-item').filter({ hasText: '仪表盘询问习惯' });
+    await askCard.getByRole('button', { name: '打卡' }).click();
+    const askModal = page.getByRole('dialog', { name: /备注 · 仪表盘询问习惯/ });
+    await expect(askModal).toBeVisible();
+    await askModal.getByRole('button', { name: '本次不填' }).click();
+    await expect(askModal).toBeHidden();
+
+    const alwaysCard = page.locator('.dashboard-habit-item').filter({ hasText: '仪表盘强制备注' });
+    await alwaysCard.getByRole('button', { name: '打卡' }).click();
+    const alwaysModal = page.getByRole('dialog', { name: /备注 · 仪表盘强制备注/ });
+    await expect(alwaysModal).toBeVisible();
+    await alwaysModal.locator('textarea').fill('仪表盘备注已保存');
+    await alwaysModal.getByLabel('以后不提醒').check();
+    await alwaysModal.getByRole('button', { name: '保存' }).click();
+    await expect(alwaysModal).toBeHidden();
+
+    const neverCard = page.locator('.dashboard-habit-item').filter({ hasText: '仪表盘直接打卡' });
+    await neverCard.getByRole('button', { name: '打卡', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(saved.habits.find(item => item.id === 'dashboard-habit-ask').noteMode).toBe('ask');
+    expect(saved.habits.find(item => item.id === 'dashboard-habit-always').noteMode).toBe('never');
+    expect(saved.habits.find(item => item.id === 'dashboard-habit-never').noteMode).toBe('never');
+    expect(saved.checkins.find(item => item.habitId === 'dashboard-habit-always').note).toBe('仪表盘备注已保存');
+    expect(saved.checkins.filter(item => item.date === localDate()).map(item => item.habitId).sort()).toEqual(['dashboard-habit-always', 'dashboard-habit-ask', 'dashboard-habit-never']);
+});
+
 test('habits preserve ask, always and never note modes through the ModalShell check-in flow', async ({ page }) => {
     const source = emptyData({
         habits: [
@@ -994,6 +1132,89 @@ test('sidebar snapshot restore requires override after safety snapshot failure a
     await expect(page.getByRole('dialog', { name: '本地快照' }).getByLabel('最近关键故障')).toContainText('恢复本地快照失败');
 });
 
+test('sidebar snapshot restore rolls back all persisted slices when the habit mirror write fails', async ({ page }) => {
+    const current = emptyData({
+        records: [{ id: 'atomic-current', type: '日记', title: '原响应式记录', content: '' }],
+        todos: [todoFixture('atomic-current-todo', '原待办')],
+        habits: [{ id: 'atomic-current-habit', name: '原习惯', rule: 'daily', timesPerDay: 1 }],
+    });
+    const target = emptyData({
+        records: [{ id: 'atomic-target', type: '日记', title: '目标记录', content: '' }],
+        todos: [todoFixture('atomic-target-todo', '目标待办')],
+        habits: [{ id: 'atomic-target-habit', name: '目标习惯', rule: 'daily', timesPerDay: 1 }],
+    });
+    const snapshot = { id: 'restore-atomic', version: 3, reason: '原子恢复目标', createdAt: '2026-08-06T09:00:00', hash: 'atomic-hash', data: target };
+    const oldValues = {
+        lifePlanData: JSON.stringify(current),
+        todoAppData: JSON.stringify({ marker: 'old-todo-mirror' }),
+        habitAppData: JSON.stringify({ marker: 'old-habit-mirror' }),
+        lifePlanSyncState: JSON.stringify({ dirty: false, marker: 'old-sync-state' }),
+    };
+    await page.addInitScript(({ item, values }) => {
+        Object.entries(values).forEach(([key, value]) => localStorage.setItem(key, value));
+        localStorage.setItem('lifePlanSnapshots', JSON.stringify([item]));
+        const realSetItem = Storage.prototype.setItem;
+        let blocked = false;
+        Storage.prototype.setItem = function blockTargetHabitMirror(key, value) {
+            if (key === 'habitAppData' && !blocked && String(value).includes('atomic-target-habit')) {
+                blocked = true;
+                throw new Error('habit mirror transaction blocked');
+            }
+            return realSetItem.call(this, key, value);
+        };
+    }, { item: snapshot, values: oldValues });
+    await page.goto('/#/dashboard');
+    const beforeRestore = await page.evaluate(() => Object.fromEntries(
+        ['lifePlanData', 'todoAppData', 'habitAppData', 'lifePlanSyncState'].map(key => [key, localStorage.getItem(key)]),
+    ));
+    await page.getByRole('button', { name: /本地快照/ }).click();
+    page.on('dialog', dialog => dialog.accept());
+    await page.getByRole('dialog', { name: '本地快照' }).getByRole('button', { name: '恢复' }).first().click();
+
+    const dialog = page.getByRole('dialog', { name: '本地快照' });
+    await expect(dialog.getByRole('alert')).toContainText('habit mirror transaction blocked');
+    await expect(dialog.getByRole('alert')).toContainText('均已恢复为操作前内容，当前页面数据未改变');
+    await expect(page.locator('#page-dashboard')).toContainText('原待办');
+    await expect(page.locator('#page-dashboard')).not.toContainText('目标待办');
+    expect(await page.evaluate(() => Object.fromEntries(
+        ['lifePlanData', 'todoAppData', 'habitAppData', 'lifePlanSyncState'].map(key => [key, localStorage.getItem(key)]),
+    ))).toEqual(beforeRestore);
+});
+
+test('failed commit removes transaction keys that did not exist before', async ({ page }) => {
+    const source = emptyData({ todos: [todoFixture('atomic-new-todo', '事务失败待办')] });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        const realSetItem = Storage.prototype.setItem;
+        let blocked = false;
+        Storage.prototype.setItem = function blockNewHabitMirror(key, value) {
+            if (key === 'habitAppData' && !blocked) {
+                blocked = true;
+                throw new Error('new habit mirror blocked');
+            }
+            return realSetItem.call(this, key, value);
+        };
+    }, source);
+    await page.goto('/#/todos');
+    const original = await page.evaluate(() => ({
+        main: localStorage.getItem('lifePlanData'),
+        todo: localStorage.getItem('todoAppData'),
+        habit: localStorage.getItem('habitAppData'),
+        sync: localStorage.getItem('lifePlanSyncState'),
+    }));
+    await page.getByRole('button', { name: /事务失败待办/ }).first().click();
+    await page.getByRole('button', { name: '标记完成', exact: true }).click().catch(() => {});
+    await expect(page.getByRole('button', { name: '标记完成', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /事务失败待办/ }).first()).not.toContainText('已完成');
+
+    expect(await page.evaluate(() => ({
+        main: localStorage.getItem('lifePlanData'),
+        todo: localStorage.getItem('todoAppData'),
+        habit: localStorage.getItem('habitAppData'),
+        sync: localStorage.getItem('lifePlanSyncState'),
+    }))).toEqual(original);
+});
+
 test('sidebar snapshot modal shows only the five most recent compatible critical failures', async ({ page }) => {
     const failures = Array.from({ length: 7 }, (_, index) => ({
         id: `failure-${index}`,
@@ -1329,6 +1550,7 @@ test('dashboard habit quick check-in writes checkin and rebuilds habit mirror', 
     const source = emptyData({
         habits: [{
             id: 'habit-dash-checkin',
+            noteMode: 'never',
             name: '首页打卡习惯',
             tag: '健康',
             rule: 'daily',
@@ -1505,8 +1727,8 @@ test('dashboard habit actions expose legacy note and decrease branches', async (
     const today = localDate();
     const source = emptyData({
         habits: [
-            { id: 'habit-dashboard-single-note', name: '单次备注习惯', rule: 'daily', timesPerDay: 1, startDate: today },
-            { id: 'habit-dashboard-multi-note', name: '多次备注习惯', rule: 'daily', timesPerDay: 2, startDate: today },
+            { id: 'habit-dashboard-single-note', name: '单次备注习惯', rule: 'daily', timesPerDay: 1, noteMode: 'ask', startDate: today },
+            { id: 'habit-dashboard-multi-note', name: '多次备注习惯', rule: 'daily', timesPerDay: 2, noteMode: 'ask', startDate: today },
         ],
         checkins: [{ id: 'checkin-dashboard-single-note', habitId: 'habit-dashboard-single-note', date: today, time: '08:00', note: '旧备注', checkinAt: `${today}T08:00:00` }],
     });
@@ -1522,12 +1744,11 @@ test('dashboard habit actions expose legacy note and decrease branches', async (
     await expect(multi.getByRole('button', { name: '备注', exact: true })).toBeVisible();
     await expect(multi.getByRole('button', { name: '-1', exact: true })).toHaveCount(0);
 
-    page.once('dialog', dialog => {
-        expect(dialog.type()).toBe('prompt');
-        expect(dialog.defaultValue()).toBe('');
-        dialog.accept('第一次备注');
-    });
     await multi.getByRole('button', { name: '备注', exact: true }).click();
+    const noteModal = page.getByRole('dialog', { name: /备注 · 多次备注习惯/ });
+    await expect(noteModal).toBeVisible();
+    await noteModal.locator('textarea').fill('第一次备注');
+    await noteModal.getByRole('button', { name: '保存' }).click();
     await expect(multi).toContainText('备注：第一次备注');
     await expect(multi.getByRole('button', { name: '-1', exact: true })).toBeVisible();
 
@@ -1842,7 +2063,7 @@ test('tag center opens wheel tag management and seeds the legacy defaults when w
     await expect(card).toContainText('只有灵感来源的标签');
     await card.getByRole('button').filter({ hasText: '转盘项' }).click();
 
-    await expectHashRoute(page, '/wheel', { tag: '' });
+    await expectHashRoute(page, '/wheel', { tag: '', returnTo: '/tags' });
     const management = page.locator('#wheel-management-block');
     await expect(management).toBeVisible();
     await expect(management).toHaveAttribute('data-management-panel', 'tags');
@@ -1867,7 +2088,7 @@ test('search record results open a read-only preview before editing', async ({ p
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/search?q=搜索预览');
     await page.locator('.search-result-item').filter({ hasText: '搜索预览记录' }).click();
-    await expectHashRoute(page, '/records', { record: 'search-preview-record', preview: '1', returnTo: '/search' });
+    await expectHashRoute(page, '/records', { record: 'search-preview-record', preview: '1', returnTo: '/search?q=%E6%90%9C%E7%B4%A2%E9%A2%84%E8%A7%88' });
     const preview = page.getByRole('dialog', { name: '记录预览' });
     await expect(preview).toContainText('搜索结果正文');
     await expect(page.locator('.record-editor-panel')).toHaveCount(0);
@@ -1875,7 +2096,7 @@ test('search record results open a read-only preview before editing', async ({ p
 
     await preview.getByRole('button', { name: '编辑', exact: true }).click();
     await expect(page.locator('.record-editor-panel')).toBeVisible();
-    await expectHashRoute(page, '/records', { record: 'search-preview-record', returnTo: '/search' });
+    await expectHashRoute(page, '/records', { record: 'search-preview-record', preview: undefined, returnTo: '/search?q=%E6%90%9C%E7%B4%A2%E9%A2%84%E8%A7%88' });
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
@@ -3304,16 +3525,17 @@ test('fitness workout log deletion keeps the legacy confirmation guard', async (
 
     const row = page.locator('article.card').filter({ hasText: '训练历史' }).locator('.fitness-metric-row').filter({ hasText: '待删训练' });
 
+    await row.getByRole('button', { name: '编辑', exact: true }).click();
+    const modalTitleInput = page.locator('#fitness-workout-section').locator('.form-group').filter({ hasText: '训练标题' }).locator('input');
+    await expect(modalTitleInput).toHaveValue('待删训练');
+    await page.getByRole('dialog', { name: '训练日志' }).getByRole('button', { name: '关闭训练日志' }).click();
+
     page.once('dialog', async dialog => {
         expect(dialog.message()).toBe('确定删除这条训练日志吗？');
         await dialog.dismiss();
     });
     await row.getByRole('button', { name: '删除', exact: true }).click();
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
-
-    await row.getByRole('button', { name: '编辑', exact: true }).click();
-    const titleInput = page.locator('#fitness-workout-section').locator('.form-group').filter({ hasText: '训练标题' }).locator('input');
-    await expect(titleInput).toHaveValue('待删训练');
 
     page.once('dialog', dialog => dialog.accept());
     await row.getByRole('button', { name: '删除', exact: true }).click();
@@ -3322,7 +3544,7 @@ test('fitness workout log deletion keeps the legacy confirmation guard', async (
     expect(stored.deletedItems).toEqual(expect.arrayContaining([
         expect.objectContaining({ collection: 'fitnessWorkouts', id: 'fitness-workout-delete', reason: 'manual-delete' }),
     ]));
-    await expect(titleInput).toHaveValue('');
+
 });
 
 test('fitness plan editor keeps the mobile page within the viewport', async ({ page }) => {
@@ -6025,10 +6247,10 @@ test('materials deep links filters and random review remain read-only', async ({
     await page.getByRole('button', { name: '搜索', exact: true }).click();
     await expectHashRoute(page, '/search', { q: 'Beta 主素材' });
     await page.locator('.search-result-item').filter({ hasText: 'Beta 主素材' }).click();
-    await expectHashRoute(page, '/materials', { material: 'material-beta' });
+    await expectHashRoute(page, '/materials', { material: 'material-beta', returnTo: '/search?q=Beta+%E4%B8%BB%E7%B4%A0%E6%9D%90' });
     await expect(materialsPage.getByRole('dialog', { name: 'Beta 主素材' })).toContainText('Beta 主素材');
     await page.reload();
-    await expectHashRoute(page, '/materials', { material: 'material-beta' });
+    await expectHashRoute(page, '/materials', { material: 'material-beta', returnTo: '/search?q=Beta+%E4%B8%BB%E7%B4%A0%E6%9D%90' });
     await expect(materialsPage.getByRole('dialog', { name: 'Beta 主素材' })).toContainText('Beta 主素材');
     await page.goBack();
     await expectHashRoute(page, '/search', { q: 'Beta 主素材' });
@@ -6330,7 +6552,7 @@ test('idea filters deep-link to one Records editor and persist all legacy idea f
 
     const ideaCard = page.locator('.idea-card').filter({ hasText: '需要结论的实践' });
     await ideaCard.getByRole('button', { name: '编辑推进' }).click();
-    await expect(page).toHaveURL(/#\/records\?record=idea-needs-conclusion$/);
+    await expect(page).toHaveURL(/#\/records\?record=idea-needs-conclusion&returnTo=\/ideas$/);
     const editor = page.locator('.record-editor-panel');
     const ideaFields = editor.getByRole('region', { name: '灵感推进' });
     await expect(editor.getByLabel('状态')).toHaveValue('实践中');
@@ -6352,7 +6574,10 @@ test('idea filters deep-link to one Records editor and persist all legacy idea f
         ideaConclusion: '新版路径可用',
     });
     await editor.getByRole('button', { name: '可选待办' }).click();
-    await expect(page).toHaveURL(/#\/todos\?todo=todo-open-idea$/);
+    await expectHashRoute(page, '/todos', {
+        todo: 'todo-open-idea',
+        returnTo: '/ideas',
+    });
     await expect(page.locator('.todo-detail-panel')).toContainText('可选待办');
 
     await page.goto('/#/records?record=idea-needs-conclusion');
@@ -6454,10 +6679,13 @@ test('idea conversion opens an editable pre-create draft then links only after s
     await detail.getByRole('button', { name: '添加', exact: true }).click();
     await detail.getByRole('button', { name: '创建并关联灵感' }).click();
 
-    await expect.poll(async () => {
-        const hash = await page.evaluate(() => location.hash);
-        return /#\/todos\?todo=/.test(hash);
-    }).toBe(true);
+    await expect.poll(() => page.evaluate(() => {
+        const rawHash = location.hash.replace(/^#/, '');
+        const queryIndex = rawHash.indexOf('?');
+        const path = queryIndex < 0 ? rawHash : rawHash.slice(0, queryIndex);
+        const params = new URLSearchParams(queryIndex < 0 ? '' : rawHash.slice(queryIndex + 1));
+        return { path, hasTodo: Boolean(params.get('todo')), returnTo: params.get('returnTo') };
+    })).toEqual({ path: '/todos', hasTodo: true, returnTo: '/ideas' });
     await expect(detail.getByRole('heading', { name: '编辑后的灵感待办' })).toBeVisible();
     const stored = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
@@ -6879,6 +7107,7 @@ test('AI chatCapture keeps multi-destination drafts read-only until confirmed wr
     await page.locator('#ai-draft-plan-start-0').fill(yesterday);
     await page.locator('#ai-draft-plan-end-0').fill(today);
     await page.locator('#ai-draft-group-0').fill('迁移');
+    await page.locator('#ai-draft-urgency-0').selectOption('high');
     await page.locator('#ai-capture-draft-workText').fill('编辑后的工作记录：chatCapture 多落点写回完成。');
     await page.locator('#ai-capture-draft-planText').fill('编辑后的日计划：先检查 AI 页面写回。');
     await page.locator('#ai-capture-draft-ideaText').fill('编辑后的灵感：把对话整理做成轻量收集入口。');
@@ -6899,6 +7128,7 @@ test('AI chatCapture keeps multi-destination drafts read-only until confirmed wr
         planStartDate: yesterday,
         planEndDate: today,
         group: '迁移',
+        urgency: 'high',
     });
     expect(stored.mirror.authority).toBe('lifePlanData.todos');
     expect(stored.mirror.todos.map(item => item.id)).toContain(captureTodo.id);
@@ -7954,7 +8184,7 @@ test('wheel remote preview stays GET-only and apply rechecks then persists the m
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false }));
-        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/custom-wheel.json', autoSync: true, remoteUploadEnabled: true }));
         window.__wheelSyncRequests = [];
         window.fetch = async (url, options = {}) => {
             const method = options.method || 'GET';
@@ -7979,8 +8209,8 @@ test('wheel remote preview stays GET-only and apply rechecks then persists the m
     }));
     expect(state.data).toBe(original);
     expect(state.methods).toEqual(['GET']);
-    expect(state.urls[0]).toContain('/apps/wheel-app/data.json');
-    expect(state.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: false, remoteUploadEnabled: false });
+    expect(state.urls[0]).toContain('/custom-wheel.json');
+    expect(state.config).toMatchObject({ remotePath: '/custom-wheel.json', autoSync: false, remoteUploadEnabled: false });
     expect(state.wheelState.lastRemoteEtag).toBe('"wheel-v1"');
 
     page.once('dialog', dialog => dialog.accept());
@@ -8092,7 +8322,7 @@ test('wheel existing remote upload uses If-Match and verifies the written snapsh
     await page.addInitScript(({ localData, remoteData }) => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
-        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/custom-wheel.json', autoSync: true, remoteUploadEnabled: true }));
         window.__wheelSyncRequests = [];
         window.__wheelUploaded = null;
         window.fetch = async (url, options = {}) => {
@@ -8124,14 +8354,14 @@ test('wheel existing remote upload uses If-Match and verifies the written snapsh
         state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
         config: JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig')),
     }));
-    const fileRequests = result.requests.filter(item => item.url.includes('/apps/wheel-app/data.json'));
+    const fileRequests = result.requests.filter(item => item.url.includes('/custom-wheel.json'));
     expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET', 'PUT', 'GET']);
     const put = fileRequests.find(item => item.method === 'PUT');
     expect(put.headers['If-Match'] || put.headers['if-match']).toBe('"wheel-existing-v1"');
     expect(result.uploaded.wheels[0].name).toBe('本机新版转盘');
     expect(result.uploaded.wheelLibraryItems.map(item => item.id)).toContain('library-existing-local');
     expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"wheel-existing-v2"' });
-    expect(result.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: false, remoteUploadEnabled: false });
+    expect(result.config).toMatchObject({ remotePath: '/custom-wheel.json', autoSync: false, remoteUploadEnabled: false });
 });
 
 test('wheel existing upload stops before PUT when the remote changed after preview', async ({ page }) => {
@@ -8194,7 +8424,7 @@ test('wheel first remote creation requires session arm and uses If-None-Match', 
     await page.addInitScript(localData => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
-        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/custom-wheel.json', autoSync: true, remoteUploadEnabled: true }));
         window.__wheelSyncRequests = [];
         window.__wheelUploaded = null;
         window.fetch = async (url, options = {}) => {
@@ -8228,12 +8458,134 @@ test('wheel first remote creation requires session arm and uses If-None-Match', 
         state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState')),
         config: JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig')),
     }));
-    const fileRequests = result.requests.filter(item => item.url.includes('/apps/wheel-app/data.json'));
+    const fileRequests = result.requests.filter(item => item.url.includes('/custom-wheel.json'));
     expect(fileRequests.map(item => item.method)).toEqual(['GET', 'GET', 'PUT', 'GET']);
     const put = fileRequests.find(item => item.method === 'PUT');
     expect(put.headers['If-None-Match'] || put.headers['if-none-match']).toBe('*');
     expect(result.state).toMatchObject({ dirty: false, lastRemoteEtag: '"wheel-created"' });
-    expect(result.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: false, remoteUploadEnabled: false });
+    expect(result.config).toMatchObject({ remotePath: '/custom-wheel.json', autoSync: false, remoteUploadEnabled: false });
+});
+
+test('wheel custom path migration discards legacy pathless baseline and previews the first difference', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-path-migration-local', name: '路径迁移本机转盘', mode: 'normal',
+            items: [{ id: 'path-local-option', name: '本机选项', note: '', weight: 1, enabled: true, createdAt: '2026-08-06T08:00:00', updatedAt: '2026-08-06T08:00:00' }],
+            createdAt: '2026-08-06T08:00:00', updatedAt: '2026-08-06T08:00:00',
+        }],
+    });
+    const remote = emptyData({
+        wheels: [{
+            id: 'wheel-path-migration-remote', name: '路径迁移云端转盘', mode: 'normal',
+            items: [{ id: 'path-remote-option', name: '云端选项', note: '', weight: 1, enabled: true, createdAt: '2026-08-06T09:00:00', updatedAt: '2026-08-06T09:00:00' }],
+            createdAt: '2026-08-06T09:00:00', updatedAt: '2026-08-06T09:00:00',
+        }],
+    });
+    const original = JSON.stringify(local);
+    await page.addInitScript(({ localData, remoteData }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
+            remotePath: '/custom-wheel.json', autoSync: true, conditionalAutoSyncEnabled: true, remoteUploadEnabled: false,
+        }));
+        localStorage.setItem('lifePlanWheelSyncState', JSON.stringify({
+            dirty: true,
+            lastLocalHash: 'legacy-local-hash',
+            lastRemoteHash: 'legacy-remote-hash',
+            lastRemoteEtag: '"legacy-wheel-etag"',
+            lastPullAt: '2026-08-01T00:00:00.000Z',
+            lastPushAt: '2026-08-01T00:00:00.000Z',
+            lastSyncAt: '2026-08-01T00:00:00.000Z',
+            lastConflictAt: '2026-08-01T00:00:00.000Z',
+        }));
+        window.__wheelPathMigrationRequests = [];
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__wheelPathMigrationRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'GET') return new Response(JSON.stringify(remoteData), { status: 200, headers: { ETag: '"wheel-custom-v1"', 'Content-Type': 'application/json' } });
+            return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"wheel-custom-v2"' } });
+        };
+    }, { localData: local, remoteData: remote });
+
+    await page.goto('/#/sync');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}'))).toEqual({ remotePath: '/custom-wheel.json' });
+    const panel = page.locator('.wheel-sync-card');
+    await panel.getByRole('button', { name: '立即自动同步一次' }).click();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}').lastRemoteHash || '')).not.toBe('');
+
+    const result = await page.evaluate(() => ({
+        data: localStorage.getItem('lifePlanData'),
+        requests: window.__wheelPathMigrationRequests,
+        state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}'),
+    }));
+    expect(result.data).toBe(original);
+    expect(result.requests.map(item => item.method)).toEqual(['GET']);
+    expect(result.requests[0].url).toContain('/custom-wheel.json');
+    expect(result.state).toMatchObject({ remotePath: '/custom-wheel.json', lastRemoteEtag: '"wheel-custom-v1"' });
+    expect(result.state.lastLocalHash).toBeTruthy();
+    expect(result.state.lastRemoteHash).toBeTruthy();
+    expect(result.state).not.toHaveProperty('dirty');
+    expect(result.state).not.toHaveProperty('lastPushAt');
+    expect(result.state).not.toHaveProperty('lastConflictAt');
+});
+
+test('wheel default path keeps a legacy pathless baseline compatible with conditional upload', async ({ page }) => {
+    const local = emptyData({
+        wheels: [{
+            id: 'wheel-default-legacy', name: '默认路径旧基线转盘', mode: 'normal',
+            items: [{ id: 'default-legacy-option', name: '默认路径选项', note: '', weight: 1, enabled: true, createdAt: '2026-08-06T08:00:00', updatedAt: '2026-08-06T08:00:00' }],
+            createdAt: '2026-08-06T08:00:00', updatedAt: '2026-08-06T08:00:00',
+        }],
+    });
+    await page.addInitScript(localData => {
+        localStorage.setItem('lifePlanData', JSON.stringify(localData));
+        localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
+            remotePath: '/apps/wheel-app/data.json', autoSync: true, conditionalAutoSyncEnabled: true, remoteUploadEnabled: false,
+        }));
+        localStorage.setItem('lifePlanWheelSyncState', JSON.stringify({
+            dirty: true,
+            lastLocalHash: 'legacy-local-hash',
+            lastRemoteHash: 'legacy-remote-hash',
+            lastRemoteEtag: '"wheel-default-v1"',
+        }));
+        window.__wheelDefaultLegacyRequests = [];
+        window.__wheelDefaultLegacyUploaded = null;
+        window.fetch = async (url, options = {}) => {
+            const method = options.method || 'GET';
+            window.__wheelDefaultLegacyRequests.push({ url: String(url), method, headers: options.headers || {}, body: options.body || '' });
+            if (method === 'PUT') {
+                window.__wheelDefaultLegacyUploaded = JSON.parse(options.body);
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ETag: '"wheel-default-v2"' } });
+            }
+            return new Response(JSON.stringify(window.__wheelDefaultLegacyUploaded || localData), {
+                status: 200,
+                headers: { ETag: window.__wheelDefaultLegacyUploaded ? '"wheel-default-v2"' : '"wheel-default-v1"', 'Content-Type': 'application/json' },
+            });
+        };
+    }, local);
+
+    await page.goto('/#/sync');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}'))).toMatchObject({
+        remotePath: '/apps/wheel-app/data.json',
+        dirty: true,
+        lastLocalHash: 'legacy-local-hash',
+        lastRemoteHash: 'legacy-remote-hash',
+        lastRemoteEtag: '"wheel-default-v1"',
+    });
+    const panel = page.locator('.wheel-sync-card');
+    await panel.getByRole('button', { name: '立即自动同步一次' }).click();
+    await expect.poll(() => page.evaluate(() => window.__wheelDefaultLegacyRequests.filter(item => item.method === 'PUT').length)).toBe(1);
+
+    const result = await page.evaluate(() => ({
+        requests: window.__wheelDefaultLegacyRequests,
+        state: JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}'),
+    }));
+    const fileRequests = result.requests.filter(item => item.url.includes('/apps/wheel-app/data.json'));
+    expect(fileRequests.map(item => item.method)).toEqual(['GET', 'PUT', 'GET']);
+    const put = fileRequests.find(item => item.method === 'PUT');
+    expect(put.headers['If-Match'] || put.headers['if-match']).toBe('"wheel-default-v1"');
+    expect(result.state).toMatchObject({ remotePath: '/apps/wheel-app/data.json', dirty: false, lastRemoteEtag: '"wheel-default-v2"' });
 });
 
 test('wheel conditional auto sync sanitizes old config and stays idle when disabled', async ({ page }) => {
@@ -8247,7 +8599,7 @@ test('wheel conditional auto sync sanitizes old config and stays idle when disab
     await page.addInitScript(localData => {
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
-        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/unsafe-wheel.json', autoSync: true, remoteUploadEnabled: true }));
+        localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({ remotePath: '/custom-wheel.json', autoSync: true, remoteUploadEnabled: true }));
         window.__wheelAutoRequests = [];
         window.fetch = async (url, options = {}) => {
             window.__wheelAutoRequests.push({ url: String(url), method: options.method || 'GET', headers: options.headers || {}, body: options.body || '' });
@@ -8272,7 +8624,7 @@ test('wheel conditional auto sync sanitizes old config and stays idle when disab
     }));
     expect(result.requests).toEqual([]);
     expect(result.config).toMatchObject({
-        remotePath: '/apps/wheel-app/data.json',
+        remotePath: '/custom-wheel.json',
         autoSync: false,
         conditionalAutoSyncEnabled: false,
         remoteUploadEnabled: false,
@@ -8292,7 +8644,7 @@ test('wheel conditional auto sync uploads dirty wheel slice after debounce', asy
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
-            remotePath: '/apps/wheel-app/data.json',
+            remotePath: '/custom-wheel.json',
             autoSync: true,
             conditionalAutoSyncEnabled: true,
             remoteUploadEnabled: true,
@@ -8325,6 +8677,7 @@ test('wheel conditional auto sync uploads dirty wheel slice after debounce', asy
     }, local);
     await page.evaluate(hash => {
         localStorage.setItem('lifePlanWheelSyncState', JSON.stringify({
+            remotePath: '/custom-wheel.json',
             dirty: false,
             lastLocalHash: hash,
             lastRemoteHash: hash,
@@ -8343,7 +8696,7 @@ test('wheel conditional auto sync uploads dirty wheel slice after debounce', asy
         mainState: JSON.parse(localStorage.getItem('lifePlanSyncState')),
         config: JSON.parse(localStorage.getItem('lifePlanWheelSyncConfig')),
     }));
-    const fileRequests = result.requests.filter(item => item.url.includes('/apps/wheel-app/data.json'));
+    const fileRequests = result.requests.filter(item => item.url.includes('/custom-wheel.json'));
     expect(fileRequests.map(item => item.method)).toEqual(['GET', 'PUT', 'GET']);
     const put = fileRequests.find(item => item.method === 'PUT');
     expect(put.headers['If-Match'] || put.headers['if-match']).toBe('"wheel-auto-v1"');
@@ -8351,7 +8704,7 @@ test('wheel conditional auto sync uploads dirty wheel slice after debounce', asy
     expect(result.uploaded.remoteUploadEnabled).toBeUndefined();
     expect(result.wheelState).toMatchObject({ dirty: false, lastRemoteEtag: '"wheel-auto-v2"' });
     expect(result.mainState.dirty).toBe(true);
-    expect(result.config).toMatchObject({ remotePath: '/apps/wheel-app/data.json', autoSync: true, conditionalAutoSyncEnabled: true, remoteUploadEnabled: false });
+    expect(result.config).toMatchObject({ remotePath: '/custom-wheel.json', autoSync: true, conditionalAutoSyncEnabled: true, remoteUploadEnabled: false });
 });
 
 test('wheel conditional auto sync never creates a missing remote file', async ({ page }) => {
@@ -8366,7 +8719,7 @@ test('wheel conditional auto sync never creates a missing remote file', async ({
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
-            remotePath: '/apps/wheel-app/data.json',
+            remotePath: '/custom-wheel.json',
             autoSync: true,
             conditionalAutoSyncEnabled: true,
             remoteUploadEnabled: false,
@@ -8416,7 +8769,7 @@ test('wheel conditional auto sync pulls remote update on visibility resume', asy
         localStorage.setItem('lifePlanData', JSON.stringify(localData));
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://sync.example.test', remotePath: '/life-plan.json', autoSync: false }));
         localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
-            remotePath: '/apps/wheel-app/data.json',
+            remotePath: '/custom-wheel.json',
             autoSync: true,
             conditionalAutoSyncEnabled: true,
             remoteUploadEnabled: false,
@@ -8436,6 +8789,7 @@ test('wheel conditional auto sync pulls remote update on visibility resume', asy
     }, local);
     await page.evaluate(hash => {
         localStorage.setItem('lifePlanWheelSyncState', JSON.stringify({
+            remotePath: '/custom-wheel.json',
             dirty: false,
             lastLocalHash: hash,
             lastRemoteHash: hash,

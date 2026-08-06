@@ -10,9 +10,14 @@ export function currentReturnTo(route: RouteLocationNormalizedLoaded) {
 }
 
 export function withReturnTo(route: RouteLocationNormalizedLoaded, target: { path: string; query?: Record<string, unknown> }): RouteLocationRaw {
+  const returnTo = currentReturnTo(route);
   return {
     path: target.path,
-    query: { ...target.query, returnTo: route.fullPath },
+    query: { ...target.query, returnTo: returnTo || route.fullPath },
+    // Once an overlay chain has a source, subsequent overlays are one transient
+    // history slot. Replacing that slot lets closing the chain remove every
+    // intermediate overlay from Back while the first open remains navigable.
+    replace: Boolean(returnTo),
   };
 }
 

@@ -450,8 +450,9 @@ function closeRecordPreview() {
 function openDiaryAiFromPreview() {
   const diaryId = previewDraft.value?.id;
   if (!diaryId) return;
-  closeRecordPreview();
-  void router.push({ path: '/ai', query: { mode: 'diaryReview', diary: diaryId } });
+  previewDraft.value = null;
+  previewFromEditor.value = false;
+  void router.push(withReturnTo(route, { path: '/ai', query: { mode: 'diaryReview', diary: diaryId } }));
 }
 
 function editPreviewRecord() {

@@ -72,8 +72,8 @@ function resetStateForRemotePath(remotePath: string) {
   const state = readJson<WheelSyncState>(STATE_KEY);
   const hasState = Object.keys(state).length > 0;
   const pathChanged = state.remotePath && state.remotePath !== remotePath;
-  const legacyStateFromDefaultPath = !state.remotePath && remotePath !== REMOTE_PATH && hasState;
-  if (pathChanged || legacyStateFromDefaultPath) {
+  const legacyStateMigratedToCustomPath = !state.remotePath && remotePath !== REMOTE_PATH && hasState;
+  if (pathChanged || legacyStateMigratedToCustomPath) {
     localStorage.setItem(STATE_KEY, JSON.stringify({ remotePath }));
     return;
   }
@@ -105,6 +105,7 @@ function writeConfig(config: Partial<WheelSyncConfig> = {}) {
     remoteUploadEnabled: false,
   };
   localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
+  resetStateForRemotePath(remotePath);
   return next;
 }
 
@@ -350,7 +351,7 @@ export async function runWheelCloudSyncBoth(options: { source?: string; force?: 
       return { merged: true, uploaded: true, conflict: true };
     } catch (error) {
       if (!isConditionalWriteConflict(error)) throw error;
-      const latestRemote = await fetchRemote(mainConfig);
+      const latestRemote = await fetchRemote(mainConfig, remotePath);
       if (!latestRemote?.etag) throw error;
       const mergedAgain = createMergeSnapshots('Wheel 条件写入冲突合并', dataProvider!(), latestRemote, 'wheel-auto-etag-conflict', options.source || 'vue-wheel-auto-sync');
       dataReplacer!(mergedAgain, 'wheel-auto-etag-conflict-merge');
