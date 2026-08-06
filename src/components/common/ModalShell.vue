@@ -4,6 +4,8 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 type ModalSize = 'sm' | 'md' | 'lg';
 type ModalElement = 'section' | 'article' | 'form';
 
+const openModalStack: symbol[] = [];
+
 const props = withDefaults(defineProps<{
   modelValue: boolean;
   title: string;
@@ -38,6 +40,7 @@ const emit = defineEmits<{
 
 const overlayRef = ref<HTMLElement | null>(null);
 const dialogRef = ref<HTMLElement | null>(null);
+const modalToken = Symbol('modal');
 let restoreFocus: HTMLElement | null = null;
 const titleId = `modal-shell-title-${Math.random().toString(36).slice(2)}`;
 
@@ -62,9 +65,10 @@ function close() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (!props.modelValue || event.defaultPrevented) return;
+  if (!props.modelValue || event.defaultPrevented || openModalStack[openModalStack.length - 1] !== modalToken) return;
   if (event.key === 'Escape' && props.closeOnEscape) {
     event.preventDefault();
+    event.stopImmediatePropagation();
     close();
     return;
   }
@@ -85,7 +89,10 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 watch(() => props.modelValue, opened => {
+  const stackIndex = openModalStack.indexOf(modalToken);
+  if (stackIndex >= 0) openModalStack.splice(stackIndex, 1);
   if (opened) {
+    openModalStack.push(modalToken);
     restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.addEventListener('keydown', handleKeydown);
     focusFirstControl();
@@ -102,6 +109,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  const stackIndex = openModalStack.indexOf(modalToken);
+  if (stackIndex >= 0) openModalStack.splice(stackIndex, 1);
   document.removeEventListener('keydown', handleKeydown);
   const target = restoreFocus;
   restoreFocus = null;

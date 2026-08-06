@@ -3,11 +3,21 @@ import { normalizeTopLevelData, type LifePlanData } from '../types/lifePlan';
 
 export type CommitSource = 'user' | 'sync';
 export type ImportOptions = { onBeforeSnapshotFailure?: () => boolean };
+export type RestoreOptions = { onBeforeSnapshotFailure?: (error: Error) => boolean };
+export type CriticalFailure = {
+  id: string;
+  label: string;
+  message: string;
+  createdAt: string;
+  action: string;
+};
 
 const mainDataKey = 'lifePlanData';
 const syncStateKey = 'lifePlanSyncState';
 const todoMirrorKey = 'todoAppData';
 const habitMirrorKey = 'habitAppData';
+const criticalFailureKey = 'lifePlanCriticalFailures';
+const maxCriticalFailures = 5;
 
 function clone<T>(value: T): T {
   // Vue store values are reactive proxies. JSON cloning mirrors the legacy
@@ -101,7 +111,12 @@ export class LifePlanRepository {
   }
 
   createSnapshot(reason: string, data: LifePlanData, meta: Record<string, unknown> = {}) {
-    return this.services.snapshots.createSnapshot(reason, data, { source: 'vue-migration', ...meta });
+    const snapshot = this.services.snapshots.createSnapshot(reason, data, { source: 'vue-migration', ...meta });
+    if (!snapshot) {
+      const error = this.snapshotError('快照服务返回空结果');
+      this.recordCriticalFailure('本地快照写入失败', error, String(meta.action || 'snapshot-create'));
+    }
+    return snapshot;
   }
 
   mergeImport(data: LifePlanData, imported: unknown, options: ImportOptions = {}): LifePlanData {
@@ -142,16 +157,39 @@ export class LifePlanRepository {
     return next;
   }
 
-  restoreSnapshot(snapshotId: string, current: LifePlanData): LifePlanData {
+  restoreSnapshot(snapshotId: string, current: LifePlanData, options: RestoreOptions = {}): LifePlanData {
     const target = this.listSnapshots().find((item: { id?: string }) => item.id === snapshotId);
     if (!target?.data) throw new Error('快照不存在或已损坏');
-    this.createSnapshot('恢复前自动快照', current, {
+    const beforeSnapshot = this.createSnapshot('恢复前自动快照', current, {
       action: 'before-restore',
       parentSnapshotId: target.id,
       parentVersion: target.version,
       parentHash: target.hash,
+      mergedWith: { label: `恢复目标 v${target.version || '?'}`, hash: target.hash || '' },
     });
-    return this.commit(normalizePersistedData(target.data, this.services), 'restore-snapshot');
+    if (!beforeSnapshot) {
+      const snapshotFailure = this.snapshotError('恢复前快照创建失败');
+      if (!options.onBeforeSnapshotFailure?.(snapshotFailure)) {
+        throw new Error(`恢复前快照创建失败，恢复已取消：${snapshotFailure.message}`);
+      }
+    }
+    try {
+      return this.commit(normalizePersistedData(target.data, this.services), 'restore-snapshot');
+    } catch (error) {
+      const restoreError = this.toError(error, '恢复后的数据未能写入本地存储');
+      this.recordCriticalFailure('恢复本地快照失败', restoreError, 'restore-snapshot');
+      throw new Error(`恢复失败：${restoreError.message}。当前数据已保持不变。`);
+    }
+  }
+
+  listCriticalFailures(): CriticalFailure[] {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(criticalFailureKey) || '[]');
+      return Array.isArray(parsed) ? parsed.slice(0, maxCriticalFailures) : [];
+    } catch (error) {
+      console.warn('关键故障记录读取失败', error);
+      return [];
+    }
   }
 
   getTodoSourceHash(data: LifePlanData) {
@@ -208,6 +246,39 @@ export class LifePlanRepository {
     };
     localStorage.setItem(habitMirrorKey, JSON.stringify(mirror));
     return mirror;
+  }
+
+  private snapshotError(fallback: string) {
+    const error = typeof this.services.snapshots.getLastError === 'function'
+      ? this.services.snapshots.getLastError()
+      : null;
+    return this.toError(error, fallback);
+  }
+
+  private toError(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error;
+    if (error && typeof error === 'object' && 'message' in error) {
+      const message = String((error as { message?: unknown }).message || '').trim();
+      if (message) return new Error(message);
+    }
+    return new Error(fallback);
+  }
+
+  private recordCriticalFailure(label: string, error: unknown, action: string) {
+    const normalized = this.toError(error, '操作失败');
+    const entry: CriticalFailure = {
+      id: genId(),
+      label,
+      message: normalized.message,
+      createdAt: getNowLocal(),
+      action,
+    };
+    try {
+      localStorage.setItem(criticalFailureKey, JSON.stringify([entry, ...this.listCriticalFailures()].slice(0, maxCriticalFailures)));
+    } catch (logError) {
+      console.warn('关键故障记录写入失败', logError);
+    }
+    console.error(label, normalized);
   }
 
   private updateMainSyncState(data: LifePlanData, source: CommitSource) {

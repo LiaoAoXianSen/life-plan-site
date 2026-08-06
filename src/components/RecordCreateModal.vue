@@ -6,6 +6,7 @@ import ModalShell from './common/ModalShell.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
+import type { DataEntity } from '../types/lifePlan';
 
 const props = defineProps<{ modelValue: boolean }>();
 const emit = defineEmits<{
@@ -22,6 +23,8 @@ const templateValues = reactive<Record<string, string>>({});
 const templateEditorRef = ref<HTMLElement | null>(null);
 const draftDirty = ref(false);
 const draftStatus = ref('');
+const draftTodoIds = ref<string[]>([]);
+const newTodoText = ref('');
 let hydrating = false;
 let autoSaveTimer: number | undefined;
 
@@ -63,6 +66,8 @@ const ideaTodoOptions = computed(() => lifePlan.data.todos
   .slice()
   .sort(records.services.todos.compareTodosForFocus));
 
+const draftTodos = computed(() => lifePlan.data.todos.filter(todo => draftTodoIds.value.includes(todo.id)));
+
 function currentTime() {
   return new Date().toTimeString().slice(0, 5);
 }
@@ -88,6 +93,8 @@ function resetDraft() {
   window.clearTimeout(autoSaveTimer);
   step.value = 'type';
   draftId.value = '';
+  draftTodoIds.value = [];
+  newTodoText.value = '';
   selectedTemplateKey.value = '';
   setTemplateValues();
   Object.assign(draft, {
@@ -111,6 +118,8 @@ function selectType(type: string) {
   hydrating = true;
   step.value = 'edit';
   draftId.value = '';
+  draftTodoIds.value = [];
+  newTodoText.value = '';
   Object.assign(draft, {
     title: type === '日记' ? formatDiaryTitle(range.start) : '',
     content: '', type, startDate: range.start, endDate: range.end, recordTime: currentTime(), recordEndTime: '',
@@ -156,7 +165,7 @@ function getDraftInput() {
     recordTime: draft.recordTime,
     recordEndTime: draft.recordEndTime,
     templateId: draft.templateId,
-    todoIds: [] as string[],
+    todoIds: [...draftTodoIds.value],
     ...ideaFields,
   };
 }
@@ -180,10 +189,36 @@ function persistDraft(mode: 'auto' | 'manual' | 'silent') {
   const result = records.saveRecordDraft(draftId.value, getDraftInput());
   if (!result) return false;
   draftId.value = result.id;
+  const savedRecord = lifePlan.data.records.find(item => item.id === result.id);
+  draftTodoIds.value = Array.isArray(savedRecord?.todoIds) ? savedRecord.todoIds.map(String) : [];
   draftDirty.value = false;
   if (mode === 'auto') draftStatus.value = `已自动保存于 ${new Date().toTimeString().slice(0, 8)}`;
   if (mode === 'manual') draftStatus.value = '已保存';
   return true;
+}
+
+function ensureDraftRecord() {
+  if (draftId.value) return draftId.value;
+  if (!hasMeaningfulInput()) draft.title = `${draft.type} ${draft.startDate}`;
+  if (!persistDraft('silent')) return '';
+  return draftId.value;
+}
+
+function applyTemplateTodos(templateTodos: DataEntity[]) {
+  const recordId = ensureDraftRecord();
+  if (!recordId) return;
+  draftTodoIds.value = records.replaceRecordTodosFromTemplate(recordId, templateTodos);
+}
+
+function createExclusiveTodo() {
+  const text = newTodoText.value.trim();
+  if (!text) return;
+  const recordId = ensureDraftRecord();
+  if (!recordId) return;
+  const todo = records.createExclusiveTodo(recordId, text);
+  if (todo && !draftTodoIds.value.includes(todo.id)) draftTodoIds.value.push(todo.id);
+  newTodoText.value = '';
+  draftStatus.value = '已创建专属待办';
 }
 
 function scheduleAutoSave() {
@@ -221,14 +256,18 @@ function applySelectedTemplate() {
     ? records.services.records.getBuiltInTemplate(key.slice('builtin:'.length))
     : lifePlan.data.templates.find(item => item.id === key);
   if (!template) return;
+  const templateTodos = Array.isArray(template.todos) ? template.todos as DataEntity[] : [];
+  if (templateTodos.length && draftTodoIds.value.length && !window.confirm('应用模板会替换当前记录的待办关联，继续吗？')) return;
   if (template.builtIn && Array.isArray(template.fields)) {
     draft.templateId = String(template.id);
     setTemplateValues(records.services.records.parseTemplateContent(template, draft.content));
+    if (templateTodos.length) applyTemplateTodos(templateTodos);
     draft.content = records.services.records.composeTemplateContent(template, templateValues);
   } else {
     draft.templateId = '';
     setTemplateValues();
     draft.content = String(template.content || '');
+    if (templateTodos.length) applyTemplateTodos(templateTodos);
   }
 }
 
@@ -248,6 +287,7 @@ function saveAsTemplate() {
   const template = records.addTemplate({
     name,
     type: draft.type || '记录',
+    todos: draftTodos.value,
     content: draft.content,
   });
   if (!template) return;
@@ -377,6 +417,12 @@ onBeforeUnmount(() => {
               <label class="form-group"><span>关联待办</span><AppSelect v-model="draft.ideaTodoId" :options="[{ value: '', label: '不关联' }, ...ideaTodoOptions.map(todo => ({ value: todo.id, label: String(todo.text) }))]" /></label>
             </div>
             <label class="form-group"><span>结果结论</span><textarea v-model="draft.ideaConclusion" rows="3" placeholder="实践之后补一句：有用、一般、放弃原因..." /></label>
+          </section>
+          <section class="record-create-todos" aria-label="新记录待办">
+            <div class="record-preview-heading">关联待办</div>
+            <div v-if="draftTodos.length" class="linked-todo-list"><div v-for="todo in draftTodos" :key="todo.id" class="record-preview-todo-item"><span>{{ todo.text }}</span><em>{{ todo.isExclusive ? '专属' : '模板' }}</em></div></div>
+            <p v-else class="record-preview-empty">还没有关联待办。</p>
+            <div class="record-link-tools"><input v-model="newTodoText" aria-label="新建专属待办" placeholder="例如：补充这条记录的下一步" /><button class="btn btn-secondary" type="button" @click="createExclusiveTodo">添加专属待办</button></div>
           </section>
           <div class="record-create-footer">
             <span class="record-create-status" role="status">{{ draftStatus }}</span>

@@ -2,11 +2,12 @@
 import EmptyState from './common/EmptyState.vue';
 import StatusBanner from './common/StatusBanner.vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import RecordCreateModal from './RecordCreateModal.vue';
 import ModalShell from './common/ModalShell.vue';
-import { lifePlanRepository } from '../services/lifePlanRepository';
+import { withReturnTo } from '../router/returnTo';
+import { lifePlanRepository, type CriticalFailure } from '../services/lifePlanRepository';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 
 type SnapshotItem = {
@@ -50,12 +51,15 @@ type SnapshotSummary = {
   relation: string;
 };
 
+const route = useRoute();
 const router = useRouter();
 const lifePlan = useLifePlanStore();
 const showCreateRecord = ref(false);
 const showSnapshots = ref(false);
 const previewSnapshotId = ref<string | null>(null);
 const snapshotNotice = ref('');
+const snapshotNoticeIsError = ref(false);
+const criticalFailures = ref<CriticalFailure[]>([]);
 const importInput = ref<HTMLInputElement | null>(null);
 const mainSyncStatus = ref<{ message: string; isError: boolean } | null>(null);
 const mainSyncConfigVersion = ref(0);
@@ -294,8 +298,20 @@ function retryLocalSave() {
   }
 }
 
+function refreshCriticalFailures() {
+  criticalFailures.value = lifePlanRepository.listCriticalFailures();
+}
+
+function setSnapshotNotice(message: string, isError = false) {
+  snapshotNotice.value = message;
+  snapshotNoticeIsError.value = isError;
+  refreshCriticalFailures();
+}
+
 function openSnapshotModal() {
   snapshotNotice.value = '';
+  snapshotNoticeIsError.value = false;
+  refreshCriticalFailures();
   previewSnapshotId.value = null;
   showSnapshots.value = true;
 }
@@ -311,8 +327,16 @@ function toggleSnapshotPreview(item: SnapshotItem) {
 }
 
 function createSnapshotNow() {
-  lifePlan.createManualSnapshot('手动快照');
-  snapshotNotice.value = '已创建本地快照。';
+  try {
+    const snapshot = lifePlan.createManualSnapshot('手动快照');
+    if (!snapshot) {
+      const error = lifePlanRepository.listCriticalFailures()[0];
+      throw new Error(error?.message || '快照服务返回空结果');
+    }
+    setSnapshotNotice('已创建本地快照。');
+  } catch (error) {
+    setSnapshotNotice(`创建快照失败：${error instanceof Error ? error.message : String(error)}`, true);
+  }
 }
 
 function downloadSnapshot(item: SnapshotItem) {
@@ -326,15 +350,39 @@ function deleteSnapshot(item: SnapshotItem) {
   snapshotNotice.value = '快照已删除。';
 }
 
+function openSyncPage() {
+  void router.push(withReturnTo(route, { path: '/sync' }));
+}
+
+function openAiAssistant() {
+  if (route.path === '/ai') {
+    void router.push({ path: '/ai', query: { mode: 'todayPlan', ...(route.query.returnTo ? { returnTo: route.query.returnTo } : {}) } });
+    return;
+  }
+  void router.push(withReturnTo(route, { path: '/ai', query: { mode: 'todayPlan' } }));
+}
+
+function openAiSettings() {
+  if (route.path === '/ai') {
+    void router.push({ path: '/ai', query: { ...route.query, settings: '1' } });
+    return;
+  }
+  void router.push(withReturnTo(route, { path: '/ai', query: { settings: '1' } }));
+}
+
 function restoreSnapshot(item: SnapshotItem) {
   if (!item.id) return;
   if (!window.confirm(`确认恢复快照「${item.reason || item.id}」吗？当前数据会先自动再存一份。`)) return;
   try {
-    lifePlan.restoreSnapshot(item.id);
-    snapshotNotice.value = '快照已恢复。';
+    const next = lifePlanRepository.restoreSnapshot(item.id, lifePlan.data, {
+      onBeforeSnapshotFailure: error => window.confirm(`恢复前快照创建失败：${error.message}。继续恢复会缺少回滚点，确定继续吗？`),
+    });
+    lifePlan.data = next;
+    lifePlan.lastError = '';
+    setSnapshotNotice('快照已恢复。');
     showSnapshots.value = false;
   } catch (error) {
-    snapshotNotice.value = error instanceof Error ? error.message : String(error);
+    setSnapshotNotice(error instanceof Error ? error.message : String(error), true);
   }
 }
 </script>
@@ -378,11 +426,11 @@ function restoreSnapshot(item: SnapshotItem) {
       </div>
       <div class="sidebar-button-row sidebar-button-row-compact">
         <button class="btn btn-secondary sync-btn" type="button" @click="openSnapshotModal">🛟 本地快照</button>
-        <button class="btn btn-secondary sync-btn" type="button" @click="router.push('/sync')">☁️ 云同步</button>
+        <button class="btn btn-secondary sync-btn" type="button" @click="openSyncPage">☁️ 云同步</button>
       </div>
       <div class="sidebar-button-row sidebar-button-row-compact sidebar-ai-row">
-        <button class="btn btn-secondary sync-btn" type="button" @click="router.push({ path: '/ai', query: { mode: 'todayPlan' } })">AI 助手</button>
-        <button class="btn btn-secondary sync-btn" type="button" @click="router.push({ path: '/ai', query: { settings: '1' } })">AI 设置</button>
+        <button class="btn btn-secondary sync-btn" type="button" @click="openAiAssistant">AI 助手</button>
+        <button class="btn btn-secondary sync-btn" type="button" @click="openAiSettings">AI 设置</button>
       </div>
       <div v-if="lifePlan.lastError" class="local-save-warning active" role="alert">
         <span class="local-save-warning-text">{{ lifePlan.lastError }}</span>
@@ -398,7 +446,7 @@ function restoreSnapshot(item: SnapshotItem) {
     </details>
 
     <input ref="importInput" hidden type="file" accept="application/json,.json" @change="importBackup">
-    <RecordCreateModal v-model="showCreateRecord" />
+    <RecordCreateModal v-model="showCreateRecord" @open-existing="recordId => router.push(withReturnTo(route, { path: '/records', query: { record: recordId } }))" />
 
     <ModalShell v-model="showSnapshots" title="本地快照" dialog-class="snapshot-modal" close-label="关闭本地快照" @close="previewSnapshotId = null">
           <p class="section-hint">自动保留最近 20 份；可预览、下载、恢复。恢复前会再自动存一份当前数据。</p>
@@ -410,7 +458,14 @@ function restoreSnapshot(item: SnapshotItem) {
             <button class="btn btn-primary" type="button" @click="createSnapshotNow">立即创建快照</button>
             <button class="btn btn-secondary" type="button" @click="exportBackup">导出备份</button>
           </div>
-          <StatusBanner v-if="snapshotNotice" class="notice success" role="status" tone="success">{{ snapshotNotice }}</StatusBanner>
+          <StatusBanner v-if="snapshotNotice" class="notice" :role="snapshotNoticeIsError ? 'alert' : 'status'" :tone="snapshotNoticeIsError ? 'danger' : 'success'">{{ snapshotNotice }}</StatusBanner>
+          <section v-if="criticalFailures.length" class="critical-failure-log" aria-label="最近关键故障">
+            <strong>最近关键故障</strong>
+            <div v-for="failure in criticalFailures" :key="failure.id" class="critical-failure-item">
+              <strong>{{ failure.label || '关键操作失败' }}</strong>
+              <span>{{ formatStoredDateTime(failure.createdAt) }} · {{ failure.message || '未记录详细原因' }}</span>
+            </div>
+          </section>
           <div class="snapshot-list">
             <article v-for="item in snapshots" :key="String(item.id)" class="snapshot-item card">
               <div>
@@ -533,6 +588,24 @@ function restoreSnapshot(item: SnapshotItem) {
 .snapshot-preview-list {
   display: grid;
   gap: 4px;
+}
+.critical-failure-log {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(196, 67, 54, 0.28);
+  border-radius: var(--radius);
+  background: rgba(196, 67, 54, 0.08);
+}
+.critical-failure-item {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+.critical-failure-item span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 .snapshot-storage-notice {
   margin-top: 8px;

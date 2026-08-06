@@ -7,13 +7,14 @@ import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
 import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
+import { closeRouteOverlay, withReturnTo } from '../router/returnTo';
 import TodoTable from '../components/TodoTable.vue';
 import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import { getTodayStr } from '../services/legacyServices';
 import { getMainSyncConfig } from '../services/mainCloudSync';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
-import { useTodosStore } from '../stores/todosStore';
+import { normalizeTodoGroup, TODO_GROUPS, useTodosStore } from '../stores/todosStore';
 import type { DataEntity, Todo, TodoSubTodo } from '../types/lifePlan';
 import { addDays, getWeekStart } from '../utils/schedule';
 
@@ -59,27 +60,8 @@ function getTodoStatusText(todo: Todo) {
   return todo.done ? '已完成' : (isTodoOverdue(todo) ? `已超期 ${getTodoOverdueDays(todo)} 天` : '未完成');
 }
 
-const DEFAULT_GROUPS = ['健身', '学习', '工作', '生活', '其他'];
-const groupOptions = computed(() => {
-  const dynamic = todosStore.todos.map(todo => todo.group || '其他');
-  return [...new Set([...DEFAULT_GROUPS, ...dynamic])].sort((left, right) => {
-    const leftIndex = DEFAULT_GROUPS.indexOf(left);
-    const rightIndex = DEFAULT_GROUPS.indexOf(right);
-    if (leftIndex >= 0 || rightIndex >= 0) {
-      if (leftIndex < 0) return 1;
-      if (rightIndex < 0) return -1;
-      return leftIndex - rightIndex;
-    }
-    return left.localeCompare(right, 'zh-CN');
-  });
-});
-const filteredTodos = computed(() => todosStore.todos
-  .filter(todo => (!startDate.value && !endDate.value) || todosStore.services.todos.isTodoInDateRange(todo, startDate.value, endDate.value))
-  .filter(todo => status.value === 'all' || (status.value === 'done' ? todo.done : !todo.done))
-  .filter(todo => urgency.value === 'all' || (todo.urgency || 'medium') === urgency.value)
-  .filter(todo => group.value === 'all' || todo.group === group.value)
-  .filter(todo => mode.value === 'all' || (mode.value === 'exclusive' ? !!todo.isExclusive : !todo.isExclusive))
-  .slice().sort(todosStore.services.todos.compareTodosForFocus));
+const TODO_GROUP_OPTIONS = [...TODO_GROUPS];
+const groupOptions = TODO_GROUP_OPTIONS;
 const selectedTodo = computed(() => todosStore.todos.find(todo => todo.id === selectedId.value) ?? null);
 const draftIdea = computed(() => ideaDraftId.value
   ? lifePlan.data.records.find(record => record.id === ideaDraftId.value && record.type === '灵感碎片') ?? null
@@ -243,7 +225,7 @@ function closeDetail() {
   editing.value = false;
   detailError.value = '';
   detailStatus.value = '';
-  if (route.query.todo || route.query.ideaDraft) updateTodoQuery({ todoId: '', clearIdeaDraft: true });
+  if (route.query.todo || route.query.ideaDraft) closeRouteOverlay(router, route, ['todo', 'ideaDraft']);
 }
 
 function startEditing() {
@@ -374,7 +356,7 @@ function deleteSelectedTodo() {
 }
 
 function openLinkedRecord(recordId: string) {
-  void router.push({ path: '/records', query: { record: recordId, preview: '1' } });
+  void router.push(withReturnTo(route, { path: '/records', query: { record: recordId, preview: '1' } }));
 }
 
 function linkSelectedRecord() {

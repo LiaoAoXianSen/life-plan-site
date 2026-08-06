@@ -8,6 +8,7 @@ import FilterBar from '../components/common/FilterBar.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import ModalShell from '../components/common/ModalShell.vue';
 import SearchInput from '../components/common/SearchInput.vue';
+import { closeRouteOverlay } from '../router/returnTo';
 import MaterialCard from '../components/MaterialCard.vue';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -131,7 +132,7 @@ function closeEditor(syncRoute = true) {
   editorOpen.value = false;
   activeMaterialId.value = '';
   resetForm();
-  if (syncRoute && route.query.material) removeMaterialQuery();
+  if (syncRoute && route.query.material) closeRouteOverlay(router, route, ['material']);
 }
 
 function openDetail(material: Material, syncRoute = true) {
@@ -144,7 +145,7 @@ function openDetail(material: Material, syncRoute = true) {
 
 function closeDetail(syncRoute = true) {
   detailMaterialId.value = '';
-  if (syncRoute && route.query.material) removeMaterialQuery();
+  if (syncRoute && route.query.material) closeRouteOverlay(router, route, ['material']);
 }
 
 function removeMaterialQuery() {

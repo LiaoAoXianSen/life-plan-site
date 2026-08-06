@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import EmptyState from '../components/common/EmptyState.vue';
 import { computed, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import AppSelect from '../components/common/AppSelect.vue';
 import DisclosurePanel from '../components/common/DisclosurePanel.vue';
@@ -9,12 +9,14 @@ import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import SearchInput from '../components/common/SearchInput.vue';
 import SegmentedTabs from '../components/common/SegmentedTabs.vue';
+import { closeRouteOverlay } from '../router/returnTo';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useWheelStore, type WheelItem, type WheelMode, type WheelTag } from '../stores/wheelStore';
 
 const wheelStore = useWheelStore();
 const wheelServices = createLegacyServices();
 const route = useRoute();
+const router = useRouter();
 const selectedId = ref('');
 const stageTag = ref<WheelTag | null>(null);
 const resultId = ref('');
@@ -877,6 +879,7 @@ function toggleManageMenu() {
 function collapseManagement() {
   showManagement.value = false;
   menuOpen.value = false;
+  if (route.query.library || route.query.tag) closeRouteOverlay(router, route, ['library', 'tag']);
 }
 
 function exportJson() { wheelStore.exportBackup(); say('已下载转盘 JSON 备份，并创建本地快照。'); }

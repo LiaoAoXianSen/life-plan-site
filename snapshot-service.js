@@ -29,11 +29,13 @@
             storage = localStorage,
             key = 'lifePlanSnapshots',
             maxSnapshots = 20,
+            maxStorageBytes = 3 * 1024 * 1024,
             schemaVersion = 2,
             genId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`,
             getHash = value => JSON.stringify(value || {}).length.toString(36),
             getNowLocal = () => new Date().toISOString()
         } = options;
+        let lastError = null;
 
         function normalize(snapshots = []) {
             const sortedOldestFirst = [...snapshots].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
@@ -74,12 +76,39 @@
             }
         }
 
-        function saveAll(snapshots) {
+        function serializeWithinBudget(snapshots) {
             const limited = normalize(snapshots)
                 .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
                 .slice(0, maxSnapshots);
-            storage.setItem(key, JSON.stringify(limited));
-            return limited;
+            while (limited.length) {
+                const serialized = JSON.stringify(limited);
+                if (new TextEncoder().encode(serialized).length <= maxStorageBytes) return { limited, serialized };
+                if (limited.length === 1) {
+                    const error = new Error(`单份快照超过本地存储预算（${maxStorageBytes} 字节）`);
+                    error.name = 'QuotaExceededError';
+                    throw error;
+                }
+                limited.pop();
+            }
+            return { limited: [], serialized: '[]' };
+        }
+
+        function saveAll(snapshots) {
+            const { limited, serialized } = serializeWithinBudget(snapshots);
+            let retained = limited;
+            let payload = serialized;
+            while (retained.length) {
+                try {
+                    storage.setItem(key, payload);
+                    return retained;
+                } catch (err) {
+                    if (err?.name !== 'QuotaExceededError' || retained.length === 1) throw err;
+                    retained = retained.slice(0, -1);
+                    payload = JSON.stringify(retained);
+                }
+            }
+            storage.setItem(key, '[]');
+            return [];
         }
 
         function getNextVersion(snapshots = getAll()) {
@@ -122,11 +151,17 @@
                     data: snapshotData
                 };
                 saveAll([snapshot, ...existingSnapshots]);
+                lastError = null;
                 return snapshot;
             } catch (err) {
+                lastError = err;
                 console.warn('本地快照写入失败', err);
                 return null;
             }
+        }
+
+        function getLastError() {
+            return lastError;
         }
 
         function getStorageStats(snapshots = getAll()) {
@@ -137,7 +172,7 @@
                 count: snapshots.length,
                 totalBytes,
                 latestBytes,
-                isRisky: totalBytes > 3 * 1024 * 1024 || latestBytes > 350 * 1024 || snapshots.length >= maxSnapshots
+                isRisky: totalBytes > maxStorageBytes * 0.85 || latestBytes > 350 * 1024 || snapshots.length >= maxSnapshots
             };
         }
 
@@ -152,6 +187,7 @@
             getNextVersion,
             getParent,
             createSnapshot,
+            getLastError,
             getStorageStats
         };
     }

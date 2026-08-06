@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import EmptyState from '../components/common/EmptyState.vue';
 import { computed, ref, watch } from 'vue';
-import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
+import { withReturnTo } from '../router/returnTo';
 import { createLegacyServices } from '../services/legacyServices';
 import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
@@ -20,7 +21,7 @@ type SearchItem = {
   body: string;
   tags: string[];
   meta: string;
-  target: RouteLocationRaw;
+  target: { path: string; query?: Record<string, unknown> };
 };
 
 const moduleLabels: Record<string, string> = {
@@ -142,6 +143,10 @@ const indexItems = computed<SearchItem[]>(() => {
   return [...recordItems, ...todoItems, ...goalItems, ...materialItems, ...templateItems, ...wheelItems];
 });
 
+function openResult(item: SearchItem) {
+  void router.push(withReturnTo(route, item.target));
+}
+
 function matches(item: SearchItem, keyword: string) {
   const haystack = [item.module, item.title, item.subtitle, item.body, item.meta, ...item.tags]
     .filter(Boolean)
@@ -194,7 +199,7 @@ function search() {
       <section v-for="[module, items] in groupedResults" :key="module" class="search-group">
         <div class="search-group-title">{{ moduleLabels[module] || module }} · {{ items.length }}</div>
         <div class="search-result-list">
-          <article v-for="result in items" :key="`${result.module}:${result.id}`" class="search-result-item" @click="router.push(result.target)">
+          <article v-for="result in items" :key="`${result.module}:${result.id}`" class="search-result-item" @click="openResult(result)">
             <div class="search-result-main">
               <strong>{{ result.title }}</strong>
               <span>{{ result.subtitle }}</span>

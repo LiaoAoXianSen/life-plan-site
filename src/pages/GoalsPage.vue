@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppSelect from '../components/common/AppSelect.vue';
 import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
+import { closeRouteOverlay } from '../router/returnTo';
 import { createLegacyServices, genId, getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity } from '../types/lifePlan';
@@ -79,7 +80,7 @@ function closeGoal(syncRoute = true) {
   editorOpen.value = false;
   activeGoalId.value = '';
   resetForm();
-  if (syncRoute && route.query.goal) syncGoalRoute('');
+  if (syncRoute && route.query.goal) closeRouteOverlay(router, route, ['goal']);
 }
 
 function handleKeydown(event: KeyboardEvent) {

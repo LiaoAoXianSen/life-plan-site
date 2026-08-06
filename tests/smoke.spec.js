@@ -4,6 +4,18 @@ const path = require('path');
 const vm = require('vm');
 
 let appSyncKitForHash = null;
+let snapshotServiceFactory = null;
+
+function getSnapshotServiceFactory() {
+    if (snapshotServiceFactory) return snapshotServiceFactory;
+    const code = fs.readFileSync(path.join(__dirname, '..', 'snapshot-service.js'), 'utf8');
+    const context = { console, TextEncoder, Blob, URL: { createObjectURL() {}, revokeObjectURL() {} }, document: { createElement: () => ({ click() {} }) } };
+    context.window = context;
+    vm.createContext(context);
+    vm.runInContext(code, context);
+    snapshotServiceFactory = context.LifePlanSnapshotService;
+    return snapshotServiceFactory;
+}
 
 function getAppSyncKitForHash() {
     if (appSyncKitForHash) return appSyncKitForHash;
@@ -18,6 +30,79 @@ function getAppSyncKitForHash() {
 function hashHabitSnapshot(value) {
     return getAppSyncKitForHash().habitAppAdapter.getHash(value);
 }
+
+test('snapshot service trims oldest entries to stay within the byte budget', () => {
+    const values = new Map();
+    const storage = {
+        getItem: key => values.get(key) || null,
+        setItem: (key, value) => values.set(key, value),
+    };
+    const service = getSnapshotServiceFactory().create({
+        storage,
+        maxSnapshots: 20,
+        maxStorageBytes: 900,
+        getHash: value => String(JSON.stringify(value).length),
+        genId: (() => { let value = 0; return () => `snapshot-${++value}`; })(),
+        getNowLocal: () => '2026-08-05T12:00:00',
+    });
+    for (let index = 0; index < 8; index++) {
+        expect(service.createSnapshot(`快照 ${index}`, { records: [{ content: 'x'.repeat(180), index }] })).toBeTruthy();
+    }
+    const retained = service.getAll();
+    expect(retained.length).toBeLessThan(8);
+    expect(retained[0].reason).toBe('快照 7');
+    expect(new TextEncoder().encode(values.get('lifePlanSnapshots')).length).toBeLessThanOrEqual(900);
+});
+
+test('snapshot service retries quota writes by removing oldest entries', () => {
+    const values = new Map();
+    const storage = {
+        getItem: key => values.get(key) || null,
+        setItem(key, value) {
+            const count = JSON.parse(value).length;
+            if (count > 2) {
+                const error = new Error('quota');
+                error.name = 'QuotaExceededError';
+                throw error;
+            }
+            values.set(key, value);
+        },
+    };
+    const service = getSnapshotServiceFactory().create({ storage, maxStorageBytes: 10 * 1024 * 1024 });
+    const existing = Array.from({ length: 4 }, (_, index) => ({ id: `old-${index}`, version: index + 1, createdAt: `2026-08-0${index + 1}T00:00:00`, data: {} }));
+    values.set('lifePlanSnapshots', JSON.stringify(existing));
+    const snapshot = service.createSnapshot('最新快照', { records: [{ id: 'latest' }] });
+    expect(snapshot).toBeTruthy();
+    expect(service.getAll()).toHaveLength(2);
+    expect(service.getAll()[0].reason).toBe('最新快照');
+    expect(service.getLastError()).toBeNull();
+});
+
+test('snapshot service exposes the real quota error when one snapshot cannot fit', () => {
+    const error = new Error('storage full');
+    error.name = 'QuotaExceededError';
+    const storage = { getItem: () => null, setItem: () => { throw error; } };
+    const service = getSnapshotServiceFactory().create({ storage });
+    expect(service.createSnapshot('超大快照', { records: [{ content: 'x'.repeat(2000) }] })).toBeNull();
+    expect(service.getLastError()).toBe(error);
+});
+
+test('snapshot service rejects one snapshot that exceeds the configured byte budget', () => {
+    const values = new Map();
+    const storage = { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
+    const service = getSnapshotServiceFactory().create({ storage, maxStorageBytes: 600 });
+    expect(service.createSnapshot('预算外快照', { records: [{ content: 'x'.repeat(2000) }] })).toBeNull();
+    expect(service.getLastError()?.name).toBe('QuotaExceededError');
+    expect(service.getLastError()?.message).toContain('单份快照超过本地存储预算');
+    expect(values.has('lifePlanSnapshots')).toBe(false);
+});
+
+test('legacy cloud sync deduplicates identical failures and skips redundant merged upload snapshots', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+    expect(source).toContain("latest?.label === label && latest?.message === message && elapsed >= 0 && elapsed < 5000");
+    expect(source).toContain("syncUpToCloud(true, { skipSnapshot: true })");
+    expect(source).toContain("snapshotService.getLastError?.()");
+});
 
 function createEmptyData(overrides = {}) {
     return {

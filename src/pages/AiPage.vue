@@ -7,6 +7,7 @@ import AppSelect from '../components/common/AppSelect.vue';
 import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import SegmentedTabs from '../components/common/SegmentedTabs.vue';
+import { closeRouteOverlay, currentReturnTo, withReturnTo } from '../router/returnTo';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -457,7 +458,7 @@ function applyIdeaDrafts() {
   }
   status.value = `已转成关联待办 ${createdIds.length} 项，并把灵感状态更新为待实践`;
   error.value = '';
-  void router.push({ path: '/todos', query: { todo: createdIds[0] } });
+  void router.push(withReturnTo(route, { path: '/todos', query: { todo: createdIds[0] } }));
 }
 
 function applyTodoBreakdown() {

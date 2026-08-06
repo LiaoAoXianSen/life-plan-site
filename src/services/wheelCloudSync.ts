@@ -10,6 +10,7 @@ type WheelSyncConfig = {
   remoteUploadEnabled: false;
 };
 type WheelSyncState = Record<string, unknown> & {
+  remotePath?: string;
   dirty?: boolean;
   lastLocalHash?: string;
   lastRemoteHash?: string;
@@ -63,22 +64,42 @@ function readMainConfig(): MainSyncConfig {
   return readJson<MainSyncConfig>(MAIN_CONFIG_KEY);
 }
 
+function normalizeWheelRemotePath(value: unknown) {
+  return sync.normalizeRemotePath(String(value || '').trim() || REMOTE_PATH, REMOTE_PATH);
+}
+
+function resetStateForRemotePath(remotePath: string) {
+  const state = readJson<WheelSyncState>(STATE_KEY);
+  const hasState = Object.keys(state).length > 0;
+  const pathChanged = state.remotePath && state.remotePath !== remotePath;
+  const legacyStateFromDefaultPath = !state.remotePath && remotePath !== REMOTE_PATH && hasState;
+  if (pathChanged || legacyStateFromDefaultPath) {
+    localStorage.setItem(STATE_KEY, JSON.stringify({ remotePath }));
+    return;
+  }
+  if (state.remotePath !== remotePath) localStorage.setItem(STATE_KEY, JSON.stringify({ ...state, remotePath }));
+}
+
 function readConfig(): WheelSyncConfig {
   const raw = readJson<Partial<WheelSyncConfig>>(CONFIG_KEY);
+  const remotePath = normalizeWheelRemotePath(raw.remotePath);
   const autoSync = raw.conditionalAutoSyncEnabled === true && raw.autoSync === true;
-  const next = {
-    remotePath: REMOTE_PATH,
+  const next: WheelSyncConfig = {
+    remotePath,
     autoSync,
     conditionalAutoSyncEnabled: autoSync,
-    remoteUploadEnabled: false as const,
+    remoteUploadEnabled: false,
   };
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
+  if (raw.remotePath !== remotePath) localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
+  resetStateForRemotePath(remotePath);
   return next;
 }
 
 function writeConfig(config: Partial<WheelSyncConfig> = {}) {
+  const previous = readJson<Partial<WheelSyncConfig>>(CONFIG_KEY);
+  const remotePath = normalizeWheelRemotePath(config.remotePath ?? previous.remotePath);
   const next: WheelSyncConfig = {
-    remotePath: REMOTE_PATH,
+    remotePath,
     autoSync: config.autoSync === true,
     conditionalAutoSyncEnabled: config.autoSync === true,
     remoteUploadEnabled: false,
@@ -142,27 +163,27 @@ function isConditionalWriteConflict(error: unknown) {
   return typeof error === 'object' && error !== null && (error as { status?: number }).status === 412;
 }
 
-async function fetchRemote(mainConfig: MainSyncConfig) {
+async function fetchRemote(mainConfig: MainSyncConfig, remotePath = readConfig().remotePath) {
   return await sync.pullJson(
-    { ...mainConfig, remotePath: REMOTE_PATH },
-    REMOTE_PATH,
+    { ...mainConfig, remotePath },
+    remotePath,
     (value: unknown) => canonical(value),
     (value: unknown) => wheelHash(value),
   ) as RemotePayload | null;
 }
 
-async function pushWithEtag(mainConfig: MainSyncConfig, snapshot: WheelSnapshot, ifMatch = '') {
+async function pushWithEtag(mainConfig: MainSyncConfig, snapshot: WheelSnapshot, ifMatch = '', remotePath = readConfig().remotePath) {
   return await sync.pushJson(
-    { ...mainConfig, remotePath: REMOTE_PATH },
-    REMOTE_PATH,
+    { ...mainConfig, remotePath },
+    remotePath,
     snapshot,
     'wheel-app',
     { ifMatch },
   ) as { etag?: string };
 }
 
-async function verifyUpload(mainConfig: MainSyncConfig, localHash: string) {
-  const verification = await fetchRemote(mainConfig);
+async function verifyUpload(mainConfig: MainSyncConfig, localHash: string, remotePath: string) {
+  const verification = await fetchRemote(mainConfig, remotePath);
   if (!verification || verification.hash !== localHash) throw new Error('上传后回读的 Wheel hash 不一致。');
   return verification;
 }
@@ -239,7 +260,8 @@ export async function runWheelCloudSyncBoth(options: { source?: string; force?: 
     const localSnapshot = snapshotFromData(current);
     const localHash = wheelHash(localSnapshot);
     const state = readState();
-    const remote = await fetchRemote(mainConfig);
+    const remotePath = wheelConfig.remotePath;
+    const remote = await fetchRemote(mainConfig, remotePath);
 
     if (!remote) {
       writeState({ ...state, lastLocalHash: localHash, lastSyncAt: nowIso() });

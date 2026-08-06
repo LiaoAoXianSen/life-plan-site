@@ -5,6 +5,7 @@ import { computed, onUnmounted, reactive, ref } from 'vue';
 
 import AppSelect from '../components/common/AppSelect.vue';
 import DisclosurePanel from '../components/common/DisclosurePanel.vue';
+import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
@@ -55,7 +56,7 @@ const libraryEditingId = ref('');
 const planEditingId = ref('');
 const workoutEditingId = ref('');
 const bodySectionOpen = ref(false);
-const workoutSectionOpen = ref(false);
+const workoutEditorOpen = ref(false);
 const librarySectionOpen = ref(false);
 const planEditorOpen = ref(false);
 const freeSectionOpen = ref(false);
@@ -184,9 +185,14 @@ function openPlanCreate() {
 
 function openWorkoutCreate() {
   resetWorkoutForm();
-  workoutSectionOpen.value = true;
+  workoutEditorOpen.value = true;
   const el = document.getElementById('fitness-workout-section');
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeWorkoutEditor() {
+  workoutEditorOpen.value = false;
+  resetWorkoutForm();
 }
 
 function openBodySection() {
@@ -199,7 +205,7 @@ function openBodySection() {
 function browseTo(target: string) {
   if (target === 'fitness-library-section') librarySectionOpen.value = true;
   if (target === 'fitness-body-section') bodySectionOpen.value = true;
-  if (target === 'fitness-workout-section') workoutSectionOpen.value = true;
+  if (target === 'fitness-workout-section') workoutEditorOpen.value = true;
   document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -220,7 +226,7 @@ const activePlanDiff = computed(() => activePlan.value && fitness.activeWorkout
 const muscleOptions = computed(() => fitness.services.fitness.EXERCISE_MUSCLE_OPTIONS);
 const goalOptions = computed(() => fitness.services.fitness.PLAN_GOAL_OPTIONS);
 const planStatusOptions = computed(() => fitness.services.fitness.PLAN_STATUS_OPTIONS);
-const workoutStatusOptions = computed(() => fitness.services.fitness.WORKOUT_STATUS_OPTIONS.filter((option: Record<string, string>) => option.value !== 'inProgress'));
+const workoutStatusOptions = computed(() => fitness.services.fitness.WORKOUT_STATUS_OPTIONS);
 const metricFields = computed(() => fitness.services.fitness.METRIC_FIELDS);
 const conditionOptions = computed(() => fitness.services.fitness.CONDITION_OPTIONS);
 const conditionSelectOptions = computed(() => conditionOptions.value.map((option: Record<string, unknown>) => ({ value: String(option.value || ''), label: String(option.label || '') })));
@@ -530,7 +536,7 @@ function removePlanWithConfirmation(planId: string) {
 
 function editWorkout(workout: Record<string, any>) {
   run(() => {
-    workoutSectionOpen.value = true;
+    workoutEditorOpen.value = true;
     Object.assign(workoutForm, {
       date: workout.date || getTodayStr(),
       status: workout.status || 'done',
@@ -628,7 +634,7 @@ function saveWorkoutLog() {
       dayName: '',
       exercises,
     }, workoutEditingId.value);
-    resetWorkoutForm();
+    closeWorkoutEditor();
   });
 }
 
@@ -1434,7 +1440,15 @@ onUnmounted(stopRestTimer);
       </DisclosurePanel>
     </div>
 
-    <DisclosurePanel id="fitness-workout-section" class="fitness-form-disclosure" :open="workoutSectionOpen" title="训练日志" description="补记或编辑已完成训练">
+    <ModalShell
+      v-model="workoutEditorOpen"
+      dialog-id="fitness-workout-section"
+      title="训练日志"
+      size="lg"
+      dialog-class="fitness-workout-modal"
+      close-label="关闭训练日志"
+      @close="resetWorkoutForm"
+    >
       <form class="card" @submit.prevent="saveWorkoutLog">
       <div class="section-title-row">
         <div>
@@ -1445,7 +1459,7 @@ onUnmounted(stopRestTimer);
         <div class="fitness-header-actions">
           <button class="btn btn-secondary todo-mini-btn" type="button" @click="jumpToFreeWorkout">开练</button>
           <button class="btn btn-secondary todo-mini-btn" type="button" @click="openWorkoutCreate">补记</button>
-          <button v-if="workoutEditingId" class="btn btn-secondary" type="button" @click="resetWorkoutForm">取消编辑</button>
+          <button class="btn btn-secondary" type="button" @click="closeWorkoutEditor">取消</button>
         </div>
       </div>
       <div class="form-row">

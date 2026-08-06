@@ -7,10 +7,11 @@ import AppSelect from '../components/common/AppSelect.vue';
 import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import SegmentedTabs from '../components/common/SegmentedTabs.vue';
+import { closeRouteOverlay } from '../router/returnTo';
 import { getTodayStr } from '../services/legacyServices';
 import { useHabitsStore } from '../stores/habitsStore';
 import { useLifePlanStore } from '../stores/lifePlanStore';
-import type { HabitRule } from '../stores/habitsStore';
+import type { HabitNoteMode, HabitRule } from '../stores/habitsStore';
 
 type AnalysisCheckin = {
   id?: string;
@@ -33,6 +34,14 @@ const makeupDate = ref(getTodayStr());
 const matrixDays = ref(30);
 const actionDrafts = reactive<Record<string, { date: string; note: string }>>({});
 const checkinNoteDrafts = reactive<Record<string, string>>({});
+const showCheckinNote = ref(false);
+const checkinNoteForm = reactive({
+  habitId: '',
+  habitName: '',
+  date: getTodayStr(),
+  note: '',
+  disableFuturePrompt: false,
+});
 const rewardForm = reactive({ name: '', cost: 10, currency: '金币', stock: 0, note: '' });
 const currencyForm = reactive({ name: '' });
 const currencyError = ref('');
@@ -491,6 +500,11 @@ function resetHabitForm() {
   formError.value = '';
 }
 
+function closeHabitEditor() {
+  resetHabitForm();
+  if (route.query.habit) closeRouteOverlay(router, route, ['habit']);
+}
+
 function editHabit(item: {
   id: string; name?: string; rule?: string; weekdays?: unknown; count?: unknown; timesPerDay?: unknown; tag?: string; goalCount?: unknown; noteMode?: string;
   rewardPoints?: unknown; rewardCurrency?: string; penaltyPoints?: unknown; penaltyCurrency?: string; randomReward?: boolean; rewardMin?: unknown; rewardMax?: unknown;
@@ -505,7 +519,7 @@ function editHabit(item: {
   habitForm.timesPerDay = Number(item.timesPerDay || 1);
   habitForm.tag = item.tag || '';
   habitForm.goalCount = Number(item.goalCount || 0);
-  habitForm.noteMode = item.noteMode === 'never' ? 'never' : 'ask';
+  habitForm.noteMode = ['ask', 'always', 'never'].includes(String(item.noteMode)) ? String(item.noteMode) : 'ask';
   habitForm.rewardPoints = Number(item.rewardPoints || 0);
   habitForm.rewardCurrency = item.rewardCurrency || '金币';
   habitForm.penaltyPoints = Number(item.penaltyPoints || 0);
@@ -551,7 +565,7 @@ function saveHabit() {
       timesPerDay: habitForm.timesPerDay,
       tag: habitForm.tag,
       goalCount: habitForm.goalCount,
-      noteMode: habitForm.noteMode as 'ask' | 'never',
+      noteMode: habitForm.noteMode as HabitNoteMode,
       rewardPoints: habitForm.rewardPoints,
       rewardCurrency: habitForm.rewardCurrency,
       penaltyPoints: habitForm.penaltyPoints,
@@ -565,7 +579,7 @@ function saveHabit() {
       milestoneRewards: habitForm.milestoneRewards,
     };
     const saved = habitForm.id ? habits.updateHabit(habitForm.id, input) : habits.create(input);
-    if (saved) resetHabitForm();
+    if (saved) closeHabitEditor();
     formError.value = '';
   } catch (error) {
     formError.value = error instanceof Error ? error.message : String(error);
@@ -612,20 +626,59 @@ function setHabitArchive(id: string, archived: boolean) {
   if (!item) return;
   if (archived && !window.confirm(`归档「${item.name}」后，它不会出现在今日待做中。确认继续吗？`)) return;
   habits.setHabitArchived(id, archived);
-  if (habitForm.id === id) resetHabitForm();
+  if (habitForm.id === id) closeHabitEditor();
 }
 
 function deleteHabit(id: string) {
   const item = habits.habits.find(habit => habit.id === id);
   if (!item) return;
   if (!window.confirm('确定删除这个习惯吗？所有历史打卡记录和时间轴条目都会一起删除')) return;
-  if (habits.deleteHabit(id) && habitForm.id === id) resetHabitForm();
+  if (habits.deleteHabit(id) && habitForm.id === id) closeHabitEditor();
+}
+
+function openCheckinNoteModal(habitId: string, date: string) {
+  const habit = habits.habits.find(item => item.id === habitId);
+  if (!habit) return;
+  checkinNoteForm.habitId = habit.id;
+  checkinNoteForm.habitName = habit.name || '未命名习惯';
+  checkinNoteForm.date = date;
+  checkinNoteForm.note = '';
+  checkinNoteForm.disableFuturePrompt = false;
+  showCheckinNote.value = true;
+}
+
+function closeCheckinNoteModal() {
+  showCheckinNote.value = false;
+  checkinNoteForm.habitId = '';
+  checkinNoteForm.habitName = '';
+  checkinNoteForm.note = '';
+  checkinNoteForm.disableFuturePrompt = false;
+}
+
+function completeCheckinNote(saveNote: boolean) {
+  const habitId = checkinNoteForm.habitId;
+  const date = checkinNoteForm.date;
+  if (!habitId) return;
+  const created = habits.appendCheckin(habitId, date, saveNote ? checkinNoteForm.note : '');
+  if (!created) {
+    closeCheckinNoteModal();
+    return;
+  }
+  if (checkinNoteForm.disableFuturePrompt) {
+    habits.setHabitNoteMode(habitId, 'never');
+  }
+  closeCheckinNoteModal();
 }
 
 function checkin(id: string) {
   const date = activeHabitDate.value;
-  if (date === getTodayStr()) habits.quickCheckin(id);
-  else habits.appendCheckin(id, date);
+  const habit = habits.habits.find(item => item.id === id);
+  if (!habit) return;
+  if (habit.noteMode === 'never') {
+    habits.appendCheckin(id, date);
+    return;
+  }
+  openCheckinNoteModal(id, date);
 }
 
 function appendWithDraft(habitId: string) {
@@ -1131,7 +1184,7 @@ watch(focusedHabitId, value => {
           <h2 id="habit-management-title">{{ formTitle }}</h2>
           <p class="section-hint">{{ editingHabit ? `正在编辑：${editingHabit.name}` : '基础字段会沿用旧版数据结构。' }}</p>
         </div>
-        <button v-if="editingHabit" class="btn btn-secondary" type="button" @click="resetHabitForm">取消编辑</button>
+        <button v-if="editingHabit" class="btn btn-secondary" type="button" @click="closeHabitEditor">取消编辑</button>
       </div>
       <form class="habit-editor-form" @submit.prevent="saveHabit">
         <label class="form-field"><span>习惯名称</span><input v-model="habitForm.name" required maxlength="80" placeholder="例如：晨间阅读" /></label>
@@ -1140,7 +1193,7 @@ watch(focusedHabitId, value => {
         <label class="form-field"><span>每天次数</span><input v-model.number="habitForm.timesPerDay" type="number" min="1" max="99" /></label>
         <label v-if="['weekly-count', 'monthly-count', 'interval'].includes(habitForm.rule)" class="form-field"><span>{{ habitForm.rule === 'interval' ? '间隔天数' : '目标次数' }}</span><input v-model.number="habitForm.count" type="number" min="1" max="99" /></label>
         <label class="form-field"><span>总目标次数</span><input v-model.number="habitForm.goalCount" type="number" min="0" max="99999" /></label>
-        <label class="form-field"><span>备注模式</span><AppSelect v-model="habitForm.noteMode" :options="[{ value: 'ask', label: '打卡时询问' }, { value: 'never', label: '不询问' }]" /></label>
+        <label class="form-field"><span>备注模式</span><AppSelect v-model="habitForm.noteMode" :options="[{ value: 'ask', label: '未设置，打卡时默认弹窗提醒' }, { value: 'always', label: '需要备注，每次都先弹窗' }, { value: 'never', label: '不需要备注，直接快捷打卡' }]" /></label>
         <div v-if="habitForm.rule === 'weekly-fixed'" class="habit-weekday-field">
           <span>执行星期</span>
           <label v-for="day in weekdayOptions" :key="day.value"><input v-model="habitForm.weekdays" type="checkbox" :value="day.value" />{{ day.label }}</label>
@@ -1209,6 +1262,34 @@ watch(focusedHabitId, value => {
         <article><strong>远端操作</strong><span>预览 / 应用 / 受保护上传 / 首次创建 / 条件自动同步</span></article>
       </div>
     </section>
+
+    <ModalShell
+      v-if="showCheckinNote"
+      :model-value="showCheckinNote"
+      :title="`备注 · ${checkinNoteForm.habitName}`"
+      size="sm"
+      dialog-class="habit-note-modal"
+      initial-focus="#habit-checkin-note-input"
+      @close="closeCheckinNoteModal"
+    >
+      <textarea
+        id="habit-checkin-note-input"
+        v-model="checkinNoteForm.note"
+        rows="3"
+        maxlength="120"
+        placeholder="这次做了什么？可留空"
+      />
+      <div class="habit-note-foot">
+        <label class="habit-note-toggle">
+          <input v-model="checkinNoteForm.disableFuturePrompt" type="checkbox">
+          <span>以后不提醒</span>
+        </label>
+        <div class="habit-note-actions">
+          <button class="btn btn-secondary" type="button" @click="completeCheckinNote(false)">本次不填</button>
+          <button class="btn btn-primary" type="button" @click="completeCheckinNote(true)">保存</button>
+        </div>
+      </div>
+    </ModalShell>
 
     <ModalShell
       v-if="showCurrencyManager"
@@ -1285,6 +1366,11 @@ watch(focusedHabitId, value => {
 </template>
 
 <style scoped>
+.habit-note-modal { width: min(520px, calc(100vw - 28px)); }
+.habit-note-modal textarea { width: 100%; min-height: 96px; resize: vertical; }
+.habit-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.habit-note-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.habit-note-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .habit-currency-modal { width: min(520px, calc(100vw - 28px)); }
 .habit-currency-add-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .habit-currency-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }

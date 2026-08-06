@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import EmptyState from '../components/common/EmptyState.vue';
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import RecordCreateModal from '../components/RecordCreateModal.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import AppSelect from '../components/common/AppSelect.vue';
 import ModalShell from '../components/common/ModalShell.vue';
+import { withReturnTo } from '../router/returnTo';
 import { getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
 import { useHabitsStore } from '../stores/habitsStore';
@@ -37,6 +38,7 @@ type RecordEntity = DataEntity & {
 };
 type FloatingMode = 'random' | 'newest' | 'oldest';
 
+const route = useRoute();
 const router = useRouter();
 const lifePlan = useLifePlanStore();
 const recordsStore = useRecordsStore();
@@ -180,7 +182,7 @@ const dashboardPreviewIdeaTodoText = computed(() => {
 });
 
 function openTodo(todoId: string) {
-  void router.push({ path: '/todos', query: { todo: todoId } });
+  void router.push(withReturnTo(route, { path: '/todos', query: { todo: todoId } }));
 }
 
 function openRecord(recordId: string) {
@@ -195,17 +197,17 @@ function closeDashboardPreview() {
 function editDashboardPreview() {
   const recordId = dashboardPreviewRecord.value?.id;
   closeDashboardPreview();
-  if (recordId) void router.push({ path: '/records', query: { record: recordId } });
+  if (recordId) void router.push(withReturnTo(route, { path: '/records', query: { record: recordId } }));
 }
 
 function openScheduleItem(item: ScheduleItem) {
   if (item.sourceType === 'record') openRecord(item.id);
   if (item.sourceType.startsWith('todo-')) openTodo(item.id);
-  if (item.sourceType === 'habit') void router.push({ path: '/habits', query: { habit: item.id } });
+  if (item.sourceType === 'habit') void router.push(withReturnTo(route, { path: '/habits', query: { habit: item.id } }));
 }
 
 function openMaterial(materialId: string) {
-  void router.push({ path: '/materials', query: { material: materialId } });
+  void router.push(withReturnTo(route, { path: '/materials', query: { material: materialId } }));
 }
 
 function normalizeMaterialText(value: unknown) {
@@ -251,11 +253,15 @@ function createRecordOfType(type: string) {
 }
 
 function openExistingFromCreate(recordId: string) {
-  void router.push({ path: '/records', query: { record: recordId } });
+  void router.push(withReturnTo(route, { path: '/records', query: { record: recordId } }));
 }
 
 function openAi(mode: string) {
   void router.push({ path: '/ai', query: { mode } });
+}
+
+function createTodo() {
+  void router.push(withReturnTo(route, { path: '/todos', query: { create: '1' } }));
 }
 
 function setFloatingMode(mode: FloatingMode) {
@@ -320,7 +326,7 @@ function startFitnessSuggestion() {
 }
 
 function openHabit(habitId: string) {
-  void router.push({ path: '/habits', query: { habit: habitId } });
+  void router.push(withReturnTo(route, { path: '/habits', query: { habit: habitId } }));
 }
 
 function quickHabitCheckin(habitId: string) {
@@ -473,7 +479,7 @@ const timelineGroups = computed(() => {
   });
   return [...groups.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
-    .map(([date, values]) => ({ date, items: sortScheduleItems(values, 'asc') }));
+    .map(([date, values]) => ({ date, items: sortScheduleItems(values, 'desc') }));
 });
 </script>
 
@@ -489,7 +495,8 @@ const timelineGroups = computed(() => {
       <div class="hero-panel">
         <div>
           <div class="hero-date">{{ todayLabel }}</div>
-          <h1 class="hero-title">{{ nextTodo ? `今天先处理：${nextTodo.text}` : '今天先把最重要的事推进一点' }}</h1>
+          <button v-if="nextTodo" class="hero-title hero-title-button" type="button" :aria-label="`打开首要待办 ${nextTodo.text}`" @click="openTodo(nextTodo.id)">今天先处理：{{ nextTodo.text }}</button>
+          <h1 v-else class="hero-title">今天先把最重要的事推进一点</h1>
           <div class="hero-meta">
             <span>待办 {{ todayTodoDone }}/{{ todayRelevantTodos.length }}</span>
             <span>习惯 {{ doneHabitCount }}/{{ dueHabits.length }}</span>
@@ -504,7 +511,7 @@ const timelineGroups = computed(() => {
           <button class="btn" type="button" @click="createRecordOfType('日记')">写日记</button>
           <button class="btn" type="button" @click="createRecordOfType('工作记录')">记工作</button>
           <button class="btn" type="button" @click="createRecordOfType('灵感碎片')">记灵感</button>
-          <button class="btn" type="button" @click="router.push('/todos')">加待办</button>
+          <button class="btn" type="button" @click="createTodo">加待办</button>
           <button class="btn" type="button" @click="openAi('todayPlan')">AI 今日计划</button>
           <button class="btn" type="button" @click="openAi('chatCapture')">AI 对话整理</button>
         </div>
@@ -601,7 +608,7 @@ const timelineGroups = computed(() => {
           <button class="btn btn-secondary todo-mini-btn" type="button" @click="router.push('/goals')">看目标</button>
         </div>
         <div v-if="goalFocusList.length" class="command-list">
-          <button v-for="goal in goalFocusList" :key="String(goal.id)" class="command-row" type="button" @click="router.push({ path: '/goals', query: { goal: String(goal.id) } })">
+          <button v-for="goal in goalFocusList" :key="String(goal.id)" class="command-row" type="button" @click="router.push(withReturnTo(route, { path: '/goals', query: { goal: String(goal.id) } }))">
             <span>{{ goal.name || '未命名目标' }}</span>
             <strong>{{ Number(goal.progress || 0) }}%</strong>
           </button>
@@ -841,6 +848,7 @@ const timelineGroups = computed(() => {
   flex-wrap: wrap;
 }
 .dashboard-main-grid { margin-bottom: 16px; }
+.hero-title-button { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; }
 .dashboard-timeline { min-width: 0; }
 .command-materials { display: grid; gap: 9px; }
 .dashboard-material-card { min-width: 0; display: flex; flex-direction: column; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: #fbfdfb; box-shadow: 0 12px 26px rgba(35,60,45,.055); }

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import StatusBanner from '../components/common/StatusBanner.vue';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import CalendarViews from '../components/CalendarViews.vue';
 import AppSelect from '../components/common/AppSelect.vue';
 import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
+import { closeRouteOverlay, withReturnTo } from '../router/returnTo';
 import SegmentedTabs from '../components/common/SegmentedTabs.vue';
 import FilterBar from '../components/common/FilterBar.vue';
 import SearchInput from '../components/common/SearchInput.vue';
@@ -228,10 +229,10 @@ function selectCalendarItem(item: ScheduleItem) {
     return;
   }
   if (item.sourceType.startsWith('todo-')) {
-    void router.push({ path: '/todos', query: { todo: item.id } });
+    void router.push(withReturnTo(route, { path: '/todos', query: { todo: item.id } }));
     return;
   }
-  if (item.sourceType === 'habit') void router.push({ path: '/habits', query: { habit: item.id } });
+  if (item.sourceType === 'habit') void router.push(withReturnTo(route, { path: '/habits', query: { habit: item.id } }));
 }
 
 function recordForItem(item: ScheduleItem) {
@@ -317,10 +318,17 @@ function deleteTemplate(id: string) {
   editorNotice.value = '模板已删除';
 }
 
-function updateRecordQuery(recordId = '') {
+function closeTemplateManager() {
+  showTemplateManager.value = false;
+  if (route.query.template) closeRouteOverlay(router, route, ['template']);
+}
+
+function updateRecordQuery(recordId = '', preview = false) {
   const query = { ...route.query };
   if (recordId) query.record = recordId;
   else delete query.record;
+  if (preview) query.preview = '1';
+  else delete query.preview;
   void router.replace({ path: route.path, query });
 }
 
@@ -432,12 +440,11 @@ function closeRecordPreview() {
   const returnToEditor = previewFromEditor.value;
   previewDraft.value = null;
   previewFromEditor.value = false;
-  if (route.query.preview || route.query.record) {
-    const query = { ...route.query };
-    delete query.preview;
-    if (!returnToEditor) delete query.record;
-    void router.replace({ path: route.path, query });
+  if (returnToEditor && activeRecordId.value) {
+    updateRecordQuery(activeRecordId.value, false);
+    return;
   }
+  closeRouteOverlay(router, route, ['record', 'preview']);
 }
 
 function openDiaryAiFromPreview() {
@@ -476,20 +483,7 @@ function closeEditor(flush = true) {
   showTemplateManager.value = false;
   editorNotice.value = '';
   resetDiaryAiState();
-  if (route.query.record) updateRecordQuery();
-}
-
-function handleKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape') return;
-  if (previewDraft.value) {
-    closeRecordPreview();
-    return;
-  }
-  if (activeRecordId.value) {
-    closeEditor();
-    return;
-  }
-  if (showTemplateManager.value) showTemplateManager.value = false;
+  if (route.query.record) closeRouteOverlay(router, route, ['record', 'preview']);
 }
 
 function getEditorUpdateInput() {
@@ -546,7 +540,7 @@ function flushPendingEditorSave() {
 
 function openIdeaTodo() {
   if (!editForm.ideaTodoId) return;
-  void router.push({ path: '/todos', query: { todo: editForm.ideaTodoId } });
+  void router.push(withReturnTo(route, { path: '/todos', query: { todo: editForm.ideaTodoId } }));
 }
 
 function linkExistingTodo() {
@@ -783,6 +777,11 @@ watch(() => route.query.template, value => {
 
 watch(() => editForm.type, type => {
   if (type !== '日记') resetDiaryAiState();
+  if (!editorHydrating && activeRecordId.value) {
+    const range = records.services.records.getSuggestedRangeForType(type);
+    editForm.startDate = range.start;
+    editForm.endDate = range.end;
+  }
   const selected = selectedTemplateKey.value;
   if (!selected) return;
   const template = selected.startsWith('builtin:')
@@ -794,14 +793,11 @@ watch(() => editForm.type, type => {
   setTemplateValues();
 });
 
-onMounted(() => window.addEventListener('keydown', handleKeydown));
-
 onBeforeRouteLeave(() => {
   flushPendingEditorSave();
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeydown);
   flushPendingEditorSave();
   window.clearTimeout(recordAutoSaveTimer);
 });
@@ -871,7 +867,7 @@ onBeforeUnmount(() => {
         </div>
     </ModalShell>
 
-    <ModalShell v-model="showTemplateManager" title="模板管理" size="sm" dialog-class="record-template-modal" close-label="关闭模板管理">
+    <ModalShell v-if="!activeRecord" :model-value="showTemplateManager" title="模板管理" size="sm" dialog-class="record-template-modal" close-label="关闭模板管理" @close="closeTemplateManager">
         <div class="record-template-manager" aria-label="自定义模板管理">
           <div v-if="lifePlan.data.templates.length" class="record-template-list">
             <div v-for="template in lifePlan.data.templates" :key="String(template.id)" class="record-template-row">

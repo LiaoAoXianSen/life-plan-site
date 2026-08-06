@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import EmptyState from '../components/common/EmptyState.vue';
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import SearchInput from '../components/common/SearchInput.vue';
+import { withReturnTo } from '../router/returnTo';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import type { DataEntity } from '../types/lifePlan';
 
@@ -19,6 +20,7 @@ type TagCenterItem = {
 };
 
 const store = useLifePlanStore();
+const route = useRoute();
 const router = useRouter();
 const keyword = ref('');
 const scope = ref('all');
@@ -129,7 +131,7 @@ function materialPreview(material: DataEntity) {
           <button type="button" @click="router.push({ path: '/materials', query: { tag: item.name } })">
             <strong>{{ item.materials.length }}</strong><span>素材</span>
           </button>
-          <button type="button" @click="router.push({ path: '/wheel', query: { tag: firstId(item.wheelTags) } })">
+          <button type="button" @click="router.push(withReturnTo(route, { path: '/wheel', query: { tag: firstId(item.wheelTags) } }))">
             <strong>{{ item.wheelItems.length }}</strong><span>转盘项</span>
           </button>
         </div>

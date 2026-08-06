@@ -1065,21 +1065,27 @@
         }
 
         function recordCriticalFailure(label, err = null, extra = {}) {
+            const message = err?.message || extra.message || '操作失败';
+            const failures = getCriticalFailures();
+            const latest = failures[0];
+            const latestAt = latest?.createdAt ? new Date(latest.createdAt).getTime() : 0;
+            const elapsed = Date.now() - latestAt;
+            if (latest?.label === label && latest?.message === message && elapsed >= 0 && elapsed < 5000) return latest;
             const entry = {
                 id: genId(),
                 label,
-                message: err?.message || extra.message || '操作失败',
+                message,
                 createdAt: getLocalDateTimeStr(),
                 action: extra.action || ''
             };
             try {
-                const failures = [entry, ...getCriticalFailures()].slice(0, MAX_CRITICAL_FAILURES);
-                localStorage.setItem(CRITICAL_FAILURE_LOG_KEY, JSON.stringify(failures));
+                localStorage.setItem(CRITICAL_FAILURE_LOG_KEY, JSON.stringify([entry, ...failures].slice(0, MAX_CRITICAL_FAILURES)));
             } catch (logErr) {
                 console.warn('关键故障记录写入失败', logErr);
             }
             console.error(label, err || entry.message);
             renderCriticalFailureLog();
+            return entry;
         }
 
         function persistLocalValue(key, value, label = '本地数据') {
@@ -1535,8 +1541,15 @@
             }
 
             if (!snapshot) {
-                recordCriticalFailure('本地快照写入失败', null, { action: meta.action || 'snapshot-create', message: '快照服务返回空结果' });
-                updateSyncStatus('本地快照写入失败，当前数据未受影响。请导出备份或清理旧快照后重试。', true);
+                const error = snapshotService.getLastError?.() || null;
+                recordCriticalFailure('本地快照写入失败', error, {
+                    action: meta.action || 'snapshot-create',
+                    message: error?.message || '快照服务返回空结果'
+                });
+                const quotaMessage = error?.name === 'QuotaExceededError'
+                    ? '本地快照写入失败：浏览器本地存储空间不足。系统已尝试淘汰旧快照，但当前数据仍无法写入。'
+                    : '本地快照写入失败，当前数据未受影响。请导出备份或清理旧快照后重试。';
+                updateSyncStatus(quotaMessage, true);
                 return null;
             }
 
@@ -5572,13 +5585,16 @@
 
         async function syncUpToCloud(force = false, options = {}) {
             const shouldRetryConditionalConflict = options.retryOnConditionalConflict !== false;
+            const skipSnapshot = options.skipSnapshot === true;
             const localHash = getDataHash();
             if (!force && !syncState.dirty && syncState.lastRemoteHash === localHash) return false;
-            createLocalSnapshot('上传云端前', data, {
-                source: 'cloud-push',
-                action: force ? 'force-upload' : 'upload',
-                mergedWith: syncState.lastRemoteHash ? { label: '上次云端', hash: syncState.lastRemoteHash } : null
-            });
+            if (!skipSnapshot) {
+                createLocalSnapshot('上传云端前', data, {
+                    source: 'cloud-push',
+                    action: force ? 'force-upload' : 'upload',
+                    mergedWith: syncState.lastRemoteHash ? { label: '上次云端', hash: syncState.lastRemoteHash } : null
+                });
+            }
             const remotePath = syncConfig.remotePath.startsWith('/') ? syncConfig.remotePath : `/${syncConfig.remotePath}`;
             let result;
             try {
@@ -5588,7 +5604,7 @@
             } catch (err) {
                 if (shouldRetryConditionalConflict && isConditionalWriteConflict(err)) {
                     await mergeAfterConditionalWriteConflict();
-                    return syncUpToCloud(true, { retryOnConditionalConflict: false });
+                    return syncUpToCloud(true, { retryOnConditionalConflict: false, skipSnapshot: true });
                 }
                 throw err;
             }
@@ -5641,7 +5657,7 @@
                         syncState.lastRemoteHash = remote.hash;
                         rememberRemoteVersion(remote, syncState);
                         syncState.lastConflictAt = new Date().toISOString();
-                        await syncUpToCloud(true);
+                        await syncUpToCloud(true, { skipSnapshot: true });
                         renderAfterDataChange();
                         updateSyncStatus(`云端也有变化，已先合并再上传 ${formatClockTime(new Date(), true)}`);
                         return;
@@ -5658,7 +5674,7 @@
                         return;
                     }
                     if (pulled === 'merged') {
-                        await syncUpToCloud(true);
+                        await syncUpToCloud(true, { skipSnapshot: true });
                         renderAfterDataChange();
                         updateSyncStatus(`本地也有变化，已先合并再拉取并回写云端 ${formatClockTime(new Date(), true)}`);
                         return;
@@ -5719,7 +5735,7 @@
                     if (!syncState.dirty) syncState.lastSyncAt = syncState.lastPullAt;
                     saveSyncState();
                     if (shouldUploadMergedData) {
-                        await syncUpToCloud(true);
+                        await syncUpToCloud(true, { skipSnapshot: true });
                     }
                     renderAfterDataChange();
                     updateSyncStatus(`${shouldUploadMergedData ? '发现云端更新，已安全合并并回传' : '发现云端更新，已安全合并'} ${formatClockTime(new Date(), true)}`);
@@ -5755,7 +5771,7 @@
                 syncState.lastRemoteHash = remote.hash;
                 rememberRemoteVersion(remote, syncState);
                 syncState.lastConflictAt = new Date().toISOString();
-                await syncUpToCloud(true);
+                await syncUpToCloud(true, { skipSnapshot: true });
                 renderAfterDataChange();
                 updateSyncStatus(`本地和云端都有变化，已按条目时间保守合并 ${formatClockTime(new Date(), true)}`);
             } catch (err) {

@@ -7,6 +7,13 @@ import { useLifePlanStore } from './lifePlanStore';
 
 const services = createLegacyServices();
 
+export const TODO_GROUPS = ['其他', '健身', '学习', '工作', '生活'] as const;
+
+export function normalizeTodoGroup(value: unknown) {
+  const group = String(value || '').trim();
+  return (TODO_GROUPS as readonly string[]).includes(group) ? group : '其他';
+}
+
 type TodoDetailInput = Pick<Todo, 'text' | 'note' | 'dueDate' | 'planStartDate' | 'planEndDate' | 'urgency' | 'group'> & {
   subTodos: TodoSubTodo[];
 };
@@ -32,9 +39,10 @@ export const useTodosStore = defineStore('todos', () => {
 
   function create(input: TodoCreateInput) {
     const range = services.todos.normalizeTodoDateRange(input.planStartDate, input.planEndDate);
-    if (!range.isValid) throw new Error('计划开始日期不能晚于结束日期');
+    if (!range.isValid) throw new Error('计划结束日期不能早于计划开始日期');
     const todo = services.todos.createTodoFromAiItem({
       ...input,
+      group: normalizeTodoGroup(input.group),
       ...range,
       subTodos: (input.subTodos || [])
         .map(item => ({ text: String(item.text || '').trim(), done: !!item.done }))
@@ -60,7 +68,7 @@ export const useTodosStore = defineStore('todos', () => {
         ...range,
         text,
         note: input.note.trim(),
-        group: input.group.trim() || '其他',
+        group: normalizeTodoGroup(input.group),
         subTodos: input.subTodos
           .map(item => ({ text: item.text.trim(), done: !!item.done }))
           .filter(item => item.text),

@@ -6,6 +6,7 @@ import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import SearchInput from '../components/common/SearchInput.vue';
+import { withReturnTo } from '../router/returnTo';
 import { useRecordsStore } from '../stores/recordsStore';
 import { useTodosStore } from '../stores/todosStore';
 
@@ -74,11 +75,11 @@ function add() {
 }
 
 function openView(idea: Record<string, unknown>) {
-  void router.push({ path: '/records', query: { record: String(idea.id), preview: '1' } });
+  void router.push(withReturnTo(route, { path: '/records', query: { record: String(idea.id), preview: '1' } }));
 }
 
 function openEditor(idea: Record<string, unknown>) {
-  void router.push({ path: '/records', query: { record: String(idea.id) } });
+  void router.push(withReturnTo(route, { path: '/records', query: { record: String(idea.id) } }));
 }
 
 function getLinkedTodo(idea: Record<string, unknown>) {
@@ -88,10 +89,10 @@ function getLinkedTodo(idea: Record<string, unknown>) {
 function convert(idea: Record<string, unknown>) {
   const linkedTodo = getLinkedTodo(idea);
   if (linkedTodo) {
-    void router.push({ path: '/todos', query: { todo: linkedTodo.id } });
+    void router.push(withReturnTo(route, { path: '/todos', query: { todo: linkedTodo.id } }));
     return;
   }
-  void router.push({ path: '/todos', query: { ideaDraft: String(idea.id) } });
+  void router.push(withReturnTo(route, { path: '/todos', query: { ideaDraft: String(idea.id) } }));
 }
 
 watch(() => route.query.tag, value => { tag.value = String(value || ''); });

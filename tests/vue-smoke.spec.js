@@ -46,10 +46,174 @@ function habitRemoteSnapshot(overrides = {}) {
 
 async function expectHashRoute(page, path, query = {}) {
     await expect.poll(() => page.evaluate(() => {
-        const [hashPath, rawQuery = ''] = location.hash.replace(/^#/, '').split('?');
+        const rawHash = location.hash.replace(/^#/, '');
+        const queryIndex = rawHash.indexOf('?');
+        const hashPath = queryIndex < 0 ? rawHash : rawHash.slice(0, queryIndex);
+        const rawQuery = queryIndex < 0 ? '' : rawHash.slice(queryIndex + 1);
         return { path: hashPath, query: Object.fromEntries(new URLSearchParams(rawQuery)) };
     })).toEqual({ path, query });
 }
+
+test('cross-page record and material overlays return to their exact source route', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'return-idea', type: '灵感碎片', title: '返回来源灵感', content: '灵感内容', ideaStatus: '待处理', ideaTags: ['route'], todoIds: [] }],
+        materials: [{ id: 'return-material', type: '摘抄', title: '返回来源素材', content: '素材内容', tags: ['route'], createdAt: '2026-08-01T08:00:00' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/ideas?status=unprocessed&tag=route');
+    await page.locator('.idea-card').filter({ hasText: '返回来源灵感' }).getByRole('button', { name: '编辑推进' }).click();
+    await expect(page.getByRole('dialog', { name: '编辑记录' })).toBeVisible();
+    await page.getByRole('dialog', { name: '编辑记录' }).getByRole('button', { name: '关闭', exact: true }).click();
+    await expectHashRoute(page, '/ideas', { status: 'unprocessed', tag: 'route' });
+
+    await page.goto('/#/search?q=返回来源&scope=all');
+    await page.locator('.search-result-item').filter({ hasText: '返回来源灵感' }).click();
+    await page.getByRole('button', { name: '关闭记录预览' }).click();
+    await expectHashRoute(page, '/search', { q: '返回来源', scope: 'all' });
+
+    await page.goto('/#/search?q=返回来源素材&scope=materials');
+    await page.locator('.search-result-item').filter({ hasText: '返回来源素材' }).click();
+    await page.getByRole('button', { name: '关闭素材详情' }).click();
+    await expectHashRoute(page, '/search', { q: '返回来源素材', scope: 'materials' });
+});
+
+test('dashboard and linked entity overlays return through their source chain', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'chain-record', type: '灵感碎片', title: '链式记录', content: '', todoIds: ['chain-todo'], ideaTodoId: 'chain-todo', ideaStatus: '待实践' }],
+        todos: [todoFixture('chain-todo', '链式待办')],
+        habits: [{ id: 'chain-habit', name: '链式习惯', rule: 'daily', weekdays: [], timesPerDay: 1, rewardPoints: 0, rewardCurrency: '金币', penaltyPoints: 0, penaltyCurrency: '金币', milestoneRewards: [] }],
+        goals: [{ id: 'chain-goal', name: '链式目标', status: '进行中', progress: 25, period: '年度' }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/todos?todo=chain-todo');
+    await page.locator('.todo-record-link').filter({ hasText: '链式记录' }).click();
+    await page.getByRole('button', { name: '关闭记录预览' }).click();
+    await expectHashRoute(page, '/todos', { todo: 'chain-todo' });
+
+    await page.goto('/#/records?record=chain-record');
+    await page.getByRole('dialog', { name: '编辑记录' }).getByRole('button', { name: /链式待办/ }).click();
+    await page.getByRole('button', { name: '关闭待办详情' }).click();
+    await expectHashRoute(page, '/records', { record: 'chain-record' });
+
+    await page.goto('/#/dashboard');
+    await page.locator('.command-row').filter({ hasText: '链式目标' }).click();
+    await page.getByRole('button', { name: '关闭目标编辑' }).click();
+    await expectHashRoute(page, '/dashboard');
+});
+
+test('direct overlay deep links close to their own list pages', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'direct-record', type: '日记', title: '直接记录', content: '', todoIds: [] }],
+        materials: [{ id: 'direct-material', type: '摘抄', title: '直接素材', content: '内容', tags: [] }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records?record=direct-record&preview=1');
+    await page.getByRole('button', { name: '关闭记录预览' }).click();
+    await expectHashRoute(page, '/records');
+    await page.goto('/#/materials?material=direct-material&tag=keep');
+    await page.getByRole('button', { name: '关闭素材详情' }).click();
+    await expectHashRoute(page, '/materials', { tag: 'keep' });
+});
+
+test('nested record preview closes only the top layer on Escape', async ({ page }) => {
+    const source = emptyData({
+        records: [{ id: 'nested-record', type: '日记', title: '嵌套弹窗记录', content: '', todoIds: [] }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/records?record=nested-record');
+    const editor = page.getByRole('dialog', { name: '编辑记录' });
+    await editor.getByRole('button', { name: '预览' }).click();
+    await expect(page.getByRole('dialog', { name: '记录预览' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: '记录预览' })).toBeHidden();
+    await expect(editor).toBeVisible();
+});
+
+test('route-backed overlays clear stale query and sidebar actions preserve context', async ({ page }) => {
+    const source = emptyData({
+        habits: [{ id: 'route-habit', name: '路由习惯', rule: 'daily', weekdays: [], timesPerDay: 1, rewardPoints: 0, rewardCurrency: '金币', penaltyPoints: 0, penaltyCurrency: '金币', milestoneRewards: [] }],
+        wheelTags: [{ id: 'route-tag', name: '路由标签' }],
+        records: [{ id: 'existing-diary', type: '日记', title: '已有日记', content: '', startDate: localDate(), endDate: localDate(), todoIds: [] }],
+        todos: [todoFixture('todo-context', 'AI 设置上下文待办')],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+
+    await page.goto('/#/habits?habit=route-habit');
+    await page.getByRole('button', { name: '取消编辑' }).click();
+    await expectHashRoute(page, '/habits');
+
+    await page.goto('/#/wheel?tag=route-tag');
+    await page.getByRole('dialog').locator('.close-btn').click();
+    await expectHashRoute(page, '/wheel');
+
+    await page.goto('/#/ai?mode=todoBreakdown&todo=todo-context');
+    await page.locator('.sidebar').getByRole('button', { name: 'AI 设置' }).click();
+    await expectHashRoute(page, '/ai', { mode: 'todoBreakdown', todo: 'todo-context', settings: '1' });
+    await page.getByRole('button', { name: '关闭AI 设置' }).click();
+    await expectHashRoute(page, '/ai', { mode: 'todoBreakdown', todo: 'todo-context' });
+
+    await page.goto('/#/ideas?status=unprocessed');
+    await page.getByRole('button', { name: '+ 新建记录' }).click();
+    await page.getByRole('button', { name: '日记' }).click();
+    await expect(page.getByRole('dialog', { name: '编辑记录' })).toBeVisible();
+    await page.getByRole('dialog', { name: '编辑记录' }).getByRole('button', { name: '关闭', exact: true }).click();
+    await expectHashRoute(page, '/ideas', { status: 'unprocessed' });
+});
+
+test('habits preserve ask, always and never note modes through the ModalShell check-in flow', async ({ page }) => {
+    const source = emptyData({
+        habits: [
+            { id: 'habit-ask', name: '询问习惯', rule: 'daily', timesPerDay: 1, noteMode: 'ask', startDate: localDate() },
+            { id: 'habit-always', name: '强制备注习惯', rule: 'daily', timesPerDay: 1, noteMode: 'always', startDate: localDate() },
+            { id: 'habit-never', name: '直接打卡习惯', rule: 'daily', timesPerDay: 1, noteMode: 'never', startDate: localDate() },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/habits');
+
+    const askCard = page.locator('.habit-quick-card').filter({ hasText: '询问习惯' });
+    await askCard.getByRole('button', { name: '打卡' }).click();
+    const askModal = page.getByRole('dialog', { name: /备注 · 询问习惯/ });
+    await expect(askModal).toBeVisible();
+    await askModal.getByRole('button', { name: '本次不填' }).click();
+    await expect(askModal).toBeHidden();
+
+    let alwaysCard = page.locator('.habit-quick-card').filter({ hasText: '强制备注习惯' });
+    await alwaysCard.getByRole('button', { name: '编辑' }).click();
+    await expect(page.getByRole('combobox', { name: '备注模式' })).toHaveValue('always');
+    await page.getByRole('button', { name: '保存习惯' }).click();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).habits.find(item => item.id === 'habit-always').noteMode)).toBe('always');
+    await page.getByRole('tab', { name: '今日', exact: true }).click();
+    alwaysCard = page.locator('.habit-quick-card').filter({ hasText: '强制备注习惯' });
+    await alwaysCard.getByRole('button', { name: '打卡' }).click();
+    const alwaysModal = page.getByRole('dialog', { name: /备注 · 强制备注习惯/ });
+    await expect(alwaysModal).toBeVisible();
+    await alwaysModal.locator('textarea').fill('保留 always 后的本次备注');
+    await alwaysModal.getByLabel('以后不提醒').check();
+    await alwaysModal.getByRole('button', { name: '保存' }).click();
+
+    const neverCard = page.locator('.habit-quick-card').filter({ hasText: '直接打卡习惯' });
+    await neverCard.getByRole('button', { name: '打卡' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));
+    expect(saved.habits.find(item => item.id === 'habit-ask').noteMode).toBe('ask');
+    expect(saved.habits.find(item => item.id === 'habit-always').noteMode).toBe('never');
+    expect(saved.habits.find(item => item.id === 'habit-never').noteMode).toBe('never');
+    expect(saved.checkins.find(item => item.habitId === 'habit-always').note).toBe('保留 always 后的本次备注');
+    expect(saved.checkins.filter(item => item.date === localDate()).map(item => item.habitId).sort()).toEqual(['habit-always', 'habit-ask', 'habit-never']);
+});
+
+test('resetting a new habit form does not close a route overlay', async ({ page }) => {
+    const source = emptyData({ habits: [{ id: 'route-form-habit', name: '路由编辑习惯', rule: 'daily', timesPerDay: 1, noteMode: 'ask', startDate: localDate() }] });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/habits?habit=route-form-habit');
+    await page.getByRole('button', { name: '+ 新建习惯' }).click();
+    await expectHashRoute(page, '/habits', { habit: 'route-form-habit' });
+    await expect(page.getByRole('heading', { name: '添加基础习惯' })).toBeVisible();
+});
 
 test('common search controls clear by button and Escape without writing data', async ({ page }) => {
     const source = emptyData({
@@ -345,7 +509,7 @@ test('todo legacy filters and linked record navigation open a read-only preview'
     await page.getByRole('button', { name: /专属工作待办/ }).click();
     await page.getByRole('button', { name: /筛选关联记录/ }).click();
 
-    await expect(page).toHaveURL(/#\/records\?record=record-filter&preview=1$/);
+    await expectHashRoute(page, '/records', { record: 'record-filter', preview: '1', returnTo: '/todos?todo=todo-exclusive' });
     const preview = page.getByRole('dialog', { name: '记录预览' });
     await expect(preview).toContainText('筛选关联记录');
     await expect(page.locator('.record-editor-panel')).toHaveCount(0);
@@ -415,10 +579,10 @@ test('todo dashboard route presets and calendar entries preserve one read-only d
 
     await page.goto('/');
     await page.getByRole('button', { name: '跨入口待办', exact: true }).click();
-    await expect(page).toHaveURL(/#\/todos\?todo=todo-cross-entry$/);
+    await expectHashRoute(page, '/todos', { todo: 'todo-cross-entry', returnTo: '/dashboard' });
     await expect(page.locator('.todo-detail-panel').getByRole('heading', { name: '跨入口待办' })).toBeVisible();
     await page.getByRole('button', { name: '关闭待办详情' }).click();
-    await expect(page).toHaveURL(/#\/todos$/);
+    await expectHashRoute(page, '/dashboard');
 
     await page.goto('/#/todos?todo=todo-cross-entry');
     const detail = page.locator('.todo-detail-panel');
@@ -439,7 +603,7 @@ test('todo dashboard route presets and calendar entries preserve one read-only d
         const entry = page.locator(selector).filter({ hasText: name });
         await expect(entry).toBeVisible();
         await entry.click();
-        await expect(page).toHaveURL(/#\/todos\?todo=todo-cross-entry$/);
+        await expectHashRoute(page, '/todos', { todo: 'todo-cross-entry', returnTo: '/records' });
         await expect(page.locator('.todo-detail-panel').getByRole('heading', { name: '跨入口待办' })).toBeVisible();
     };
 
@@ -533,12 +697,24 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     await expect(page.locator('.dashboard-timeline')).not.toContainText('计划：计划截止不进首页时间轴');
     await expect(page.locator('.dashboard-timeline')).not.toContainText('截止：计划截止不进首页时间轴');
 
+    const timelineRows = page.locator('.dashboard-timeline .record-row');
+    await expect(page.locator('.dashboard-timeline')).toContainText('执行：执行入口待办');
+    await expect(page.locator('.dashboard-timeline')).toContainText('Dashboard 日记记录');
+
+    await page.getByRole('button', { name: '打开首要待办 超期高压待办' }).click();
+    await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-overdue', returnTo: '/dashboard' });
+
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: '加待办' }).click();
+    await expectHashRoute(page, '/todos', { create: '1', returnTo: '/dashboard' });
+
+    await page.goto('/#/dashboard');
     await page.locator('.command-row').filter({ hasText: '超期高压待办' }).click();
-    await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-overdue' });
+    await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-overdue', returnTo: '/dashboard' });
 
     await page.goto('/#/dashboard');
     await page.locator('.command-materials .material-card').filter({ hasText: 'Dashboard 素材内容' }).getByRole('button', { name: '查看详情' }).click();
-    await expectHashRoute(page, '/materials', { material: 'material-dashboard' });
+    await expectHashRoute(page, '/materials', { material: 'material-dashboard', returnTo: '/dashboard' });
 
     await page.goto('/#/dashboard');
     await page.locator('.period-item').filter({ hasText: '本周计划入口' }).click();
@@ -559,15 +735,15 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
 
     await page.goto('/#/dashboard');
     await page.getByRole('button', { name: /执行：执行入口待办/ }).click();
-    await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-session' });
+    await expectHashRoute(page, '/todos', { todo: 'todo-dashboard-session', returnTo: '/dashboard' });
 
     await page.goto('/#/dashboard');
     await page.locator('.dashboard-timeline').getByRole('button', { name: /Dashboard 习惯/ }).click();
-    await expectHashRoute(page, '/habits', { habit: 'habit-dashboard' });
+    await expectHashRoute(page, '/habits', { habit: 'habit-dashboard', returnTo: '/dashboard' });
 
     await page.goto('/#/dashboard');
     await page.getByRole('button', { name: /Dashboard 目标/ }).click();
-    await expectHashRoute(page, '/goals', { goal: 'goal-dashboard' });
+    await expectHashRoute(page, '/goals', { goal: 'goal-dashboard', returnTo: '/dashboard' });
 
     const persisted = await page.evaluate(() => ({ data: localStorage.getItem('lifePlanData'), mirror: localStorage.getItem('todoAppData') }));
     expect(persisted.data).toBe(original);
@@ -723,6 +899,87 @@ test('sidebar snapshot preview exposes legacy collection summary', async ({ page
     await expect(preview).toContainText('动作库 1');
     await expect(preview).toContainText('2026-07-30 · 日记 · 最近记录');
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('sidebar snapshot restore requires override after safety snapshot failure and keeps current data on commit failure', async ({ page }) => {
+    const source = emptyData({ records: [{ id: 'restore-current', type: '日记', title: '当前记录', content: '' }] });
+    const restored = emptyData({ records: [{ id: 'restore-target', type: '日记', title: '目标记录', content: '' }] });
+    const snapshot = { id: 'restore-safety', version: 2, reason: '安全恢复目标', createdAt: '2026-08-06T08:00:00', hash: 'restore-hash', data: restored };
+    const original = JSON.stringify(source);
+    await page.addInitScript(({ data, item }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanSnapshots', JSON.stringify([item]));
+        const realSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function blockedRestoreWrites(key, value) {
+            if (key === 'lifePlanSnapshots') throw new Error('snapshot safety blocked');
+            if (key === 'lifePlanData' && String(value).includes('restore-target')) throw new Error('restore commit blocked');
+            return realSetItem.call(this, key, value);
+        };
+    }, { data: source, item: snapshot });
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /本地快照/ }).click();
+
+    let allowUnsafeRestore = false;
+    const confirms = [];
+    page.on('dialog', async dialog => {
+        confirms.push(dialog.message());
+        if (dialog.message().includes('恢复前快照创建失败')) {
+            if (allowUnsafeRestore) await dialog.accept();
+            else await dialog.dismiss();
+        } else {
+            await dialog.accept();
+        }
+    });
+
+    const restore = page.getByRole('dialog', { name: '本地快照' }).getByRole('button', { name: '恢复' }).first();
+    await restore.click();
+    await expect.poll(() => confirms.filter(message => message.includes('恢复前快照创建失败')).length).toBe(1);
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('snapshot safety blocked');
+
+    allowUnsafeRestore = true;
+    await restore.click();
+    await expect(page.getByRole('alert')).toContainText('restore commit blocked');
+    expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+    await expect(page.getByRole('dialog', { name: '本地快照' }).getByLabel('最近关键故障')).toContainText('恢复本地快照失败');
+});
+
+test('sidebar snapshot modal shows only the five most recent compatible critical failures', async ({ page }) => {
+    const failures = Array.from({ length: 7 }, (_, index) => ({
+        id: `failure-${index}`,
+        label: `关键故障 ${index}`,
+        message: `真实错误 ${index}`,
+        createdAt: `2026-08-06T08:0${index}:00`,
+        action: 'test',
+    }));
+    await page.addInitScript(({ data, log }) => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        localStorage.setItem('lifePlanCriticalFailures', JSON.stringify(log));
+    }, { data: emptyData(), log: failures });
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /本地快照/ }).click();
+    const log = page.getByRole('dialog', { name: '本地快照' }).getByLabel('最近关键故障');
+    await expect(log.locator('.critical-failure-item')).toHaveCount(5);
+    await expect(log).toContainText('真实错误 0');
+    await expect(log).toContainText('真实错误 4');
+    await expect(log).not.toContainText('真实错误 5');
+});
+
+test('sidebar manual snapshot failure shows the underlying error and records it', async ({ page }) => {
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        const realSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function blockedSnapshotWrite(key, value) {
+            if (key === 'lifePlanSnapshots') throw new Error('manual snapshot storage blocked');
+            return realSetItem.call(this, key, value);
+        };
+    }, emptyData());
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: /本地快照/ }).click();
+    await page.getByRole('button', { name: '立即创建快照' }).click();
+    const dialog = page.getByRole('dialog', { name: '本地快照' });
+    await expect(dialog.getByRole('alert')).toContainText('manual snapshot storage blocked');
+    await expect(dialog.getByLabel('最近关键故障')).toContainText('manual snapshot storage blocked');
 });
 
 test('sidebar empty snapshot state explains automatic backups', async ({ page }) => {
@@ -1475,17 +1732,19 @@ test('search and tag center restore legacy read-only index navigation', async ({
     await expect(page.locator('.search-result-item').filter({ hasText: '共享标签素材内容' })).toContainText('2026年7月28日 08:00:00');
 
     await page.locator('.search-result-item').filter({ hasText: '搜索目标 OKR' }).click();
-    await expectHashRoute(page, '/goals', { goal: 'goal-search' });
+    await expectHashRoute(page, '/goals', { goal: 'goal-search', returnTo: '/search?q=%E8%B7%AF%E7%BA%BF' });
     await expect(page.getByRole('dialog', { name: '编辑目标' })).toBeVisible();
 
     await page.goto('/#/search?q=模板下一步&scope=templates');
     await expect(page.locator('.search-result-item')).toHaveCount(1);
     await page.locator('.search-result-item').filter({ hasText: '搜索模板入口' }).click();
-    await expectHashRoute(page, '/records', { template: 'template-search' });
+    await expectHashRoute(page, '/records', { template: 'template-search', returnTo: '/search?q=%E6%A8%A1%E6%9D%BF%E4%B8%8B%E4%B8%80%E6%AD%A5&scope=templates' });
+    await page.getByRole('button', { name: '关闭模板管理' }).click();
+    await expectHashRoute(page, '/search', { q: '模板下一步', scope: 'templates' });
 
     await page.goto('/#/search?q=路线转盘&scope=wheel');
     await page.locator('.search-result-item').filter({ hasText: '搜索转盘公共项' }).click();
-    await expectHashRoute(page, '/wheel', { library: 'wheel-library-search' });
+    await expectHashRoute(page, '/wheel', { library: 'wheel-library-search', returnTo: '/search?q=%E8%B7%AF%E7%BA%BF%E8%BD%AC%E7%9B%98&scope=wheel' });
     await expect(page.locator('#wheel-management-block')).toBeVisible();
     await expect(page.locator('#wheel-management-block')).toHaveAttribute('data-management-panel', 'library');
     await expect(page.locator('[data-wheel-library-id="wheel-library-search"]')).toContainText('搜索转盘公共项');
@@ -1508,7 +1767,7 @@ test('search and tag center restore legacy read-only index navigation', async ({
 
     await page.goto('/#/tags');
     await page.locator('.tag-center-card').filter({ hasText: '共享标签' }).getByRole('button').filter({ hasText: '转盘项' }).click();
-    await expectHashRoute(page, '/wheel', { tag: 'wheel-tag-search' });
+    await expectHashRoute(page, '/wheel', { tag: 'wheel-tag-search', returnTo: '/tags' });
     await expect(page.locator('#wheel-management-block')).toBeVisible();
     await expect(page.locator('#wheel-management-block')).toHaveAttribute('data-management-panel', 'tags');
     await expect(page.locator('[data-wheel-tag-id="wheel-tag-search"]')).toContainText('共享标签');
@@ -1558,7 +1817,7 @@ test('search record results open a read-only preview before editing', async ({ p
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/search?q=搜索预览');
     await page.locator('.search-result-item').filter({ hasText: '搜索预览记录' }).click();
-    await expectHashRoute(page, '/records', { record: 'search-preview-record', preview: '1' });
+    await expectHashRoute(page, '/records', { record: 'search-preview-record', preview: '1', returnTo: '/search' });
     const preview = page.getByRole('dialog', { name: '记录预览' });
     await expect(preview).toContainText('搜索结果正文');
     await expect(page.locator('.record-editor-panel')).toHaveCount(0);
@@ -1566,7 +1825,7 @@ test('search record results open a read-only preview before editing', async ({ p
 
     await preview.getByRole('button', { name: '编辑', exact: true }).click();
     await expect(page.locator('.record-editor-panel')).toBeVisible();
-    await expectHashRoute(page, '/records', { record: 'search-preview-record' });
+    await expectHashRoute(page, '/records', { record: 'search-preview-record', returnTo: '/search' });
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
@@ -4233,6 +4492,7 @@ test('habit quick check-in writes the legacy fields and rebuilds its local mirro
     })), { data: emptyData(), date: today });
     await page.goto('/#/habits');
     await page.getByRole('button', { name: '打卡', exact: true }).click();
+    await page.getByRole('button', { name: '本次不填', exact: true }).click();
     await expect(page.locator('#page-habits')).toContainText('1/1 次');
     const stored = await page.evaluate(() => ({ data: JSON.parse(localStorage.getItem('lifePlanData')), mirror: JSON.parse(localStorage.getItem('habitAppData')) }));
     expect(stored.data.checkins).toHaveLength(1);
@@ -4267,6 +4527,7 @@ test('habit backfill primary check-in writes the selected date', async ({ page }
     await page.getByLabel('补卡日期').fill(yesterday);
     const card = page.locator('.habit-quick-card').filter({ hasText: '补卡主按钮习惯' });
     await card.getByRole('button', { name: '打卡', exact: true }).click();
+    await page.getByRole('button', { name: '本次不填', exact: true }).click();
     await expect(page.locator('.notice.success')).toContainText(`补卡 ${yesterday}`);
 
     const stored = await page.evaluate(() => ({
@@ -5471,7 +5732,7 @@ test('records legacy filters and operation events stay read-only', async ({ page
     await expect(results).not.toContainText('只应出现在待办日程');
     await recordsPage.getByLabel('记录类型筛选').selectOption('all');
     await results.getByRole('button', { name: /聚合阅读习惯/ }).click();
-    await expect(page).toHaveURL(/#\/habits\?habit=habit-filter$/);
+    await expectHashRoute(page, '/habits', { habit: 'habit-filter', returnTo: '/records' });
     await expect(page.locator('.habit-quick-card.is-target')).toContainText('聚合阅读习惯');
     await page.goto('/#/records');
     await recordsPage.getByLabel('记录日期范围').selectOption('all');
@@ -6051,7 +6312,7 @@ test('idea view opens a read-only record preview before editing', async ({ page 
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/ideas');
     await page.locator('.idea-card').filter({ hasText: '只读查看灵感' }).getByRole('button', { name: '查看', exact: true }).click();
-    await expectHashRoute(page, '/records', { record: 'idea-view-preview', preview: '1' });
+    await expectHashRoute(page, '/records', { record: 'idea-view-preview', preview: '1', returnTo: '/ideas' });
     const preview = page.getByRole('dialog', { name: '记录预览' });
     await expect(preview).toContainText('只读查看灵感');
     await expect(preview).toContainText('先看清楚再决定推进。');
@@ -6060,7 +6321,7 @@ test('idea view opens a read-only record preview before editing', async ({ page 
 
     await preview.getByRole('button', { name: '编辑', exact: true }).click();
     await expect(page.locator('.record-editor-panel')).toBeVisible();
-    await expectHashRoute(page, '/records', { record: 'idea-view-preview' });
+    await expectHashRoute(page, '/records', { record: 'idea-view-preview', returnTo: '/ideas' });
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
@@ -6091,7 +6352,7 @@ test('idea conversion opens an editable pre-create draft then links only after s
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/ideas');
     await page.locator('.idea-card').filter({ hasText: '把灵感变成行动' }).getByRole('button', { name: '转成待办' }).click();
-    await expectHashRoute(page, '/todos', { ideaDraft: 'idea-convert' });
+    await expectHashRoute(page, '/todos', { ideaDraft: 'idea-convert', returnTo: '/ideas' });
     const detail = page.locator('.todo-detail-panel');
     await expect(detail.getByRole('heading', { name: '灵感转待办' })).toBeVisible();
     await expect(detail).toContainText('来源灵感：把灵感变成行动');
@@ -6146,7 +6407,7 @@ test('idea conversion draft cancel leaves lifePlanData and todo mirror untouched
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
     await page.goto('/#/ideas');
     await page.locator('.idea-card').filter({ hasText: '取消草稿灵感' }).getByRole('button', { name: '转成待办' }).click();
-    await expectHashRoute(page, '/todos', { ideaDraft: 'idea-draft-cancel' });
+    await expectHashRoute(page, '/todos', { ideaDraft: 'idea-draft-cancel', returnTo: '/ideas' });
     const detail = page.locator('.todo-detail-panel');
     await detail.getByLabel('任务', { exact: true }).fill('临时草稿标题');
     await detail.getByRole('button', { name: '取消' }).click();
@@ -8133,6 +8394,7 @@ test('habit conditional auto sync sanitizes old config and stays idle when disab
     await page.clock.install();
     await page.goto('/#/habits');
     await page.getByRole('button', { name: '打卡', exact: true }).click();
+    await page.getByRole('button', { name: '本次不填', exact: true }).click();
     await page.clock.fastForward(25000);
     await page.waitForTimeout(100);
 
@@ -8224,6 +8486,7 @@ test('habit conditional auto sync uploads dirty habit slice after debounce', asy
         }));
     }, hashes);
     await page.getByRole('button', { name: '打卡', exact: true }).click();
+    await page.getByRole('button', { name: '本次不填', exact: true }).click();
     await page.clock.fastForward(20000);
     await expect.poll(() => requests.filter(item => item.method === 'PUT').length).toBe(1);
 
@@ -8275,6 +8538,7 @@ test('habit conditional auto sync never creates a missing remote file', async ({
     await page.clock.install();
     await page.goto('/#/habits');
     await page.getByRole('button', { name: '打卡', exact: true }).click();
+    await page.getByRole('button', { name: '本次不填', exact: true }).click();
     await page.clock.fastForward(20000);
     await expect.poll(() => requests.filter(item => item.path === '/apps/habit-app/data.json').length).toBe(1);
 

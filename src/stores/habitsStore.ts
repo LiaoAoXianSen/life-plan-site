@@ -19,6 +19,7 @@ const MILESTONE_LABELS: Record<number, string> = {
 const habitServices = createLegacyServices();
 
 export type HabitRule = 'daily' | 'weekly-fixed' | 'weekly-count' | 'monthly-count' | 'interval';
+export type HabitNoteMode = 'ask' | 'always' | 'never';
 
 interface Habit extends DataEntity {
   id: string;
@@ -29,7 +30,7 @@ interface Habit extends DataEntity {
   timesPerDay?: string;
   tag?: string;
   goalCount?: number;
-  noteMode?: 'ask' | 'never';
+  noteMode?: HabitNoteMode;
   rewardPoints?: number;
   rewardCurrency?: string;
   penaltyPoints?: number;
@@ -94,7 +95,7 @@ export interface CreateHabitInput {
   weekdays?: string[];
   count?: number;
   goalCount?: number;
-  noteMode?: 'ask' | 'never';
+  noteMode?: HabitNoteMode;
   rewardPoints?: number;
   rewardCurrency?: string;
   penaltyPoints?: number;
@@ -236,7 +237,9 @@ function normalizeHabitBaseInput(input: CreateHabitInput | UpdateHabitInput) {
     timesPerDay: String(timesPerDay),
     tag: String(input.tag || '').trim(),
     goalCount,
-    noteMode: input.noteMode === 'never' ? 'never' as const : 'ask' as const,
+    noteMode: ['ask', 'always', 'never'].includes(String(input.noteMode))
+      ? input.noteMode as HabitNoteMode
+      : 'ask' as const,
     rewardPoints,
     rewardCurrency: normalizeCurrency(input.rewardCurrency),
     penaltyPoints: Math.max(0, Math.trunc(Number(input.penaltyPoints) || 0)),
@@ -872,6 +875,30 @@ export const useHabitsStore = defineStore('habits', () => {
     }
   }
 
+  function setHabitNoteMode(habitId: string, noteMode: HabitNoteMode): boolean {
+    const habit = habits.value.find(item => item.id === habitId);
+    if (!habit) {
+      lastError.value = '未找到该习惯，未更新备注模式。';
+      return false;
+    }
+    const normalizedMode = ['ask', 'always', 'never'].includes(noteMode) ? noteMode : 'ask';
+    try {
+      lifePlan.mutate('vue-update-habit-note-mode', data => {
+        const target = data.habits.find(item => item.id === habitId) as Habit | undefined;
+        if (!target) throw new Error('习惯已不存在，未更新备注模式。');
+        target.noteMode = normalizedMode;
+        target.updatedAt = getNowLocal();
+      });
+      rebuildLocalMirror('vue-update-habit-note-mode');
+      lastAction.value = normalizedMode === 'never' ? `以后将直接为「${habit.name}」打卡` : `已更新「${habit.name}」的备注模式`;
+      lastError.value = '';
+      return true;
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }
+
   function setHabitArchived(habitId: string, archived: boolean): boolean {
     const habit = habits.value.find(item => item.id === habitId);
     if (!habit) {
@@ -1248,6 +1275,7 @@ export const useHabitsStore = defineStore('habits', () => {
     isHabitDueOnDate: isDueOnDate,
     create,
     updateHabit,
+    setHabitNoteMode,
     setHabitArchived,
     deleteHabit,
     createReward,
