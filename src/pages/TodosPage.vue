@@ -18,6 +18,8 @@ import { normalizeTodoGroup, TODO_GROUPS, useTodosStore } from '../stores/todosS
 import type { DataEntity, Todo, TodoSubTodo } from '../types/lifePlan';
 import { addDays, getWeekStart } from '../utils/schedule';
 
+const props = withDefaults(defineProps<{ embeddedCreate?: boolean }>(), { embeddedCreate: false });
+const emit = defineEmits<{ close: [] }>();
 const route = useRoute();
 const router = useRouter();
 const lifePlan = useLifePlanStore();
@@ -41,7 +43,7 @@ const newCreateSubTodo = ref('');
 const createSubTodos = ref<TodoSubTodo[]>([]);
 const recordLinkId = ref('');
 /** Browse-first: create form is secondary and collapsed until the user opens it. */
-const showCreateForm = ref(false);
+const showCreateForm = ref(props.embeddedCreate);
 const form = reactive({ text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium' as Todo['urgency'], group: '其他' });
 const detailForm = reactive({ text: '', note: '', dueDate: '', planStartDate: '', planEndDate: '', urgency: 'medium' as Todo['urgency'], group: '其他', subTodos: [] as TodoSubTodo[] });
 const sessionForm = reactive({ date: getTodayStr(), startTime: new Date().toTimeString().slice(0, 5), endTime: '', note: '' });
@@ -115,7 +117,8 @@ function resetCreateForm(shouldReturn = true) {
 }
 
 function closeCreateForm() {
-  resetCreateForm();
+  resetCreateForm(!props.embeddedCreate);
+  if (props.embeddedCreate) emit('close');
 }
 
 function submit() {
@@ -124,7 +127,8 @@ function submit() {
     const todo = todosStore.create({ ...form, text: form.text.trim(), group: normalizeTodoGroup(form.group), subTodos: createSubTodos.value });
     const routeBackedCreate = !!route.query.create;
     resetCreateForm(routeBackedCreate);
-    if (!routeBackedCreate) selectTodo(todo.id);
+    if (props.embeddedCreate) emit('close');
+    if (!routeBackedCreate && !props.embeddedCreate) selectTodo(todo.id);
   } catch (error) {
     createError.value = error instanceof Error ? error.message : String(error);
   }
@@ -412,7 +416,7 @@ watch([() => route.query.create, () => route.query.todo, () => route.query.ideaD
     if (!showCreateForm.value) toggleCreateForm();
     return;
   }
-  if (showCreateForm.value && !route.query.create) resetCreateForm(false);
+  if (showCreateForm.value && !route.query.create && !props.embeddedCreate) resetCreateForm(false);
   const draftValue = route.query.ideaDraft;
   const draftId = Array.isArray(draftValue) ? draftValue[0] : draftValue;
   if (draftId) {
@@ -430,7 +434,7 @@ watch([() => route.query.create, () => route.query.todo, () => route.query.ideaD
 
 <template>
   <section class="page active" id="page-todos">
-    <PageHeader title="待办总览">
+    <PageHeader v-if="!props.embeddedCreate" title="待办总览">
       <template #actions>
         <button class="btn btn-primary" type="button" :aria-expanded="showCreateForm" aria-controls="todo-create-panel" @click="toggleCreateForm">
           {{ showCreateForm ? '收起新建' : '+ 新建通用待办' }}
@@ -486,7 +490,7 @@ watch([() => route.query.create, () => route.query.todo, () => route.query.ideaD
       </form>
     </ModalShell>
 
-    <FilterBar class="todo-legacy-filters">
+    <FilterBar v-if="!props.embeddedCreate" class="todo-legacy-filters">
       <span class="todo-filter-label">日期：</span>
       <input v-model="startDate" type="date" aria-label="筛选开始日期">
       <span class="todo-filter-sep">至</span>
@@ -530,7 +534,7 @@ watch([() => route.query.create, () => route.query.todo, () => route.query.ideaD
       />
     </FilterBar>
 
-    <div class="todo-workspace">
+    <div v-if="!props.embeddedCreate" class="todo-workspace">
       <div class="todo-list-pane">
         <TodoTable :todos="filteredTodos" :selected-id="selectedId" @toggle="todosStore.toggle" @select="selectTodo" />
       </div>

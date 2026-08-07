@@ -8,6 +8,7 @@ import PageHeader from '../components/common/PageHeader.vue';
 import AppSelect from '../components/common/AppSelect.vue';
 import ModalShell from '../components/common/ModalShell.vue';
 import AiPage from './AiPage.vue';
+import TodosPage from './TodosPage.vue';
 import { withReturnTo } from '../router/returnTo';
 import { getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
@@ -74,6 +75,7 @@ function handleDashboardVisibility() {
 }
 const showCreateRecord = ref(false);
 const showAiAssistant = ref(false);
+const showTodoAssistant = ref(false);
 const aiAssistantMode = ref<'todayPlan' | 'chatCapture'>('todayPlan');
 const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
 const floatingMode = ref<FloatingMode>('random');
@@ -316,7 +318,7 @@ function openAi(mode: 'todayPlan' | 'chatCapture') {
 }
 
 function createTodo() {
-  void router.push(withReturnTo(route, { path: '/todos', query: { create: '1' } }));
+  showTodoAssistant.value = true;
 }
 
 function setFloatingMode(mode: FloatingMode) {
@@ -1004,6 +1006,7 @@ onBeforeUnmount(() => {
     <ModalShell v-model="showAiAssistant" :title="aiAssistantMode === 'todayPlan' ? 'AI 今日计划' : 'AI 对话整理'" size="lg" dialog-class="ai-assistant-modal">
       <AiPage :embedded-mode="aiAssistantMode" @close="showAiAssistant = false" />
     </ModalShell>
+    <TodosPage v-if="showTodoAssistant" embedded-create @close="showTodoAssistant = false" />
   </section>
 </template>
 
