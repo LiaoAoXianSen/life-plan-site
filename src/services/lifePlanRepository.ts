@@ -106,6 +106,10 @@ export class LifePlanRepository {
       return next;
     } catch (error) {
       const commitError = this.toError(error, '本地数据写入失败');
+      const errorDetails = error && typeof error === 'object'
+        ? error as { name?: unknown; code?: unknown }
+        : null;
+      const isQuotaExceeded = errorDetails?.name === 'QuotaExceededError' || Number(errorDetails?.code) === 22;
       const rollbackFailures: string[] = [];
       [...transactionKeys].reverse().forEach(key => {
         try {
@@ -126,9 +130,10 @@ export class LifePlanRepository {
         rollbackFailures.push(`响应式数据: ${this.toError(reactiveRollbackError, '未知回滚错误').message}`);
       }
       if (rollbackFailures.length) {
-        throw new Error(`${commitError.message}；回滚未完整完成（${rollbackFailures.join('；')}）`);
+        throw new Error(`${isQuotaExceeded ? 'QuotaExceededError: ' : ''}${commitError.message}；回滚未完整完成（${rollbackFailures.join('；')}）`);
       }
 
+      if (isQuotaExceeded) throw new Error(`QuotaExceededError: ${commitError.message}`);
       throw commitError;
     }
   }

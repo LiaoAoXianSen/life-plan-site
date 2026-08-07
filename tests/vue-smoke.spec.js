@@ -1005,7 +1005,113 @@ test('dashboard command center restores the legacy fitness card', async ({ page 
     await expect(fitnessCard.getByRole('button', { name: '按计划开练' })).toBeVisible();
 });
 
-test('sidebar snapshot closes with Escape without changing data', async ({ page }) => {
+test('sidebar tools follow legacy desktop and mobile resize behavior without page overflow', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/#/dashboard');
+    const tools = page.locator('.sidebar-bottom');
+    await expect(tools).toHaveJSProperty('open', true);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expect(tools).toHaveJSProperty('open', false);
+    const mobileNav = await page.evaluate(() => {
+        const nav = document.querySelector('.nav-list');
+        const items = Array.from(document.querySelectorAll('.nav-item'));
+        const iconSpacing = items.map(item => {
+            const icon = item.firstElementChild;
+            const label = icon?.nextElementSibling;
+            return {
+                childCount: item.children.length,
+                iconText: icon?.textContent || '',
+                labelText: label?.textContent || '',
+                gap: getComputedStyle(item).gap,
+            };
+        });
+        if (nav) nav.scrollLeft = nav.scrollWidth;
+        const lastItem = items.at(-1);
+        const navRect = nav?.getBoundingClientRect();
+        const lastRect = lastItem?.getBoundingClientRect();
+        return {
+            documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            bodyOverflow: document.body.scrollWidth - document.body.clientWidth,
+            navOverflow: nav ? nav.scrollWidth - nav.clientWidth : 0,
+            navOverflowX: nav ? getComputedStyle(nav).overflowX : '',
+            itemCount: items.length,
+            iconSpacing,
+            lastItemReachable: Boolean(navRect && lastRect && lastRect.right <= navRect.right + 1 && lastRect.left >= navRect.left - 1),
+        };
+    });
+    expect(mobileNav.documentOverflow).toBe(0);
+    expect(mobileNav.bodyOverflow).toBe(0);
+    expect(mobileNav.navOverflow).toBeGreaterThan(0);
+    expect(mobileNav.navOverflowX).toBe('auto');
+    expect(mobileNav.itemCount).toBe(11);
+    expect(mobileNav.iconSpacing).toHaveLength(11);
+    mobileNav.iconSpacing.forEach(({ childCount, iconText, labelText, gap }) => {
+        expect(childCount).toBe(2);
+        expect(iconText.endsWith('\u00a0')).toBe(true);
+        expect(iconText.slice(0, -1).trim()).not.toBe('');
+        expect(labelText.trim()).not.toBe('');
+        expect(Number.parseFloat(gap) || 0).toBe(0);
+    });
+    expect(mobileNav.lastItemReachable).toBe(true);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(tools).toHaveJSProperty('open', true);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(tools).toHaveJSProperty('open', true);
+});
+
+test('sidebar tools expand when a local save error appears', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        const realSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function blockedLocalSave(key, value) {
+            if (key === 'lifePlanData') throw new Error('local save blocked');
+            return realSetItem.call(this, key, value);
+        };
+    }, emptyData());
+    await page.goto('/#/dashboard');
+
+    const tools = page.locator('.sidebar-bottom');
+    await expect(tools).toHaveJSProperty('open', false);
+    await page.locator('.sidebar').getByRole('button', { name: '+ 新建记录' }).click();
+    const createDialog = page.getByRole('dialog');
+    await createDialog.getByRole('button', { name: '工作记录', exact: true }).click();
+    await createDialog.getByLabel('标题').fill('触发本地保存错误');
+    await createDialog.getByRole('button', { name: '保存记录' }).click();
+
+    await expect(tools).toHaveJSProperty('open', true);
+    const warning = page.locator('.local-save-warning');
+    await expect(warning).toContainText('主数据未可靠保存：浏览器本地存储写入失败。请先导出备份。');
+    await expect(warning).not.toContainText('local save blocked');
+});
+
+test('sidebar maps quota save failures to the legacy storage warning', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(data => {
+        localStorage.setItem('lifePlanData', JSON.stringify(data));
+        const realSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function quotaBlocked(key, value) {
+            if (key === 'lifePlanData') throw new DOMException('The operation failed.', 'QuotaExceededError');
+            return realSetItem.call(this, key, value);
+        };
+    }, emptyData());
+    await page.goto('/#/dashboard');
+    await page.locator('.sidebar').getByRole('button', { name: '+ 新建记录' }).click();
+    const createDialog = page.getByRole('dialog');
+    await createDialog.getByRole('button', { name: '工作记录', exact: true }).click();
+    await createDialog.getByLabel('标题').fill('触发容量错误');
+    await createDialog.getByRole('button', { name: '保存记录' }).click();
+    const warning = page.locator('.local-save-warning');
+    await expect(warning).toContainText('主数据未可靠保存：浏览器存储空间不足。请先导出备份或清理旧快照。');
+    await expect(warning).not.toContainText('The operation failed.');
+});
+
+test('sidebar snapshot ignores backdrop clicks then closes with Escape and restores focus', async ({ page }) => {
     const source = emptyData();
     const original = JSON.stringify(source);
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
@@ -1013,10 +1119,30 @@ test('sidebar snapshot closes with Escape without changing data', async ({ page 
     const trigger = page.getByRole('button', { name: /本地快照/ });
     await trigger.click();
     await expect(page.getByRole('dialog', { name: '本地快照' })).toBeVisible();
+    await page.locator('.modal-overlay').click({ position: { x: 4, y: 4 } });
+    await expect(page.getByRole('dialog', { name: '本地快照' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: '本地快照' })).toBeHidden();
     await expect(trigger).toBeFocused();
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
+});
+
+test('AI settings shares the modal backdrop, Escape, focus and route contract', async ({ page }) => {
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
+    await page.goto('/#/ai?mode=todayPlan');
+    const trigger = page.locator('#page-ai').getByRole('button', { name: 'AI 设置' });
+    await trigger.click();
+    await expectHashRoute(page, '/ai', { mode: 'todayPlan', settings: '1' });
+    const dialog = page.getByRole('dialog', { name: 'AI 设置' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: '关闭AI 设置' })).toBeFocused();
+    await page.locator('.modal-overlay').click({ position: { x: 4, y: 4 } });
+    await expect(dialog).toBeVisible();
+    await expectHashRoute(page, '/ai', { mode: 'todayPlan', settings: '1' });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expectHashRoute(page, '/ai', { mode: 'todayPlan' });
+    await expect(trigger).toBeFocused();
 });
 
 test('sidebar snapshot list keeps the legacy timestamp format', async ({ page }) => {
@@ -1031,7 +1157,14 @@ test('sidebar snapshot list keeps the legacy timestamp format', async ({ page })
     }, { data: source, item: snapshot });
     await page.goto('/#/dashboard');
     await page.getByRole('button', { name: /本地快照/ }).click();
-    await expect(page.getByRole('dialog', { name: '本地快照' })).toContainText('2026年7月28日 08:09:10');
+    const dialog = page.getByRole('dialog', { name: '本地快照' });
+    await expect(dialog).toContainText('自动保留最近 20 份快照。现在会记录版本号、上一个版本和合并来源；点“预览”可以先看内容概况，再决定是否恢复。');
+    const storageNotice = dialog.locator('.snapshot-storage-notice');
+    await expect(storageNotice.locator('strong')).toHaveText(/快照占用 \d+ B/);
+    await expect(storageNotice.locator('span')).toContainText('已保留 1/20 份，最近一份 128 B。');
+    await expect(dialog).toContainText('2026年7月28日 08:09:10');
+    await expect(dialog.getByRole('button')).toHaveText(['×', '预览', '恢复', '下载', '删除', '立即创建快照', '关闭']);
+    await expect(dialog.getByRole('button', { name: '导出备份' })).toHaveCount(0);
 });
 
 test('sidebar snapshot preview exposes legacy collection summary', async ({ page }) => {
@@ -1067,7 +1200,13 @@ test('sidebar snapshot preview exposes legacy collection summary', async ({ page
     await expect(row).toContainText('snapshot-preview-hash');
     await expect(row).toContainText('上一个版本：v3 · parent-h');
     await row.getByRole('button', { name: '预览' }).click();
-    const preview = row.getByTestId('snapshot-preview');
+    const preview = dialog.getByTestId('snapshot-preview');
+    await expect(preview.locator('.snapshot-preview-card')).toBeVisible();
+    const previewPrecedesList = await dialog.locator('.snapshot-preview').evaluate(node => {
+        const list = node.parentElement?.querySelector('.snapshot-list');
+        return Boolean(list && (node.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING));
+    });
+    expect(previewPrecedesList).toBe(true);
     await expect(preview).toContainText('v4 · 关系测试快照');
     await expect(preview).toContainText('2026年7月30日 08:09:10');
     await expect(preview).toContainText('256 B');

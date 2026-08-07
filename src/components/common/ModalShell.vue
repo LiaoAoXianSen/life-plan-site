@@ -24,7 +24,7 @@ const props = withDefaults(defineProps<{
   as: 'section',
   size: 'md',
   dialogClass: '',
-  closeOnBackdrop: true,
+  closeOnBackdrop: false,
   closeOnEscape: true,
   closeLabel: '',
   showHeader: true,

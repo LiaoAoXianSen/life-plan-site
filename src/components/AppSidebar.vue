@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import EmptyState from './common/EmptyState.vue';
 import StatusBanner from './common/StatusBanner.vue';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import RecordCreateModal from './RecordCreateModal.vue';
@@ -61,6 +60,7 @@ const snapshotNotice = ref('');
 const snapshotNoticeIsError = ref(false);
 const criticalFailures = ref<CriticalFailure[]>([]);
 const importInput = ref<HTMLInputElement | null>(null);
+const sidebarBottom = ref<HTMLDetailsElement | null>(null);
 const mainSyncStatus = ref<{ message: string; isError: boolean } | null>(null);
 const mainSyncConfigVersion = ref(0);
 const importCollections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'exerciseLibrary', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
@@ -88,6 +88,13 @@ const snapshotStats = computed(() => (showSnapshots.value ? lifePlan.getSnapshot
 } : { count: 0, totalBytes: 0, latestBytes: 0, isRisky: false }));
 const selectedSnapshot = computed(() => snapshots.value.find(item => String(item.id || '') === previewSnapshotId.value) || null);
 const selectedSnapshotSummary = computed(() => selectedSnapshot.value ? getSnapshotSummary(selectedSnapshot.value) : null);
+const localSaveWarning = computed(() => {
+  const error = String(lifePlan.lastError || '');
+  const quotaExceeded = /(quota|space|full|storage[^\n]*(?:limit|exceed)|容量|空间不足|存储[^\n]*满)/i.test(error);
+  return quotaExceeded
+    ? '主数据未可靠保存：浏览器存储空间不足。请先导出备份或清理旧快照。'
+    : '主数据未可靠保存：浏览器本地存储写入失败。请先导出备份。';
+});
 
 function formatSyncClock(value = '') {
   const match = String(value || '').match(/T(\d{2}:\d{2}(?::\d{2})?)/);
@@ -118,12 +125,34 @@ function handleMainSyncConfig() {
   mainSyncConfigVersion.value += 1;
 }
 
+function updateSidebarBottom(force = false) {
+  const panel = sidebarBottom.value;
+  if (!panel) return;
+  if (lifePlan.lastError) {
+    panel.open = true;
+    return;
+  }
+  const shouldOpen = window.innerWidth > 980;
+  if (force || shouldOpen) panel.open = shouldOpen;
+}
+
+function handleResize() {
+  updateSidebarBottom();
+}
+
+watch(() => lifePlan.lastError, error => {
+  if (error && sidebarBottom.value) sidebarBottom.value.open = true;
+});
+
 onMounted(() => {
+  updateSidebarBottom(true);
+  window.addEventListener('resize', handleResize);
   window.addEventListener('life-plan-main-sync-status', handleMainSyncStatus);
   window.addEventListener('life-plan-main-sync-config', handleMainSyncConfig);
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
   window.removeEventListener('life-plan-main-sync-status', handleMainSyncStatus);
   window.removeEventListener('life-plan-main-sync-config', handleMainSyncConfig);
 });
@@ -414,7 +443,7 @@ function restoreSnapshot(item: SnapshotItem) {
         custom
       >
         <a :class="['nav-item', { active: isActive }]" :href="href" @click="navigate">
-          <span aria-hidden="true">{{ item.icon }}</span>
+          <span aria-hidden="true">{{ item.icon }}&nbsp;</span>
           <span>{{ item.label }}</span>
         </a>
       </RouterLink>
@@ -424,7 +453,7 @@ function restoreSnapshot(item: SnapshotItem) {
       <button class="btn btn-primary" type="button" @click="showCreateRecord = true">+ 新建记录</button>
     </div>
 
-    <details class="sidebar-bottom" open>
+    <details ref="sidebarBottom" class="sidebar-bottom">
       <summary>
         <span>数据与备份</span>
         <span class="sync-status-stack">
@@ -445,7 +474,7 @@ function restoreSnapshot(item: SnapshotItem) {
         <button class="btn btn-secondary sync-btn" type="button" @click="openAiSettings">AI 设置</button>
       </div>
       <div v-if="lifePlan.lastError" class="local-save-warning active" role="alert">
-        <span class="local-save-warning-text">{{ lifePlan.lastError }}</span>
+        <span class="local-save-warning-text">{{ localSaveWarning }}</span>
         <div class="local-save-warning-actions">
           <button class="btn btn-secondary" type="button" @click="exportBackup">立即导出</button>
           <button class="btn btn-secondary" type="button" @click="openSnapshotModal">管理快照</button>
@@ -461,67 +490,73 @@ function restoreSnapshot(item: SnapshotItem) {
     <RecordCreateModal v-model="showCreateRecord" @open-existing="recordId => router.push(withReturnTo(route, { path: '/records', query: { record: recordId } }))" />
 
     <ModalShell v-model="showSnapshots" title="本地快照" dialog-class="snapshot-modal" close-label="关闭本地快照" @close="previewSnapshotId = null">
-          <p class="section-hint">自动保留最近 20 份；可预览、下载、恢复。恢复前会再自动存一份当前数据。</p>
-          <div class="snapshot-storage-notice" :class="{ risky: snapshotStats.isRisky }">
-            共 {{ snapshotStats.count || 0 }} 份 · 占用 {{ formatBytes(Number(snapshotStats.totalBytes || 0)) }}
-            · 最近一份 {{ formatBytes(Number(snapshotStats.latestBytes || 0)) }}
-          </div>
-          <div class="page-actions" style="margin: 12px 0;">
-            <button class="btn btn-primary" type="button" @click="createSnapshotNow">立即创建快照</button>
-            <button class="btn btn-secondary" type="button" @click="exportBackup">导出备份</button>
-          </div>
-          <StatusBanner v-if="snapshotNotice" class="notice" :role="snapshotNoticeIsError ? 'alert' : 'status'" :tone="snapshotNoticeIsError ? 'danger' : 'success'">{{ snapshotNotice }}</StatusBanner>
-          <section v-if="criticalFailures.length" class="critical-failure-log" aria-label="最近关键故障">
-            <strong>最近关键故障</strong>
-            <div v-for="failure in criticalFailures" :key="failure.id" class="critical-failure-item">
-              <strong>{{ failure.label || '关键操作失败' }}</strong>
-              <span>{{ formatStoredDateTime(failure.createdAt) }} · {{ failure.message || '未记录详细原因' }}</span>
+      <div class="snapshot-help">
+        自动保留最近 20 份快照。现在会记录版本号、上一个版本和合并来源；点“预览”可以先看内容概况，再决定是否恢复。
+      </div>
+      <section v-if="criticalFailures.length" class="critical-failure-log" aria-label="最近关键故障">
+        <div v-for="failure in criticalFailures" :key="failure.id" class="critical-failure-item">
+          <strong>{{ failure.label || '关键操作失败' }}</strong>
+          <span>{{ formatStoredDateTime(failure.createdAt) }} · {{ failure.message || '未记录详细原因' }}</span>
+        </div>
+      </section>
+      <div class="snapshot-storage-notice" :class="{ 'is-warning': snapshotStats.isRisky }">
+        <strong>快照占用 {{ formatBytes(Number(snapshotStats.totalBytes || 0)) }}</strong>
+        <span>已保留 {{ snapshotStats.count || 0 }}/20 份，最近一份 {{ formatBytes(Number(snapshotStats.latestBytes || 0)) }}。{{ snapshotStats.isRisky ? '数据变大时建议先导出备份，避免浏览器本地存储写满。' : '数据继续变大后，可定期手动导出一份离线备份。' }}</span>
+      </div>
+      <StatusBanner v-if="snapshotNotice" class="notice" :role="snapshotNoticeIsError ? 'alert' : 'status'" :tone="snapshotNoticeIsError ? 'danger' : 'success'">{{ snapshotNotice }}</StatusBanner>
+      <div class="snapshot-preview" data-testid="snapshot-preview">
+        <div v-if="selectedSnapshot && selectedSnapshotSummary" class="snapshot-preview-card">
+          <div class="snapshot-preview-head">
+            <div>
+              <div class="snapshot-version">v{{ selectedSnapshot.version || '?' }} · {{ selectedSnapshot.reason || '本地快照' }}</div>
+              <div class="snapshot-meta">{{ formatStoredDateTime(selectedSnapshot.createdAt) }} · {{ formatBytes(Number(selectedSnapshot.bytes || 0)) }} · {{ selectedSnapshot.hash || '' }}</div>
             </div>
-          </section>
-          <div class="snapshot-list">
-            <article v-for="item in snapshots" :key="String(item.id)" class="snapshot-item card">
-              <div>
-                <strong>v{{ item.version || '-' }} · {{ item.reason || '本地快照' }}</strong>
-                <p>{{ formatStoredDateTime(item.createdAt) }} · {{ formatBytes(Number(item.bytes || 0)) }} · {{ item.hash || '' }}</p>
-                <p class="snapshot-preview-relation">{{ getSnapshotRelationText(item) }}</p>
-              </div>
-              <div class="page-actions">
-                <button class="btn btn-secondary" type="button" :aria-expanded="previewSnapshotId === String(item.id)" @click="toggleSnapshotPreview(item)">
-                  {{ previewSnapshotId === String(item.id) ? '收起' : '预览' }}
-                </button>
-                <button class="btn btn-secondary" type="button" @click="downloadSnapshot(item)">下载</button>
-                <button class="btn btn-primary" type="button" @click="restoreSnapshot(item)">恢复</button>
-                <button class="btn btn-danger" type="button" @click="deleteSnapshot(item)">删除</button>
-              </div>
-              <div v-if="previewSnapshotId === String(item.id) && selectedSnapshotSummary" class="snapshot-preview" data-testid="snapshot-preview">
-                <div class="snapshot-preview-heading">v{{ selectedSnapshot?.version || '-' }} · {{ selectedSnapshot?.reason || '本地快照' }}</div>
-                <div class="snapshot-preview-meta">{{ formatStoredDateTime(selectedSnapshot?.createdAt) }} · {{ formatBytes(Number(selectedSnapshot?.bytes || 0)) }} · {{ selectedSnapshot?.hash || '' }}</div>
-                <div class="snapshot-preview-relation">{{ selectedSnapshotSummary.relation }}</div>
-                <div class="snapshot-preview-stats">
-                  <span>记录 {{ selectedSnapshotSummary.records.length }}</span>
-                  <span>待办 {{ selectedSnapshotSummary.todos.length }}（未完成 {{ selectedSnapshotSummary.openTodos }} / 已完成 {{ selectedSnapshotSummary.doneTodos }}）</span>
-                  <span>习惯 {{ selectedSnapshotSummary.habits.length }}</span>
-                  <span>打卡 {{ selectedSnapshotSummary.checkins.length }}</span>
-                  <span>目标 {{ selectedSnapshotSummary.goals.length }}</span>
-                  <span>素材 {{ selectedSnapshotSummary.materials.length }}</span>
-                  <span>身材 {{ selectedSnapshotSummary.bodyMetrics.length }}</span>
-                  <span>训练计划 {{ selectedSnapshotSummary.fitnessPlans.length }}</span>
-                  <span>训练日志 {{ selectedSnapshotSummary.fitnessWorkouts.length }}</span>
-                  <span>动作库 {{ selectedSnapshotSummary.exerciseLibrary.length }}</span>
-                </div>
-                <div class="snapshot-preview-list">
-                  <strong>最近记录</strong>
-                  <div v-if="selectedSnapshotSummary.latestRecords.length">
-                    <div v-for="record in selectedSnapshotSummary.latestRecords" :key="`${record.id || ''}-${record.updatedAt || record.startDate || ''}`">
-                      {{ record.startDate || '' }} · {{ record.type || '记录' }} · {{ record.title || '无标题' }}
-                    </div>
-                  </div>
-                  <div v-else>暂无记录</div>
-                </div>
-              </div>
-            </article>
-            <EmptyState v-if="!snapshots.length">还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。</EmptyState>
+            <button class="btn btn-secondary todo-mini-btn" type="button" @click="previewSnapshotId = null">收起</button>
           </div>
+          <div class="snapshot-relation">{{ selectedSnapshotSummary.relation }}</div>
+          <div class="snapshot-preview-stats">
+            <span>记录 {{ selectedSnapshotSummary.records.length }}</span>
+            <span>待办 {{ selectedSnapshotSummary.todos.length }}（未完成 {{ selectedSnapshotSummary.openTodos }} / 已完成 {{ selectedSnapshotSummary.doneTodos }}）</span>
+            <span>习惯 {{ selectedSnapshotSummary.habits.length }}</span>
+            <span>打卡 {{ selectedSnapshotSummary.checkins.length }}</span>
+            <span>目标 {{ selectedSnapshotSummary.goals.length }}</span>
+            <span>素材 {{ selectedSnapshotSummary.materials.length }}</span>
+            <span>身材 {{ selectedSnapshotSummary.bodyMetrics.length }}</span>
+            <span>训练计划 {{ selectedSnapshotSummary.fitnessPlans.length }}</span>
+            <span>训练日志 {{ selectedSnapshotSummary.fitnessWorkouts.length }}</span>
+            <span>动作库 {{ selectedSnapshotSummary.exerciseLibrary.length }}</span>
+          </div>
+          <div class="snapshot-preview-list">
+            <strong>最近记录</strong>
+            <template v-if="selectedSnapshotSummary.latestRecords.length">
+              <div v-for="record in selectedSnapshotSummary.latestRecords" :key="`${record.id || ''}-${record.updatedAt || record.startDate || ''}`">
+                {{ record.startDate || '' }} · {{ record.type || '记录' }} · {{ record.title || '无标题' }}
+              </div>
+            </template>
+            <div v-else>暂无记录</div>
+          </div>
+        </div>
+      </div>
+      <div class="snapshot-list">
+        <article v-for="item in snapshots" :key="String(item.id)" class="snapshot-item">
+          <div class="snapshot-main">
+            <div class="snapshot-title"><span class="snapshot-version-pill">v{{ item.version || '?' }}</span>{{ item.reason || '本地快照' }}</div>
+            <div class="snapshot-meta">{{ formatStoredDateTime(item.createdAt) }} · {{ formatBytes(Number(item.bytes || 0)) }} · {{ item.hash || '' }}</div>
+            <div class="snapshot-relation">{{ getSnapshotRelationText(item) }}</div>
+          </div>
+          <div class="snapshot-actions">
+            <button class="btn btn-secondary" type="button" :aria-expanded="previewSnapshotId === String(item.id)" @click="toggleSnapshotPreview(item)">预览</button>
+            <button class="btn btn-secondary" type="button" @click="restoreSnapshot(item)">恢复</button>
+            <button class="btn btn-secondary" type="button" @click="downloadSnapshot(item)">下载</button>
+            <button class="btn btn-danger" type="button" @click="deleteSnapshot(item)">删除</button>
+          </div>
+        </article>
+        <div v-if="!snapshots.length" class="snapshot-empty">还没有本地快照。同步、导入、删除前会自动创建，也可以手动创建一份。</div>
+      </div>
+      <div class="snapshot-footer-actions">
+        <button class="btn btn-secondary" type="button" @click="createSnapshotNow">立即创建快照</button>
+        <button class="btn btn-secondary" type="button" @click="closeSnapshotModal">关闭</button>
+      </div>
     </ModalShell>
   </aside>
 </template>
@@ -555,85 +590,187 @@ function restoreSnapshot(item: SnapshotItem) {
     overflow-y: hidden;
   }
 }
+.nav-item {
+  gap: 0;
+}
 .snapshot-modal {
   width: min(720px, calc(100vw - 32px));
   max-height: min(860px, calc(100vh - 32px));
   overflow: auto;
 }
-.snapshot-list {
-  display: grid;
-  gap: 10px;
-}
-.snapshot-item {
-  display: grid;
-  gap: 10px;
-  padding: 12px 14px;
-}
-.snapshot-item p {
-  margin: 4px 0 0;
+.snapshot-help {
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f6faf7;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 14px;
 }
-.snapshot-preview {
-  display: grid;
-  gap: 8px;
-  padding-top: 2px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-}
-.snapshot-preview-heading {
-  font-weight: 700;
-}
-.snapshot-preview-relation,
-.snapshot-preview-list {
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-.snapshot-preview-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-}
-.snapshot-preview-stats span {
-  white-space: nowrap;
-}
-.snapshot-preview-list {
+.snapshot-storage-notice {
   display: grid;
   gap: 4px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #d7e6dc;
+  border-radius: 12px;
+  background: #f8fcf9;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.snapshot-storage-notice strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.snapshot-storage-notice.is-warning {
+  border-color: #e7cf92;
+  background: #fff9e8;
+  color: #735b22;
 }
 .critical-failure-log {
   display: grid;
   gap: 8px;
-  margin: 10px 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(196, 67, 54, 0.28);
-  border-radius: var(--radius);
-  background: rgba(196, 67, 54, 0.08);
+  margin: 0 0 12px;
 }
 .critical-failure-item {
-  display: grid;
-  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid #e9b9ad;
+  border-radius: 12px;
+  background: #fff4f1;
+  color: #7d2f1e;
   font-size: 12px;
+  line-height: 1.55;
 }
-.critical-failure-item span {
-  color: var(--muted);
+.critical-failure-item strong {
+  display: block;
+  color: #5f2115;
+  font-size: 13px;
+}
+.snapshot-list {
+  display: grid;
+  gap: 10px;
+  max-height: 48vh;
+  overflow: auto;
+  padding-right: 2px;
+}
+.snapshot-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+.snapshot-main { min-width: 0; }
+.snapshot-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
   overflow-wrap: anywhere;
 }
-.snapshot-storage-notice {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius);
+.snapshot-version-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #e3f0e8;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.snapshot-meta {
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.snapshot-relation {
+  margin-top: 4px;
+  color: #607267;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.snapshot-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.snapshot-empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--faint);
+  border: 1px dashed var(--line);
+  border-radius: 14px;
   background: var(--surface-soft);
+}
+.snapshot-preview { margin-bottom: 12px; }
+.snapshot-preview-card {
+  border: 1px solid #cfe0d5;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(239,248,242,.92));
+  padding: 13px;
+  box-shadow: 0 12px 26px rgba(44, 75, 54, .08);
+}
+.snapshot-preview-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 9px;
+}
+.snapshot-version {
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.snapshot-preview-stats {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.snapshot-preview-stats span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #edf6f0;
+  color: #456354;
+  font-size: 12px;
+  font-weight: 800;
+}
+.snapshot-preview-list {
+  border-top: 1px dashed #cedbd3;
+  padding-top: 9px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.7;
 }
-.snapshot-storage-notice.risky {
-  color: #8a4b00;
-  background: rgba(255, 186, 73, 0.16);
+.snapshot-preview-list strong {
+  display: block;
+  color: var(--text);
+  margin-bottom: 3px;
 }
-.section-hint {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
+.snapshot-footer-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+@media (max-width: 640px) {
+  .snapshot-item { grid-template-columns: 1fr; }
+  .snapshot-actions { justify-content: flex-start; }
 }
 </style>
