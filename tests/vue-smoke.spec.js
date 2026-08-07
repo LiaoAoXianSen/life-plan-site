@@ -252,10 +252,18 @@ test('AI selectors default to the first valid source and expose invalid diary fa
     await expect(aiPage.getByLabel('选择日记')).toHaveValue('diary-ai-default');
 });
 
-test('dashboard AI actions retain their exact source route', async ({ page }) => {
+test('dashboard quick-create and AI actions retain their exact source route', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/dashboard?focus=today');
-    await page.getByRole('button', { name: 'AI 今日计划' }).click();
+
+    await page.getByRole('button', { name: '写日记', exact: true }).click();
+    const recordDialog = page.getByRole('dialog');
+    await expect(recordDialog).toHaveCount(1);
+    await expect(recordDialog.getByLabel('记录类型')).toHaveValue('日记');
+    await recordDialog.getByRole('button', { name: '关闭', exact: true }).click();
+    await expectHashRoute(page, '/dashboard', { focus: 'today' });
+
+    await page.getByRole('button', { name: 'AI 今日计划', exact: true }).click();
     await expectHashRoute(page, '/ai', { mode: 'todayPlan', returnTo: '/dashboard?focus=today' });
     await page.getByRole('button', { name: '返回原页面' }).click();
     await expectHashRoute(page, '/dashboard', { focus: 'today' });
@@ -273,6 +281,7 @@ test('dashboard habits honor ask, always and never note modes through ModalShell
     await page.goto('/#/dashboard');
 
     const askCard = page.locator('.dashboard-habit-item').filter({ hasText: '仪表盘询问习惯' });
+    await expect(askCard.getByRole('button', { name: '备注', exact: true })).toBeEnabled();
     await askCard.getByRole('button', { name: '打卡' }).click();
     const askModal = page.getByRole('dialog', { name: /备注 · 仪表盘询问习惯/ });
     await expect(askModal).toBeVisible();
@@ -298,6 +307,282 @@ test('dashboard habits honor ask, always and never note modes through ModalShell
     expect(saved.habits.find(item => item.id === 'dashboard-habit-never').noteMode).toBe('never');
     expect(saved.checkins.find(item => item.habitId === 'dashboard-habit-always').note).toBe('仪表盘备注已保存');
     expect(saved.checkins.filter(item => item.date === localDate()).map(item => item.habitId).sort()).toEqual(['dashboard-habit-always', 'dashboard-habit-ask', 'dashboard-habit-never']);
+});
+
+test('dashboard layout is three-column at 1440 and single-column without horizontal overflow at 390', async ({ page, browser }) => {
+    const timelineRecord = { id: 'dashboard-timeline-layout', type: '日记', title: '时间轴布局记录', content: '用于验证标题和范围选择器布局', startDate: localDate(), endDate: localDate(), todoIds: [] };
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData({ records: [timelineRecord], todos: [todoFixture('dashboard-hero-height', '一个适中的首要待办标题用于建立两行 Hero 基准'.repeat(2))] }));
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/#/dashboard');
+    await expect(page.locator('#page-dashboard')).toBeVisible();
+    const desktopTimeline = page.locator('.dashboard-timeline');
+    const desktopTimelineTitle = desktopTimeline.getByRole('heading', { name: '近期记录时间轴', exact: true });
+    const desktopTimelineSelect = desktopTimeline.getByLabel('时间轴范围');
+    const desktopTimelineBox = await desktopTimeline.boundingBox();
+    const desktopTimelineTitleBox = await desktopTimelineTitle.boundingBox();
+    const desktopTimelineSelectBox = await desktopTimelineSelect.boundingBox();
+    expect(desktopTimelineBox).not.toBeNull();
+    expect(desktopTimelineTitleBox).not.toBeNull();
+    expect(desktopTimelineSelectBox).not.toBeNull();
+    expect(Math.abs(desktopTimelineTitleBox.y - desktopTimelineSelectBox.y)).toBeLessThanOrEqual(8);
+    expect(desktopTimelineSelectBox.x).toBeGreaterThan(desktopTimelineTitleBox.x);
+    expect(desktopTimelineBox.x + desktopTimelineBox.width - (desktopTimelineSelectBox.x + desktopTimelineSelectBox.width)).toBeLessThanOrEqual(12);
+    expect(desktopTimelineSelectBox.width).toBeLessThan(desktopTimelineBox.width * 0.5);
+
+    const desktopColumns = await page.evaluate(() => ({
+        hero: getComputedStyle(document.querySelector('.dashboard-hero')).gridTemplateColumns.split(' ').length,
+        command: getComputedStyle(document.querySelector('.command-center')).gridTemplateColumns.split(' ').length,
+        today: getComputedStyle(document.querySelector('.today-grid')).gridTemplateColumns.split(' ').length,
+        heroFont: getComputedStyle(document.querySelector('.hero-title')).fontSize,
+        todayGridMarginBottom: Number.parseFloat(getComputedStyle(document.querySelector('.dashboard-main-grid')).marginBottom),
+        timelineCardPadding: Number.parseFloat(getComputedStyle(document.querySelector('.dashboard-timeline')).paddingTop),
+        timelineCardBorder: getComputedStyle(document.querySelector('.dashboard-timeline')).borderTopWidth,
+    }));
+    expect(desktopColumns).toMatchObject({ hero: 2, command: 3, today: 3, todayGridMarginBottom: 0, timelineCardPadding: 0, timelineCardBorder: '0px' });
+    expect(Number.parseFloat(desktopColumns.heroFont)).toBeGreaterThanOrEqual(28);
+    const desktopShortHero = await page.locator('.dashboard-hero').boundingBox();
+    const longTitle = '极长标题'.repeat(300);
+    const longContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const longPage = await longContext.newPage();
+    await longPage.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData({ todos: [todoFixture('dashboard-hero-long', longTitle)] }));
+    await longPage.goto('/#/dashboard');
+    const longHeroButton = longPage.locator('.hero-title-button');
+    await expect(longHeroButton).toHaveText(`今天先处理：${longTitle}`);
+    const desktopLong = await longHeroButton.evaluate(element => ({
+        heroHeight: element.closest('.dashboard-hero').getBoundingClientRect().height,
+        titleHeight: element.getBoundingClientRect().height,
+        lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+        clamp: getComputedStyle(element).webkitLineClamp,
+    }));
+    expect(desktopLong.clamp).toBe('2');
+    expect(desktopLong.titleHeight).toBeLessThanOrEqual(desktopLong.lineHeight * 2 + 1);
+    expect(desktopLong.heroHeight).toBeGreaterThanOrEqual(330);
+    expect(desktopLong.heroHeight).toBeLessThanOrEqual(337);
+    await longContext.close();
+
+    const richToday = localDate();
+    const richSource = emptyData({
+        todos: [
+            todoFixture('dashboard-mobile-today', '移动端长今日待办用于确认文本截断按钮可见且不会产生水平滚动'.repeat(5), { dueDate: richToday, urgency: 'high' }),
+            todoFixture('dashboard-mobile-floating', '移动端无截止待办用于确认今天做与执行一次按钮仍然可见'.repeat(3), { urgency: 'medium' }),
+        ],
+        habits: [
+            { id: 'dashboard-mobile-single', name: '移动端单次习惯', rule: 'daily', timesPerDay: 1, noteMode: 'ask', startDate: richToday },
+            { id: 'dashboard-mobile-multi', name: '移动端多次习惯', rule: 'daily', timesPerDay: 3, noteMode: 'never', startDate: richToday },
+        ],
+        checkins: [{ id: 'dashboard-mobile-checkin', habitId: 'dashboard-mobile-multi', date: richToday, time: '08:00', checkinAt: `${richToday}T08:00:00`, note: '' }],
+    });
+    const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const mobilePage = await mobileContext.newPage();
+    await mobilePage.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), richSource);
+    await mobilePage.goto('/#/dashboard');
+    await expect(mobilePage.locator('.dashboard-today-todos .todo-item')).toHaveCount(1);
+    await expect(mobilePage.locator('.dashboard-floating-todos .todo-item')).toHaveCount(1);
+    await expect(mobilePage.locator('.dashboard-today-habits .dashboard-habit-item')).toHaveCount(2);
+    await expect(mobilePage.getByRole('button', { name: '今天做', exact: true })).toBeVisible();
+    await expect(mobilePage.getByRole('button', { name: '执行一次', exact: true })).toHaveCount(2);
+    await expect(mobilePage.locator('.dashboard-habit-item').filter({ hasText: '移动端多次习惯' }).getByRole('button', { name: '-1' })).toBeVisible();
+    const mobileTimeline = mobilePage.locator('.dashboard-timeline');
+    const mobileTimelineTitle = mobileTimeline.getByRole('heading', { name: '近期记录时间轴', exact: true });
+    const mobileTimelineSelect = mobileTimeline.getByLabel('时间轴范围');
+    const mobileTimelineBox = await mobileTimeline.boundingBox();
+    const mobileTimelineTitleBox = await mobileTimelineTitle.boundingBox();
+    const mobileTimelineSelectBox = await mobileTimelineSelect.boundingBox();
+    expect(mobileTimelineBox).not.toBeNull();
+    expect(mobileTimelineTitleBox).not.toBeNull();
+    expect(mobileTimelineSelectBox).not.toBeNull();
+    expect(Math.abs(mobileTimelineTitleBox.y - mobileTimelineSelectBox.y)).toBeLessThanOrEqual(8);
+    expect(mobileTimelineSelectBox.x).toBeGreaterThan(mobileTimelineTitleBox.x);
+    expect(mobileTimelineBox.x + mobileTimelineBox.width - (mobileTimelineSelectBox.x + mobileTimelineSelectBox.width)).toBeLessThanOrEqual(12);
+    expect(mobileTimelineSelectBox.width).toBeLessThan(mobileTimelineBox.width * 0.7);
+
+    const mobile = await mobilePage.evaluate(() => ({
+        documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        bodyOverflow: document.body.scrollWidth - document.body.clientWidth,
+        hero: getComputedStyle(document.querySelector('.dashboard-hero')).gridTemplateColumns.split(' ').length,
+        command: getComputedStyle(document.querySelector('.command-center')).gridTemplateColumns.split(' ').length,
+        today: getComputedStyle(document.querySelector('.today-grid')).gridTemplateColumns.split(' ').length,
+        stats: getComputedStyle(document.querySelector('.summary-grid')).gridTemplateColumns.split(' ').length,
+        quick: getComputedStyle(document.querySelector('.quick-create')).gridTemplateColumns.split(' ').length,
+        todoClamp: getComputedStyle(document.querySelector('.dashboard-today-todos .todo-dashboard-link')).webkitLineClamp,
+        todoRowHeight: document.querySelector('.dashboard-today-todos .todo-item').getBoundingClientRect().height,
+        floatingRowHeight: document.querySelector('.dashboard-floating-todos .todo-item').getBoundingClientRect().height,
+    }));
+    expect(mobile).toMatchObject({ documentOverflow: 0, bodyOverflow: 0, hero: 1, command: 1, today: 1, stats: 2, quick: 1, todoClamp: '2' });
+    expect(mobile.todoRowHeight).toBeLessThan(145);
+    expect(mobile.floatingRowHeight).toBeLessThan(170);
+    await mobileContext.close();
+});
+
+test('dashboard refreshes date-scoped UI and undo target after local midnight', async ({ page }) => {
+    const previousDate = '2026-08-07';
+    const nextDate = '2026-08-08';
+    const source = emptyData({
+        todos: [
+            todoFixture('dashboard-midnight-old', '跨午夜前的今日待办', { planStartDate: previousDate, planEndDate: previousDate }),
+            todoFixture('dashboard-midnight-next', '跨午夜后的今日待办', { dueDate: nextDate }),
+        ],
+        habits: [{ id: 'dashboard-midnight-habit', name: '跨午夜习惯', rule: 'daily', timesPerDay: 3, noteMode: 'never', startDate: previousDate }],
+        checkins: [{ id: 'dashboard-midnight-checkin', habitId: 'dashboard-midnight-habit', date: nextDate, time: '08:00', checkinAt: `${nextDate}T08:00:00`, note: '' }],
+    });
+    await page.clock.install();
+    await page.clock.setFixedTime(new Date('2026-08-07T23:59:50+08:00'));
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+    await expect(page.locator('.hero-date')).toHaveText('2026年8月7日');
+    await expect(page.locator('.dashboard-today-todos')).toContainText('跨午夜前的今日待办');
+    await expect(page.locator('.dashboard-today-todos')).not.toContainText('跨午夜后的今日待办');
+
+    await page.clock.setFixedTime(new Date('2026-08-08T00:00:10+08:00'));
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await expect(page.locator('.hero-date')).toHaveText('2026年8月8日');
+    await expect(page.locator('.dashboard-today-todos')).toContainText('跨午夜后的今日待办');
+    await expect(page.locator('.dashboard-today-todos')).not.toContainText('跨午夜前的今日待办');
+    const habit = page.locator('.dashboard-habit-item').filter({ hasText: '跨午夜习惯' });
+    await expect(habit).toContainText('1/3');
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toContain(nextDate);
+        await dialog.accept();
+    });
+    await habit.getByRole('button', { name: '-1', exact: true }).click();
+    await expect(habit).toContainText('0/3');
+});
+
+test('dashboard record details expose legacy actions and ModalShell close contracts', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        records: [
+            { id: 'dashboard-detail-diary', type: '日记', title: '动作日记', content: '内容', startDate: today, endDate: today, recordTime: '08:00', todoIds: [] },
+            { id: 'dashboard-detail-empty-diary', type: '日记', title: '空内容日记', content: '  \n  ', startDate: today, endDate: today, recordTime: '07:00', todoIds: [] },
+            { id: 'dashboard-detail-idea-new', type: '灵感碎片', title: '未关联灵感', content: '内容', startDate: today, endDate: today, ideaTodoId: '', todoIds: [] },
+            { id: 'dashboard-detail-idea-linked', type: '灵感碎片', title: '已关联灵感', content: '内容', startDate: today, endDate: today, ideaTodoId: 'dashboard-linked-todo', todoIds: ['dashboard-linked-todo'] },
+        ],
+        todos: [todoFixture('dashboard-linked-todo', '关联待办')],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+
+    const openTimelineRecord = async title => {
+        const trigger = page.locator('.dashboard-timeline').getByRole('button', { name: new RegExp(title) });
+        await trigger.click();
+        return { trigger, dialog: page.getByRole('dialog', { name: '记录详情' }) };
+    };
+
+    let opened = await openTimelineRecord('动作日记');
+    const recordDialogBox = await opened.dialog.boundingBox();
+    const recordDialogStyle = await opened.dialog.evaluate(element => ({
+        paddingBottom: Number.parseFloat(getComputedStyle(element.querySelector('.record-preview-dialog-body')).paddingBottom),
+        maxWidth: Number.parseFloat(getComputedStyle(element).maxWidth),
+    }));
+    expect(recordDialogBox.width).toBeLessThanOrEqual(recordDialogStyle.maxWidth);
+    expect(recordDialogStyle.paddingBottom).toBeGreaterThan(0);
+    await expect(opened.dialog.getByRole('button', { name: 'AI 分析日记' })).toBeVisible();
+    await opened.dialog.getByRole('button', { name: 'AI 分析日记' }).click();
+    await expectHashRoute(page, '/ai', { mode: 'diaryReview', diary: 'dashboard-detail-diary', returnTo: '/dashboard' });
+
+    await page.goto('/#/dashboard');
+    opened = await openTimelineRecord('空内容日记');
+    await expect(opened.dialog.getByRole('button', { name: 'AI 分析日记' })).toHaveCount(0);
+    await opened.dialog.getByRole('button', { name: '关闭记录详情' }).click();
+
+    opened = await openTimelineRecord('未关联灵感');
+    await expect(opened.dialog.getByRole('button', { name: '转成待办' })).toBeVisible();
+    await opened.dialog.getByRole('button', { name: '转成待办' }).click();
+    await expectHashRoute(page, '/todos', { ideaDraft: 'dashboard-detail-idea-new', returnTo: '/dashboard' });
+
+    await page.goto('/#/dashboard');
+    opened = await openTimelineRecord('已关联灵感');
+    await opened.dialog.getByRole('button', { name: '打开关联待办' }).click();
+    await expectHashRoute(page, '/todos', { todo: 'dashboard-linked-todo', returnTo: '/dashboard' });
+
+    await page.goto('/#/dashboard');
+    opened = await openTimelineRecord('动作日记');
+    await page.keyboard.press('Escape');
+    await expect(opened.dialog).toBeHidden();
+    await expect(opened.trigger).toBeFocused();
+
+    opened = await openTimelineRecord('动作日记');
+    await page.locator('.modal-overlay').click({ position: { x: 4, y: 4 } });
+    await expect(opened.dialog).toBeHidden();
+    await expect(opened.trigger).toBeFocused();
+});
+
+test('dashboard floating todo pool reports hidden items and random clicks change the sampled todo IDs', async ({ page }) => {
+    const candidateIds = Array.from({ length: 12 }, (_, index) => `x10-${index}`);
+    const source = emptyData({
+        todos: candidateIds.map((id, index) => todoFixture(id, id, { createdAt: `2026-08-${String(index + 1).padStart(2, '0')}T08:00:00` })),
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+    const pool = page.getByRole('region', { name: '无截止待办池' });
+    await expect(pool.locator('.todo-item')).toHaveCount(5);
+    await expect(pool).toContainText('还有 7 条无截止待办没展示');
+    const visibleIds = () => pool.locator('.todo-dashboard-link').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
+    const before = await visibleIds();
+    expect(new Set(before).size).toBe(5);
+    expect(before.every(text => /^x10-\d+$/.test(text || ''))).toBe(true);
+    await pool.getByRole('button', { name: '随机', exact: true }).click();
+    const after = await visibleIds();
+    expect(new Set(after).size).toBe(5);
+    expect(after.every(text => /^x10-\d+$/.test(text || ''))).toBe(true);
+    expect(after).not.toEqual(before);
+    expect(after.some(id => !before.includes(id))).toBe(true);
+});
+
+test('dashboard habit note edit reuses ModalShell and multi decrease confirms before writes', async ({ page }) => {
+    const today = localDate();
+    const source = emptyData({
+        habits: [
+            { id: 'dashboard-single-pending', name: '单次待备注', rule: 'daily', timesPerDay: 1, noteMode: 'ask', startDate: today },
+            { id: 'dashboard-single-done', name: '单次已完成', rule: 'daily', timesPerDay: 1, noteMode: 'ask', startDate: today },
+            { id: 'dashboard-multi', name: '多次确认', rule: 'daily', timesPerDay: 3, noteMode: 'never', startDate: today },
+        ],
+        checkins: [
+            { id: 'dashboard-single-checkin', habitId: 'dashboard-single-done', date: today, time: '08:00', checkinAt: `${today}T08:00:00`, note: '旧备注' },
+            { id: 'dashboard-multi-checkin', habitId: 'dashboard-multi', date: today, time: '09:00', checkinAt: `${today}T09:00:00`, note: '' },
+        ],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+
+    const pending = page.locator('.dashboard-habit-item').filter({ hasText: '单次待备注' });
+    await expect(pending.getByRole('button', { name: '备注', exact: true })).toBeEnabled();
+    await pending.getByRole('button', { name: '备注', exact: true }).click();
+    const createModal = page.getByRole('dialog', { name: /备注 · 单次待备注/ });
+    await expect(createModal.getByLabel('以后不提醒')).toBeVisible();
+    const noteDesktopBox = await createModal.boundingBox();
+    const noteDesktopStyle = await createModal.evaluate(element => ({
+        width: Number.parseFloat(getComputedStyle(element).width),
+        paddingTop: Number.parseFloat(getComputedStyle(element).paddingTop),
+        radius: Number.parseFloat(getComputedStyle(element).borderRadius),
+        headerGap: Number.parseFloat(getComputedStyle(element.querySelector('.modal-header')).marginBottom),
+    }));
+    expect(noteDesktopBox.width).toBe(noteDesktopStyle.width);
+    expect(noteDesktopStyle).toMatchObject({ width: 430, paddingTop: 18, radius: 22, headerGap: 12 });
+    await page.keyboard.press('Escape');
+    await expect(createModal).toBeHidden();
+    await expect(pending.getByRole('button', { name: '备注', exact: true })).toBeFocused();
+
+    const done = page.locator('.dashboard-habit-item').filter({ hasText: '单次已完成' });
+    await done.getByRole('button', { name: '备注', exact: true }).click();
+    const editModal = page.getByRole('dialog', { name: /编辑备注 · 单次已完成/ });
+    await expect(editModal.locator('textarea')).toHaveValue('旧备注');
+    await expect(editModal.getByLabel('以后不提醒')).toHaveCount(0);
+    await editModal.locator('textarea').fill('Modal 编辑备注');
+    await editModal.getByRole('button', { name: '保存' }).click();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).checkins.find(item => item.id === 'dashboard-single-checkin').note)).toBe('Modal 编辑备注');
+
+    const multi = page.locator('.dashboard-habit-item').filter({ hasText: '多次确认' });
+    page.once('dialog', dialog => dialog.dismiss());
+    await multi.getByRole('button', { name: '-1' }).click();
+    expect((await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).checkins.filter(item => item.habitId === 'dashboard-multi'))).length).toBe(1);
+    page.once('dialog', async dialog => {
+        expect(dialog.message()).toContain(today);
+        await dialog.accept();
+    });
+    await multi.getByRole('button', { name: '-1' }).click();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).checkins.filter(item => item.habitId === 'dashboard-multi').length)).toBe(0);
 });
 
 test('habits preserve ask, always and never note modes through the ModalShell check-in flow', async ({ page }) => {
@@ -833,6 +1118,40 @@ test('todo table keeps a legacy empty task title blank', async ({ page }) => {
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
+test('dashboard command center entry buttons preserve their legacy destinations', async ({ page }) => {
+    const today = localDate();
+    const yesterday = localDate(new Date(Date.now() - 86_400_000));
+    const source = emptyData({
+        records: [
+            { id: 'dashboard-entry-idea-unprocessed', type: '灵感碎片', title: '入口未处理灵感', content: '内容', startDate: today, endDate: today, ideaStatus: '待整理', todoIds: [] },
+            { id: 'dashboard-entry-idea-conclusion', type: '灵感碎片', title: '入口待写结论', content: '内容', startDate: today, endDate: today, ideaStatus: '实践中', ideaConclusion: '', todoIds: [] },
+        ],
+        todos: [todoFixture('dashboard-entry-urgent', '入口高压待办', { dueDate: yesterday, urgency: 'high' })],
+        materials: [{ id: 'dashboard-entry-material', type: '摘抄', title: '入口素材', content: '素材内容', createdAt: `${today}T08:00:00` }],
+        goals: [{ id: 'dashboard-entry-goal', name: '入口目标', status: '进行中', progress: 42 }],
+    });
+    await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.goto('/#/dashboard');
+
+    await page.getByRole('region', { name: '今日指挥中心' }).getByRole('button', { name: /未处理灵感/ }).click();
+    await expectHashRoute(page, '/ideas', { status: 'unprocessed' });
+    await page.goto('/#/dashboard');
+    await page.getByRole('region', { name: '今日指挥中心' }).getByRole('button', { name: /待写结论/ }).click();
+    await expectHashRoute(page, '/ideas', { status: 'needsConclusion' });
+
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: '标签中心', exact: true }).click();
+    await expectHashRoute(page, '/tags');
+
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: '去素材库', exact: true }).click();
+    await expectHashRoute(page, '/materials');
+
+    await page.goto('/#/dashboard');
+    await page.getByRole('button', { name: '看目标', exact: true }).click();
+    await expectHashRoute(page, '/goals');
+});
+
 test('dashboard command center periods and recent timeline stay read-only', async ({ page }) => {
     const dateAt = amount => {
         const date = new Date();
@@ -907,19 +1226,19 @@ test('dashboard command center periods and recent timeline stay read-only', asyn
     await page.goto('/#/dashboard');
     await page.locator('.period-item').filter({ hasText: '本周计划入口' }).click();
     await expect(page).toHaveURL(/#\/dashboard$/);
-    const dashboardPreview = page.getByRole('dialog', { name: '记录预览' });
+    const dashboardPreview = page.getByRole('dialog', { name: '记录详情' });
     await expect(dashboardPreview).toContainText('本周计划入口');
     await expect(page.locator('.record-editor-panel')).toHaveCount(0);
     await expect(page.locator('#all-records .record-row-actions')).toHaveCount(0);
-    await dashboardPreview.getByRole('button', { name: '关闭记录预览' }).click();
+    await dashboardPreview.getByRole('button', { name: '关闭记录详情' }).click();
     await expect(page).toHaveURL(/#\/dashboard$/);
-    await expect(page.getByRole('dialog', { name: '记录预览' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: '记录详情' })).toHaveCount(0);
 
     await page.locator('.dashboard-timeline').getByRole('button', { name: /Dashboard 日记记录/ }).click();
     await expect(page).toHaveURL(/#\/dashboard$/);
     await expect(dashboardPreview).toContainText('Dashboard 日记记录');
-    await dashboardPreview.getByRole('button', { name: '关闭记录预览' }).click();
-    await expect(page.getByRole('dialog', { name: '记录预览' })).toHaveCount(0);
+    await dashboardPreview.getByRole('button', { name: '关闭记录详情' }).click();
+    await expect(page.getByRole('dialog', { name: '记录详情' })).toHaveCount(0);
 
     await page.goto('/#/dashboard');
     await page.getByRole('button', { name: /执行：执行入口待办/ }).click();
@@ -1891,6 +2210,7 @@ test('dashboard habit actions expose legacy note and decrease branches', async (
     await expect(multi).toContainText('备注：第一次备注');
     await expect(multi.getByRole('button', { name: '-1', exact: true })).toBeVisible();
 
+    page.once('dialog', dialog => dialog.accept());
     await multi.getByRole('button', { name: '-1', exact: true }).click();
     await expect(multi).toContainText('0/2');
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')));

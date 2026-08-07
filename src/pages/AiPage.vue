@@ -29,6 +29,8 @@ type AiDraftItem = {
 };
 type CaptureDraftKey = 'diaryText' | 'workText' | 'planText' | 'ideaText';
 
+const props = withDefaults(defineProps<{ embeddedMode?: AiMode }>(), { embeddedMode: undefined });
+const emit = defineEmits<{ close: [] }>();
 const route = useRoute();
 const router = useRouter();
 const store = useLifePlanStore();
@@ -45,10 +47,15 @@ function readPersistedAiConfig() {
 }
 
 const config = reactive(ai.normalizeConfig(readPersistedAiConfig()));
-const mode = ref<AiMode>('chatCapture');
+const mode = ref<AiMode>(props.embeddedMode || 'chatCapture');
+const embeddedSettingsOpen = ref(false);
 const settingsOpen = computed({
-  get: () => String(route.query.settings || '') === '1',
+  get: () => props.embeddedMode ? embeddedSettingsOpen.value : String(route.query.settings || '') === '1',
   set: value => {
+    if (props.embeddedMode) {
+      embeddedSettingsOpen.value = value;
+      return;
+    }
     const query = { ...route.query };
     if (value) query.settings = '1';
     else delete query.settings;
@@ -305,6 +312,7 @@ function resetResult() {
 function setMode(next: AiMode) {
   mode.value = next;
   resetResult();
+  if (props.embeddedMode) return;
   const query: Record<string, string> = { mode: next };
   if (next === 'ideaNext' && selectedIdeaId.value) query.idea = selectedIdeaId.value;
   if (next === 'todoBreakdown' && selectedTodoId.value) query.todo = selectedTodoId.value;
@@ -315,6 +323,10 @@ function setMode(next: AiMode) {
 }
 
 function closeAiPage() {
+  if (props.embeddedMode) {
+    emit('close');
+    return;
+  }
   closeRouteOverlay(router, route, ['settings', 'mode', 'idea', 'todo', 'diary']);
 }
 

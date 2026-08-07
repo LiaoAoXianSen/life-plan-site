@@ -377,19 +377,19 @@ onBeforeUnmount(() => {
         </section>
 
         <form v-else class="record-create-form" @submit.prevent="saveManual">
-          <div class="record-create-template-toolbar">
+          <div class="record-create-template-toolbar template-select">
             <label class="form-group"><span>选择模板</span><select v-model="selectedTemplateKey" aria-label="记录模板" @change="applySelectedTemplate"><option value="">空白</option><optgroup v-if="builtInTemplates.length" label="内置模板"><option v-for="template in builtInTemplates" :key="template.id" :value="`builtin:${template.id}`">{{ template.name }}</option></optgroup><optgroup v-if="customTemplates.length" label="我的模板"><option v-for="template in customTemplates" :key="String(template.id)" :value="String(template.id)">{{ template.name }}</option></optgroup></select></label>
             <div class="record-template-actions">
               <button class="btn btn-secondary" type="button" :disabled="!selectedTemplateKey" @click="applySelectedTemplate">应用模板</button>
               <button class="btn btn-secondary" type="button" @click="saveAsTemplate">保存为模板</button>
             </div>
           </div>
-          <section v-if="activeBuiltInTemplate" ref="templateEditorRef" class="record-template-editor" :aria-label="`${activeBuiltInTemplate.name}新记录字段`">
+          <section v-if="activeBuiltInTemplate" ref="templateEditorRef" class="record-template-editor template-editor active" :aria-label="`${activeBuiltInTemplate.name}新记录字段`">
             <div class="record-template-editor-head">
-              <div><strong>{{ activeBuiltInTemplate.name }}</strong><p>{{ activeBuiltInTemplate.description }}</p></div>
-              <div class="record-template-actions"><button class="link-button" type="button" @click="toggleTemplateFields(true)">全部展开</button><button class="link-button" type="button" @click="toggleTemplateFields(false)">全部收起</button><button class="link-button danger-text" type="button" @click="clearStructuredFields">清空</button></div>
+              <div><strong class="template-editor-title">{{ activeBuiltInTemplate.name }}</strong><p class="template-editor-meta">{{ activeBuiltInTemplate.description }}</p></div>
+              <div class="record-template-actions template-editor-actions"><button class="link-button" type="button" @click="toggleTemplateFields(true)">全部展开</button><button class="link-button" type="button" @click="toggleTemplateFields(false)">全部收起</button><button class="link-button danger-text" type="button" @click="clearStructuredFields">清空</button></div>
             </div>
-            <details v-for="field in activeBuiltInTemplate.fields" :key="field.id" class="record-template-field">
+            <details v-for="field in activeBuiltInTemplate.fields" :key="field.id" class="record-template-field template-field">
               <summary>{{ field.label }}</summary>
               <textarea v-model="templateValues[field.id]" :aria-label="`新记录${field.label}`" :placeholder="field.placeholder" :rows="field.rows || 3" @input="updateStructuredContent" />
             </details>

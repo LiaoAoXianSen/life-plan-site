@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import EmptyState from '../components/common/EmptyState.vue';
-import { computed, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import RecordCreateModal from '../components/RecordCreateModal.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import AppSelect from '../components/common/AppSelect.vue';
 import ModalShell from '../components/common/ModalShell.vue';
+import AiPage from './AiPage.vue';
 import { withReturnTo } from '../router/returnTo';
 import { getTodayStr } from '../services/legacyServices';
 import { useFitnessStore } from '../stores/fitnessStore';
@@ -45,16 +46,45 @@ const recordsStore = useRecordsStore();
 const todosStore = useTodosStore();
 const habitsStore = useHabitsStore();
 const fitnessStore = useFitnessStore();
-const today = getTodayStr();
-const todayLabel = formatLongDate(today);
+const today = ref(getTodayStr());
+const todayLabel = computed(() => formatLongDate(today.value));
+let todayTimer: ReturnType<typeof setTimeout> | null = null;
+
+function refreshToday() {
+  const nextToday = getTodayStr();
+  if (today.value !== nextToday) today.value = nextToday;
+}
+
+function scheduleTodayRefresh() {
+  if (todayTimer !== null) clearTimeout(todayTimer);
+  const now = new Date();
+  const nextMidnight = new Date(now);
+  nextMidnight.setHours(24, 0, 0, 25);
+  todayTimer = setTimeout(() => {
+    refreshToday();
+    scheduleTodayRefresh();
+  }, Math.max(1000, nextMidnight.getTime() - now.getTime()));
+}
+
+function handleDashboardVisibility() {
+  if (document.visibilityState !== 'hidden') {
+    refreshToday();
+    scheduleTodayRefresh();
+  }
+}
 const showCreateRecord = ref(false);
+const showAiAssistant = ref(false);
+const aiAssistantMode = ref<'todayPlan' | 'chatCapture'>('todayPlan');
 const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
 const floatingMode = ref<FloatingMode>('random');
+const floatingSampleNonce = ref(0);
 const expandedMaterialIds = ref<string[]>([]);
 const timelineRangeDays = ref(30);
 const dashboardPreviewRecord = ref<RecordEntity | null>(null);
 const showHabitCheckinNote = ref(false);
 const habitCheckinNoteForm = reactive({
+  mode: 'create' as 'create' | 'edit',
+  checkinId: '',
   habitId: '',
   habitName: '',
   note: '',
@@ -71,26 +101,26 @@ function hasTodoSessionOnDate(todo: Todo, date: string) {
   return (todo.sessions || []).some(session => session.date === date);
 }
 
-function isTodoOverdue(todo: Todo, date = today) {
+function isTodoOverdue(todo: Todo, date = today.value) {
   return Boolean(!todo.done && todo.dueDate && todo.dueDate < date);
 }
 
-function getTodoOverdueDays(todo: Todo, date = today) {
+function getTodoOverdueDays(todo: Todo, date = today.value) {
   if (!isTodoOverdue(todo, date)) return 0;
   const diff = new Date(`${date}T12:00:00`).getTime() - new Date(`${todo.dueDate}T12:00:00`).getTime();
   return Math.max(1, Math.floor(diff / 86_400_000));
 }
 
 function isTodoRelevantToday(todo: Todo) {
-  return isTodoOverdue(todo) || todo.dueDate === today || isTodoPlannedOnDate(todo, today) || hasTodoSessionOnDate(todo, today);
+  return isTodoOverdue(todo) || todo.dueDate === today.value || isTodoPlannedOnDate(todo, today.value) || hasTodoSessionOnDate(todo, today.value);
 }
 
 function getTodayTodoReason(todo: Todo) {
   const reasons = [];
   if (isTodoOverdue(todo)) reasons.push(`已超期 ${getTodoOverdueDays(todo)} 天`);
-  if (isTodoPlannedOnDate(todo, today)) reasons.push('计划中');
-  if (todo.dueDate === today) reasons.push('今天截止');
-  if (hasTodoSessionOnDate(todo, today)) reasons.push('今天已记录');
+  if (isTodoPlannedOnDate(todo, today.value)) reasons.push('计划中');
+  if (todo.dueDate === today.value) reasons.push('今天截止');
+  if (hasTodoSessionOnDate(todo, today.value)) reasons.push('今天已记录');
   return reasons.join(' · ') || '今日关注';
 }
 
@@ -111,8 +141,8 @@ function habitRuleText(habit: Record<string, any>) {
 }
 
 function latestHabitCheckin(habitId: string) {
-  const checkins = habitsStore.getCheckins(habitId, today).slice().sort((a: Record<string, any>, b: Record<string, any>) => {
-    const sortKey = (checkin: Record<string, any>) => String(checkin.checkinAt || (checkin.time ? `${today}T${checkin.time}:00` : checkin.createdAt || ''));
+  const checkins = habitsStore.getCheckins(habitId, today.value).slice().sort((a: Record<string, any>, b: Record<string, any>) => {
+    const sortKey = (checkin: Record<string, any>) => String(checkin.checkinAt || (checkin.time ? `${today.value}T${checkin.time}:00` : checkin.createdAt || ''));
     return sortKey(a).localeCompare(sortKey(b));
   });
   return checkins[checkins.length - 1] || null;
@@ -207,6 +237,23 @@ function editDashboardPreview() {
   if (recordId) void router.push(withReturnTo(route, { path: '/records', query: { record: recordId } }));
 }
 
+function analyzeDashboardDiary() {
+  const recordId = dashboardPreviewRecord.value?.id;
+  closeDashboardPreview();
+  if (recordId) void router.push(withReturnTo(route, { path: '/ai', query: { mode: 'diaryReview', diary: recordId } }));
+}
+
+function advanceDashboardIdea() {
+  const record = dashboardPreviewRecord.value;
+  if (!record) return;
+  closeDashboardPreview();
+  if (record.ideaTodoId && lifePlan.data.todos.some(todo => todo.id === record.ideaTodoId)) {
+    openTodo(record.ideaTodoId);
+    return;
+  }
+  void router.push(withReturnTo(route, { path: '/todos', query: { ideaDraft: record.id } }));
+}
+
 function openScheduleItem(item: ScheduleItem) {
   if (item.sourceType === 'record') openRecord(item.id);
   if (item.sourceType.startsWith('todo-')) openTodo(item.id);
@@ -263,8 +310,9 @@ function openExistingFromCreate(recordId: string) {
   void router.push(withReturnTo(route, { path: '/records', query: { record: recordId } }));
 }
 
-function openAi(mode: string) {
-  void router.push(withReturnTo(route, { path: '/ai', query: { mode } }));
+function openAi(mode: 'todayPlan' | 'chatCapture') {
+  aiAssistantMode.value = mode;
+  showAiAssistant.value = true;
 }
 
 function createTodo() {
@@ -273,6 +321,16 @@ function createTodo() {
 
 function setFloatingMode(mode: FloatingMode) {
   floatingMode.value = mode;
+  if (mode === 'random') floatingSampleNonce.value += 1;
+}
+
+function seededFloatingValue(id: string, nonce: number) {
+  let value = nonce ^ 0x9e3779b9;
+  for (let index = 0; index < id.length; index += 1) {
+    value = Math.imul(value ^ id.charCodeAt(index), 0x45d9f3b);
+    value ^= value >>> 16;
+  }
+  return value >>> 0;
 }
 
 const notice = ref('');
@@ -351,6 +409,8 @@ function openHabitCheckinNote(habitId: string) {
     announce('未找到该习惯，未打卡', 'warning');
     return;
   }
+  habitCheckinNoteForm.mode = 'create';
+  habitCheckinNoteForm.checkinId = '';
   habitCheckinNoteForm.habitId = habit.id;
   habitCheckinNoteForm.habitName = habit.name || '未命名习惯';
   habitCheckinNoteForm.note = '';
@@ -358,8 +418,23 @@ function openHabitCheckinNote(habitId: string) {
   showHabitCheckinNote.value = true;
 }
 
+function openHabitNoteEdit(habitId: string) {
+  const habit = habitsStore.habits.find(item => item.id === habitId);
+  const latest = habitsStore.getCheckins(habitId, today.value).slice(-1)[0] as Record<string, any> | undefined;
+  if (!habit || !latest) return;
+  habitCheckinNoteForm.mode = 'edit';
+  habitCheckinNoteForm.checkinId = String(latest.id || '');
+  habitCheckinNoteForm.habitId = habit.id;
+  habitCheckinNoteForm.habitName = habit.name || '未命名习惯';
+  habitCheckinNoteForm.note = String(latest.note || '');
+  habitCheckinNoteForm.disableFuturePrompt = false;
+  showHabitCheckinNote.value = true;
+}
+
 function closeHabitCheckinNote() {
   showHabitCheckinNote.value = false;
+  habitCheckinNoteForm.mode = 'create';
+  habitCheckinNoteForm.checkinId = '';
   habitCheckinNoteForm.habitId = '';
   habitCheckinNoteForm.habitName = '';
   habitCheckinNoteForm.note = '';
@@ -367,6 +442,15 @@ function closeHabitCheckinNote() {
 }
 
 function submitHabitCheckinNote(saveNote: boolean) {
+  if (habitCheckinNoteForm.mode === 'edit') {
+    if (!habitsStore.editCheckinNote(habitCheckinNoteForm.checkinId, saveNote ? habitCheckinNoteForm.note : '')) {
+      announce(habitsStore.lastError || '备注保存失败', 'warning');
+      return;
+    }
+    announce(habitsStore.lastAction || '打卡备注已保存');
+    closeHabitCheckinNote();
+    return;
+  }
   const habitId = habitCheckinNoteForm.habitId;
   if (!habitId) return;
   if (!completeDashboardHabitCheckin(habitId, saveNote ? habitCheckinNoteForm.note : '')) return;
@@ -396,22 +480,20 @@ function quickHabitCheckinWithNote(habitId: string) {
 }
 
 function editLatestHabitNote(habitId: string) {
-  const latest = habitsStore.getCheckins(habitId, today).slice(-1)[0];
+  const latest = habitsStore.getCheckins(habitId, today.value).slice(-1)[0];
   if (!latest) {
     quickHabitCheckinWithNote(habitId);
     return;
   }
-  const note = window.prompt('编辑打卡备注', String(latest.note || ''));
-  if (note === null) return;
-  if (!habitsStore.editCheckinNote(latest.id, note)) {
-    announce(habitsStore.lastError || '备注保存失败', 'warning');
-    return;
-  }
-  announce(habitsStore.lastAction || '打卡备注已保存');
+  openHabitNoteEdit(habitId);
 }
 
-function undoHabitCheckin(habitId: string) {
-  if (!habitsStore.undoLatestCheckin(habitId)) {
+function undoHabitCheckin(habitId: string, requireConfirmation = false) {
+  if (requireConfirmation) {
+    const habit = habitsStore.habits.find(item => item.id === habitId);
+    if (!window.confirm(`确认要减少【${habit?.name || '该习惯'}】${today.value} 的打卡次数吗？`)) return;
+  }
+  if (!habitsStore.undoLatestCheckin(habitId, today.value)) {
     announce(habitsStore.lastError || '撤销失败', 'warning');
     return;
   }
@@ -447,15 +529,16 @@ const floatingTodos = computed(() => {
       .sort((a, b) => String(a.createdAt || a.updatedAt || a.id || '').localeCompare(String(b.createdAt || b.updatedAt || b.id || '')))
       .slice(0, 5);
   }
-  for (let index = 0; index < Math.min(5, pool.length); index += 1) {
-    const swapIndex = index + Math.floor(Math.random() * (pool.length - index));
-    [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
-  }
-  return pool.slice(0, 5);
+  const ordered = pool.sort((a, b) => seededFloatingValue(String(a.id), 0) - seededFloatingValue(String(b.id), 0));
+  if (ordered.length <= 5) return ordered;
+  const offset = floatingSampleNonce.value % ordered.length;
+  return [...ordered.slice(offset), ...ordered.slice(0, offset)].slice(0, 5);
+
+
 });
-const dueHabits = computed(() => habitsStore.todayHabits);
+const dueHabits = computed(() => habitsStore.habits.filter(habit => habitsStore.isHabitDueOnDate(habit, today.value)));
 const todayHabitItems = computed(() => dueHabits.value.map(habit => {
-  const count = habitsStore.getCheckinCount(habit.id, today);
+  const count = habitsStore.getCheckinCount(habit.id, today.value);
   const target = habitsStore.targetCount(habit);
   return {
     habit,
@@ -471,7 +554,7 @@ const todayHabitItems = computed(() => dueHabits.value.map(habit => {
     noteText: habitCheckinNoteText(habit.id),
   };
 }));
-const doneHabitCount = computed(() => dueHabits.value.filter(habit => habitsStore.getCheckinCount(habit.id, today) > 0).length);
+const doneHabitCount = computed(() => dueHabits.value.filter(habit => habitsStore.getCheckinCount(habit.id, today.value) > 0).length);
 const fitnessOverview = computed(() => fitnessStore.services.fitness.buildFitnessOverview({
   bodyMetrics: fitnessStore.metrics,
   fitnessPlans: fitnessStore.plans,
@@ -489,7 +572,7 @@ const fitnessLatestText = computed(() => {
 });
 const activeGoals = computed(() => lifePlan.data.goals.filter(goal => goal.status === '进行中'));
 const weekStart = computed(() => {
-  const date = new Date(`${today}T12:00:00`);
+  const date = new Date(`${today.value}T12:00:00`);
   date.setDate(date.getDate() - ((date.getDay() || 7) - 1));
   return date.toISOString().slice(0, 10);
 });
@@ -507,12 +590,12 @@ const goalFocusList = computed(() => [...activeGoals.value]
   .sort((a, b) => Number(b.progress || 0) - Number(a.progress || 0))
   .slice(0, 3));
 const activePeriods = computed(() => lifePlan.data.records
-  .filter(record => periodTypes.includes(entityString(record, 'type')) && (!entityString(record, 'endDate') || entityString(record, 'endDate') >= today))
+  .filter(record => periodTypes.includes(entityString(record, 'type')) && (!entityString(record, 'endDate') || entityString(record, 'endDate') >= today.value))
   .sort((a, b) => (entityString(a, 'endDate') || '9999-12-31').localeCompare(entityString(b, 'endDate') || '9999-12-31')));
 const timelineGroups = computed(() => {
   const days = Math.max(7, Number(timelineRangeDays.value) || 30);
-  const startDate = addDays(today, -(days - 1));
-  const items = buildScheduleItems(lifePlan.data, startDate, today, {
+  const startDate = addDays(today.value, -(days - 1));
+  const items = buildScheduleItems(lifePlan.data, startDate, today.value, {
     includeRecords: true,
     includeTodos: true,
     includeHabits: true,
@@ -528,6 +611,16 @@ const timelineGroups = computed(() => {
   return [...groups.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([date, values]) => ({ date, items: sortScheduleItems(values, 'desc') }));
+});
+onMounted(() => {
+  document.addEventListener('visibilitychange', handleDashboardVisibility);
+  scheduleTodayRefresh();
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleDashboardVisibility);
+  if (todayTimer !== null) clearTimeout(todayTimer);
+  todayTimer = null;
 });
 </script>
 
@@ -691,7 +784,7 @@ const timelineGroups = computed(() => {
           <EmptyState v-else class="empty-state">今日暂无待办</EmptyState>
         </section>
 
-        <section class="dashboard-floating-todos" aria-label="无截止待办池">
+        <section class="dashboard-floating-todos" aria-label="无截止待办池" :data-sample-nonce="floatingSampleNonce">
           <div class="section-title-row">
             <div class="section-title">无截止待办池</div>
             <div class="todo-pool-toolbar">
@@ -719,50 +812,55 @@ const timelineGroups = computed(() => {
               </span>
             </li>
           </ul>
-          <EmptyState v-else class="empty-state">暂无无截止待办</EmptyState>
+          <div v-if="floatingTodoPool.length > floatingTodos.length" class="todo-pool-hint">还有 {{ floatingTodoPool.length - floatingTodos.length }} 条无截止待办没展示</div>
+          <EmptyState v-if="!floatingTodos.length" class="empty-state">暂无无截止待办</EmptyState>
         </section>
 
         <section class="dashboard-today-habits" aria-label="今日习惯">
           <div class="section-title">今日习惯快捷打卡</div>
-          <ul v-if="todayHabitItems.length" class="todo-list dashboard-habit-list">
-            <li v-for="item in todayHabitItems" :key="item.habit.id" class="todo-item dashboard-habit-item habit-quick-card compact" :class="{ done: item.count > 0, multi: item.target > 1 }">
-              <button class="todo-text todo-dashboard-link" type="button" :aria-label="item.habit.name" @click="openHabit(item.habit.id)">
-                <span class="habit-quick-title-row">
-                  <span class="habit-quick-title">{{ item.habit.name }}</span>
-                  <span class="habit-quick-tag">{{ item.habit.tag || '习惯' }}</span>
-                </span>
-                <span class="habit-quick-meta">
-                  <span>{{ item.ruleText }}</span>
-                  <span>{{ item.count }}/{{ item.target }}</span>
-                  <span>{{ item.checkinTimeText }}</span>
-                  <span v-if="item.rewardText" class="is-points">{{ item.rewardText }}</span>
-                  <span v-if="item.penaltyText" class="is-penalty">{{ item.penaltyText }}</span>
-                </span>
-                <span v-if="item.noteText" class="habit-quick-note-inline">备注：{{ item.noteText }}</span>
-              </button>
-              <span class="habit-quick-status" :class="item.count === 0 ? 'is-pending' : item.done ? 'is-done' : 'is-active'">{{ item.statusText }}</span>
-              <span class="todo-actions">
-                <button
-                  class="btn btn-secondary todo-mini-btn"
-                  type="button"
-                  :disabled="item.target === 1 && item.count > 0 ? false : !item.canCheckin"
-                  @click="item.target === 1 && item.count > 0 ? editLatestHabitNote(item.habit.id) : quickHabitCheckin(item.habit.id)"
-                >{{ item.target === 1 && item.count > 0 ? '备注' : '打卡' }}</button>
-                <button
-                  class="btn btn-secondary todo-mini-btn"
-                  type="button"
-                  :disabled="item.target > 1 ? false : item.count <= 0"
-                  @click="item.target > 1 ? (item.count > 0 ? editLatestHabitNote(item.habit.id) : quickHabitCheckinWithNote(item.habit.id)) : undoHabitCheckin(item.habit.id)"
-                >{{ item.target > 1 ? '备注' : '撤销' }}</button>
-                <button
-                  v-if="item.target > 1 && item.count > 0"
-                  class="btn btn-secondary todo-mini-btn"
-                  type="button"
-                  @click="undoHabitCheckin(item.habit.id)"
-                >-1</button>
-              </span>
-            </li>
-          </ul>
+          <div v-if="todayHabitItems.length" class="habit-quick-list dashboard-habit-list">
+            <article v-for="item in todayHabitItems" :key="item.habit.id" class="todo-item dashboard-habit-item habit-quick-card compact" :class="{ done: item.count > 0, multi: item.target > 1 }">
+              <div class="habit-quick-head">
+                <div class="habit-quick-main">
+                  <button class="habit-quick-open" type="button" :aria-label="item.habit.name" @click="openHabit(item.habit.id)">
+                    <span class="habit-quick-title-row">
+                      <span class="habit-quick-title">{{ item.habit.name }}</span>
+                      <span class="habit-quick-tag">{{ item.habit.tag || '习惯' }}</span>
+                      <span class="habit-quick-status" :class="item.count === 0 ? 'is-pending' : item.done ? 'is-done' : 'is-active'">{{ item.statusText }}</span>
+                    </span>
+                    <span class="habit-quick-meta">
+                      <span>{{ item.ruleText }}</span>
+                      <span>{{ item.count }}/{{ item.target }}</span>
+                      <span>{{ item.checkinTimeText }}</span>
+                      <span v-if="item.rewardText" class="is-points">{{ item.rewardText }}</span>
+                      <span v-if="item.penaltyText" class="is-penalty">{{ item.penaltyText }}</span>
+                    </span>
+                    <span v-if="item.noteText" class="habit-quick-note-inline">备注：{{ item.noteText }}</span>
+                  </button>
+                </div>
+                <div class="habit-quick-actions compact">
+                  <button
+                    class="habit-quick-btn primary"
+                    type="button"
+                    :disabled="item.target === 1 && item.count > 0 ? false : !item.canCheckin"
+                    @click="item.target === 1 && item.count > 0 ? editLatestHabitNote(item.habit.id) : quickHabitCheckin(item.habit.id)"
+                  >{{ item.target === 1 && item.count > 0 ? '备注' : '打卡' }}</button>
+                  <button
+                    class="habit-quick-btn secondary"
+                    type="button"
+                    :disabled="item.target > 1 ? false : item.count <= 0 && item.habit.noteMode === 'never'"
+                    @click="item.target > 1 ? (item.count > 0 ? editLatestHabitNote(item.habit.id) : quickHabitCheckinWithNote(item.habit.id)) : item.count > 0 ? undoHabitCheckin(item.habit.id) : quickHabitCheckinWithNote(item.habit.id)"
+                  >{{ item.target > 1 || item.count <= 0 ? '备注' : '撤销' }}</button>
+                  <button
+                    v-if="item.target > 1 && item.count > 0"
+                    class="habit-quick-btn ghost"
+                    type="button"
+                    @click="undoHabitCheckin(item.habit.id, true)"
+                  >-1</button>
+                </div>
+              </div>
+            </article>
+          </div>
           <EmptyState v-else class="empty-state">今日暂无安排的习惯</EmptyState>
         </section>
       </div>
@@ -784,7 +882,7 @@ const timelineGroups = computed(() => {
       <EmptyState v-else class="empty-state">暂无进行中的周期记录</EmptyState>
     </article>
 
-    <article class="card dashboard-timeline">
+    <article class="dashboard-timeline">
       <div class="section-title-row timeline-title-row">
         <h2 class="card-title">近期记录时间轴</h2>
         <AppSelect
@@ -821,12 +919,14 @@ const timelineGroups = computed(() => {
     <ModalShell
       v-if="showHabitCheckinNote"
       :model-value="showHabitCheckinNote"
-      :title="`备注 · ${habitCheckinNoteForm.habitName}`"
+      :title="`${habitCheckinNoteForm.mode === 'edit' ? '编辑备注' : '备注'} · ${habitCheckinNoteForm.habitName}`"
+      close-on-backdrop
       size="sm"
       dialog-class="habit-note-modal"
       initial-focus="#dashboard-habit-checkin-note"
       @close="closeHabitCheckinNote"
     >
+      <div class="habit-note-field">
       <textarea
         id="dashboard-habit-checkin-note"
         v-model="habitCheckinNoteForm.note"
@@ -834,13 +934,14 @@ const timelineGroups = computed(() => {
         maxlength="120"
         placeholder="这次做了什么？可留空"
       />
+      </div>
       <div class="habit-note-foot">
-        <label class="habit-note-toggle">
+        <label v-if="habitCheckinNoteForm.mode === 'create'" class="habit-note-toggle">
           <input v-model="habitCheckinNoteForm.disableFuturePrompt" type="checkbox">
           <span>以后不提醒</span>
         </label>
         <div class="habit-note-actions">
-          <button class="btn btn-secondary" type="button" @click="submitHabitCheckinNote(false)">本次不填</button>
+          <button v-if="habitCheckinNoteForm.mode === 'create'" class="btn btn-secondary" type="button" @click="submitHabitCheckinNote(false)">本次不填</button>
           <button class="btn btn-primary" type="button" @click="submitHabitCheckinNote(true)">保存</button>
         </div>
       </div>
@@ -849,7 +950,8 @@ const timelineGroups = computed(() => {
     <ModalShell
       v-if="dashboardPreviewRecord"
       :model-value="Boolean(dashboardPreviewRecord)"
-      title="记录预览"
+      title="记录详情"
+      close-on-backdrop
       size="lg"
       dialog-class="record-preview-modal"
       @close="closeDashboardPreview"
@@ -877,11 +979,11 @@ const timelineGroups = computed(() => {
           </div>
           <div v-if="dashboardPreviewRecord.type === '灵感碎片'" class="record-preview-content">
             <div class="record-preview-heading">灵感推进</div>
-            <div class="record-idea-badges"><span>{{ dashboardPreviewRecord.ideaStatus || '待整理' }}</span><span v-for="tag in recordsStore.services.records.getIdeaTags(dashboardPreviewRecord)" :key="tag">{{ tag }}</span></div>
-            <div class="record-idea-preview-grid">
+            <div class="idea-badge-row"><span class="idea-status-badge">{{ dashboardPreviewRecord.ideaStatus || '待整理' }}</span><span v-for="tag in recordsStore.services.records.getIdeaTags(dashboardPreviewRecord)" :key="tag" class="tag-pill">{{ tag }}</span></div>
+            <div class="idea-detail-grid dashboard-idea-detail-grid">
               <div><strong>下一步</strong><span>{{ dashboardPreviewRecord.ideaNextAction || '未设置' }}</span></div>
               <div><strong>关联待办</strong><span>{{ dashboardPreviewIdeaTodoText }}</span></div>
-              <div><strong>结果结论</strong><span>{{ dashboardPreviewRecord.ideaConclusion || '还没有结论' }}</span></div>
+              <div class="wide"><strong>结果结论</strong><span>{{ dashboardPreviewRecord.ideaConclusion || '还没有结论' }}</span></div>
             </div>
           </div>
           <div v-if="dashboardPreviewTodos.length" class="record-preview-todos">
@@ -890,11 +992,18 @@ const timelineGroups = computed(() => {
               <span class="record-preview-dot" /><span>{{ todo.text || '未命名待办' }}</span>
             </div>
           </div>
-          <div class="record-preview-actions"><button class="btn btn-secondary" type="button" @click="editDashboardPreview">编辑</button></div>
+          <div class="record-preview-actions">
+            <button v-if="dashboardPreviewRecord.type === '日记' && dashboardPreviewRecord.content?.trim()" class="btn btn-secondary" type="button" @click="analyzeDashboardDiary">AI 分析日记</button>
+            <button v-if="dashboardPreviewRecord.type === '灵感碎片'" class="btn btn-secondary" type="button" @click="advanceDashboardIdea">{{ dashboardPreviewRecord.ideaTodoId && dashboardPreviewTodos.some(todo => todo.id === dashboardPreviewRecord?.ideaTodoId) ? '打开关联待办' : '转成待办' }}</button>
+            <button class="btn btn-secondary" type="button" @click="editDashboardPreview">编辑</button>
+          </div>
         </div>
     </ModalShell>
 
     <RecordCreateModal ref="createModal" v-model="showCreateRecord" @open-existing="openExistingFromCreate" />
+    <ModalShell v-model="showAiAssistant" :title="aiAssistantMode === 'todayPlan' ? 'AI 今日计划' : 'AI 对话整理'" size="lg" dialog-class="ai-assistant-modal">
+      <AiPage :embedded-mode="aiAssistantMode" @close="showAiAssistant = false" />
+    </ModalShell>
   </section>
 </template>
 
@@ -919,12 +1028,56 @@ const timelineGroups = computed(() => {
   word-break: break-word;
 }
 .quick-create,
-.command-card-head,
-.timeline-title-row {
+.command-card-head {
   flex-wrap: wrap;
 }
-.dashboard-main-grid { margin-bottom: 16px; }
-.hero-title-button { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.timeline-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.timeline-title-row .card-title {
+  min-width: 0;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+.timeline-title-row :deep(.app-select),
+.timeline-title-row :deep(.app-control--compact) {
+  width: auto;
+  min-width: 118px;
+  max-width: 148px;
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  box-shadow: 0 2px 8px rgba(60, 55, 40, .06);
+}
+@media (max-width: 420px) {
+  .timeline-title-row {
+    gap: 8px;
+  }
+  .timeline-title-row :deep(.app-select),
+  .timeline-title-row :deep(.app-control--compact) {
+    min-width: 108px;
+    max-width: 136px;
+    padding-inline: 7px;
+  }
+}
+.timeline-title-row :deep(.app-select:focus-visible),
+.timeline-title-row :deep(.app-control--compact:focus-visible) {
+  outline: 3px solid rgba(47, 128, 237, .2);
+  outline-offset: 2px;
+  border-color: var(--accent-2);
+}
+.dashboard-main-grid { margin-bottom: 0; }
+.command-row span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; line-height: 1.45; }
+.command-row strong { flex: 0 0 auto; }
+.hero-title-button { display: -webkit-box; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; font-family: inherit; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .dashboard-timeline { min-width: 0; }
 .command-materials { display: grid; gap: 9px; }
 .dashboard-material-card { min-width: 0; display: flex; flex-direction: column; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: #fbfdfb; box-shadow: 0 12px 26px rgba(35,60,45,.055); }
@@ -939,52 +1092,70 @@ const timelineGroups = computed(() => {
 .dashboard-material-card.is-expanded .material-meta { display: block; max-height: none; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
 .dashboard-material-card .material-card-actions { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; align-items: center; margin-top: auto; padding-top: 12px; }
 .dashboard-material-card .material-expand-btn { margin: 0 auto 0 0; padding: 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; }
-.todo-list { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.todo-list { display: grid; gap: 0; padding: 0; margin: 0; list-style: none; }
+.todo-pool-hint { margin-top: 8px; color: var(--faint); font-size: 12px; }
 .todo-item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 8px;
+  display: flex;
+  font-size: 14px;
+  gap: 9px;
   align-items: center;
   min-width: 0;
+  padding: 7px 0;
 }
 .todo-check { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; }
-.todo-dashboard-link { display: grid; gap: 3px; width: 100%; min-width: 0; text-align: left; }
-.todo-dashboard-link small { color: var(--faint); font-size: 12px; font-weight: 650; }
+.todo-dashboard-link { display: -webkit-box; width: 100%; min-width: 0; text-align: left; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.todo-dashboard-link small { display: block; margin-top: 3px; color: var(--faint); font-size: 12px; font-weight: 650; line-height: 1.45; }
+.habit-quick-list { display: grid; gap: 8px; }
+.dashboard-habit-item { min-width: 0; }
+.dashboard-habit-item .habit-quick-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; min-width: 0; }
+.dashboard-habit-item .habit-quick-main { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+.habit-quick-open { display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; text-align: left; color: inherit; cursor: pointer; font: inherit; }
+.dashboard-habit-item .habit-quick-actions { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 1 auto; justify-content: flex-end; align-items: center; max-width: 100%; }
 .todo-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-end;
-  grid-column: 1 / -1;
+
   min-width: 0;
 }
 .dashboard-habit-item .todo-dashboard-link small {
   color: var(--faint);
 }
 @media (min-width: 720px) {
-  .todo-item {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-  }
-  .todo-actions {
-    grid-column: auto;
-    justify-content: flex-end;
-  }
-  .dashboard-habit-item {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-  }
+  .todo-actions { justify-content: flex-end; }
 }
 .period-item { width: 100%; min-width: 0; text-align: left; }
 .period-info { min-width: 0; }
-.period-info h4 { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.period-info h4 { display: -webkit-box; min-width: 0; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.period-info h4 .item-type { margin-right: 8px; }
 .progress-bar { min-width: 0; }
 .timeline-item { width: 100%; min-width: 0; text-align: left; }
-.item-preview { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-.habit-note-modal textarea { width: 100%; min-height: 96px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
-.habit-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
-.habit-note-toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 700; }
-.habit-note-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.item-title { display: -webkit-box; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.item-preview { margin-top: 9px; max-width: 78ch; color: var(--muted); font-size: 13px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+:global(.habit-note-modal) { width: min(430px, 100%); padding: 18px; border-radius: 22px; background: linear-gradient(180deg, #ffffff, #f8fbf8); }
+:global(.habit-note-modal .modal-header) { margin-bottom: 12px; }
+:global(.habit-note-modal .modal-title) { font-size: 17px; letter-spacing: -.02em; }
+.habit-note-field { margin-bottom: 10px; }
+.habit-note-modal textarea { width: 100%; min-height: 96px; padding: 13px 14px; border: 1px solid #cbded1; border-radius: 16px; background: #fff; resize: vertical; font-size: 14px; line-height: 1.7; }
+.habit-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.habit-note-toggle { display: inline-flex; align-items: center; gap: 7px; color: #607166; font-size: 12px; font-weight: 800; cursor: pointer; }
+.habit-note-toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+.habit-note-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.habit-note-actions .btn { min-height: 34px; padding: 0 16px; border-radius: 999px; font-size: 13px; }
 .record-preview-modal { max-width: 880px; }
-.record-preview-dialog-body { display: grid; gap: 14px; }
+.record-preview-dialog-body { display: grid; gap: 16px; padding-bottom: 15px; }
+.dashboard-idea-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 10px; }
+.dashboard-idea-detail-grid > div { display: grid; gap: 4px; padding: 10px; border: 1px solid #e0e9e3; border-radius: var(--radius); background: rgba(255,255,255,.75); }
+.dashboard-idea-detail-grid > .wide { grid-column: 1 / -1; }
+.dashboard-idea-detail-grid strong { color: var(--text); font-size: 12px; }
+.dashboard-idea-detail-grid span { color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .dashboard-habit-item .habit-quick-head { flex-direction: column; align-items: stretch; }
+  .dashboard-habit-item .habit-quick-actions { justify-content: flex-start; width: 100%; }
+  .dashboard-idea-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-idea-detail-grid > .wide { grid-column: auto; }
+}
 @media (max-width: 980px) {
   .command-center { grid-template-columns: minmax(0, 1fr); }
   .today-grid { grid-template-columns: minmax(0, 1fr); }
