@@ -11,6 +11,7 @@ import SegmentedTabs from '../components/common/SegmentedTabs.vue';
 import FilterBar from '../components/common/FilterBar.vue';
 import SearchInput from '../components/common/SearchInput.vue';
 import RecordCreateModal from '../components/RecordCreateModal.vue';
+import EmptyState from '../components/common/EmptyState.vue';
 import { buildScheduleItems, addDays, getMonthStart, getWeekStart, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
 import { getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
@@ -1071,36 +1072,6 @@ onBeforeUnmount(() => {
             <button class="btn btn-primary" type="submit">保存修改</button>
           </div>
         </form>
-        <aside class="record-preview-shell">
-          <div class="record-preview-top">
-            <span class="item-type">{{ editForm.type || '记录' }}</span>
-            <div class="record-preview-title">{{ editForm.title || '未命名记录' }}</div>
-            <div class="record-preview-meta">
-              <span>{{ records.services.records.getRecordDateRangeLabel(editForm) }}</span>
-              <span>时间 {{ editForm.recordTime || '全天' }}<template v-if="editForm.recordEndTime"> - {{ editForm.recordEndTime }}</template></span>
-              <span>待办 {{ linkedTodos.filter(todo => todo.done).length }}/{{ linkedTodos.length }}</span>
-            </div>
-          </div>
-          <div class="record-preview-content">
-            <div class="record-preview-heading">内容预览</div>
-            <div v-if="previewSections.length">
-              <section v-for="section in previewSections" :key="section.title" class="record-preview-section">
-                <h4>{{ section.title }}</h4>
-                <div class="record-preview-text">{{ section.body.join('\n').trim() || '暂未填写' }}</div>
-              </section>
-            </div>
-            <div v-else class="record-preview-empty">还没有内容</div>
-          </div>
-          <div v-if="editForm.type === '灵感碎片'" class="record-preview-content">
-            <div class="record-preview-heading">灵感推进</div>
-            <div class="record-idea-badges"><span class="app-badge">{{ editForm.ideaStatus || '待整理' }}</span><span v-for="tag in records.services.records.getIdeaTags({ ideaTags: editForm.ideaTagsInput })" :key="tag" class="app-badge">{{ tag }}</span></div>
-            <div class="record-idea-preview-grid">
-              <div><strong>下一步</strong><span>{{ editForm.ideaNextAction || '未设置' }}</span></div>
-              <div><strong>关联待办</strong><button v-if="ideaLinkedTodo" class="link-button" type="button" @click="openIdeaTodo">{{ ideaLinkedTodo.text }}</button><span v-else>未关联</span></div>
-              <div><strong>结果结论</strong><span>{{ editForm.ideaConclusion || '还没有结论' }}</span></div>
-            </div>
-          </div>
-        </aside>
         </div>
     </ModalShell>
 
@@ -1155,7 +1126,7 @@ onBeforeUnmount(() => {
 }
 #page-records .record-filter-bar { grid-template-columns: minmax(200px, 1.4fr) minmax(145px, .8fr) minmax(120px, .65fr) minmax(155px, .9fr) minmax(150px, .9fr); }
 #page-records .record-filter-bar--list { grid-template-columns: minmax(200px, 1.4fr) minmax(145px, .8fr) minmax(120px, .65fr) minmax(155px, .9fr) minmax(150px, .9fr) minmax(120px, .65fr); }
-.record-editor-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
+.record-editor-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
 .record-edit-form { display: grid; gap: 13px; }
 .record-template-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 10px; align-items: end; }
 .record-template-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -1193,7 +1164,6 @@ onBeforeUnmount(() => {
 .danger-text { color: #b84f45; }
 @media (max-width: 1180px) {
   #page-records .record-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .record-editor-grid,
   .record-link-tools,
   .record-template-toolbar { grid-template-columns: 1fr; }
   .record-template-editor-head { flex-direction: column; }

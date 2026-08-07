@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppSelect from '../components/common/AppSelect.vue';
 import FilterBar from '../components/common/FilterBar.vue';
 import PageHeader from '../components/common/PageHeader.vue';
+import RecordCreateModal from '../components/RecordCreateModal.vue';
 import SearchInput from '../components/common/SearchInput.vue';
 import { withReturnTo } from '../router/returnTo';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -17,9 +18,8 @@ const router = useRouter();
 const query = ref('');
 const status = ref(String(route.query.status || 'all') || 'all');
 const tag = ref(String(route.query.tag || ''));
-const title = ref('');
-const content = ref('');
-const showCreate = ref(false);
+const showCreateRecord = ref(false);
+const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
 const statusOptions = ['待整理', '待实践', '实践中', '已验证', '已放弃'] as const;
 
 type KpiItem = { key: string; label: string; count: number };
@@ -66,12 +66,13 @@ function truncatePreview(text: unknown, maxLen = 80) {
   return `${normalized.slice(0, maxLen).trimEnd()}…`;
 }
 
-function add() {
-  if (!title.value.trim()) return;
-  records.addIdea(title.value.trim(), content.value);
-  title.value = '';
-  content.value = '';
-  showCreate.value = false;
+function createIdea() {
+  createModal.value?.openWithType('灵感碎片');
+}
+
+function openExistingFromCreate(recordId: string) {
+  showCreateRecord.value = false;
+  void router.push(withReturnTo(route, { path: '/records', query: { record: recordId } }));
 }
 
 function openView(idea: Record<string, unknown>) {
@@ -106,23 +107,13 @@ watch(() => route.query.status, value => {
   <section class="page active" id="page-ideas">
     <PageHeader title="灵感池" subtitle="灵感仍然是时间轴记录，这里只负责状态、标签和下一步。">
       <template #actions>
-        <button class="btn btn-primary" type="button" :aria-expanded="showCreate" @click="showCreate = !showCreate">
-          {{ showCreate ? '收起' : '+ 记录灵感' }}
+        <button class="btn btn-primary" type="button" @click="createIdea">
+          + 记录灵感
         </button>
       </template>
     </PageHeader>
 
-    <form v-if="showCreate" class="card idea-create-card" @submit.prevent="add">
-      <div class="form-row">
-        <label class="form-group"><span>新灵感</span><input v-model="title" required placeholder="先接住这个想法" /></label>
-        <label class="form-group"><span>补充</span><input v-model="content" placeholder="可选说明" /></label>
-      </div>
-      <div class="idea-create-actions">
-        <button class="btn btn-primary" type="submit">加入灵感池</button>
-        <button class="btn btn-secondary" type="button" @click="showCreate = false">取消</button>
-      </div>
-    </form>
-
+    <RecordCreateModal ref="createModal" v-model="showCreateRecord" @open-existing="openExistingFromCreate" />
     <FilterBar class="idea-filter-bar">
       <SearchInput v-model="query" aria-label="搜索灵感" placeholder="搜索灵感标题、内容、标签" />
       <AppSelect
@@ -183,8 +174,6 @@ watch(() => route.query.status, value => {
 </template>
 
 <style scoped>
-.idea-create-card { margin-bottom: 14px; }
-.idea-create-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 #page-ideas .idea-filter-bar {
   grid-template-columns: minmax(220px, 1.4fr) minmax(140px, .7fr) minmax(180px, 1fr);
   margin-bottom: 12px;
