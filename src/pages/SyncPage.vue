@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import StatusBanner from '../components/common/StatusBanner.vue';
 import { reactive, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { closeRouteOverlay, currentReturnTo } from '../router/returnTo';
 
 import HabitSyncPanel from '../components/HabitSyncPanel.vue';
 import TodoSyncPanel from '../components/TodoSyncPanel.vue';
 import WheelSyncPanel from '../components/WheelSyncPanel.vue';
-import PageHeader from '../components/common/PageHeader.vue';
 import { bindHabitCloudSync, runHabitCloudSyncBoth, startHabitAutoSyncEngine } from '../services/habitCloudSync';
 import { createLegacyServices } from '../services/legacyServices';
 import { lifePlanRepository } from '../services/lifePlanRepository';
@@ -28,9 +25,9 @@ type SyncState = Record<string, unknown> & {
 
 type RemotePayload = { data: unknown; hash: string; etag?: string };
 
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false });
+const emit = defineEmits<{ close: [] }>();
 const store = useLifePlanStore();
-const route = useRoute();
-const router = useRouter();
 const sync = createLegacyServices().sync;
 const config = reactive(getMainSyncConfig());
 const status = ref('');
@@ -63,9 +60,6 @@ bindHabitCloudSync({
   },
 });
 
-function closeSyncPage() {
-  closeRouteOverlay(router, route, []);
-}
 
 function nowIso() {
   return new Date().toISOString();
@@ -318,12 +312,6 @@ async function importFile(event: Event) {
 
 <template>
   <section class="page active">
-    <PageHeader title="云同步">
-      <template #actions>
-        <button v-if="currentReturnTo(route)" class="btn btn-secondary" type="button" @click="closeSyncPage">返回原页面</button>
-      </template>
-    </PageHeader>
-
     <article class="card">
       <div class="card-title">主数据 WebDAV 配置</div>
       <div class="form-row">

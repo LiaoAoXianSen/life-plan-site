@@ -77,6 +77,8 @@ const showCreateRecord = ref(false);
 const showAiAssistant = ref(false);
 const showTodoAssistant = ref(false);
 const aiAssistantMode = ref<'todayPlan' | 'chatCapture'>('todayPlan');
+const showAiDiaryReview = ref(false);
+const aiDiaryReviewId = ref('');
 const createModal = ref<InstanceType<typeof RecordCreateModal> | null>(null);
 const floatingMode = ref<FloatingMode>('random');
 const floatingSampleNonce = ref(0);
@@ -242,7 +244,10 @@ function editDashboardPreview() {
 function analyzeDashboardDiary() {
   const recordId = dashboardPreviewRecord.value?.id;
   closeDashboardPreview();
-  if (recordId) void router.push(withReturnTo(route, { path: '/ai', query: { mode: 'diaryReview', diary: recordId } }));
+  if (recordId) {
+    aiDiaryReviewId.value = recordId;
+    showAiDiaryReview.value = true;
+  }
 }
 
 function advanceDashboardIdea() {
@@ -1005,6 +1010,10 @@ onBeforeUnmount(() => {
     <RecordCreateModal ref="createModal" v-model="showCreateRecord" @open-existing="openExistingFromCreate" />
     <ModalShell v-model="showAiAssistant" :title="aiAssistantMode === 'todayPlan' ? 'AI 今日计划' : 'AI 对话整理'" size="lg" dialog-class="ai-assistant-modal">
       <AiPage :embedded-mode="aiAssistantMode" @close="showAiAssistant = false" />
+    </ModalShell>
+
+    <ModalShell v-model="showAiDiaryReview" title="AI 日记分析" size="lg" dialog-class="ai-assistant-modal">
+      <AiPage embedded-mode="diaryReview" :embedded-diary-id="aiDiaryReviewId" @close="showAiDiaryReview = false" />
     </ModalShell>
     <TodosPage v-if="showTodoAssistant" embedded-create @close="showTodoAssistant = false" />
   </section>

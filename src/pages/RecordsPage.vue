@@ -11,6 +11,7 @@ import SegmentedTabs from '../components/common/SegmentedTabs.vue';
 import FilterBar from '../components/common/FilterBar.vue';
 import SearchInput from '../components/common/SearchInput.vue';
 import RecordCreateModal from '../components/RecordCreateModal.vue';
+import AiPage from './AiPage.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import { buildScheduleItems, addDays, getMonthStart, getWeekStart, sortScheduleItems, type ScheduleItem } from '../utils/schedule';
 import { getTodayStr } from '../services/legacyServices';
@@ -110,6 +111,8 @@ const diaryAiSections = ref<DiaryAiSectionDraft[]>([]);
 const diaryAiTodos = ref<DiaryAiTodoDraft[]>([]);
 let diaryAiRequestToken = 0;
 const previewDraft = ref<RecordEntity | null>(null);
+const showAiDiaryReview = ref(false);
+const aiDiaryId = ref('');
 const previewFromEditor = ref(false);
 
 const typeOptions = ['日记', '日计划', '工作记录', '健康日报', '灵感碎片', '周复盘', '月复盘', '年复盘', '周计划', '月计划', '年度计划', '3年计划', '终身愿景'];
@@ -453,7 +456,8 @@ function openDiaryAiFromPreview() {
   if (!diaryId) return;
   previewDraft.value = null;
   previewFromEditor.value = false;
-  void router.push(withReturnTo(route, { path: '/ai', query: { mode: 'diaryReview', diary: diaryId } }));
+  aiDiaryId.value = diaryId;
+  showAiDiaryReview.value = true;
 }
 
 function editPreviewRecord() {
@@ -867,6 +871,10 @@ onBeforeUnmount(() => {
             <button v-else class="btn btn-secondary" type="button" @click="editPreviewRecord">编辑</button>
           </div>
         </div>
+    </ModalShell>
+
+    <ModalShell v-model="showAiDiaryReview" title="AI 日记分析" size="lg" dialog-class="ai-assistant-modal">
+      <AiPage embedded-mode="diaryReview" :embedded-diary-id="aiDiaryId" @close="showAiDiaryReview = false" />
     </ModalShell>
 
     <ModalShell v-if="!activeRecord" :model-value="showTemplateManager" title="模板管理" size="sm" dialog-class="record-template-modal" close-label="关闭模板管理" @close="closeTemplateManager">

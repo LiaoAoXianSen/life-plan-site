@@ -3,6 +3,9 @@ import StatusBanner from './common/StatusBanner.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import AiPage from '../pages/AiPage.vue';
+import SyncPage from '../pages/SyncPage.vue';
+import AiSettingsModal from './AiSettingsModal.vue';
 import RecordCreateModal from './RecordCreateModal.vue';
 import ModalShell from './common/ModalShell.vue';
 import { withReturnTo } from '../router/returnTo';
@@ -55,6 +58,10 @@ const router = useRouter();
 const lifePlan = useLifePlanStore();
 const showCreateRecord = ref(false);
 const showSnapshots = ref(false);
+const showSyncModal = ref(false);
+const showAiAssistant = ref(false);
+const showAiSettings = ref(false);
+const aiAssistantMode = ref<'todayPlan' | 'chatCapture'>('todayPlan');
 const previewSnapshotId = ref<string | null>(null);
 const snapshotNotice = ref('');
 const snapshotNoticeIsError = ref(false);
@@ -380,35 +387,16 @@ function deleteSnapshot(item: SnapshotItem) {
 }
 
 function openSyncPage() {
-  void router.push(withReturnTo(route, { path: '/sync' }));
+  showSyncModal.value = true;
 }
 
 function openAiAssistant() {
-  if (route.path === '/ai') {
-    void router.push({
-      path: '/ai',
-      query: {
-        mode: 'todayPlan',
-        ...(route.query.returnTo ? { returnTo: route.query.returnTo } : {}),
-      },
-    });
-    return;
-  }
-  void router.push(withReturnTo(route, { path: '/ai', query: { mode: 'todayPlan' } }));
+  aiAssistantMode.value = 'todayPlan';
+  showAiAssistant.value = true;
 }
 
 function openAiSettings() {
-  if (route.path === '/ai') {
-    const query: Record<string, string | string[]> = { settings: '1' };
-    ['mode', 'idea', 'todo', 'diary', 'returnTo'].forEach(key => {
-      const value = route.query[key];
-      if (typeof value === 'string') query[key] = value;
-      else if (Array.isArray(value)) query[key] = value.filter((entry): entry is string => typeof entry === 'string');
-    });
-    void router.push({ path: '/ai', query });
-    return;
-  }
-  void router.push(withReturnTo(route, { path: '/ai', query: { settings: '1' } }));
+  showAiSettings.value = true;
 }
 
 function restoreSnapshot(item: SnapshotItem) {
@@ -558,6 +546,16 @@ function restoreSnapshot(item: SnapshotItem) {
         <button class="btn btn-secondary" type="button" @click="closeSnapshotModal">关闭</button>
       </div>
     </ModalShell>
+
+    <ModalShell v-model="showSyncModal" title="云同步" size="lg" dialog-class="sync-modal">
+      <SyncPage embedded @close="showSyncModal = false" />
+    </ModalShell>
+
+    <ModalShell v-model="showAiAssistant" :title="aiAssistantMode === 'todayPlan' ? 'AI 助手' : 'AI 对话整理'" size="lg" dialog-class="ai-assistant-modal">
+      <AiPage :embedded-mode="aiAssistantMode" @close="showAiAssistant = false" />
+    </ModalShell>
+
+    <AiSettingsModal v-model="showAiSettings" />
   </aside>
 </template>
 

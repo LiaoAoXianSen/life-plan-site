@@ -9,8 +9,6 @@ const TagsPage = () => import('../pages/TagsPage.vue');
 const SearchPage = () => import('../pages/SearchPage.vue');
 const GoalsPage = () => import('../pages/GoalsPage.vue');
 const FitnessPage = () => import('../pages/FitnessPage.vue');
-const AiPage = () => import('../pages/AiPage.vue');
-const SyncPage = () => import('../pages/SyncPage.vue');
 const HabitsPage = () => import('../pages/HabitsPage.vue');
 const WheelPage = () => import('../pages/WheelPage.vue');
 
@@ -30,8 +28,6 @@ const router = createRouter({
     { path: '/fitness', name: 'fitness', component: FitnessPage, meta: { title: '运动健身', phase: '第 6 步' } },
     { path: '/goals', name: 'goals', component: GoalsPage, meta: { title: '目标管理', phase: '第 6 步' } },
     { path: '/wheel', name: 'wheel', component: WheelPage, meta: { title: '工具转盘', phase: '第 6 步' } },
-    { path: '/ai', name: 'ai', component: AiPage, meta: { title: 'AI 助手', phase: '第 6 步' } },
-    { path: '/sync', name: 'sync', component: SyncPage, meta: { title: '云同步', phase: '第 6 步' } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 });

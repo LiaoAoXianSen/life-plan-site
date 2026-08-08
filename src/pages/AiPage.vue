@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import StatusBanner from '../components/common/StatusBanner.vue';
 import { computed, reactive, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 
 import AppSelect from '../components/common/AppSelect.vue';
-import ModalShell from '../components/common/ModalShell.vue';
 import PageHeader from '../components/common/PageHeader.vue';
 import SegmentedTabs from '../components/common/SegmentedTabs.vue';
-import { closeRouteOverlay, currentReturnTo, withReturnTo } from '../router/returnTo';
+
 import { createLegacyServices, getTodayStr } from '../services/legacyServices';
 import { useLifePlanStore } from '../stores/lifePlanStore';
 import { useRecordsStore } from '../stores/recordsStore';
@@ -29,9 +28,13 @@ type AiDraftItem = {
 };
 type CaptureDraftKey = 'diaryText' | 'workText' | 'planText' | 'ideaText';
 
-const props = withDefaults(defineProps<{ embeddedMode?: AiMode }>(), { embeddedMode: undefined });
+const props = withDefaults(defineProps<{
+  embeddedMode?: AiMode;
+  embeddedDiaryId?: string;
+  embeddedIdeaId?: string;
+  embeddedTodoId?: string;
+}>(), { embeddedMode: undefined, embeddedDiaryId: '', embeddedIdeaId: '', embeddedTodoId: '' });
 const emit = defineEmits<{ close: [] }>();
-const route = useRoute();
 const router = useRouter();
 const store = useLifePlanStore();
 const records = useRecordsStore();
@@ -48,20 +51,6 @@ function readPersistedAiConfig() {
 
 const config = reactive(ai.normalizeConfig(readPersistedAiConfig()));
 const mode = ref<AiMode>(props.embeddedMode || 'chatCapture');
-const embeddedSettingsOpen = ref(false);
-const settingsOpen = computed({
-  get: () => props.embeddedMode ? embeddedSettingsOpen.value : String(route.query.settings || '') === '1',
-  set: value => {
-    if (props.embeddedMode) {
-      embeddedSettingsOpen.value = value;
-      return;
-    }
-    const query = { ...route.query };
-    if (value) query.settings = '1';
-    else delete query.settings;
-    void router.replace({ path: '/ai', query });
-  },
-});
 const input = ref('');
 const selectedIdeaId = ref('');
 const selectedTodoId = ref('');
@@ -72,14 +61,6 @@ const diarySections = ref<DiaryAiSectionDraft[]>([]);
 const running = ref(false);
 const error = ref('');
 const status = ref('');
-const settingsNotice = ref('');
-const apiKeyStored = ref(false);
-
-function refreshApiKeyStored() {
-  apiKeyStored.value = Boolean(String(config.apiKey || '').trim());
-}
-
-refreshApiKeyStored();
 const captureDraft = reactive<Record<CaptureDraftKey, string>>({
   diaryText: '',
   workText: '',
@@ -267,36 +248,6 @@ const context = computed(() => ({
   } : null,
 }));
 
-function saveConfig() {
-  Object.assign(config, ai.normalizeConfig(config));
-  localStorage.setItem('lifePlanAiConfig', JSON.stringify(config));
-  refreshApiKeyStored();
-  settingsNotice.value = 'AI 设置已保存';
-  status.value = 'AI 设置已保存';
-}
-
-function clearApiKey() {
-  config.apiKey = '';
-  Object.assign(config, ai.normalizeConfig(config));
-  localStorage.setItem('lifePlanAiConfig', JSON.stringify(config));
-  refreshApiKeyStored();
-  settingsNotice.value = 'API Key 已清除';
-}
-
-async function testConfig() {
-  if (!ai.isRemoteReady(config)) {
-    settingsNotice.value = '请先填写完整的远程 AI 配置';
-    return;
-  }
-  settingsNotice.value = '正在测试接口…';
-  try {
-    await ai.requestRemoteAi(config, { mode: 'chatCapture', userInput: '只回复测试成功', today: getTodayStr(), context: {} });
-    settingsNotice.value = '接口测试成功';
-  } catch (error) {
-    settingsNotice.value = `接口测试失败：${error instanceof Error ? error.message : String(error)}`;
-  }
-}
-
 function resetResult() {
   result.value = null;
   drafts.value = [];
@@ -312,22 +263,6 @@ function resetResult() {
 function setMode(next: AiMode) {
   mode.value = next;
   resetResult();
-  if (props.embeddedMode) return;
-  const query: Record<string, string> = { mode: next };
-  if (next === 'ideaNext' && selectedIdeaId.value) query.idea = selectedIdeaId.value;
-  if (next === 'todoBreakdown' && selectedTodoId.value) query.todo = selectedTodoId.value;
-  if (next === 'diaryReview' && selectedDiaryId.value) query.diary = selectedDiaryId.value;
-  const returnTo = currentReturnTo(route);
-  if (returnTo) query.returnTo = returnTo;
-  void router.replace({ path: '/ai', query });
-}
-
-function closeAiPage() {
-  if (props.embeddedMode) {
-    emit('close');
-    return;
-  }
-  closeRouteOverlay(router, route, ['settings', 'mode', 'idea', 'todo', 'diary']);
 }
 
 function toDrafts(items: any[] = []): AiDraftItem[] {
@@ -364,6 +299,8 @@ function updateDiaryDraft(raw: any) {
 }
 
 async function run() {
+  // 所有 AI 功能共用左下角「AI 设置」里保存的同一份配置（lifePlanAiConfig）。
+  Object.assign(config, ai.normalizeConfig(readPersistedAiConfig()));
   running.value = true;
   error.value = '';
   status.value = '';
@@ -483,7 +420,8 @@ function applyIdeaDrafts() {
   }
   status.value = `已转成关联待办 ${createdIds.length} 项，并把灵感状态更新为待实践`;
   error.value = '';
-  void router.push(withReturnTo(route, { path: '/todos', query: { todo: createdIds[0] } }));
+  emit('close');
+  void router.push({ path: '/todos', query: { todo: createdIds[0] } });
 }
 
 function applyTodoBreakdown() {
@@ -608,25 +546,18 @@ watch(diaryOptions, options => {
   if (!options.some(item => item.id === selectedDiaryId.value)) selectedDiaryId.value = String(options[0].id || '');
 }, { immediate: true });
 
-watch(() => route.query.mode, value => {
-  const next = String(Array.isArray(value) ? value[0] : value || 'chatCapture');
-    if (next === 'ideaNext' || next === 'todoBreakdown' || next === 'diaryReview' || next === 'chatCapture' || next === 'todayPlan' || next === 'backlogTriage') {
-    mode.value = next;
-  }
-}, { immediate: true });
-
-watch(() => route.query.idea, value => {
-  const id = String(Array.isArray(value) ? value[0] : value || '');
+watch(() => props.embeddedIdeaId, value => {
+  const id = String(value || '');
   selectedIdeaId.value = ideaOptions.value.some(item => item.id === id) ? id : String(ideaOptions.value[0]?.id || '');
 }, { immediate: true });
 
-watch(() => route.query.todo, value => {
-  const id = String(Array.isArray(value) ? value[0] : value || '');
+watch(() => props.embeddedTodoId, value => {
+  const id = String(value || '');
   selectedTodoId.value = todoOptions.value.some(item => item.id === id) ? id : String(todoOptions.value[0]?.id || '');
 }, { immediate: true });
 
-watch(() => route.query.diary, value => {
-  const id = String(Array.isArray(value) ? value[0] : value || '');
+watch(() => props.embeddedDiaryId, value => {
+  const id = String(value || '');
   selectedDiaryId.value = diaryOptions.value.some(item => item.id === id) ? id : String(diaryOptions.value[0]?.id || '');
 }, { immediate: true });
 </script>
@@ -634,23 +565,8 @@ watch(() => route.query.diary, value => {
 <template>
   <section class="page active" id="page-ai">
     <PageHeader title="AI 助手">
-      <p class="todo-page-summary">生成结果默认只是草稿，确认后才写入 lifePlanData。</p>
-      <template #actions>
-        <button v-if="currentReturnTo(route)" class="btn btn-secondary" type="button" @click="closeAiPage">返回原页面</button>
-        <button class="btn btn-secondary" type="button" @click="settingsOpen = true">AI 设置</button>
-      </template>
+      <p class="todo-page-summary">生成结果默认只是草稿，确认后才写入 lifePlanData。AI 模型与接口统一在左下角「AI 设置」中配置。</p>
     </PageHeader>
-
-    <ModalShell v-model="settingsOpen" title="AI 设置" size="md" dialog-class="ai-settings-modal">
-      <div class="ai-settings-note">AI 配置只保存在当前浏览器本地，不会写入主数据或云同步。API Key 会保存在浏览器本地；共用设备请用完后清除。</div>
-      <div class="form-group"><label><input v-model="config.remoteEnabled" type="checkbox" /> 启用远程 AI</label></div>
-      <div class="form-group"><label for="ai-endpoint">接口地址</label><input id="ai-endpoint" v-model="config.endpointUrl" placeholder="https://.../v1" /></div>
-      <div class="form-group"><label for="ai-key">API Key</label><input id="ai-key" v-model="config.apiKey" type="password" /><div class="ai-key-row"><span>{{ apiKeyStored ? '已保存 API Key' : '未保存 API Key' }}</span><button class="btn btn-secondary todo-mini-btn" type="button" @click="clearApiKey">清除 Key</button></div></div>
-      <div class="form-group"><label for="ai-model">模型</label><input id="ai-model" v-model="config.model" /></div>
-      <div class="form-group"><label for="ai-user-style">偏好说明</label><textarea id="ai-user-style" v-model="config.userStyle" rows="3" placeholder="例如：建议要短、具体、偏行动；不要鸡汤。" /></div>
-      <p v-if="settingsNotice" class="sync-modal-status" role="status">{{ settingsNotice }}</p>
-      <div class="modal-action-row"><span /><div class="modal-action-right"><button class="btn btn-secondary" type="button" @click="testConfig">测试接口</button><button class="btn btn-primary" type="button" @click="saveConfig">保存设置</button></div></div>
-    </ModalShell>
 
     <article id="ai-mode-panel" class="card" role="tabpanel" :aria-labelledby="`ai-mode-${mode}`" aria-live="polite">
       <div class="card-title">模式</div>

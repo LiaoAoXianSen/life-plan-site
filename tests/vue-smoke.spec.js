@@ -54,6 +54,29 @@ async function expectHashRoute(page, path, query = {}) {
     })).toEqual({ path, query });
 }
 
+async function openSidebarSyncModal(page, sourceRoute = '/#/dashboard') {
+    await page.goto(sourceRoute);
+    await page.locator('.sidebar').getByRole('button', { name: /云同步/ }).click();
+    const dialog = page.getByRole('dialog', { name: '云同步' });
+    await expect(dialog).toBeVisible();
+    return dialog;
+}
+
+async function openSidebarAiAssistant(page, sourceRoute = '/#/dashboard') {
+    await page.goto(sourceRoute);
+    await page.locator('.sidebar').getByRole('button', { name: /AI 助手/ }).click();
+    await expect(page.getByRole('dialog', { name: 'AI 助手' })).toBeVisible();
+    return page.locator('#page-ai');
+}
+
+async function openSidebarAiSettings(page, sourceRoute = '/#/dashboard') {
+    await page.goto(sourceRoute);
+    await page.locator('.sidebar').getByRole('button', { name: /AI 设置/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'AI 设置' });
+    await expect(dialog).toBeVisible();
+    return dialog;
+}
+
 test('cross-page record and material overlays return to their exact source route', async ({ page }) => {
     const source = emptyData({
         records: [{ id: 'return-idea', type: '灵感碎片', title: '返回来源灵感', content: '灵感内容', ideaStatus: '待处理', ideaTags: ['route'], todoIds: [] }],
@@ -148,13 +171,19 @@ test('route-backed overlays clear stale query and sidebar actions preserve conte
     await page.getByRole('dialog').locator('.close-btn').click();
     await expectHashRoute(page, '/wheel');
 
-    await page.goto('/#/ai?mode=todoBreakdown&todo=todo-context');
-    await page.locator('.sidebar').getByRole('button', { name: 'AI 设置' }).click();
-    await expectHashRoute(page, '/ai', { mode: 'todoBreakdown', todo: 'todo-context', settings: '1' });
-    await page.getByRole('button', { name: '关闭AI 设置' }).click();
-    await expectHashRoute(page, '/ai', { mode: 'todoBreakdown', todo: 'todo-context' });
+    const aiAssistant = await openSidebarAiAssistant(page);
+    await aiAssistant.getByRole('button', { name: '待办拆解', exact: true }).click();
+    await expect(aiAssistant.getByLabel('选择待办')).toHaveValue('todo-context');
+    await page.getByRole('dialog', { name: 'AI 助手' }).getByRole('button', { name: '关闭AI 助手' }).click();
+    await expect(page.getByRole('dialog', { name: 'AI 助手' })).toBeHidden();
+    await page.locator('.sidebar').getByRole('button', { name: /AI 设置/ }).click();
+    const aiSettingsDialog = page.getByRole('dialog', { name: 'AI 设置' });
+    await expect(aiSettingsDialog).toBeVisible();
+    await aiSettingsDialog.getByRole('button', { name: '关闭AI 设置' }).click();
+    await expect(aiSettingsDialog).toBeHidden();
 
     await page.goto('/#/ideas?status=unprocessed');
+    await expect(page.locator('#page-ideas')).toBeVisible();
     await page.getByRole('button', { name: '+ 新建记录' }).click();
     await page.getByRole('button', { name: '日记' }).click();
     await expect(page.getByRole('dialog', { name: '编辑记录' })).toBeVisible();
@@ -191,7 +220,7 @@ test('multi-page overlays keep the original return route', async ({ page }) => {
     await expect.poll(() => page.evaluate(() => location.hash)).not.toMatch(/^#\/(records|todos)(?:\?|$)/);
 });
 
-test('record preview keeps its original return route when opening AI diary review', async ({ page }) => {
+test('record preview opens AI diary review without leaving the current route', async ({ page }) => {
     const source = emptyData({
         records: [{ id: 'return-diary', type: '日记', title: '跨页日记分析', content: '保留最初来源。', startDate: '2026-08-05', endDate: '2026-08-05', todoIds: [] }],
     });
@@ -200,34 +229,42 @@ test('record preview keeps its original return route when opening AI diary revie
     await page.goto('/#/records?record=return-diary&preview=1&returnTo=/search%3Fq%3D%E8%B7%A8%E9%A1%B5%E6%97%A5%E8%AE%B0');
     const preview = page.getByRole('dialog', { name: '记录预览' });
     await preview.getByRole('button', { name: 'AI 分析日记' }).click();
-    await expectHashRoute(page, '/ai', {
-        mode: 'diaryReview',
-        diary: 'return-diary',
+    await expectHashRoute(page, '/records', {
+        record: 'return-diary',
+        preview: '1',
         returnTo: '/search?q=跨页日记',
     });
+    const aiDialog = page.getByRole('dialog', { name: 'AI 日记分析' });
+    await expect(aiDialog).toBeVisible();
+    await expect(aiDialog.getByLabel('选择日记')).toHaveValue('return-diary');
+    await aiDialog.getByRole('button', { name: '关闭AI 日记分析' }).click();
+    await expect(aiDialog).toBeHidden();
 });
 
-test('habits cloud sync entry keeps the current habits route as return context', async ({ page }) => {
+test('habits cloud sync entry opens the sync modal without leaving the habits page', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/habits');
     await page.getByRole('tab', { name: '云同步', exact: true }).click();
     await page.getByRole('region', { name: '习惯云同步' }).getByRole('button', { name: '打开云同步' }).click();
-    await expectHashRoute(page, '/sync', { returnTo: '/habits' });
+    await expect(page.getByRole('dialog', { name: '云同步' })).toBeVisible();
+    await expectHashRoute(page, '/habits');
+    await page.getByRole('dialog', { name: '云同步' }).getByRole('button', { name: '关闭云同步' }).click();
+    await expect(page.getByRole('dialog', { name: '云同步' })).toBeHidden();
 });
 
-test('AI source return survives mode switches and closes back to the original page', async ({ page }) => {
+test('AI assistant modal survives mode switches and closes back to the original page', async ({ page }) => {
     const source = emptyData({
         records: [{ id: 'return-ai-idea', type: '灵感碎片', title: '返回来源灵感', content: '验证 AI 来源返回', todoIds: [], ideaStatus: '待整理' }],
     });
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
 
-    await page.goto('/#/ai?mode=todayPlan&returnTo=/ideas');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page, '/#/ideas');
     await aiPage.getByRole('button', { name: '灵感下一步', exact: true }).click();
-    await expectHashRoute(page, '/ai', { mode: 'ideaNext', idea: 'return-ai-idea', returnTo: '/ideas' });
+    await expect(aiPage.getByLabel('选择灵感')).toHaveValue('return-ai-idea');
     await aiPage.getByRole('button', { name: '对话整理', exact: true }).click();
-    await expectHashRoute(page, '/ai', { mode: 'chatCapture', returnTo: '/ideas' });
-    await aiPage.getByRole('button', { name: '返回原页面' }).click();
+    await expect(aiPage.locator('.ai-mode-tabs button.active')).toHaveText('对话整理');
+    await page.getByRole('dialog', { name: 'AI 助手' }).getByRole('button', { name: '关闭AI 助手' }).click();
+    await expect(page.getByRole('dialog', { name: 'AI 助手' })).toBeHidden();
     await expectHashRoute(page, '/ideas');
 });
 
@@ -241,18 +278,18 @@ test('AI selectors default to the first valid source and expose invalid diary fa
     });
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
 
-    await page.goto('/#/ai?mode=ideaNext');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
+    await aiPage.getByRole('button', { name: '灵感下一步', exact: true }).click();
     await expect(aiPage.getByLabel('选择灵感')).toHaveValue('idea-ai-default');
 
     await aiPage.getByRole('button', { name: '待办拆解', exact: true }).click();
     await expect(aiPage.getByLabel('选择待办')).toHaveValue('todo-ai-default');
 
-    await page.goto('/#/ai?mode=diaryReview&diary=missing-diary');
+    await aiPage.getByRole('button', { name: '日记分析', exact: true }).click();
     await expect(aiPage.getByLabel('选择日记')).toHaveValue('diary-ai-default');
 });
 
-test('dashboard quick-create and AI actions retain their exact source route', async ({ page }) => {
+test('dashboard quick-create and AI actions stay on the dashboard', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
     await page.goto('/#/dashboard?focus=today');
 
@@ -264,9 +301,11 @@ test('dashboard quick-create and AI actions retain their exact source route', as
     await expectHashRoute(page, '/dashboard', { focus: 'today' });
 
     await page.getByRole('button', { name: 'AI 今日计划', exact: true }).click();
-    await expectHashRoute(page, '/ai', { mode: 'todayPlan', returnTo: '/dashboard?focus=today' });
-    await page.getByRole('button', { name: '返回原页面' }).click();
+    const aiDialog = page.getByRole('dialog', { name: 'AI 今日计划' });
+    await expect(aiDialog).toBeVisible();
     await expectHashRoute(page, '/dashboard', { focus: 'today' });
+    await aiDialog.getByRole('button', { name: '关闭AI 今日计划' }).click();
+    await expect(aiDialog).toBeHidden();
 });
 
 test('dashboard habits honor ask, always and never note modes through ModalShell', async ({ page }) => {
@@ -479,7 +518,11 @@ test('dashboard record details expose legacy actions and ModalShell close contra
     expect(recordDialogStyle.paddingBottom).toBeGreaterThan(0);
     await expect(opened.dialog.getByRole('button', { name: 'AI 分析日记' })).toBeVisible();
     await opened.dialog.getByRole('button', { name: 'AI 分析日记' }).click();
-    await expectHashRoute(page, '/ai', { mode: 'diaryReview', diary: 'dashboard-detail-diary', returnTo: '/dashboard' });
+    const aiDiaryDialog = page.getByRole('dialog', { name: 'AI 日记分析' });
+    await expect(aiDiaryDialog).toBeVisible();
+    await expect(aiDiaryDialog.getByLabel('选择日记')).toHaveValue('dashboard-detail-diary');
+    await aiDiaryDialog.getByRole('button', { name: '关闭AI 日记分析' }).click();
+    await expect(aiDiaryDialog).toBeHidden();
 
     await page.goto('/#/dashboard');
     opened = await openTimelineRecord('空内容日记');
@@ -714,6 +757,13 @@ test('Vue shell navigates through migrated pages without browser errors', async 
             ? page.getByRole('button', { name: label })
             : page.getByRole('link', { name: label });
         await entry.click();
+        if (['AI 助手', '云同步'].includes(label)) {
+            const dialog = page.getByRole('dialog', { name: title });
+            await expect(dialog).toBeVisible();
+            await dialog.getByRole('button', { name: `关闭${title}` }).click();
+            await expect(dialog).toBeHidden();
+            continue;
+        }
         const header = page.locator('.page-header');
         await expect(header).toHaveCount(1);
         await expect(header.locator('.page-title')).toHaveText(title);
@@ -1446,21 +1496,19 @@ test('sidebar snapshot ignores backdrop clicks then closes with Escape and resto
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
 
-test('AI settings shares the modal backdrop, Escape, focus and route contract', async ({ page }) => {
+test('AI settings modal shares the backdrop, Escape and focus contract', async ({ page }) => {
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), emptyData());
-    await page.goto('/#/ai?mode=todayPlan');
-    const trigger = page.locator('#page-ai').getByRole('button', { name: 'AI 设置' });
+    await page.goto('/#/dashboard');
+    const trigger = page.locator('.sidebar').getByRole('button', { name: /AI 设置/ });
     await trigger.click();
-    await expectHashRoute(page, '/ai', { mode: 'todayPlan', settings: '1' });
     const dialog = page.getByRole('dialog', { name: 'AI 设置' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: '关闭AI 设置' })).toBeFocused();
     await page.locator('.modal-overlay').click({ position: { x: 4, y: 4 } });
     await expect(dialog).toBeVisible();
-    await expectHashRoute(page, '/ai', { mode: 'todayPlan', settings: '1' });
+    await expectHashRoute(page, '/dashboard');
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
-    await expectHashRoute(page, '/ai', { mode: 'todayPlan' });
     await expect(trigger).toBeFocused();
 });
 
@@ -3397,7 +3445,7 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
         localStorage.setItem('habitAppData', JSON.stringify({ localMirror: true, habits: [], mirror: { reason: 'stale' } }));
     }, { localData: local });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     page.once('dialog', async dialog => {
         expect(dialog.type()).toBe('confirm');
         expect(dialog.message()).toContain('records:2');
@@ -3440,7 +3488,7 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     expect(state.snapshots.map(snapshot => snapshot.reason)).toEqual(expect.arrayContaining(['导入前自动备份', '导入合并结果']));
 
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('main').getByRole('button', { name: '导出备份' }).click();
+    await page.getByRole('dialog', { name: '云同步' }).getByRole('button', { name: '导出备份' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^人生规划备份_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.json$/);
     const afterExport = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
@@ -3452,10 +3500,10 @@ test('main export preserves data and legacy snapshot metadata', async ({ page })
         records: [{ id: 'export-metadata-record', type: '日记', title: '导出记录', content: '正文', startDate: '2026-07-28', endDate: '2026-07-28' }],
     });
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const beforeExport = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('main').getByRole('button', { name: '导出备份' }).click();
+    await page.getByRole('dialog', { name: '云同步' }).getByRole('button', { name: '导出备份' }).click();
     const download = await downloadPromise;
     const exported = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
     const state = await page.evaluate(() => ({
@@ -3487,7 +3535,7 @@ test('main import schedules the shared auto-sync notification', async ({ page })
             return realSetTimeout(callback, delay, ...args);
         };
     }, { localData: local });
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     page.once('dialog', dialog => dialog.accept());
     await page.getByLabel('导入并合并').setInputFiles({
         name: 'import-auto-sync.json',
@@ -3508,7 +3556,7 @@ test('main import confirmation cancellation keeps data and snapshots unchanged',
     });
     const original = JSON.stringify(source);
     await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
 
     const [dialog] = await Promise.all([
         page.waitForEvent('dialog'),
@@ -3533,7 +3581,7 @@ test('main import summary normalizes legacy shadow records before confirmation',
         records: [{ id: 'import-summary-shadow', type: '习惯打卡', title: '不应进入主记录', isHabitRecord: true, content: '', startDate: '2026-07-27', endDate: '2026-07-27' }],
     });
     await page.addInitScript(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), local);
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     page.once('dialog', async dialog => {
         expect(dialog.type()).toBe('confirm');
         expect(dialog.message()).toContain('records:0');
@@ -3564,7 +3612,7 @@ test('main import cancels when the before-import snapshot cannot be saved', asyn
         };
     }, source);
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const dialogs = [];
     page.on('dialog', async dialog => {
         dialogs.push({ type: dialog.type(), message: dialog.message() });
@@ -3603,7 +3651,7 @@ test('main import can continue after confirming a missing before-import snapshot
         };
     }, source);
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const dialogs = [];
     page.on('dialog', async dialog => {
         dialogs.push({ type: dialog.type(), message: dialog.message() });
@@ -3630,7 +3678,7 @@ test('sync config removes legacy credential fields when saved', async ({ page })
     await page.addInitScript(() => localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
         webdavUrl: '', remotePath: '/life-plan.json', autoSync: false, username: 'legacy-user', password: 'legacy-password',
     })));
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.getByRole('button', { name: '保存配置' }).click();
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
@@ -3643,7 +3691,7 @@ test('sync config preserves the legacy AppSyncKit provider flag', async ({ page 
     await page.addInitScript(() => localStorage.setItem('lifePlanSyncConfig', JSON.stringify({
         webdavUrl: '', remotePath: '/life-plan.json', autoSync: false, useAppSyncKitProvider: true,
     })));
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.getByRole('button', { name: '保存配置' }).click();
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
@@ -3665,7 +3713,7 @@ test('sync main config restores the legacy read-only connection test', async ({ 
         await route.fulfill({ status: 404, body: 'not found' });
     });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
     await configCard.getByRole('button', { name: '测试连接' }).click();
 
@@ -3683,7 +3731,7 @@ test('sync page shows unconfigured hint without touching webdav or data', async 
         if (/dav\.|webdav|sync\./.test(request.url())) requests.push(request.url());
     });
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
 
     const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
     await expect(configCard.locator('.sync-status')).toContainText('未配置云同步');
@@ -3702,7 +3750,7 @@ test('sync page shows loaded config hint and backfills inputs without requests',
         localStorage.setItem('lifePlanData', JSON.stringify(data));
         localStorage.setItem('lifePlanSyncConfig', JSON.stringify({ webdavUrl: 'https://dav.example.test/life-plan.json', remotePath: '/custom/life.json', autoSync: false }));
     }, source);
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
 
     const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
     await expect(configCard.locator('.sync-status')).toContainText('已加载云同步配置');
@@ -3716,7 +3764,7 @@ test('sync page saving a config refreshes the config card hint', async ({ page }
     const source = emptyData({ records: [{ id: 'sync-hint-save', type: '日记', title: '保存记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28' }] });
     const original = JSON.stringify(source);
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
 
     const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
     await expect(configCard.locator('.sync-status')).toContainText('未配置云同步');
@@ -3742,7 +3790,7 @@ test('saving a configured sync address immediately runs the main sync flow', asy
         await route.fulfill({ status: 201, headers: { ETag: '"save-now"' }, body: '' });
     });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.getByLabel('同步地址').fill('https://save-now.example.test');
     await page.getByRole('button', { name: '保存配置', exact: true }).click();
 
@@ -3791,7 +3839,7 @@ test('main sync migrates the legacy wheel endpoint into the shared config', asyn
     await page.addInitScript(() => localStorage.setItem('lifePlanWheelSyncConfig', JSON.stringify({
         webdavUrl: 'https://legacy-wheel-endpoint.example.test', remotePath: '/apps/wheel-app/data.json', autoSync: false,
     })));
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
 
     await expect(page.getByLabel('同步地址')).toHaveValue('https://legacy-wheel-endpoint.example.test');
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
@@ -3821,7 +3869,7 @@ test('main manual pull keeps dirty state when the merged result differs from clo
         });
     });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.getByRole('button', { name: '下载并合并' }).click();
     const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
     await expect(manualCard.locator('.sync-status')).toContainText('已按原 mergeCloudData 规则合并云端数据');
@@ -7203,10 +7251,8 @@ test('AI page falls back when persisted config is malformed', async ({ page }) =
         localStorage.setItem('lifePlanAiConfig', malformed);
     }, { data: source, malformed: malformedConfig });
 
-    await page.goto('/#/ai?settings=1');
-    await expect(page.locator('#page-ai .page-title')).toHaveText('AI 助手');
-    await expect(page.getByRole('dialog', { name: 'AI 设置' })).toBeVisible();
-    await expect(page.getByLabel('接口地址')).toBeVisible();
+    const dialog = await openSidebarAiSettings(page);
+    await expect(dialog.getByLabel('接口地址')).toBeVisible();
     expect(errors).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanAiConfig'))).toBe(malformedConfig);
@@ -7221,14 +7267,12 @@ test('AI settings use the shared modal contract and clear only their own API key
         localStorage.setItem('lifePlanAiConfig', JSON.stringify(config));
     }, { data: source, config: originalConfig });
 
-    await page.goto('/#/ai');
-    const trigger = page.locator('#page-ai').getByRole('button', { name: 'AI 设置', exact: true });
+    await page.goto('/#/dashboard');
+    const trigger = page.locator('.sidebar').getByRole('button', { name: /AI 设置/ });
     await trigger.click();
     const dialog = page.getByRole('dialog', { name: 'AI 设置' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: '关闭AI 设置' })).toBeFocused();
-    await expect(page.locator('#ai-mode-panel')).toHaveAttribute('aria-labelledby', 'ai-mode-chatCapture');
-    await expect(page.locator('#ai-mode-chatCapture')).toHaveAttribute('aria-selected', 'true');
 
     await dialog.getByRole('button', { name: '清除 Key' }).click();
     await expect(dialog).toContainText('API Key 已清除');
@@ -7250,10 +7294,7 @@ test('AI settings restore from settings query and preserve preferences on save',
         localStorage.setItem('lifePlanData', JSON.stringify(data));
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
     }, { data: source });
-    await page.goto('/#/ai?settings=1');
-
-    const dialog = page.getByRole('dialog', { name: 'AI 设置' });
-    await expect(dialog).toBeVisible();
+    const dialog = await openSidebarAiSettings(page);
     await dialog.getByLabel('接口地址').fill('https://saved.example.test/v1');
     await dialog.getByLabel('模型').fill('saved-model');
     await dialog.getByLabel('API Key').fill('saved-key');
@@ -7338,8 +7379,8 @@ test('AI ideaNext keeps drafts read-only until confirmed writeback', async ({ pa
         localStorage.setItem('lifePlanData', JSON.stringify(data));
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
     }, source);
-    await page.goto('/#/ai?mode=ideaNext&idea=idea-ai-next');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
+    await aiPage.getByRole('button', { name: '灵感下一步', exact: true }).click();
     await expect(aiPage.getByLabel('选择灵感')).toHaveValue('idea-ai-next');
     await aiPage.getByRole('button', { name: '生成灵感行动' }).click();
     await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
@@ -7387,8 +7428,8 @@ test('AI diaryReview keeps diary drafts read-only until confirmed writeback', as
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
     }, source);
 
-    await page.goto('/#/ai?mode=diaryReview&diary=diary-ai-page');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
+    await aiPage.getByRole('button', { name: '日记分析', exact: true }).click();
     await expect(aiPage.locator('.ai-mode-tabs button.active')).toHaveText('日记分析');
     await expect(aiPage.getByLabel('选择日记')).toHaveValue('diary-ai-page');
     await aiPage.getByLabel('分析偏好').fill('复盘要简短，保留明日动作。');
@@ -7441,8 +7482,7 @@ test('AI todayPlan keeps drafts read-only until confirmed writeback with sourceT
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'ai-today-plan-before' }));
     }, source);
 
-    await page.goto('/#/ai?mode=todayPlan');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
     await expect(aiPage.locator('.ai-mode-tabs button.active')).toHaveText('今日计划');
     await aiPage.getByLabel('补充今天的状态或限制').fill('优先补逾期，再推进一个迁移事项。');
     await aiPage.getByRole('button', { name: '生成今日计划', exact: true }).click();
@@ -7494,8 +7534,7 @@ test('AI todayPlan orders relevant todos by legacy focus priority', async ({ pag
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
     }, source);
 
-    await page.goto('/#/ai?mode=todayPlan');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
     await aiPage.getByRole('button', { name: '生成今日计划', exact: true }).click();
     await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
     await expect(aiPage.locator('#ai-draft-text-0')).toHaveValue('推进：高优先级今日待办');
@@ -7516,8 +7555,7 @@ test('AI remote failure falls back to local drafts before confirmation', async (
         localStorage.setItem('lifePlanData', JSON.stringify(data));
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: true, endpointUrl: 'https://ai-fallback.example.test/v1', model: 'fallback-model', apiKey: 'fallback-key' }));
     }, { data: source });
-    await page.goto('/#/ai?mode=todayPlan');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
     await aiPage.getByRole('button', { name: '生成今日计划' }).click();
 
     await expect.poll(() => remoteRequests).toBe(1);
@@ -7548,8 +7586,8 @@ test('AI chatCapture keeps multi-destination drafts read-only until confirmed wr
         localStorage.setItem('lifePlanData', JSON.stringify(data));
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
     }, source);
-    await page.goto('/#/ai?mode=chatCapture');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
+    await aiPage.getByRole('button', { name: '对话整理', exact: true }).click();
     await aiPage.getByLabel('直接和 AI 说').fill('明天想把 Vue AI 对话整理跑通，顺手记个待办；今天工作里把页面写回做完了。这个想法先放灵感池。');
     await aiPage.getByRole('button', { name: '生成建议' }).click();
     await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
@@ -7629,8 +7667,7 @@ test('AI mode tabs swap the input label to the legacy per-mode text', async ({ p
         localStorage.setItem('lifePlanData', JSON.stringify(data));
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
     }, source);
-    await page.goto('/#/ai');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
     const inputLabel = aiPage.locator('label[for="ai-user-input"]');
     const expectations = [
         ['对话整理', '直接和 AI 说'],
@@ -7654,8 +7691,7 @@ test('AI mode tabs keep the legacy per-mode subtitle wording', async ({ page }) 
         localStorage.setItem('lifePlanData', JSON.stringify(data));
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false, endpointUrl: '', model: '', apiKey: '' }));
     }, source);
-    await page.goto('/#/ai');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
     const expectations = [
         ['对话整理', '把你随手说的一段话纠错、整理，并建议放到待办、工作、日记、计划或灵感。'],
         ['今日计划', '根据今日待办、习惯、目标和近期记录，整理一个短行动清单。'],
@@ -7685,8 +7721,8 @@ test('AI todoBreakdown writes selected subtasks only after confirmation', async 
         localStorage.setItem('lifePlanData', JSON.stringify(data));
         localStorage.setItem('lifePlanAiConfig', JSON.stringify({ remoteEnabled: false }));
     }, source);
-    await page.goto('/#/ai?mode=todoBreakdown&todo=todo-break');
-    const aiPage = page.locator('#page-ai');
+    const aiPage = await openSidebarAiAssistant(page);
+    await aiPage.getByRole('button', { name: '待办拆解', exact: true }).click();
     await expect(aiPage.getByLabel('选择待办')).toHaveValue('todo-break');
     await aiPage.getByRole('button', { name: '生成子任务' }).click();
     await expect(aiPage.getByText('已生成建议，确认后再写入')).toBeVisible();
@@ -7971,7 +8007,7 @@ test('todo remote preview stays GET-only and apply rechecks then persists the me
         };
     }, { localData: local, remoteData: remote });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.todo-sync-card');
     await panel.getByRole('button', { name: '检查 Todo 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('已生成');
@@ -8072,7 +8108,7 @@ test('habit remote preview stays GET-only and leaves local habit mirrors untouch
         localStorage.setItem('habitAppSyncState', stateData);
     }, { localData: original, mirrorData: mirror, stateData: syncState });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.habit-sync-card');
     await expect(panel).toContainText('/apps/habit-app/data.json');
     await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
@@ -8203,7 +8239,7 @@ test('habit remote apply rechecks then persists the merged legacy contract', asy
         localStorage.removeItem('todoAppData');
     }, { localData: local });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.habit-sync-card');
     await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('只读预检完成');
@@ -8290,7 +8326,7 @@ test('habit remote apply stops before persistence when cloud changed after previ
         localStorage.setItem('habitAppSyncState', JSON.stringify({ dirty: true, lastRemoteHash: 'old-habit-race' }));
     }, { localData: original, mirrorData: mirror });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.habit-sync-card');
     await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('只读预检完成');
@@ -8378,7 +8414,7 @@ test('habit existing remote upload uses If-Match and verifies the written snapsh
         };
     }, { localData: local, remoteData: remote });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.habit-sync-card');
     await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('只读预检完成');
@@ -8448,7 +8484,7 @@ test('habit existing upload stops before PUT when the remote changed after previ
         };
     }, { localData: local, firstRemote: remoteBefore, secondRemote: remoteAfter });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.habit-sync-card');
     await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('只读预检完成');
@@ -8525,7 +8561,7 @@ test('habit first remote creation requires session arm and uses If-None-Match', 
         };
     }, local);
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.habit-sync-card');
     await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('不存在');
@@ -8595,7 +8631,7 @@ test('habit first remote creation stops before PUT when the file appears after p
         };
     }, { localData: original, stateData: syncState, remoteData: remoteAfter });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.habit-sync-card');
     await panel.getByRole('button', { name: '检查 Habit 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('不存在');
@@ -8653,7 +8689,7 @@ test('wheel remote preview stays GET-only and apply rechecks then persists the m
         };
     }, { localData: local, remoteData: remote });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.wheel-sync-card');
     await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('已生成');
@@ -8739,7 +8775,7 @@ test('wheel remote apply stops before persistence when cloud changed after previ
         };
     }, { localData: local, firstRemote: remoteBefore, secondRemote: remoteAfter });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.wheel-sync-card');
     await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('已生成');
@@ -8800,7 +8836,7 @@ test('wheel existing remote upload uses If-Match and verifies the written snapsh
         };
     }, { localData: local, remoteData: remote });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.wheel-sync-card');
     await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
     page.once('dialog', dialog => dialog.accept());
@@ -8857,7 +8893,7 @@ test('wheel existing upload stops before PUT when the remote changed after previ
         };
     }, { localData: local, firstRemote: remoteBefore, secondRemote: remoteAfter });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.wheel-sync-card');
     await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
     await panel.getByRole('button', { name: '受保护上传' }).click();
@@ -8901,7 +8937,7 @@ test('wheel first remote creation requires session arm and uses If-None-Match', 
         };
     }, local);
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.wheel-sync-card');
     await panel.getByRole('button', { name: '检查 Wheel 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('不存在');
@@ -8966,7 +9002,7 @@ test('wheel custom path migration discards legacy pathless baseline and previews
         };
     }, { localData: local, remoteData: remote });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}'))).toEqual({ remotePath: '/custom-wheel.json' });
     const panel = page.locator('.wheel-sync-card');
     await panel.getByRole('button', { name: '立即自动同步一次' }).click();
@@ -9024,7 +9060,7 @@ test('wheel default path keeps a legacy pathless baseline compatible with condit
         };
     }, local);
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanWheelSyncState') || '{}'))).toMatchObject({
         remotePath: '/apps/wheel-app/data.json',
         dirty: true,
@@ -9241,7 +9277,7 @@ test('wheel conditional auto sync pulls remote update on visibility resume', asy
         };
     }, { localData: local, remoteData: remote });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const localHash = await page.evaluate(localData => {
         const sync = window.LifePlanSyncService.create();
         return sync.getWheelDataHash(sync.getWheelSnapshot(localData));
@@ -9482,7 +9518,7 @@ test('habit conditional auto sync pulls remote update on visibility resume', asy
         }));
     }, emptyData());
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.evaluate(() => {
         localStorage.setItem('habitAppSyncState', JSON.stringify({
             dirty: false,
@@ -9538,7 +9574,7 @@ test('todo existing remote upload uses If-Match and verifies the written mirror'
         };
     }, { localData: local, remoteData: remote });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.todo-sync-card');
     await panel.getByRole('button', { name: '检查 Todo 云端' }).click();
     page.once('dialog', dialog => dialog.accept());
@@ -9585,7 +9621,7 @@ test('todo existing upload stops before PUT when the remote changed after previe
         };
     }, { localData: local, firstRemote: remoteBefore, secondRemote: remoteAfter });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.todo-sync-card');
     await panel.getByRole('button', { name: '检查 Todo 云端' }).click();
     await panel.getByRole('button', { name: '受保护上传' }).click();
@@ -9621,7 +9657,7 @@ test('todo first remote creation requires session arm and uses If-None-Match', a
         };
     }, local);
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     const panel = page.locator('.todo-sync-card');
     await panel.getByRole('button', { name: '检查 Todo 云端' }).click();
     await expect(panel.getByRole('status')).toContainText('不存在');
@@ -9696,7 +9732,7 @@ test('todo independent auto sync records baseline before first remote difference
         localStorage.setItem('todoAppSyncConfig', JSON.stringify({ remotePath: '/apps/todo-app/data.json', autoSync: true, autoSyncUserEnabled: true, remoteUploadEnabled: false }));
     }, local);
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.locator('.todo-sync-card').getByRole('button', { name: '立即同步一次' }).click();
 
     await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('todoAppSyncState') || '{}').lastRemoteHash || '')).not.toBe('');
@@ -9765,7 +9801,7 @@ test('todo independent auto sync uploads local dirty data with If-Match and veri
     await page.getByRole('button', { name: /新建.*待办/ }).click();
     await page.locator('#todo-create-panel input[required]').fill('自动同步新增待办');
     await page.getByRole('button', { name: '保存待办' }).click();
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.locator('.todo-sync-card').getByRole('button', { name: '立即同步一次' }).click();
 
     await expect.poll(() => requests.filter(item => item.method === 'PUT').length).toBe(1);
@@ -9802,7 +9838,7 @@ test('todo independent auto sync applies remote merge to lifePlanData and marks 
         localStorage.setItem('todoAppSyncState', JSON.stringify({ dirty: false, lastRemoteHash: 'stale-todo-baseline', lastRemoteEtag: '"todo-old"' }));
     }, local);
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.locator('.todo-sync-card').getByRole('button', { name: '立即同步一次' }).click();
 
     await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData') || '{}').todos.map(item => item.text))).toEqual(['自动拉取云端待办']);
@@ -9895,7 +9931,7 @@ test('main sync upload uses If-Match and merges after a 412 conflict', async ({ 
         };
     }, { local: localData, firstRemote: remoteBase, secondRemote: remoteConflict });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.getByRole('button', { name: '上传主数据' }).click();
     const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
     await expect(manualCard.locator('.sync-status')).toContainText('云端版本变化');
@@ -10015,7 +10051,7 @@ test('main auto sync recreates a missing remote even when local data is unchange
     });
 
     await page.clock.install();
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await page.evaluate(() => {
         const data = JSON.parse(localStorage.getItem('lifePlanData'));
         const hash = window.LifePlanSyncService.create().getDataHash(data);
@@ -10062,7 +10098,7 @@ test('main auto sync resumes on visibility when enabled', async ({ page }) => {
         await route.fulfill({ status: 204, headers: { ETag: '"vis-2"' }, body: '' });
     });
 
-    await page.goto('/#/sync');
+    await openSidebarSyncModal(page);
     await expect(page.getByRole('button', { name: '保存配置' })).toBeVisible();
     await expect.poll(() => methods.filter(method => method === 'GET').length).toBeGreaterThan(0);
     const startupGets = methods.filter(method => method === 'GET').length;
