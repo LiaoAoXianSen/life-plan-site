@@ -36,7 +36,6 @@ function configStatusHint() {
 }
 const autoStatus = ref(configStatusHint());
 const busy = ref(false);
-const importCollections = ['records', 'todos', 'habits', 'checkins', 'habitPointLedger', 'habitRewards', 'habitCurrencies', 'templates', 'goals', 'materials', 'bodyMetrics', 'fitnessPlans', 'fitnessWorkouts', 'exerciseLibrary', 'wheels', 'wheelTags', 'wheelLibraryItems', 'wheelHistory'];
 
 bindMainCloudSync({
   getData: () => store.data,
@@ -89,13 +88,6 @@ function rememberRemoteVersion(remote: RemotePayload | null, state: SyncState) {
 
 function isConditionalWriteConflict(error: unknown) {
   return typeof error === 'object' && error !== null && (error as { status?: number }).status === 412;
-}
-
-function getImportSummary(value: unknown) {
-  const imported = value && typeof value === 'object' ? value as Record<string, unknown> : {};
-  return importCollections
-    .map(key => `${key}:${Array.isArray(imported[key]) ? imported[key].length : 0}`)
-    .join(' · ');
 }
 
 function createMergeSnapshots(reason: string, remote: RemotePayload, actionPrefix: string) {
@@ -171,21 +163,6 @@ async function testConnection() {
       : '连接成功';
   } catch (error) {
     autoStatus.value = error instanceof Error ? error.message : '连接失败';
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function runAutoNow() {
-  busy.value = true;
-  status.value = '';
-  try {
-    await runMainCloudSyncBoth({ force: true, source: 'manual-auto-both' });
-    status.value = status.value || '已执行一次主数据自动同步流程。';
-    autoStatus.value = `${configStatusHint()}；${status.value}`;
-  } catch (error) {
-    status.value = error instanceof Error ? error.message : String(error);
-    autoStatus.value = `${configStatusHint()}；${status.value}`;
   } finally {
     busy.value = false;
   }
@@ -290,24 +267,6 @@ async function push() {
   }
 }
 
-async function importFile(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  try {
-    const imported = lifePlanRepository.normalizeImportPreview(JSON.parse(await file.text()));
-    const summary = getImportSummary(imported);
-    const confirmed = window.confirm(`导入会安全合并，不会用旧内容静默覆盖当前较新的日记。\n\n如果同一篇日记两边都改过，会保留主版本并创建冲突副本。\n\n备份内容：${summary}\n\n继续导入吗？`);
-    if (!confirmed) return;
-    store.importData(imported, {
-      onBeforeSnapshotFailure: () => window.confirm('导入前快照创建失败。继续导入会缺少回滚点，确定继续吗？'),
-    });
-    status.value = '导入已按合并规则完成，并建立前后快照。';
-  } catch (error) {
-    status.value = error instanceof Error ? error.message : String(error);
-  } finally {
-    (event.target as HTMLInputElement).value = '';
-  }
-}
 </script>
 
 <template>
@@ -315,39 +274,56 @@ async function importFile(event: Event) {
     <article class="card">
       <div class="card-title">主数据 WebDAV 配置</div>
       <div class="form-row">
-        <div class="form-group"><label for="sync-webdav-url">同步地址</label><input id="sync-webdav-url" v-model="config.webdavUrl" placeholder="https://..." /></div>
-        <div class="form-group"><label for="sync-remote-path">远端路径</label><input id="sync-remote-path" v-model="config.remotePath" /></div>
-        <div class="form-group"><label for="sync-auto"><input id="sync-auto" v-model="config.autoSync" type="checkbox" /> 启用主数据自动同步</label></div>
+        <div class="form-group"><label for="sync-webdav-url">同步中转地址（主数据与大转盘共用）</label><input id="sync-webdav-url" v-model="config.webdavUrl" placeholder="https://..." /></div>
+        <div class="form-group"><label for="sync-remote-path">云端路径</label><input id="sync-remote-path" v-model="config.remotePath" /></div>
+        <div class="form-group"><label for="sync-auto"><input id="sync-auto" v-model="config.autoSync" type="checkbox" /> 自动同步（修改后 20 秒上传，每 5 分钟检查云端）</label></div>
       </div>
+      <StatusBanner v-if="autoStatus || status" class="sync-modal-status sync-status active" role="status" tone="info">{{ status || autoStatus }}</StatusBanner>
       <div class="page-actions">
         <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="testConnection">测试连接</button>
-        <button class="btn btn-secondary" type="button" @click="saveConfig">保存配置</button>
-        <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="runAutoNow">立即自动同步一次</button>
-      </div>
-      <StatusBanner v-if="autoStatus" class="sync-modal-status sync-status active" role="status" tone="info">{{ autoStatus }}</StatusBanner>
-    </article>
-
-    <article class="card">
-      <div class="card-title">备份与导入</div>
-      <p>导出的是原有完整 `lifePlanData` 格式。导入不是覆盖操作，会保留原有合并和快照保护。</p>
-      <div class="page-actions">
-        <button class="btn btn-secondary" @click="store.exportData">导出备份</button>
-        <label class="btn btn-secondary">导入并合并<input hidden type="file" accept="application/json" @change="importFile" /></label>
+        <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="pullAndMerge">从云端拉取</button>
+        <button class="btn btn-secondary" type="button" :disabled="busy || !config.webdavUrl" @click="push">上传到云端</button>
+        <button class="btn btn-primary" type="button" @click="saveConfig">保存并同步</button>
       </div>
     </article>
 
-    <article class="card">
-      <div class="card-title">手动同步</div>
-      <p>上传会先读取云端 ETag，使用 If-Match 条件写入；遇到 412 会重新拉取、快照、合并并只重试一次。</p>
-      <div class="page-actions">
-        <button class="btn btn-secondary" :disabled="busy || !config.webdavUrl" @click="pullAndMerge">下载并合并</button>
-        <button class="btn btn-primary" :disabled="busy || !config.webdavUrl" @click="push">上传主数据</button>
-      </div>
-      <StatusBanner v-if="status" class="sync-status active" role="status" tone="info">{{ status }}</StatusBanner>
-    </article>
+    <WheelSyncPanel title="共享大转盘" :sync-config="config" :run-auto-sync="() => runWheelCloudSyncBoth({ force: true, source: 'wheel-manual-auto-both' })" :restart-auto-sync="startWheelAutoSyncEngine" />
 
-    <TodoSyncPanel :sync-config="config" />
-    <WheelSyncPanel :sync-config="config" :run-auto-sync="() => runWheelCloudSyncBoth({ force: true, source: 'wheel-manual-auto-both' })" :restart-auto-sync="startWheelAutoSyncEngine" />
-    <HabitSyncPanel :sync-config="config" :run-auto-sync="() => runHabitCloudSyncBoth({ force: true, source: 'habit-manual-auto-both' })" :restart-auto-sync="startHabitAutoSyncEngine" />
+    <details class="sync-extras">
+      <summary>独立应用同步（待办 / 习惯）</summary>
+      <TodoSyncPanel :sync-config="config" />
+      <HabitSyncPanel :sync-config="config" :run-auto-sync="() => runHabitCloudSyncBoth({ force: true, source: 'habit-manual-auto-both' })" :restart-auto-sync="startHabitAutoSyncEngine" />
+    </details>
   </section>
 </template>
+
+<style scoped>
+.sync-extras {
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+.sync-extras > summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.sync-extras > summary:hover {
+  color: var(--text);
+}
+.sync-extras[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.sync-extras :deep(.sync-resource-card),
+.sync-extras :deep(.wheel-sync-card) {
+  margin: 0;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+</style>

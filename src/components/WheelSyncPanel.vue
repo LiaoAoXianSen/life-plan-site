@@ -46,7 +46,7 @@ type WheelSyncState = Record<string, unknown> & {
   lastConflictAt?: string;
 };
 
-const props = defineProps<{ syncConfig: SyncConfig; runAutoSync?: RunAutoSync; restartAutoSync?: () => void }>();
+const props = withDefaults(defineProps<{ syncConfig: SyncConfig; runAutoSync?: RunAutoSync; restartAutoSync?: () => void; title?: string }>(), { title: '转盘独立同步' });
 const store = useLifePlanStore();
 const sync = createLegacyServices().sync;
 const remotePath = ref(getWheelSyncConfig().remotePath);
@@ -409,7 +409,7 @@ async function uploadFirst() {
 </script>
 
 <template>
-  <SyncResourcePanel root-class="wheel-sync-card" title="转盘独立同步" :remote-path="remotePath" :mode-label="'预览/应用/条件自动'" resource-label="Wheel" auto-label="启用 Wheel 条件自动同步" run-label="立即自动同步一次" :status="preview.status" :busy="busy" :auto-busy="autoBusy" :endpoint-ready="endpointReady" :auto-sync-enabled="autoSyncEnabled" :armed="armed" :can-apply="canApply" :can-upload="canUploadExisting" :message="message" :message-tone="messageTone" @update:auto-sync-enabled="autoSyncEnabled = $event" @update:armed="armed = $event" @save-auto-sync="saveAutoSyncSetting" @run-auto-sync="runAutoSyncNow" @preview="previewRemote" @apply="applyRemoteMerge" @upload="uploadExisting" @create="uploadFirst">
+  <SyncResourcePanel root-class="wheel-sync-card" :title="props.title" :remote-path="remotePath" :mode-label="'预览/应用/条件自动'" resource-label="Wheel" auto-label="启用 Wheel 条件自动同步" run-label="立即自动同步一次" :status="preview.status" :busy="busy" :auto-busy="autoBusy" :endpoint-ready="endpointReady" :auto-sync-enabled="autoSyncEnabled" :armed="armed" :can-apply="canApply" :can-upload="canUploadExisting" :message="message" :message-tone="messageTone" @update:auto-sync-enabled="autoSyncEnabled = $event" @update:armed="armed = $event" @save-auto-sync="saveAutoSyncSetting" @run-auto-sync="runAutoSyncNow" @preview="previewRemote" @apply="applyRemoteMerge" @upload="uploadExisting" @create="uploadFirst">
     <template #preview>
       <div v-if="preview.local" class="sync-resource-comparison">
         <div v-for="item in [{ label: '本机', value: preview.local }, { label: '云端', value: preview.remote }, { label: '合并', value: preview.merged }]" :key="item.label" class="sync-resource-column">

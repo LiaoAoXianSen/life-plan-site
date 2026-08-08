@@ -59,6 +59,12 @@ async function openSidebarSyncModal(page, sourceRoute = '/#/dashboard') {
     await page.locator('.sidebar').getByRole('button', { name: /云同步/ }).click();
     const dialog = page.getByRole('dialog', { name: '云同步' });
     await expect(dialog).toBeVisible();
+    const extras = dialog.locator('.sync-extras');
+    if (await extras.count()) {
+        const summary = extras.locator('summary');
+        if (await extras.evaluate(el => !el.open)) await summary.click();
+        await expect(extras).toHaveAttribute('open', '');
+    }
     return dialog;
 }
 
@@ -3445,20 +3451,19 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
         localStorage.setItem('habitAppData', JSON.stringify({ localMirror: true, habits: [], mirror: { reason: 'stale' } }));
     }, { localData: local });
 
-    await openSidebarSyncModal(page);
+    await page.goto('/#/dashboard');
     page.once('dialog', async dialog => {
         expect(dialog.type()).toBe('confirm');
         expect(dialog.message()).toContain('records:2');
         expect(dialog.message()).toContain('todos:1');
         await dialog.accept();
     });
-    await page.getByLabel('导入并合并').setInputFiles({
+    await page.locator('.sidebar input[type="file"]').setInputFiles({
         name: 'import-contract.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
     });
-    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
-    await expect(manualCard.locator('.sync-status')).toContainText('导入已按合并规则完成');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.map(item => item.id))).toEqual(expect.arrayContaining(['record-imported']));
 
     const state = await page.evaluate(() => ({
         data: JSON.parse(localStorage.getItem('lifePlanData')),
@@ -3488,7 +3493,7 @@ test('main import export keeps snapshots tombstones mirrors and dirty state comp
     expect(state.snapshots.map(snapshot => snapshot.reason)).toEqual(expect.arrayContaining(['导入前自动备份', '导入合并结果']));
 
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('dialog', { name: '云同步' }).getByRole('button', { name: '导出备份' }).click();
+    await page.locator('.sidebar').getByRole('button', { name: '导出备份' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^人生规划备份_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.json$/);
     const afterExport = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSnapshots') || '[]'));
@@ -3500,10 +3505,10 @@ test('main export preserves data and legacy snapshot metadata', async ({ page })
         records: [{ id: 'export-metadata-record', type: '日记', title: '导出记录', content: '正文', startDate: '2026-07-28', endDate: '2026-07-28' }],
     });
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
-    await openSidebarSyncModal(page);
+    await page.goto('/#/dashboard');
     const beforeExport = await page.evaluate(() => localStorage.getItem('lifePlanData'));
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('dialog', { name: '云同步' }).getByRole('button', { name: '导出备份' }).click();
+    await page.locator('.sidebar').getByRole('button', { name: '导出备份' }).click();
     const download = await downloadPromise;
     const exported = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
     const state = await page.evaluate(() => ({
@@ -3535,9 +3540,9 @@ test('main import schedules the shared auto-sync notification', async ({ page })
             return realSetTimeout(callback, delay, ...args);
         };
     }, { localData: local });
-    await openSidebarSyncModal(page);
+    await page.goto('/#/dashboard');
     page.once('dialog', dialog => dialog.accept());
-    await page.getByLabel('导入并合并').setInputFiles({
+    await page.locator('.sidebar input[type="file"]').setInputFiles({
         name: 'import-auto-sync.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
@@ -3556,11 +3561,11 @@ test('main import confirmation cancellation keeps data and snapshots unchanged',
     });
     const original = JSON.stringify(source);
     await page.addInitScript(value => localStorage.setItem('lifePlanData', value), original);
-    await openSidebarSyncModal(page);
+    await page.goto('/#/dashboard');
 
     const [dialog] = await Promise.all([
         page.waitForEvent('dialog'),
-        page.getByLabel('导入并合并').setInputFiles({
+        page.locator('.sidebar input[type="file"]').setInputFiles({
             name: 'import-cancel.json',
             mimeType: 'application/json',
             buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
@@ -3581,13 +3586,13 @@ test('main import summary normalizes legacy shadow records before confirmation',
         records: [{ id: 'import-summary-shadow', type: '习惯打卡', title: '不应进入主记录', isHabitRecord: true, content: '', startDate: '2026-07-27', endDate: '2026-07-27' }],
     });
     await page.addInitScript(value => localStorage.setItem('lifePlanData', JSON.stringify(value)), local);
-    await openSidebarSyncModal(page);
+    await page.goto('/#/dashboard');
     page.once('dialog', async dialog => {
         expect(dialog.type()).toBe('confirm');
         expect(dialog.message()).toContain('records:0');
         await dialog.dismiss();
     });
-    await page.getByLabel('导入并合并').setInputFiles({
+    await page.locator('.sidebar input[type="file"]').setInputFiles({
         name: 'import-normalized-summary.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
@@ -3612,24 +3617,24 @@ test('main import cancels when the before-import snapshot cannot be saved', asyn
         };
     }, source);
 
-    await openSidebarSyncModal(page);
+    await page.goto('/#/dashboard');
     const dialogs = [];
     page.on('dialog', async dialog => {
         dialogs.push({ type: dialog.type(), message: dialog.message() });
         if (dialogs.length === 1) await dialog.accept();
         else await dialog.dismiss();
     });
-    await page.getByLabel('导入并合并').setInputFiles({
+    await page.locator('.sidebar input[type="file"]').setInputFiles({
         name: 'import-before-snapshot-failure.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
     });
 
-    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
-    await expect(manualCard.locator('.sync-status.active')).toContainText('导入前快照创建失败');
+    await expect.poll(() => dialogs.length).toBeGreaterThanOrEqual(3);
     expect(dialogs).toEqual([
         expect.objectContaining({ type: 'confirm' }),
         expect.objectContaining({ type: 'confirm', message: expect.stringContaining('导入前快照创建失败') }),
+        expect.objectContaining({ type: 'alert', message: expect.stringContaining('导入已取消') }),
     ]);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanSnapshots'))).toBeNull();
@@ -3651,20 +3656,19 @@ test('main import can continue after confirming a missing before-import snapshot
         };
     }, source);
 
-    await openSidebarSyncModal(page);
+    await page.goto('/#/dashboard');
     const dialogs = [];
     page.on('dialog', async dialog => {
         dialogs.push({ type: dialog.type(), message: dialog.message() });
         await dialog.accept();
     });
-    await page.getByLabel('导入并合并').setInputFiles({
+    await page.locator('.sidebar input[type="file"]').setInputFiles({
         name: 'import-before-snapshot-continue.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(imported), 'utf8'),
     });
 
-    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
-    await expect(manualCard.locator('.sync-status.active')).toContainText('导入已按合并规则完成');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanData')).records.map(item => item.id))).toEqual(expect.arrayContaining(['import-snapshot-continue-incoming']));
     expect(dialogs).toEqual([
         expect.objectContaining({ type: 'confirm' }),
         expect.objectContaining({ type: 'confirm', message: expect.stringContaining('导入前快照创建失败') }),
@@ -3679,7 +3683,7 @@ test('sync config removes legacy credential fields when saved', async ({ page })
         webdavUrl: '', remotePath: '/life-plan.json', autoSync: false, username: 'legacy-user', password: 'legacy-password',
     })));
     await openSidebarSyncModal(page);
-    await page.getByRole('button', { name: '保存配置' }).click();
+    await page.getByRole('button', { name: '保存并同步' }).click();
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
     expect(stored).toEqual({ webdavUrl: '', remotePath: '/life-plan.json', autoSync: false });
@@ -3692,7 +3696,7 @@ test('sync config preserves the legacy AppSyncKit provider flag', async ({ page 
         webdavUrl: '', remotePath: '/life-plan.json', autoSync: false, useAppSyncKitProvider: true,
     })));
     await openSidebarSyncModal(page);
-    await page.getByRole('button', { name: '保存配置' }).click();
+    await page.getByRole('button', { name: '保存并同步' }).click();
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
     expect(stored.useAppSyncKitProvider).toBe(true);
@@ -3754,8 +3758,8 @@ test('sync page shows loaded config hint and backfills inputs without requests',
 
     const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
     await expect(configCard.locator('.sync-status')).toContainText('已加载云同步配置');
-    await expect(page.getByLabel('同步地址')).toHaveValue('https://dav.example.test/life-plan.json');
-    await expect(page.getByLabel('远端路径')).toHaveValue('/custom/life.json');
+    await expect(page.locator('#sync-webdav-url')).toHaveValue('https://dav.example.test/life-plan.json');
+    await expect(page.locator('#sync-remote-path')).toHaveValue('/custom/life.json');
     expect(requests).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem('lifePlanData'))).toBe(original);
 });
@@ -3764,14 +3768,17 @@ test('sync page saving a config refreshes the config card hint', async ({ page }
     const source = emptyData({ records: [{ id: 'sync-hint-save', type: '日记', title: '保存记录', content: '', startDate: '2026-07-28', endDate: '2026-07-28' }] });
     const original = JSON.stringify(source);
     await page.addInitScript(data => localStorage.setItem('lifePlanData', JSON.stringify(data)), source);
+    await page.route('https://dav-save.example.test/**', async route => {
+        if (route.request().method() === 'GET') return route.fulfill({ status: 404, body: 'not found' });
+        await route.fulfill({ status: 201, headers: { ETag: '"save-hint"' }, body: '' });
+    });
     await openSidebarSyncModal(page);
 
     const configCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
     await expect(configCard.locator('.sync-status')).toContainText('未配置云同步');
-    await page.getByLabel('同步地址').fill('https://dav-save.example.test/life-plan.json');
-    await page.getByRole('button', { name: '保存配置', exact: true }).click();
-    await expect(configCard.locator('.sync-status')).toContainText('已加载云同步配置');
-    await expect(page.locator('.sync-status').filter({ hasText: '配置已保存' })).toBeVisible();
+    await page.locator('#sync-webdav-url').fill('https://dav-save.example.test/life-plan.json');
+    await page.getByRole('button', { name: '保存并同步', exact: true }).click();
+    await expect(configCard.locator('.sync-status')).toContainText('云端文件不存在');
 
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig') || '{}'));
     expect(saved.webdavUrl).toBe('https://dav-save.example.test/life-plan.json');
@@ -3791,11 +3798,11 @@ test('saving a configured sync address immediately runs the main sync flow', asy
     });
 
     await openSidebarSyncModal(page);
-    await page.getByLabel('同步地址').fill('https://save-now.example.test');
-    await page.getByRole('button', { name: '保存配置', exact: true }).click();
+    await page.locator('#sync-webdav-url').fill('https://save-now.example.test');
+    await page.getByRole('button', { name: '保存并同步', exact: true }).click();
 
     await expect.poll(() => methods).toEqual(['GET', 'PUT']);
-    await expect(page.locator('article.card').filter({ hasText: '手动同步' }).locator('.sync-status')).toContainText('云端文件不存在，已自动上传本地主数据');
+    await expect(page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' }).locator('.sync-status')).toContainText('云端文件不存在，已自动上传本地主数据');
     const state = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncState')));
     expect(state.dirty).toBe(false);
     expect(state.lastLocalHash).toBeTruthy();
@@ -3841,7 +3848,7 @@ test('main sync migrates the legacy wheel endpoint into the shared config', asyn
     })));
     await openSidebarSyncModal(page);
 
-    await expect(page.getByLabel('同步地址')).toHaveValue('https://legacy-wheel-endpoint.example.test');
+    await expect(page.locator('#sync-webdav-url')).toHaveValue('https://legacy-wheel-endpoint.example.test');
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('lifePlanSyncConfig')));
     expect(stored.webdavUrl).toBe('https://legacy-wheel-endpoint.example.test');
     expect(stored.remotePath).toBe('/life-plan.json');
@@ -3870,8 +3877,8 @@ test('main manual pull keeps dirty state when the merged result differs from clo
     });
 
     await openSidebarSyncModal(page);
-    await page.getByRole('button', { name: '下载并合并' }).click();
-    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
+    await page.getByRole('button', { name: '从云端拉取' }).click();
+    const manualCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
     await expect(manualCard.locator('.sync-status')).toContainText('已按原 mergeCloudData 规则合并云端数据');
 
     const result = await page.evaluate(() => ({
@@ -9932,8 +9939,8 @@ test('main sync upload uses If-Match and merges after a 412 conflict', async ({ 
     }, { local: localData, firstRemote: remoteBase, secondRemote: remoteConflict });
 
     await openSidebarSyncModal(page);
-    await page.getByRole('button', { name: '上传主数据' }).click();
-    const manualCard = page.locator('article.card').filter({ hasText: '手动同步' });
+    await page.getByRole('button', { name: '上传到云端' }).click();
+    const manualCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
     await expect(manualCard.locator('.sync-status')).toContainText('云端版本变化');
 
     const result = await page.evaluate(() => ({
@@ -10058,7 +10065,7 @@ test('main auto sync recreates a missing remote even when local data is unchange
         localStorage.setItem('lifePlanSyncState', JSON.stringify({ dirty: false, lastRemoteHash: hash, lastRemoteEtag: '"old"' }));
     });
     const mainCard = page.locator('article.card').filter({ hasText: '主数据 WebDAV 配置' });
-    await mainCard.getByRole('button', { name: '立即自动同步一次' }).click();
+    await mainCard.getByRole('button', { name: '保存并同步' }).click();
 
     await expect.poll(() => calls.filter(item => item.method === 'PUT').length).toBe(1);
     expect(calls.map(item => item.method)).toEqual(['GET', 'PUT']);
@@ -10099,7 +10106,7 @@ test('main auto sync resumes on visibility when enabled', async ({ page }) => {
     });
 
     await openSidebarSyncModal(page);
-    await expect(page.getByRole('button', { name: '保存配置' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '保存并同步' })).toBeVisible();
     await expect.poll(() => methods.filter(method => method === 'GET').length).toBeGreaterThan(0);
     const startupGets = methods.filter(method => method === 'GET').length;
     await page.evaluate(() => {
